@@ -1,0 +1,261 @@
+---
+title: Adding objects to a bucket with POST object
+description: This page explains how to add objects to a Bucket with POST Object.
+excerpt: |
+  This page explains how to add objects to a bucket with POST object.
+totalTime: PT15M
+steps:
+  - step: TODO
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/storage/object/api-cli/post-object
+image: /assets/images/docs/scaleway.png
+keywords: object storage, create, Howto
+dates:
+  validation: 2021-05-28
+  posted: 2021-05-19
+---
+
+The POST object operation adds an object to a specified bucket using HTML forms. POST is an alternate form of PUT that enables browser-based uploads as a way of putting objects directly in buckets.
+
+Parameters that are passed to PUT via HTTP Headers are instead passed as form fields to POST in the multipart/form-data encoded message body.
+
+<Message type="important">
+
+You must have WRITE access on a bucket to add an object to it.
+
+</Message>
+
+<Lightbox src="scaleway-post-object-use-case.png" alt="" />
+
+| Fields                            | Description                                                                               | Required |
+| --------------------------------- | ----------------------------------------------------------------------------------------- | -------- |
+| `file`                              | File or text content                                                                      | Yes      |
+| `key`                               | Name of the object you are about to create. If set to `${filename}`, the key will be replaced by the name of the uploaded file                                                | Yes      |
+| `acl`                               | private, public-read, ...                                                                 | No       |
+| `Cache-Control`                     | -                                                                                          | No       |
+| `Content-Type`                      | -                                                                                          | No       |
+| `Content-Disposition`               | -                                                                                          | No       |
+| `Content-Encoding`                 | -                                                                                         | No       |
+| `Expires`                           | -                                                                                          | No       |
+| `x-amz-meta-\*`                     | Any metadata you want to attach to the object                                               | No       |
+| `success_action_redirect, redirect` | Custom redirection (303 See Other) if request is successful and URL correct, else ignored | No       |
+| `success_action_status`             | 200, 201 or 204                                                                           | No       |
+| `policy`                            | Security Policy describing what is permitted in the request                               | Yes      |
+| `x-amz-credential`                  | Access Key                                                                                | Yes      |
+| `x-amz-algorithm`                   | AWS4-HMAC-SHA256                                                                          | Yes      |
+| `x-amz-signature`                   | The signature of the policy (See below for generation)                                    | Yes      |
+
+## Policy, expiration and condition matching
+
+The policy required for making authenticated requests using HTTP POST is a `UTF-8` and `base64`-encoded document written in JavaScript Object Notation ([JSON](https://www.json.org/)) that specifies conditions that the request must meet. Depending on how you design your policy document, you can control the access granularity.
+
+The POST policy always contains the expiration and conditions elements.
+
+## Expiration
+
+The expiration element specifies the expiration date and time of the POST policy in [ISO 8601 GMT](https://www.iso.org/iso-8601-date-and-time-format.html) date format. For example, `2019-09-19T12:00:00.000Z` specifies that the POST policy is not valid after midnight GMT on September 19, 2019.
+
+## Condition matching
+
+Following is a table that describes condition matching types that you can use to specify POST policy conditions (described in the next section). Although you must specify one condition for each form field that you specify in the form, you can create more complex matching criteria by specifying multiple conditions for a form field.
+
+| Condition | Example | Description |
+| --- | --- | --- |
+| Exact Matches | `{"acl": "public-read" }` | The form field value must match the value specified. This example indicates that the ACL must be set to public-read. |
+| Exact Match | `[ "eq", "$acl", "public-read" ]` | Same as above |
+| Starts With | `["starts-with", "$field", "user/user1/"]` | Fields must starts with |
+| Specifying Ranges | `["content-length-range", 1048576, 10485760]` | Uploaded file size might be between 1Mo and 10Mo |
+
+Every field submitted in the form post must be supplied to condition matching.
+All fields must begin with a `$`.
+To allow wildcard on a field, use `["starts-with", "$field", ""]`.
+
+## Signing request
+
+POST object only supports [signature v4](/storage/object/concepts#signature-v2-signature-v4).
+
+Here's how to sign an example policy in python:
+
+```python
+import base64
+import json
+import hmac
+import hashlib
+
+# Generate your access key from the console
+ACCESS_KEY_ID = "SCWXXXXXXXXXXXXXXXXX"
+SECRET_ACCESS_KEY = "110e8400-e29b-11d4-a716-446655440000"
+
+# S3 Region
+REGION = "fr-par"
+
+# Example for the demo
+DATE = "20190918"
+X_AMZ_DATE = "20190919T000000Z"
+EXPIRATION = "2019-09-19T02:00:00.000Z"
+
+policy = {
+    "expiration": EXPIRATION,
+    "conditions": [
+        {"bucket":"mybucket"},
+        ["starts-with","$key",""],
+        {"acl":"public-read"},
+        {"x-amz-credential": ACCESS_KEY_ID + "/" + DATE + "/" + REGION + "/s3/aws4_request"},
+        {"x-amz-algorithm":"AWS4-HMAC-SHA256"},
+        {"x-amz-date": X_AMZ_DATE},
+        {"success_action_status":"204"}
+    ]
+}
+
+stringToSign = base64.b64encode(bytes(json.dumps(policy), encoding='utf8'))
+print("Base64 encoded policy:", stringToSign.decode("utf-8"), end="\n\n")
+# Base64 encoded policy: eyJleHBpcmF0aW9uIjogIjIwMTktMDktMTlUMDI6MDA6MDAuMDAwWiIsICJjb25kaXRpb25zIjogW3siYnVja2V0IjogIm15YnVja2V0In0sIFsic3RhcnRzLXdpdGgiLCAiJGtleSIsICIiXSwgeyJhY2wiOiAicHVibGljLXJlYWQifSwgeyJ4LWFtei1jcmVkZW50aWFsIjogIlNDV1hYWFhYWFhYWFhYWFhYWFhYLzIwMTkwOTE4L2ZyLXBhci9zMy9hd3M0X3JlcXVlc3QifSwgeyJ4LWFtei1hbGdvcml0aG0iOiAiQVdTNC1ITUFDLVNIQTI1NiJ9LCB7IngtYW16LWRhdGUiOiAiMjAxOTA5MTlUMDAwMDAwWiJ9LCB7InN1Y2Nlc3NfYWN0aW9uX3N0YXR1cyI6ICIyMDQifV19
+
+dateKey = hmac.new(bytes("AWS4" + SECRET_ACCESS_KEY, 'utf-8'), bytes(DATE, 'utf-8'), digestmod=hashlib.sha256).digest()
+dateRegionKey = hmac.new(dateKey, bytes(REGION, 'utf-8'), digestmod=hashlib.sha256).digest()
+dateRegionServiceKey = hmac.new(dateRegionKey, bytes("s3", 'utf-8'), digestmod=hashlib.sha256).digest()
+signinKey = hmac.new(dateRegionServiceKey, bytes("aws4_request", 'utf-8'), digestmod=hashlib.sha256).digest()
+print("Signin key:", signinKey.hex(), end="\n\n")
+# Signin key: 9c3ad81294a9263e472165307ae6e5c64e738b6837ff688f6e721a5ed53a4873
+
+signature = hmac.new(signinKey, stringToSign, digestmod=hashlib.sha256).digest()
+print("Signature:", signature.hex(), end="\n\n")
+# Signature: 4d879d70f91e6f2f417163b4a1e90e0e6b32c99cbe3eaa168bc7ab216d33d784
+```
+
+## Examples 
+
+### Node.js
+
+```
+$> npm install aws-s3-form
+```
+
+```js
+const express = require("express")
+const app = express()
+const port = 3000
+
+var AwsS3Form = require("aws-s3-form")
+
+require("dotenv").config()
+
+app.use(express.json())
+
+# Generate your access key from the console
+var PAR = {
+  access: "SCWXXXXXXXXXXXXXXXXX",
+  secret: "110e8400-e29b-11d4-a716-446655440000",
+  region: "fr-par",
+  bucket: "mybucket"
+}
+
+var CREDS = PAR
+
+app.get("/", (req, res) => {
+  var formGen = new AwsS3Form({
+    accessKeyId: CREDS.access,
+    secretAccessKey: CREDS.secret,
+    region: CREDS.region,
+    bucket: CREDS.bucket,
+    redirectUrlTemplate: "http://localhost/",
+    acl: "public-read"
+  })
+  obj = formGen.create("object")
+  console.log(obj)
+
+  var html = ""
+  html += "<body>"
+  html += "Fill the 'key' attribute, chose file and submit"
+  html += "<form action='http://s3.fr-par.scw.cloud/mybucket'  method='post' name='form1' enctype='multipart/form-data'>"
+  html += "<table>"
+  html += "<tr><td><span>Key: <span></td><td><input type='text' name='key'></br></td></tr>"
+  html +=
+    "<tr><td><span>Signature: <span></td><td><input readonly type='text' name='X-Amz-Signature' value=" +
+    obj.fields["X-Amz-Signature"] +
+    "></br></td></tr>"
+  html += "<tr><td><span>Policy: <span></td><td><input readonly type='text' name='Policy' value=" + obj.fields["Policy"] + "></br></td></tr>"
+  html += "<tr><td><span>Acl: <span></td><td><input readonly type='text' name='acl' value=" + obj.fields["acl"] + "></br></td></tr>"
+  html +=
+    "<tr><td><span>Credential: <span></td><td><input readonly type='text' name='X-Amz-Credential' value=" +
+    obj.fields["X-Amz-Credential"] +
+    "></br></td></tr>"
+  html +=
+    "<tr><td><span>Algorithm: <span></td><td><input readonly type='text' name='X-Amz-Algorithm' value=" +
+    obj.fields["X-Amz-Algorithm"] +
+    "></br></td></tr>"
+  html += "<tr><td><span>Date: <span></td><td><input readonly type='text' name='X-Amz-Date' value=" + obj.fields["X-Amz-Date"] + "></br></td></tr>"
+  html +=
+    "<tr><td><span>Status: <span></td><td><input readonly type='text' name='success_action_status' value=" +
+    obj.fields["success_action_status"] +
+    "></br></td></tr>"
+  html +=
+    "<tr><td><span>Meta: <span></td><td><input readonly type='text' name='x-amz-meta-uuid' value=" +
+    obj.fields["x-amz-meta-uuid"] +
+    "></br></td></tr>"
+  html += "<tr><td><span>File</span></td><td><input type='file' name='file'></br></td></tr>"
+  html += "<tr><td><input type='submit' value='submit'></br></td></tr>"
+  html += "</form>"
+  html += "</body>"
+  res.send(html)
+})
+
+app.listen(port, () => console.log(`Example app listening on port ${port}!`))
+```
+
+### Python 
+
+```python
+import logging
+import boto3
+import requests
+from botocore.exceptions import ClientError
+
+
+# Generate a presigned URL for the S3 object
+session = boto3.session.Session()
+
+s3_client = session.client(
+    service_name='s3',
+    region_name='fr-par',
+    use_ssl=True,
+    endpoint_url='http://s3.fr-par.scw.cloud',
+    aws_access_key_id='SCWXXXXXXXXXXXXXXXXX',
+    aws_secret_access_key='110e8400-e29b-11d4-a716-446655440000'
+)
+
+bucket_name = "mybucket"
+object_name = "myobject"
+fields = {
+        'acl': 'public-read',
+        'Cache-Control': 'nocache',
+        'Content-Type': 'image/jpeg'
+    }
+conditions = [
+    {"key": "myobject"}
+]
+expiration = 120 # Max two minutes to start upload
+
+try:
+    response = s3_client.generate_presigned_post(Bucket=bucket_name,
+                                                    Key=object_name,
+                                                    Fields=fields,
+                                                    Conditions=conditions,
+                                                    ExpiresIn=expiration)
+except ClientError as e:
+    logging.error(e)
+    exit()
+
+# The response contains the presigned URL and required fields
+print(response)
+
+
+with open('myfile', 'rb') as f:
+    files = {'file': (object_name, f)}
+    http_response = requests.post(response['url'], data=response['fields'], files=files)
+```
+
+<Navigation title="See Also">
+  <PreviousButton to="/network/load-balancer/how-to/create-load-balancer/">How to create a Load Balancer</PreviousButton>
+  <NextButton to="/network/load-balancer/how-to/setup-ssl-offloading/">How to set up TLS/SSL offloading</NextButton>
+</Navigation>

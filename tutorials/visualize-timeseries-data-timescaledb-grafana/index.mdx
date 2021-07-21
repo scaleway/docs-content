@@ -1,0 +1,329 @@
+---
+
+title: How to visualize time-Series data with TimescaleDB and Grafana
+description: This page shows how to visualize time-series data with TimescaleDB and Grafana
+excerpt: |
+  This page shows how to configure the TimescaleDB extension on a Scaleway Database Instance, how to add, delete and query time-scale data and how to visualize it using Grafana
+totalTime: PT30M
+steps:
+  - step: Creating a new database
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/visualize-timeseries-data-timescaledb-grafana/#creating-a-new-database
+  - step: Enabling the TimescaleDB extension
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/visualize-timeseries-data-timescaledb-grafana/#Enabling-the-TimescaleDB-extension
+  - step: Prepare the table for TimescaleDB
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/visualize-timeseries-data-timescaledb-grafana/#Prepare-the-table-for-TimescaleDB
+  - step: Adding and removing data
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/visualize-timeseries-data-timescaledb-grafana/#Adding-and-removing-data
+  - step: Querying data
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/visualize-timeseries-data-timescaledb-grafana/#Querying-data
+  - step: Visualizing data with Grafana
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/visualize-timeseries-data-timescaledb-grafana/#Visualizing-data-with-Grafana
+categories:
+  - storage
+brands:
+  - elements
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, ubuntu server, debian server, linux server, IAAS, scalability, cloud, cluster, clustering, postgresql, postgre, pgsql, postgres, managed service, managed, managed database, database hosting, hosted database, database, timescale, timescaledb, time-series data
+dates:
+  validation: 2021-05-10
+  posted: 2019-12-10
+---
+
+## TimescaleDB - Overview
+
+[TimescaleDB](https://www.timescale.com/) is a time series database built on top of [PostgreSQL](/tutorials/install-postgresql/).  
+A time-series database typically stores “time-series data” as the name indicates. It can be seen as a sequence of data points, that measure the same thing over time and store the measurement results in time order.  
+Each of these measurements is paired with a timestamp, defined by a name and a set of labeled dimensions (or “tags”).
+
+Time-series data is everywhere around us and an important point of our everyday life. Whether it is a factory that measures the production output of a specific machine, a farmer observing the humidity of the soil or a city measuring the regularity between trains.
+
+In this example we will use [Scaleway Database for PostgreSQL](https://www.scaleway.com/en/database/) with the TimescaleDB extension and a Dataset of the air quality at the [Franklin D. Roosevelt Metro station](<https://en.wikipedia.org/wiki/Franklin_D._Roosevelt_(Paris_M%C3%A9tro)>) in Paris, provided by [RATP](https://dataratp2.opendatasoft.com/explore/dataset/qualite-de-lair-mesuree-dans-la-station-franklin-d-roosevelt/information/), the Parisian transport authority. This kind of data is a perfect example for a time-series database as it monitors certain values over a period of time. Other usages could include data from a diverse backgrounds, such as weather data, economic information or productivity information of an assembly line.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)- You have a [managed Database for PostgreSQL](https://www.scaleway.com/en/database/)
+- You have a compute instance running on Ubuntu Bionic Beaver (18.04) for hosting the Grafana interface
+- You have sudo privileges or access to the root user.
+
+</Message>
+
+## Creating a new database
+
+<Message type="note">
+
+The following steps assume that you have already created a Database Instance. For more information how to create and setup a managed Database Instance, you may follow the [Database how to's](/storage/database/how-to/create-a-database/).
+
+</Message>
+
+1. Connect to your Scaleway Console and enter the **Database** section.
+
+2. Choose your Database Instance by clicking on its name.
+
+3. Click the **Databases** tab, then on **+ Create Database**.
+
+4. Enter the name of the new database, in this tutorial we use `airquality`.
+
+5. Click the **Users** tab, followed by **...** and **Update Permissions**.
+
+6. Grant the permissions to the newly created `airquality` database to your user.
+
+## Enabling the TimescaleDB Extension
+
+1. Connect to your managed Database using the `psql` client:
+  ```
+  psql -h <rbd_host> --port <rdb_port> -d airquality -U <rdb_user>
+  ```
+
+  Enter the password for your database user when prompted.
+  <Message type="tip"> 
+
+  You can find the `rdb_host` and `rdb_port` on the database information page.
+
+  </Message>
+
+  2. Enable the `timescaledb` extension for your database:
+  ```
+  CREATE EXTENSION IF NOT EXISTS timescaledb CASCADE;
+  ```
+
+  The following output displays in your terminal:
+      ```
+      WARNING:
+      WELCOME TO
+      _____ _                               _     ____________
+      |_   _(_)                             | |    |  _  \ ___ \
+        | |  _ _ __ ___   ___  ___  ___ __ _| | ___| | | | |_/ /
+        | | | |  _ ` _ \ / _ \/ __|/ __/ _` | |/ _ \ | | | ___ \
+        | | | | | | | | |  __/\__ \ (_| (_| | |  __/ |/ /| |_/ /
+        |_| |_|_| |_| |_|\___||___/\___\__,_|_|\___|___/ \____/
+                    Running version 1.5.1
+      For more information on TimescaleDB, please visit the following links:
+
+      1. Getting started: https://docs.timescale.com/getting-started
+      2. API reference documentation: https://docs.timescale.com/api
+      3. How TimescaleDB is designed: https://docs.timescale.com/introduction/architecture
+
+      Note: TimescaleDB collects anonymous reports to better understand and assist our users.
+      For more information and how to disable, please see our docs https://docs.timescaledb.com/using-timescaledb/telemetry.
+
+      CREATE EXTENSION
+      ```
+
+## Prepare the table for TimescaleDB
+
+1. Create a table `airquality` which will be used to store the information:
+  ```
+  CREATE TABLE airquality(
+    DATETIME   TIMESTAMP WITH TIME ZONE NOT NULL,
+    NO         INTEGER,
+    NO2        INTEGER,
+    PM10       INTEGER,
+    CO2        INTEGER,
+    TEMP       NUMERIC(4,1),
+    HUMI       NUMERIC(4,1)
+  );
+  ```
+
+  The command above creates a new table called `airquality` with seven columns:
+
+    - `DATETIME` contains a timestamp which includes the time zone.
+    - `NO` contains the average [NO](https://en.wikipedia.org/wiki/Nitric_oxide) concentration in µg/m3.
+    - `NO2` contains the average [NO2](https://en.wikipedia.org/wiki/Nitrogen_dioxide) concentration in µg/m3.
+    - `PM10` contains the average [PM10](https://en.wikipedia.org/w/index.php?title=PM10) particles concentration in in µg/m3
+    - `CO2` contains the average [CO2](https://en.wikipedia.org/wiki/Carbon_dioxide) concentration in ppm.
+    - `TEMP` contains the average ambient temperature in °C.
+    - `HUMI` contains the relative humidity in %.
+
+2. Create a Hypertable from the previously create table:
+  ```
+  SELECT create_hypertable('airquality', 'datetime');
+  ```
+
+  The command above converts the regular PostgreSQL table into a TimescaleDB [hypertable](https://docs.timescale.com/latest/introduction/architecture#hypertables).
+
+  The following output displays in the terminal window:
+
+  ```
+  airquality=> SELECT create_hypertable('airquality', 'datetime');
+      create_hypertable
+  -------------------------
+  (1,public,airquality,t)
+  (1 row)
+  ```
+
+## Adding and removing data
+
+1. You can now add a sample row to the database. The `RETURNING` statement visualizes the data added to the table:
+  ```
+  INSERT INTO airquality(DATETIME,NO,NO2,PM10,CO2,TEMP,HUMI) VALUES (NOW(),4,38,14,398,27.0,47.4) RETURNING *;
+  ```
+
+  An output like the following displays:
+
+  ```
+            datetime            | no | no2 | pm10 | co2 | temp | humi
+  -------------------------------+----+-----+------+-----+------+------
+  2019-12-10 15:31:28.116471+00 |  4 |  38 |   14 | 398 | 27.0 | 47.4
+  (1 row)
+
+  INSERT 0 1
+  ```
+
+2. Remove the data from the table. The following command deletes all data where the value for `temp` is larger than `26`:
+  ```
+  airquality=> DELETE FROM airquality WHERE temp > 26;
+  DELETE 1
+  ```
+
+  Run a [garbage collection](https://www.postgresql.org/docs/current/sql-vacuum.html) using the `VACCUM` command to clean up the table and to free unused space:
+
+  ```
+  VACUUM airquality;
+  ```
+
+  Manually adding data works for a small scale database, but when it comes to deal with time-scale data you have large sets of data.
+
+### Importing a lagrge dataset
+
+To have a large dataset available we are going to use the [air quality data](https://dataratp2.opendatasoft.com/explore/dataset/qualite-de-lair-mesuree-dans-la-station-franklin-d-roosevelt/information/) from a parisian metro station. The data is provided by Paris' transport authority [RATP](https://dataratp2.opendatasoft.com/explore/?sort=modified)
+
+1. [Download](https://dataratp.opendatasoft.com/explore/dataset/qualite-de-lair-mesuree-dans-la-station-franklin-d-roosevelt/export/) the sample data in CSV-format on your local computer.
+
+2. Convert the downloaded CSV file into a SQL database file:
+  ```
+  cat qualite-de-lair-mesuree-dans-la-station-franklin-d-roosevelt.csv | awk -F';' '{ printf "INSERT INTO airquality(DATETIME,NO,NO2,PM10,CO2,TEMP,HUMI) VALUES (\x27%s\x27,\x27%s\x27,\x27%s\x27,\x27%s\x27,\x27%s\x27,\x27%s\x27,\x27%s\x27);",$1,$2,$3,$4,$5,$6,$7;print ""}' > airquality.sql
+  ```
+
+3. Import the file to your database:
+  ```
+  psql -h <rbd_host> --port <rdb_port> -d airquality -U <rdb_user> < airquality.sql
+  ```
+
+## Querying Data
+
+Now as you have a large dataset available, you can query the data using the `psql` client.
+
+1. Connect to your database:
+  ```
+  psql -h <rbd_host> --port <rdb_port> -d airquality -U <rdb_user>
+  ```
+
+2. To receive a list of the 10 most recent entries in the database run the following command:
+  ```
+  SELECT * FROM airquality ORDER BY datetime DESC LIMIT 10;
+  ```
+
+  A list like the following displays:
+
+  ```
+          datetime        | no | no2 | pm10 | co2 | temp | humi
+  ------------------------+----+-----+------+-----+------+------
+  2019-12-02 00:00:00+00 | 12 |  42 |   25 |     | 14.8 | 36.3
+  2019-12-01 23:00:00+00 | 11 |  40 |   23 |     | 15.0 | 36.6
+  2019-12-01 22:00:00+00 | 14 |  42 |   23 |     | 15.0 | 38.1
+  2019-12-01 21:00:00+00 | 29 |  48 |   26 |     | 14.4 | 41.7
+  2019-12-01 20:00:00+00 | 21 |  43 |   30 |     | 13.9 | 42.3
+  2019-12-01 19:00:00+00 | 18 |  40 |   31 |     | 14.1 | 42.3
+  2019-12-01 18:00:00+00 | 17 |  40 |   29 |     | 14.2 | 41.8
+  2019-12-01 17:00:00+00 | 16 |  39 |   27 |     | 14.6 | 40.9
+  2019-12-01 16:00:00+00 | 15 |  40 |   26 |     | 15.0 | 41.4
+  2019-12-01 15:00:00+00 | 13 |  40 |   20 |     | 14.8 | 41.8
+  (10 rows)
+  ```
+
+3. To retrieve the average temperature on all data run the following command:
+  ```
+  SELECT percentile_cont(0.5)
+    WITHIN GROUP (ORDER BY temp)
+    FROM airquality;
+  ```
+
+  An output like the following displays:
+
+  ```
+  percentile_cont
+  -----------------
+            18.7
+  (1 row)
+  ```
+
+For more information how to read data from your database, refer to the [Read Data documentation](https://docs.timescale.com/latest/using-timescaledb/reading-data) of TimescaleDB.
+
+## Visualizing data with Grafana
+
+You can visualize the time-series data by creating a dashboard using [Grafana](https://grafana.com/), an open source analytics & monitoring solution.
+
+1. Create a new [virtual instance](https://www.scaleway.com/en/virtual-instances/) running on Ubuntu Bionic (18.04) from your [Scaleway console](https://console.scaleway.com/dashboard)
+
+2. Log into the virtual instance [using SSH](/compute/instances/how-to/connect-to-instance/).
+
+3. Add the Grafana repository to the `apt` packet cache:
+  ```
+  add-apt-repository "deb https://packages.grafana.com/oss/deb stable main"
+  ```
+
+4. Install the GPG key of Grafana to validate the packages:
+  ```
+  wget -q -O - https://packages.grafana.com/gpg.key | apt-key add -
+  ```
+
+5. Update the `apt` packet cache:
+  ```
+  apt update
+  ```
+
+6. Install Grafana using `apt`:
+  ```
+  apt install grafana
+  ```
+
+7. Reload the `systemd` daemon, enable the Grafana service to start the application automatically during system boot and start the application manually:
+  ```
+  systemctl daemon-reload && systemctl enable grafana-server && systemctl start grafana-server
+  ```
+
+8. Open a web browser and point it to `http://<instance_ip>:3000/`
+  <Message type="note">
+
+  Replace `<instance_ip>` with the IP address of your virtual instance.
+
+  </Message>
+
+9. The Grafana login screen displays. Log yourself into grafana using the username and password `admin`:
+<Lightbox src="scaleway-grafana_login.png" alt="" />
+
+10. Upon the first connection, you will be asked to set a new password. Enter it twice and validate the form.
+
+11. The default dashbard displays. Click **Add Datasource** to configure a new datasource.
+
+12. Enter the credentials of your managed Database Instance:
+<Lightbox src="scaleway-grafana_db.png" alt="" />
+
+    - **Host**: Enter the IP address and the port of your Database Instance seperated by a double-point.
+    - **Database**: The name of the database (for example `airquality`)
+    - **User**: The database user
+    - **Password**: The database password
+    - **SSL Mode**: The desired SSL validation mode. Set the value to `required`.
+    - **Version**: This value must correspond to the PostgreSQL version of your Database Instance
+    - **TimescaleDB**: Enable this value
+
+13. Click **Save & Test** to test the database connection and to save the values.
+
+14. If the connection succeeds, click the Grafana logo to return to the base dashboard.
+
+15. Download the [JSON configuration](https://tutorials.s3.fr-par.scw.cloud/dashboard.json) to query the database in Grafana.
+
+16. Click **+ Create** > **Import** and click **Import .json File** to upload the previously downloaded configuration file to Grafana.
+
+17. Grafana starts to generate graphs from the time-series data stored in TimescaleDB. You can now browse the data in a visual interface and edit the queries of the database according to your needs:
+<Lightbox src="scaleway-grafana_dashboard.png" alt="" />
+
+## Conclusion
+
+You now have configured a Timescale database, imported time-series data, learned how to query, modify and visualize the data using Grafana. For more information about TimescaleDB, refer to the [official Documentation](https://docs.timescale.com/).

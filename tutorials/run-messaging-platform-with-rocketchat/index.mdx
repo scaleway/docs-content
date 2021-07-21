@@ -1,0 +1,387 @@
+---
+layout: docs
+title: Run a messaging platform with RocketChat
+description: RocketChat is a messaging platform allowing you to run your community with chats, private messaging and file sharing
+tags: compute instance messaging rocket.chat rocketchat chat mongodb nodejs
+excerpt: |
+  Rocket.Chat is a free and open source team chat software solution. It provides features like audio and video conferencing, guest access, screen sharing, file sharing, LiveChat, LDAP Group Sync, two-factor authentication (2FA), E2E encryption, SSO, and more. The tool uses MongoDB as database and the JavaScript runtime Node.js.
+totalTime: PT10M
+steps:
+  - step: Preparing the Instance
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/run-messaging-platform-with-rocketchat/#-Preparing-the-Instance
+  - step: Installing Rocket.Chat
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/run-messaging-platform-with-rocketchat/#-Installing-RocketChat
+  - step: Configuring the Rocket.Chat Service
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/run-messaging-platform-with-rocketchat/#-Configuring-the-RocketChat-Service
+  - step: Configuring a MongoDB Replica Set
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/run-messaging-platform-with-rocketchat/#-Configuring-a-MongoDB-Replica-Set
+  - step: Configuring a Nginx Reverse Proxy
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/run-messaging-platform-with-rocketchat/#-Configuring-a-Nginx-Reverse-Proxy
+  - step: Setting up the Rocket.Chat Service
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/run-messaging-platform-with-rocketchat/#-Setting-up-the-RocketChat-Service
+categories:
+  - compute
+  - instances
+image: /assets/scaleway_rocketchat.png
+permalink: docs/tutorials/rocketchat/
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, ubuntu server, debian server, linux server, community, file sharing, chat, messaging, calls
+dates:
+  validation: 2021-05-10
+  posted: 2019-01-30
+---
+
+## Rocket.Chat - Overview
+
+[Rocket.Chat](https://rocket.chat) is a free and open source team chat software solution. It provides features like audio and video conferencing, guest access, screen sharing, file sharing, LiveChat, LDAP Group Sync, two-factor authentication (2FA), E2E encryption, SSO, and more. The tool uses [MongoDB](/tutorials/mongodb-ubuntu-1604/) as database and the JavaScript runtime [Node.js](https://nodejs.org/en/).
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have sudo privileges or access to the root user.
+
+</Message>
+
+## Preparing the instance
+
+1. Before installing Rocket.Chat, make sure to update the APT packet cache and the software already installed on the instance:
+
+  ```
+  apt update && apt upgrade -y
+  ```
+
+2. Import the public key used by apt to install the official MongoDB packages:
+
+  ```
+  apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 9DA31620334BD75D9DCB49F368818C72E52529D4
+  ```
+
+3. Create an apt sources list by running the follwing command:
+
+  ```
+  echo "deb [ arch=amd64 ] https://repo.mongodb.org/apt/ubuntu bionic/mongodb-org/4.0 multiverse" | tee /etc/apt/sources.list.d/mongodb-org-4.0.list
+  ```
+
+4. Prepare the installation of Node.js with the following command:
+
+  ```
+  apt install -y curl && curl -sL https://deb.nodesource.com/setup_11.x | bash -
+  ```
+
+5. Update the apt packet cache and install MongoDB and Node.js:
+
+  ```
+  apt update && apt install build-essential mongodb-org nodejs npm graphicsmagick -y
+  ```
+
+6. Install [inherits](https://www.npmjs.com/package/inherits) via npm, the packet manager of Node.js, and the node version required by Rocket.Chat:
+
+  ```
+  npm install -g inherits n && n 8.11.3
+  ```
+
+## Installing Rocket.Chat
+
+1. Download the latest version of Rocket.Chat:
+
+  ```
+  curl -L https://releases.rocket.chat/latest/download -o /tmp/rocket.chat.tgz
+  ```
+
+2. Extract the downloaded file:
+
+  ```
+  tar -xzf /tmp/rocket.chat.tgz -C /tmp
+  ```
+
+3. Launch the installation of the application:
+
+  ```
+  cd /tmp/bundle/programs/server && npm install
+  ```
+
+4. Move the application to its final destination:
+
+  ```
+  mv /tmp/bundle /opt/Rocket.Chat
+  ```
+
+## Configuring the Rocket.Chat Service
+
+1. Create a user under which the application will run:
+
+  ```
+  useradd -M rocketchat && usermod -L rocketchat
+  ```
+
+2. Set the ownership and permissions of the application:
+
+  ```
+  chown -R rocketchat:rocketchat /opt/Rocket.Chat
+  ```
+
+3. Create the file **/lib/systemd/system/rocketchat.service** and open it in your favourite text editor. Copy the following content in it to create a service file for Rocket.chat:
+
+  ```
+  [Unit]
+  Description=Rocket.Chat Server
+  After=network.target remote-fs.target nss-lookup.target nginx.target mongod.target
+  [Service]
+  ExecStart=/usr/local/bin/node /opt/Rocket.Chat/main.js
+  StandardOutput=syslog
+  StandardError=syslog
+  SyslogIdentifier=rocketchat
+  User=rocketchat
+  Environment=MONGO_URL=mongodb://localhost:27017/rocketchat ROOT_URL=http://rocketchat.example.com/ MONGO_OPLOG_URL=mongodb://localhost:27017/local?replSet=rs01 PORT=3000
+  [Install]
+  WantedBy=multi-user.target
+  ```
+
+  <Message type="important">
+
+  Replace `rocketchat.example.com` with the domain for your Rocket.Chat instance.
+
+  </Message>
+
+## Configuring a MongoDB replica set
+
+It is recommended to use the [MongoDB replica set](https://docs.mongodb.com/manual/replication/) to improve the performance of Rocket.Chat via Meteor Oplog tailing.
+
+1. Run the following code to add a replica set to your MongoDB configuration:
+
+  ```
+  echo -e "replication:\n  replSetName: \"rs01\"" | tee -a /etc/mongod.conf
+  ```
+
+2. Enable and start the MongoDB service:
+
+  ```
+  systemctl enable mongod && systemctl start mongod
+  ```
+
+3. Connect to the MongoDB shell and initiate the replica set with `rs.initiate()`:
+
+  ```
+  mongo
+  > rs.initiate()
+  ```
+
+  An output like the following will appear on your screen:
+
+  ```
+  {
+    "info2" : "no configuration specified. Using a default configuration for the set",
+    "me" : "127.0.0.1:27017",
+    "ok" : 1,
+    "operationTime" : Timestamp(1548866987, 1),
+    "$clusterTime" : {
+      "clusterTime" : Timestamp(1548866987, 1),
+      "signature" : {
+        "hash" : BinData(0,"AAAAAAAAAAAAAAAAAAAAAAAAAAA="),
+        "keyId" : NumberLong(0)
+      }
+    }
+  }
+  rs01:SECONDARY>
+  ```
+
+  <Message type="note">
+
+  Note the `"ok”` value has to be 1. Any other value, means something is wrong.
+
+  </Message>
+
+4. Press Enter on your keyboard. You will see the following output indicating the replica set is being used:
+
+  ```
+  rs01:PRIMARY>
+  ```
+
+5. Leave the MongoDB shell by typing `exit` followed by pressing Enter on your keyboard:
+
+  ```
+  rs01:PRIMARY> exit
+  bye
+  ```
+
+## Configuring a Nginx reverse proxy
+
+Rocket.Chat is able to function as a server on its own, but adding a [Nginx Reverse Proxy](https://www.scaleway.com/docs/how-to-configure-nginx-reverse-proxy/) adds a layer of security, advanced load balancing and acceleration features that the application does not provide by itself.
+
+1. Install Nginx:
+
+  ```
+  apt install nginx
+  ```
+
+2. Create and open the file **/etc/nginx/sites-available/rocketchat.example.com** and paste the following content into it to create a proxy server block for Rocket.Chat:
+
+  ```
+  # Upstreams
+  upstream backend {
+      server 127.0.0.1:3000;
+  }
+
+  # Proxy Server
+  server {
+      listen 80;
+      server_name rocketchat.example.com;
+
+      # You can increase the limit if your need to.
+      client_max_body_size 200M;
+
+      error_log /var/log/nginx/rocketchat.access.log;
+
+      location / {
+          proxy_pass http://backend/;
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+          proxy_set_header Host $http_host;
+
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forward-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forward-Proto http;
+          proxy_set_header X-Nginx-Proxy true;
+
+          proxy_redirect off;
+      }
+  }
+  ```
+
+  <Message type="important">
+
+  Replace `rocketchat.example.com` with the domain name under which your rocket chat instance will be available.
+
+  </Message>
+
+3. Create a symbolic link to activate the proxy in Nginx:
+
+  ```
+  ln -s /etc/nginx/sites-available/rocketchat.example.com /etc/nginx/sites-enabled/rocketchat.example.com
+  ```
+
+4. Test the configuration for syntax errors by running `nginx -t`. You should see an output like the following:
+
+  ```
+  nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+  nginx: configuration file /etc/nginx/nginx.conf test is successful
+  ```
+
+5. Install Certbot to generate a [Let's Encrypt SSL certificate](https://letsencrypt.org/) to encrypt the connection to your Rocket.Chat instance:
+
+  ```
+  apt install software-properties-common
+  add-apt-repository ppa:certbot/certbot
+  apt update
+  apt-get install python-certbot-nginx
+  ```
+
+6. Run Certbot to request a certificate and to make the required changes to the Nginx configuration:
+
+  ```
+  certbot --nginx
+  ```
+
+  Certbot will ask you several questions and you should see an output like the following when you have completed the generation of the certificate:
+
+    ```
+    Plugins selected: Authenticator nginx, Installer nginx
+    Enter email address (used for urgent renewal and security notices) (Enter 'c' to
+    cancel): me@example.com
+
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Please read the Terms of Service at
+    https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf. You must
+    agree in order to register with the ACME server at
+    https://acme-v02.api.letsencrypt.org/directory
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    (A)gree/(C)ancel: a
+
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Would you be willing to share your email address with the Electronic Frontier
+    Foundation, a founding partner of the Let's Encrypt project and the non-profit
+    organization that develops Certbot? We'd like to send you email about our work
+    encrypting the web, EFF news, campaigns, and ways to support digital freedom.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    (Y)es/(N)o: n
+
+    Which names would you like to activate HTTPS for?
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    1: rocketchat.example.com
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Select the appropriate numbers separated by commas and/or spaces, or leave input
+    blank to select all options shown (Enter 'c' to cancel):
+    Obtaining a new certificate
+    Performing the following challenges:
+    http-01 challenge for rocketchat.example.com
+    Waiting for verification...
+    Cleaning up challenges
+    Deploying Certificate to VirtualHost /etc/nginx/sites-enabled/rocketchat.example.com
+
+    Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    1: No redirect - Make no further changes to the webserver configuration.
+    2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
+    new sites, or if you're confident your site works on HTTPS. You can undo this
+    change by editing your web server's configuration.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 2
+    Redirecting all traffic on port 80 to ssl in /etc/nginx/sites-enabled/rocketchat.example.com
+
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Congratulations! You have successfully enabled https://rocketchat.example.com
+
+    You should test your configuration at:
+    https://www.ssllabs.com/ssltest/analyze.html?d=rocketchat.example.com
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    ```
+
+## Setting up the Rocket.Chat service
+
+1. Start and enable the Rocket.Chat service:
+
+  ```
+  systemctl enable rocketchat && systemctl start rocketchat
+  ```
+
+2. Restart the Nginx web proxy:
+
+  ```
+  service nginx restart
+  ```
+
+3. Open your web browser and type your domain name, for example: `https://rocketchat.example.com/`. The Rocket.Chat setup wizard appears in your browser:
+
+    <Lightbox src="scaleway-rocketchat_setup.png" alt="" />
+
+    Enter your personal information:
+
+    - Your name
+    - Your admin user name
+    - Your email address
+    - Your password.
+
+  Click **Continue** to go to the next step.
+
+  On the next page you will be asked to provide some information about your organization. Fill in the required information and click **Continue**.
+
+  On the third page you will be asked to provide information about your Rocket.Chat instance. Fill in your site name, language and if you want to have a private or public community. Then click **Continue**.
+
+  In the last step of the setup, you will be asked if you want to keep your server as a stand-alone instance or if you want to register it with Rocket.Chat to have access to additional functions and resources.
+
+4. Once the setup is completed, you can access your Rocket.Chat and be the first user in the #general channel:
+
+  <Lightbox src="scaleway-rocketchat_chat.png" alt="" />
+
+5. Click the menu button, then **Administration** to access the admin interface of your instance. Here you can configure the look and feel of your instance as well as additional services like an IRC bridge, bots or OAuth services:
+
+  <Lightbox src="scaleway-rocketchat_admin.png" alt="" />
+
+To use Rocket.Chat directly on your PC or Mac or from your mobile, download the [free application](https://rocket.chat/install) directly from the Rocket.Chat website. For more information and advanced configuration settings of your community, refer to the [official documentation](https://rocket.chat/docs/)

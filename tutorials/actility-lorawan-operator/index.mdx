@@ -1,0 +1,111 @@
+---
+title: Using Actility as a LoRaWAN operator for IoT Hub
+description: This page explains how to configure your Actility backend to have your LoRaWAN devices send messages to IoT Hub
+tags: Scaleway IoT Hub LoRaWAN
+excerpt: |
+  LoRaWAN is a low-power long-range radio protocol to use when 3G/4G/5G is not required. Actility is a LoRaWAN operator and is able to connect to IoT Hub to bring your LoRaWAN devices' data to the cloud.
+totalTime: PT30M
+image: /assets/images/docs/scaleway.png
+keywords: iot, smart, connected, embedded, devices, hubs, mqtt, network, Sigfox, lora, lorawan, bridge
+categories:
+  - iot-hub
+  - iot
+dates:
+  validation: 2021-05-10
+  posted: 2020-07-02
+---
+
+## LoRaWAN&copy; and Actility Overview
+
+LoRaWAN&copy; is a low-power, low-bandwidth, long-range radio protocol used by many devices to send their data over the air. This protocol is specifically designed for battery powered devices with little to no installation cost.
+
+LoRaWAN&copy; devices broadcast their data to reachable LoRaWAN&copy; gateways, which forward the messages on the LoRaWAN&copy; operator network. The operator de-duplicates the messages from multiple gateways and hand over the message to the "LoRaWAN&copy; application". In our scenario, the "LoRaWAN&copy; application" is Scaleway IoT Hub.
+
+[Actility](https://www.actility.com) is a LoRaWAN&copy; operator which can build a public or private LoRaWAN&copy; network.
+
+In this tutorial we are going to:
+
+- Create a IoT Hub which to receive/send messages from/to LoRaWAN&copy; devices
+- Add a Device to the Hub to prepare the Actility-to-Scaleway connection
+- Set up the Actility backend to use the Device credentials to establish a connection with IoT Hub
+- Add another Device and connect it as a subscribe to receive LoRaWAN&copy; messages
+
+---
+
+## Create an IoT Hub
+
+First, we need a Hub. Its role will be to distribute messages from your LoRaWAN&copy; devices to the intended targets. Please follow [this procedure](/iot/iot-hub/how-to/create-hub) to create an IoT Hub if you don't have one already. The hub's name and plan does not matter for this tutorial.
+
+## Create an IoT Device
+
+The Actility platform will connect as a MQTT device to exchange data on IoT Hub. This means that we need to add a Device to the IoT Hub. Please follow [this procedure](/iot/iot-hub/how-to/add-device) to create a device.
+
+<Message type="note">
+
+- The device name is not important for this tutorial.
+- Keep the default `Deny Insecure` connections setting to provide maximum security.
+
+</Message>
+
+Once done, copy the `Device ID` and download the `certificate` & `private key` files, you will need them to set up the Actility backend.
+
+## Set up the Actility backend
+
+Now IoT Hub is ready to exchange messages with Actility, let's configure the Actility side:
+
+1. Go to your [Actility Thingpark Enterprise console](https://community.thingpark.io/).
+
+2. Click `Applications > Create` and choose MQTT.
+
+3. Fill in the following parameters (unlisted settings can be anything you like):
+
+    - **Hostname**: Your IoT Hub Endpoint, followed by MQTTs port (ex: `iot.fr-par.scw.cloud:8883`).
+    - **Account prefix**: This allows you to set the MQTT topic prefix. Messages will be published with a topic like `<prefix>/things/<LoRaWAN device ID>/uplink`. Type in `my-app` here.
+    - **Protocol**: `SSL`.
+    - **MQTT Username**: Your IoT Hub Device ID.
+    - **MQTT Password**: Leave empty.
+    - **Certificate**: the device certificate file (ex: `my-device-crt.pem`).
+    - **Private Key**: the device key file (ex: `my-device-key.pem`).
+
+4. Click the Save button.
+
+You can check the application is up and running by going to the application page and verifying the `Deployment Status` box is set to `Opened`. When it is, your LoRaWAN&copy; network is now connected to your IoT Hub.
+
+## Verify the we have done things right
+
+It is time to see messages flowing on IoT Hub:
+
+  - Create another IoT Hub Device, but this time choose the `Allow Insecure` connections setting. Secured connections are not supported over Web Sockets, which the `MQTT Webclient` uses.
+  - On the Device page, click the `MQTT Webclient` button. The client will open and automatically connect.
+
+  <Lightbox src="scaleway-mqtt_webclient.png" alt="" />
+
+  - Now subscribe to the LoRaWAN&copy; devices messages:
+    - Click `Add New Topic Subscription` in the `Subscriptions` block
+    - Pick any color to identify this subscription
+    - Leave QoS 0
+    - Use `my-app/things/+/uplink` as the topic, this will instruct IoT Hub to send you uplink messages from all devices
+    - Click subscribe
+
+  <Lightbox src="scaleway-mqtt_webclient_2.png" alt="" />
+
+  - Your subscription now appears in the `Subscriptions` block and the messages from your LoRa devices will start showing in the `Messages` block.
+
+Congratulations! Messages are flowing as expected.
+
+## Going further
+
+You could leverage the power of IoT Hub to build a dashboard to display your data in a few easy steps:
+
+- [Start a PostgreSQL managed DB instance](/storage/database/how-to/create-a-database/) and create a `lora` table with the following fields: `time` (timestamp type) and `data` (jsonb type)
+- Configure a Database Route to push data in there, [see how to](/storage/database/how-to/create-a-database/). The topic filter should be `my-app/things/+/uplink`. Your query should look like `INSERT INTO lora (time, data) VALUES (NOW(), $PAYLOAD)`.
+- Start a [new Scaleway instance](/compute/instances/how-to/create-an-instance) and setup Grafana, get inspiration from [this tutorial](/tutorials/visualize-timeseries-data-timescaledb-grafana) (steps 1 to 14, don't enable TimescaleDB option).
+- Add widgets to your dashboard, for a graph your query could look like `SELECT time, data->'DevEUI_uplink'->'payload'->'batteryLevel' as batteryLevel FROM lora WHERE $__timeFilter(time)`.
+
+That's it! Your LoRaWAN&copy; devices data is now backed by a production-grade dashboard!
+
+<Lightbox src="scaleway-iothub_howto_actility_grafana.png" alt="" />
+
+---
+
+Learn more about [Scaleway IoT Hub](/iot/iot-hub/concepts), discover how to add [Devices to the hub](/iot/iot-hub/how-to/add-device), check the [IoT Hub metrics](/iot/iot-hub/how-to/view-metrics) or get started in a few clicks with the [IoT Hub Kickstarts](/iot/iot-hub/how-to/create-kickstart).

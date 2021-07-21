@@ -1,0 +1,383 @@
+---
+layout: docs
+title: Deploying a Software as-a-Service application with Scaleway
+description: In this tutorial you will learn how to deploy a Software as-a-Service (SaaS) application, based on a SaaS application developed using Django Template.
+tags: saas, software as-a-Service
+excerpt: |
+  In this tutorial you will learn how to deploy a Software as-a-Service (SaaS) application, based on a SaaS application developed using Django Template. 
+totalTime: PT15M
+steps:
+  - step: Setting up Scaleway Elements Object Storage for your static files
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploying-saas-with-elements/#-Setting-up-Scaleway-Elements-Object-Storage-for-your-static-files
+  - step: Setting up Scaleway Database
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploying-saas-with-elements/#-Setting-up-Scaleway-Database
+  - step: Setting up Container Registry credentials 
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploying-saas-with-elements/#-Setting-up-Container-Registry-credentials 
+  - step: Building and pushing your SaaS Docker image
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploying-saas-with-elements/#-Building-and-pushing-your-SaaS-Docker-image
+  - step: Setting up environment variables
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploying-saas-with-elements/#-Setting-up-environment-variables
+  - step: Deploying your application
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploying-saas-with-elements/#-Deploying-your-application
+categories: 
+  - compute
+brands: 
+  - elements
+image: /assets/images/docs/scaleway.png
+permalink: docs/deploying-saas-with-elements/
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, server, object storage, kubernetes, kubernetes kapsule, database, kubernetes secret, docker, saas, software as-a-Service, container registry
+dates:
+  validation: 2021-07-07
+  posted: 2021-03-09
+---
+
+
+In this tutorial you will learn how to deploy a Software as-a-Service (SaaS) application, based on a SaaS application developed using Django Template. You will use the following Scaleway products:
+
+* [**Object Storage**](https://www.scaleway.com/en/object-storage/), to store your static files
+* [**Database as-a-Service**](https://www.scaleway.com/en/database/), for your data storage
+* [**Container Registry**](https://www.scaleway.com/en/container-registry/), to store your Docker images
+* [**Kubernetes Kapsule**](https://www.scaleway.com/en/kubernetes-kapsule/), for your production environment
+
+Along the way, you'll learn how to store environment variables with Kubernetes secrets and use ImagePullSecrets to pull your private images. We also give you some tips for going further with your deployed SaaS application, including how to expose it with a Scaleway Load Balancer.
+
+	
+<Message type="requirement">
+
+  - You have already created a SaaS application using [Django Template](https://docs.djangoproject.com/en/3.1/topics/templates/) (Note: you may still follow this tutorial if you have used another technology for your SaaS application, but you will need to adapt the Django settings used throughout this tutorial)
+  - You have created an account and are logged into [console.scaleway.com](https://console.scaleway.com)
+  - You have [configured your API Keys](/console/my-project/how-to/generate-api-key/)
+  - You have [created a private Object Storage bucket](/storage/object/how-to/create-a-bucket/)
+  - You have [created a Scaleway Elements Managed Database](/storage/database/how-to/create-a-database/)
+  - You have [created a private Container Registry namespace](/compute/container-registry/how-to/create-namespace)
+  - You have [installed kubectl on your local machine](/compute/kubernetes/how-to/connect-cluster-kubectl/)
+  - You have [installed docker on your local machine](https://www.docker.com/)
+
+</Message>
+
+
+## Setting up Object Storage for your static files
+
+In all applications, you have to define settings, usually based on environment variables, so that you can adapt the behavior of your application depending on their values. Having used Django to create your SaaS application, the settings you need can be found in a file called `settings.py`. In the following steps, we will modify `settings.py` in order to connect our private Object Storage bucket to our application.  As noted in the requirements for this tutorial, you should have already [created a private Object Storage bucket](/storage/object/how-to/create-a-bucket/) before continuing.
+
+1. Take a look at your Django application's `settings.py` file. Natively, Django doesn't manage the S3 protocol for storing static files, and it will provide you with a basic configuration at the end of this file:
+
+  ```
+  STATIC_URL = '/static/'
+  STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+  STATICFILES_DIRS = [os.path.join(BASE_DIR, 'static'), ]
+  ```
+
+    - `BASE_DIR` is the root directory of your project
+    - `STATIC_URL` is the string that will be added to your project root URL to access static files
+    - `STATIC_ROOT` is the location of your static files once you are in production. In this case, they will be stored locally with your application.
+    - `STATICFILES_DIRS` is the list of locations where static files can be found in your project.
+
+  	
+  <Message type="note">
+  
+    When you are in a development environment, `STATIC_URL` will point to `STATICFILES_DIRS`, while it redirects to `STATIC_ROOT` for production. Therefore, in production, you have to copy all your static files to the `STATIC_ROOT` location. You can use the Django helper [`python manage.py collectstatics`](https://docs.djangoproject.com/en/3.1/ref/contrib/staticfiles/) for this purpose.
+  
+  </Message>
+
+  This configuration is usually perfect for development. For a production environment, it can be desirable to have an alternative, e.g. using an Object Storage bucket. 
+
+2. Append the following code to your `settings.py` file. It will add new variables to set up the use of Object Storage as the static files' storage engine. It is recommended to keep the previous settings by default for development purposes.
+
+  ```
+  PROD = os.getenv('PROD')
+  if PROD:
+      AWS_ACCESS_KEY_ID = os.getenv('ACCESS_KEY_ID')
+      AWS_SECRET_ACCESS_KEY = os.getenv('SECRET_ACCESS_KEY')
+      AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_STORAGE_BUCKET_NAME')
+      AWS_S3_REGION_NAME = os.getenv('AWS_S3_REGION_NAME')
+
+      AWS_DEFAULT_ACL = 'public-read'
+      AWS_LOCATION = 'static'
+      STATICFILES_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
+      AWS_S3_SIGNATURE_VERSION = 's3v4'
+
+      AWS_S3_HOST = 's3.%s.scw.cloud' % (AWS_S3_REGION_NAME,)
+      AWS_S3_ENDPOINT_URL = 'https://%s' % (AWS_S3_HOST, )
+      STATIC_URL = '%s/%s/' % (AWS_S3_ENDPOINT_URL, AWS_LOCATION)
+  ```
+
+  Before we look more closely at the variables we just added, further action is required. Since you have a new package (`boto3` in this case) used in the variable `STATICFILES_STORAGE`, you need to follow the next steps:
+
+3. Add the `boto3` package to your requirements list.
+
+4. Add the `boto3` package (`storages` app) to the list of applications used in your Django project in your `settings.py` file.
+
+  ```
+  INSTALLED_APPS = [
+      'django.contrib.admin',
+      'django.contrib.auth',
+      ...
+      'storages',
+  ```
+
+5. Now we can take a look at the variables we added in step 2. Since there are so many variable imbrications it may seem a little overwhelming. However, once the setup is complete you won't need to worry about them any more:
+
+- `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` are the [Access Key and Secret Key for your Scaleway account](/console/my-project/how-to/generate-api-key/)
+- `AWS_STORAGE_BUCKET_NAME` is the name you gave your [Object Storage bucket](/storage/object/how-to/create-a-bucket/), e.g. `my_awesome_bucket`
+- `AWS_S3_REGION_NAME` is the region/zone of your Object Storage Bucket
+- `AWS_S3_HOST` and `AWS_S3_ENDPOINT_URL` are the URLs needed to access your S3 bucket. They are composed of the previously defined variables.
+- `AWS_LOCATION` is the folder that will be created in our S3 bucket for our static files
+- `STATIC_URL` has changed
+- `STATICFILES_STORAGE` defines the new storage class that we want to use, here standard S3 protocol storage. We now need to give values to our environment values, so that they can be correctly found by `settings.py` via `os.getenv('MY_VAR_NAME')`. 
+	
+<Message type="note">
+
+  Remember that S3 is a standard protocol. Even though the `boto3` library asks us to prefix variables with `AWS`, it nonetheless works perfectly with Scaleway Object Storage.
+
+</Message> 
+
+Even though we added a lot of lines to `settings.py`, only four environment variables are ultimately needed to use our Object Storage bucket: `ACCESS_KEY_ID`, `SECRET_ACCESS_KEY`, `AWS_S3_REGION_NAME` (eg `nl-ams`) and `AWS_STORAGE_BUCKET_NAME`. These variables are called using `os.getenv('MY_VAR_NAME')` so we now need to set these values.
+
+If you set your `PROD` variable to `TRUE`, you will be able to connect to your bucket, but your variables are only available locally. Instead, to send them safely into your Kubernetes Kapsule environment, you can pack them into a `secret` object:
+
+6. Type the following command into your terminal. Be sure to replace the information in the angled brackets with the correct information for your credentials / bucket:
+
+  ```
+  kubectl create secret generic my-s3-credentials  \
+      --from-literal=ACCESS_KEY_ID=<my_access_key> \
+      --from-literal=SECRET_ACCESS_KEY=<my_secret_key> \
+      --from-literal=AWS_STORAGE_BUCKET_NAME=my_awesome_bucket \
+      --from-literal=AWS_S3_REGION_NAME=nl-ams
+  ```
+
+  You should see the following output in your terminal:
+
+  ```
+  secret/my-s3-credentials created
+  ```
+	
+  <Message type="note">
+
+    Secrets can be of different types (as we will see later in this tutorial). In this step, we only need the 'generic' secret type.
+
+  </Message> 
+
+Your Object Storage bucket is now all set up, and your production environment knows how to connect to it. 
+
+## Setting up Scaleway Database
+
+We now need to configure our settings for our Scaleway Database. As noted in the requirements for this tutorial, you should already have [created a Scaleway Elements Managed Database](/storage/database/how-to/create-a-database/) before continuing. These come in various types, but for this tutorial we use a PostgreSQL database, which does not require much configuration.
+
+1. Add the `psycopg2` package (or the equivalent for your chosen database type) to your python requirements.
+
+2. Back in your `settings.py` file, change the default database engine that Django will be using:
+
+  ```
+  DATABASES = {
+      'default': {
+              'ENGINE': 'django.db.backends.postgresql_psycopg2',
+              'NAME': os.getenv('DB_NAME'),
+              'USER': os.getenv('DB_USER'),
+              'PASSWORD': os.getenv('DB_PWD'),
+              'HOST': os.getenv('DB_HOST'),
+              'PORT': os.getenv('DB_PORT')
+      }
+  }
+  ```
+
+3. As you did for your Object Storage environment variables, you now need to set these new database variables as environment variables so that you can switch from one environment to another, via a `secret` object. Type the following command into your terminal command line. Be sure to replace the information in the angled brackets with the correct information for your Scaleway Database:
+
+  ```
+  kubectl create secret generic my-db-credentials  \
+      --from-literal=DB_NAME=<my_db_name> \
+      --from-literal=DB_USER=<my_db_user> \
+      --from-literal=DB_PWD=<my_db_user_password> \
+      --from-literal=DB_HOST=<my_db_host> \
+      --from-literal=DB_PORT=<my_db_port>
+  ```
+
+  You should see the following output:
+
+  ```
+  secret/my-db-credentials created
+  ```
+
+## Setting up Container Registry credentials 
+
+As noted in the requirements for this tutorial, you should already have [created a private Scaleway Container Registry namespace](/compute/container-registry/how-to/create-namespace/). For this tutorial, we use a namespace called `my_registry_namespace`.
+
+1. Log into your Container Registry with docker. You can do this in your terminal by using the following command, as you already set up your `SECRET_ACCESS_KEY` environment variable in an earlier step. Just make sure to use your correct username, and namespace region (in this case `nl-ams`):
+
+  ```
+  echo SECRET_ACCESS_KEY | docker login rg.nl-ams.scw.cloud -u <my_user_name> --password-stdin
+  ```
+
+2. Enable Kubernetes to pull from your private registry namespace by using the `ImagePullSecret` configuration in your manifest. Type the following into your terminal command line, being sure to replace the information in the angled brackets for your own case as necessary:
+
+  ```
+  kubectl create secret docker-registry my-private-registry-access \
+  --docker-server=rg.nl-ams.scw.cloud \
+  --docker-username=<my_user_name> \
+  --docker-password=<my_secret_key> \
+  --docker-email=<my_email>
+  ```
+
+	
+<Message type="note">
+
+  You can see that this secret is not of type `generic` with `from-literal` tags, but of type `docker-registry`, with docker-specific tags. To learn more about secrets and their differences, you can go to the [official Kubernetes documentation page](https://kubernetes.io/docs/concepts/configuration/secret/).
+
+</Message>
+
+## Building and pushing your SaaS Docker image
+
+You are free to build your Docker image as you see fit. In this case, we won't use docker-compose, but manually build images from our Dockerfile. 
+
+1. Create a Dockerfile with the following content:
+
+  ```
+  FROM python:3.9
+
+  RUN apt-get update
+  WORKDIR /app
+
+  COPY requirements.txt requirements.txt
+
+  RUN pip3 install --upgrade pip
+  RUN pip3 install -r requirements.txt
+
+  COPY . .
+
+  EXPOSE 8000
+  CMD python my_app/manage.py runserver
+  ```
+
+2. Use this Dockerfile to build the image, with the following command in your terminal:
+
+  ```
+  docker build --tag my_web_app .
+  ```
+
+3. Tag your image, with the following command:
+
+  ```
+  docker tag my_web_app:latest rg.nl-ams.scw.cloud/my_registry_namespace/my_web_app:latest
+  ```
+
+4. Push the tagged image to your private Container Registry namespace:
+
+  ```
+  docker push rg.nl-ams.scw.cloud/my_registry_namespace/my_web_app:latest
+  ```
+
+## Setting up environment variables
+
+We're getting used to secret creation, and now our Django SaaS application needs some environment variables of its own.
+
+1. Type the following into your terminal, being sure to replace the information in angled brackets with the correct values for your application:
+
+  ```
+  kubectl create secret generic my-app-credentials \
+  --from-literal=ENV=PROD \
+  --from-literal=ALLOWED_HOST=<my_app_ip> \
+  --from-literal=SECRET_KEY=<randomly_generated_string>
+  ```
+
+  You should see the following output:
+
+  ```
+  secret/my-app-credentials created
+  ```
+
+## Deploying your application
+
+Now that everything is set up, you need to write a manifest to deploy your web application on your Kubernetes Kapsule cluster.
+
+1. Create a `manifest.yaml` file with the following content:
+
+  ```
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+      name: awesome-webapp
+  spec:
+      replicas: 3
+      selector:
+          matchLabels:
+              app: my_web_app
+      template:
+          metadata:
+              labels:
+                  app: my_web_app
+          spec:
+              containers:
+              - name: my_web_app
+                  image: rg.nl-ams.scw.cloud/my_registry_namespace/my_web_app:v1
+                  ports:
+                  - containerPort: 8000
+                  envFrom:
+                      - secretRef:
+                          name: my-db-credentials
+                      - secretRef:
+                          name: my-app-credentials
+                      - secretRef:
+                          name: my-s3-credentials
+                  imagePullPolicy: Always
+              imagePullSecrets:
+              - name: my-private-registry-access
+  ```
+
+  In this file, we can see that:
+
+    - We link to our docker image in our private Container Registry namespace (`image: rg.nl-ams.scw.cloud/my_registry_namespace/my_web_app:v1`) by using the credentials set as secret (`imagePullSecrets`)
+    - Our web application uses environment variables (`envFrom`) from our secret credentials for Database and Object Storage accesses, and for our application variables.
+
+2. Deploy your app with the following command in your terminal: 
+
+  ```
+  kubectl apply -f manifest.yaml
+  ```
+
+  You should see this output:
+
+  ```
+  deployment “awesome-webapp” created
+  ```
+
+3. Run the following command to see your application up and running in your cluster:
+
+  ```
+  kubectl get all
+  ```
+
+  You should see output like the following:
+
+  ```
+  NAME                                     READY   STATUS    RESTARTS   AGE
+  pod/awesome-webapp-7252e88462-9vw92   1/1     Running   0          8m
+  pod/awesome-webapp-7252e88462-wm2br   1/1     Running   0          8m
+  pod/awesome-webapp-7252e88462-x6rwv   1/1     Running   0          8m
+
+  NAME                                READY   UP-TO-DATE   AVAILABLE   AGE
+  deployment.apps/awesome-webapp   3/3     3            3           8m
+
+  NAME                                           DESIRED   CURRENT   READY   AGE
+  replicaset.apps/awesome-webapp-7252e88462   3         3         3       8m
+  ```
+
+That's it! Your SaaS application is now deployed.
+
+## Going further
+
+If you want to go further by exposing your application outside of the cluster, take a look at these tutorials:
+
+- [Setting up Traefik v2 and cert-manager on Kapsule](/tutorials/traefik-v2-cert-manager)
+- [Using a load balancer to expose your Kubernetes Kapsule ingress controller service](/tutorials/lb-ingress-controller)
+
+By following them, you will learn how to:
+
+- Set up an ingress controller with a certificate
+- Configure a DNS to access your web application
+- Use Scaleway Load Balancer to expose your application in production

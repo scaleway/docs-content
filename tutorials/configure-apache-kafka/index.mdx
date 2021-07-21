@@ -1,0 +1,323 @@
+---
+title: Configure an Apache Kafka Messaging Cluster
+description: Discover how to configure an Apache Kafka messaging cluster.
+tags: compute messaging apache kafka bigdata
+excerpt: |
+  Apache Kafka is a versatile distributed messaging system, developed initially by LinkedIn in to handle their growing need for message processing. It is a publish/subscribe messaging system that has an interface typical of messaging systems but a storage layer more like a log-aggregation system and can be used for various activities, from monitoring (collection of metrics, or the creation of dashboards), messaging (used for message queues in content feeds), activity tracking (from passive information like page views or clicks to more complex data like user generated content) or a building block for distributed applications (distributed databases, distributed log systems).
+totalTime: PT1H
+steps:
+  - step: What is a Messaging System?
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/configure-apache-kafka/#-What-is-a-Messaging-System
+  - step: Architecture of Apache Kafka
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/configure-apache-kafka/#-Architecture-of-Apache-Kafka
+  - step: Installing Kafka
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/configure-apache-kafka/#-Installing-Kafka
+  - step: Sending Messages
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/configure-apache-kafka/#-Sending-Messages
+  - step: Starting a Consumer
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/configure-apache-kafka/#-Starting-a-Consumer
+  - step: Starting a MultiBroker Cluster
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/configure-apache-kafka/#-Starting-a-MultiBroker-Cluster
+  - step: Importing and Exporting Data with Kafka Connect
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/configure-apache-kafka/#-Importing-and-Exporting-Data-with-Kafka-Connect
+categories:
+  - compute
+  - kapsule
+  - instance-dev
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, debian server, linux server, Object Storage, S3, IAAS, baremetal, scalability, ARM, physical server, dedicated server, physicalization, account, kafka, messaging, apache, bigdata
+dates:
+  validation: 2021-05-10
+  posted: 2018-04-07
+---
+
+## Kafka Overview
+
+[Apache Kafka](https://kafka.apache.org) is a versatile distributed messaging system, developed initially by LinkedIn in to handle their growing need for message processing. It is a publish/subscribe messaging system that has an interface typical of messaging systems but a storage layer more like a log-aggregation system and can be used for various activities, from monitoring (collection of metrics, or the creation of dashboards), messaging (used for message queues in content feeds), activity tracking (from passive information like page views or clicks to more complex data like user generated content) or a building block for distributed applications (distributed databases, distributed log systems).
+
+The project started in 2010 at LinkedIn and released to the open source community on GitHub where it gained rapid attention. It became part of the Apache Foundation in 2011.
+
+Kafka has been implemented by many companies at any size because of its flexibility, immense scalability (you can grow your Kafka cluster by adding additional brokers without any impact on the system and handle trillions of messages) and redundancy.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key)
+
+</Message>
+
+
+## What is a Messaging System?
+
+In today's applications, you have to handle enormous volumes of messages. Therefore a messaging system can facilitate your workflow. It is responsible for the transmission of data from one application to the other. Thus, the apps can focus on the data but do not need to worry about sharing it with other applications.
+
+Two types of messaging systems exist:
+
+- Point-to-point
+- Publish/subscribe
+
+In a point-to-point messaging system, messages are kept in a queue, and multiple consumers can consume the messages. Once a message is consumed it disappears from the queue.
+
+A typical use case would be an order processing system. Several workers can consume messages one after another and the task assigned in the message can be fulfilled by the worker. The next task can be done by the next worker that consumes a message from the queue.
+
+In a publish/subscribe system, messages are persisted in a topic. Unlike in a point-to-point system, consumers can subscribe to one or more topics and consume all messages on that topic. Different consumers can consume messages and remain on the topic so another consumer can receive the same information again. Kafka is a publish-subscribe messaging system.
+
+## Architecture of Apache Kafka
+
+<Lightbox src="scaleway-schema-kafka.png" alt="" />
+
+Kafka needs at least one server to run the application on, called **broker**, a cluster can consist of multiple brokers that can be distributed in different data centers and physical locations for redundancy and stability.
+
+Brokers collect the messages sent by the **producers**. A message can be any kind of data and can be reported from different types of services, either log files or data collected by a sensor probe.
+
+Kafka stores the data in **topics**. Topics can be seen as a table in a database or a folder in a file system. They contain the messages sent to Kafka.
+
+Topics are split into **partitions**. For each topic, Kafka keeps a minimum of one partition. Each such partition contains messages in an unchangeable ordered sequence. A partition consists of a set of segment files of equal sizes.
+
+**Consumers** can subscribe to one or multiple topics to consume the data in the topic.
+
+## Installing Kafka
+
+Kafka is built in Scala and Java and can run on any platform that is capable of executing Java applications (for example Linux, Windows or MacOS).
+
+<Message type="note">
+
+For security reasons, it is not recommended to run your applications as root user. You should create a dedicated Kafka user and run the application with user privileges.
+
+</Message>
+
+1. Update the system and download a Java environment as Kafka relies on it:
+
+  ```
+  sudo apt-get update && sudo apt-get upgrade
+  sudo apt-get install default-jre
+  ```
+
+  Kafka relies on [ZooKeeper](https://zookeeper.apache.org/) to coordinate and synchronize information between the different Kafka nodes. The Kafka package comes pre-packed with a ZooKeeper application, but as it is available in Ubuntu's repository we can install it easily with `apt`.
+
+2. Install `ZooKeeper`
+
+    ```
+    sudo apt-get install zookeeperd
+    ```
+
+3. Download Kafka and extract it
+
+  ```
+  wget http://apache.crihan.fr/dist/kafka/1.0.1/kafka_2.11-1.0.1.tgz
+  tar -zxf kafka_2.11-0.9.0.1.tgz
+  sudo mv kafka_2.11-1.0.1 /usr/local/kafka
+  sudo mkdir /tmp/kafka-logs
+  ```
+
+4. Start the first Kafka broker
+
+  ```
+  /usr/local/kafka/bin/kafka-server-start.sh -daemon /usr/local/kafka/config/server.properties
+  ```
+
+  Kafka stores the data in topics. Topics can be seen as a table in a database or a folder in a file system. It contains the messages sent to Kafka.
+
+5. Create the first topic
+
+  ```
+  /usr/local/kafka/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 1 --partitions 1 --topic test
+  ```
+
+  This command will create a topic `test` by passing via the ZooKeeper instance running on `localhost:2181` and we get a response: `Created topic "test"`.
+
+Our first Kafka broker is ready now to receive some messages.
+
+## Sending Messages
+
+Kafka comes with a command line tool that can to send messages to our broker.
+
+1. Send the first messages
+
+  ```
+  /usr/local/kafka/bin/kafka-console-producer.sh --broker-list localhost:9092 --topic test
+  ```
+
+2. Type some messages that we can send to Kafka:
+
+  ```
+  This is a test message
+  This is another test message
+  ```
+
+  It is possible to exit the tool by pressing on `CTRL+C`.
+
+## Starting a Consumer
+
+1. As we have sent some messages to Kafka, start a consumer
+
+  ```
+  /usr/local/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test --from-beginning
+  ```
+
+  The messages that we have sent previously to Kafka will appear on the client:
+
+  ```
+  This is a test message
+  This is another test message
+  ```
+
+2. Exit the tool by pressing `CTRL+C` on your keyboard.
+
+## Starting a Multi-Broker Cluster
+
+We have now everything up and running for a single broker setup of Kafka. Let's configure a multi-broker setup for fault tolerance and redundancy.
+
+_If you configure Kafka for testing purposes you can run the different brokers on the same machine, however for redundancy it is recommended to run a production environment on multiple computers._
+
+We will setup a cluster consisting of three Kafka brokers. This will allow us to keep the cluster running even if one broker fails.
+
+1. First, we have to clone the configuration files
+
+  ```
+  sudo cp /usr/local/kafka/config/server.properties /usr/local/kafka/config/server-1.properties
+  sudo cp /usr/local/kafka/config/server.properties /usr/local/kafka/config/server-2.properties
+  ```
+
+  Now we have to edit the configuration files to configure some parameters give a unique identifier to each instance.
+
+2. Modify the following parameters in `server-1.properties`
+
+  ```
+  broker.id=1
+  listeners=PLAINTEXT://localhost:9093
+  log.dir=/tmp/kafka-logs-1
+  ```
+
+3. Edit the file `server-2.properties` as follows
+
+  ```
+  broker.id=2
+  listeners=PLAINTEXT://localhost:9094
+  log.dir=/tmp/kafka-logs-2
+  ```
+
+4. Zookeeper and our first node are already started, start the two new nodes:
+
+  ```
+  /usr/local/kafka/bin/kafka-server-start.sh /usr/local/kafka/config/server-1.properties &
+  /usr/local/kafka/bin/kafka-server-start.sh /usr/local/kafka/config/server-2.properties &
+  ```
+
+5. Create a topic that is replicated on the three brokers:
+
+  ```
+  /usr/local/kafka/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 3 --partitions 1 --topic replicated-topic
+  ```
+
+  Our cluster is running now and has its fist topic `replicated-topic`.
+
+6. Run the following command to check the status of the cluster:
+
+  ```
+  /usr/local/kafka/bin/kafka-topics.sh --describe --zookeeper localhost:2181 --topic replicated-topic
+  Topic:replicated-topic    PartitionCount:1    ReplicationFactor:3    Configs:
+  Topic: replicated-topic    Partition: 0    Leader: 0    Replicas: 0,1,2    Isr: 0,1,2
+  ```
+
+  Since our cluster has only one topic, there is only one line. Here is the information how to read it:
+
+    - **"Leader"** is the responsible node for reads and writes on the given partition. Each node will be a leader for a randomly chosen part of partitions.
+
+    - **"Replicas"** contains the list of nodes that replicate the log for this partition. This listing contains all nodes, no matter if they are the leader or if they are currently reachable (they might be out of sync).
+
+    - **"Isr"** contains the set of "in-sync" replicas. This is the subset of replicas that are currently active and connected to the leader.
+
+7. Our cluster is up and running now. Let's feed some test messages to it:
+
+  ```
+  /usr/local/kafka/bin/kafka-console-producer.sh --broker-list localhost:9092 --topic replicated-topic
+  ```
+
+  Type some messages and press `CTRL+C` to exit the `producer`:
+
+  ```
+  This is a first test message
+  This is a second test message
+  ...
+  ```
+
+8. Let us consume the data
+
+  ```
+  /usr/local/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --from-beginning --topic replicated-topic
+  ```
+
+  The messages will appear on the screen. To exit the `consumer` press on `CTRL+C`on your keyboard.
+
+  ```
+  This is a first test message
+  This is a second test message
+  ...
+  ```
+
+## Importing and Exporting Data with Kafka Connect
+
+Writing and consuming data on the console is a nice way to start, but you want probably collect data from other sources or export data to other applications from Kafka. This can be done with Kafka connect.
+
+Kafka Connect is a tool that is included with Kafka and can be used to import and export data by running connectors, which implement the specific configuration for interacting with an external system.
+
+In this tutorial, we will configure Kafka connect to write data from a file to a Kafka topic and from a Kafka topic to a file.
+
+1. Create some data to test
+
+  ```
+  echo -e "foo\nbar" > test.txt
+  ```
+
+2. Start two _connectors_ in standalone mode:
+
+  ```
+  /usr/local/kafka/bin/connect-standalone.sh /usr/local/kafka/config/connect-standalone.properties /usr/local/kafka/config/connect-file-source.properties /usr/local/kafka/config/connect-fileink.properties
+  ```
+
+  These sample configuration files provided by Kafka use the local cluster configuration that we started earlier and create two connectors:
+
+    - a **source connector** that reads lines from an input file and passes each line of the file to a Kafka topic
+    - a **sink connector** that reads the messages from a Kafka topic and writes each as a line in an output file.
+
+  During startup, some log messages show up.
+  Once the Kafka Connect process has started the source connector will begin reading lines from the file `test.txt` and passing them to the topic `connect-test`. The sink connector will start reading lines from the topic `connect-test` and writes them to the file `test.sink.txt`.
+
+3. To check if everything has worked well, display the content of the output file:
+
+  ```
+  cat test.sink.txt
+  foo
+  bar
+  ```
+
+As the messages remain in the Kafka topic we can also check it from a console consumer:
+
+  ```
+  /usr/local/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic connect-test --from-beginning
+  {"schema":{"type":"string","optional":false},"payload":"foo"}
+  {"schema":{"type":"string","optional":false},"payload":"bar"}
+  ```
+
+  As the connectors continue to process data, we can add more content to the file:
+
+  ```
+  echo More content>> test.txt
+  ```
+
+  The line appears in the sink file as well as the console consumer.
+
+Different connectors for various applications exist already and are [available for download](https://www.confluent.io/product/connectors/).
+
+If you are in need of a specific connector for your application you can [develop one](https://docs.confluent.io/current/connect/devguide.html) by yourself.
+
+Kafka provides various API's to automatize many tasks.
+If you want to learn more about Kafka, feel free to check their [documentation](https://kafka.apache.org/documentation/).

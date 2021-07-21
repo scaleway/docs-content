@@ -1,0 +1,144 @@
+---
+title: How to send SMS from IoT Devices using Twilio
+description: This page explains how to combine IoT Hub and Serverless Functions to trigger an SMS from an IoT Device
+excerpt: This page explains how to combine IoT Hub and Serverless Functions to trigger an SMS from an IoT Device
+totalTime: PT20M
+categories:
+  - iot
+  - iot-hub
+tags: Scaleway IoT Hub Serverless SMS Twilio
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, object storage, s3, functions, containers, serverless, iot, smart, connected, embedded, devices, hubs, mqtt, sms
+dates:
+  validation: 2021-05-10
+  posted: 2020-10-13
+---
+
+## How to send SMS from IoT Devices
+
+SMS messages are the universal way to quickly send information to someone, with a high reachability, quick delivery, and high rate of opening.
+And today, we are going to have a look at how to send SMS messages right from your IoT Hub.
+
+For this tutorial, we will setup a standard scenario:
+Imagine that you have a house with intrusion sensors, and you want to be alerted by SMS when one of them is triggered.
+We can do this easily with IoT Hub.
+
+First, the plan: a Device will send a message, which will be caught by an IoT Hub Route, which then triggers a Serverless Function which will finally call the SMS provider API.
+
+For the SMS provider we chose Twilio, as they offer a small amount of credit when you register, which should be enough to play with this tutorial. If you prefer to use another SMS provder, you can use it as long as they provide API access.
+
+We are going to do things in reverse order:
+
+- Get Twilio credentials
+- Create a Serverless Function
+- Set up an IoT Hub and configure a Route to the Function
+- Give it a try!
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+
+</Message>
+
+## Getting Twilio credentials
+
+1. Create a Twilio account on [their website](https://www.twilio.com).
+
+  <Lightbox src="scaleway-twilio-signup.png" alt="" />
+
+2. Validate your email address and your phone number to finish to sign up process.
+
+3. If you want to add another verified phone number, go to [Verified Caller IDs](https://www.twilio.com/console/phone-numbers/verified).
+
+  On your project's dashboard, start by getting a phone number:
+
+  <Lightbox src="scaleway-twilio-welcome-dashboard.png" alt="" />
+
+  <Lightbox src="scaleway-twilio-get-phone-number.png" alt="" />
+
+4. Head to the [Messaging / Setting Started](https://www.twilio.com/console/sms/getting-started/build) page and click `Show your Auth Token`.
+
+  In the text area below you should see something like:
+
+  ```sh
+  curl 'https://api.twilio.com/2010-04-01/Accounts/<your account ID>/Messages.json' -X POST \
+  --data-urlencode 'To=+01234567890' \
+  --data-urlencode 'From=+12345678901' \
+  -u <your Account ID>:<your Auth Token>
+  ```
+
+  <Lightbox src="scaleway-twilio-try-sms.png" alt="" />
+
+5. Write down the `From` and `To` phone numbers, along with your `Account ID` and `Auth Token`, we will need these in the Serverless Function.
+
+  That's it for Twilio, let's proceed to the Serverless Function setup.
+
+## Create a Serverless Function
+
+1. Head to the [Serverless section](https://console.scaleway.com/serverless/) of your Scaleway console and create a new Namespace.
+
+2. Once done, create a new Function, set `python3` as the runtime, paste the following code in the code editor, choose any name for your function, leave everything else with the default settings and click create.
+
+  ```python
+  #!/usr/bin/python3
+  import urllib
+  import urllib.request
+
+  twAccount = '<Account ID>'
+  twToken = '<Auth Token>'
+  smsFrom = '<"From" Phone Number>'
+  smsTo = '<"To" Phone Number>'
+
+  url = "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json".format(twAccount)
+
+  password_mgr = urllib.request.HTTPPasswordMgrWithDefaultRealm()
+  password_mgr.add_password(None, url, twAccount, twToken)
+  handler = urllib.request.HTTPBasicAuthHandler(password_mgr)
+  opener = urllib.request.build_opener(handler)
+  urllib.request.install_opener(opener)
+
+  params = urllib.parse.urlencode({
+      'From': smsFrom,
+      'To': smsTo,
+      'Body': 'This is an alert from Scaleway IoT Hub!'
+      }).encode('ascii')
+
+  urllib.request.urlopen(url, data=params)
+  ```
+
+  Don't forget to replace empty variables (`twAccount`, `twToken`, `smsFrom` and `smsTo`) with the information you got from the Twilio console.
+
+  That's it for the function. While is it being deployed, write down the Function endpoint (under the `Function settings` tab) and let's proceed to the IoT Hub configuration.
+
+## Creating and setting-up an IoT Hub
+
+Here we are going to set up an IoT Hub to trigger the Function when we receive the alert message from the sensor.
+Let's say we want the Hub to trigger our function when a message is published on the `my-home/alert` topic.
+
+1. Create an IoT Hub in the [IoT Hub section](https://console.scaleway.com/iot-hub/hubs) of Scaleway console.
+
+2. Give it a name, choose the `Shared` plan (this plan is free) and click the `Create a Hub` button.
+
+3. Click your newly created Hub in the list, go to the `Networks` tab and write down the Hub endpoint.
+
+4. Now the Hub is created, click it, go to the `Routes` tab, and click `Create a Route`.
+
+5. Choose any name, type in `my-home/alert` in the `Topic` field, select `REST Query` under `Route type`, paste the Function endpoint in the `Endpoint` field, and click the `Add new Route` button.
+
+That's it! Our IoT Hub is ready to send SMS messages!
+
+## Testing the configuration
+
+1. Head back to the `Devices` tab of your IoT Hub. Add a new Device, name it as you wish, choose `Allow insecure connection` and click the `Add device` button. On the Device overview page, click the `MQTT Webclient` button. The client will open and automatically connect.
+
+  <Message type="note">
+
+  We chose to allow insecure connection to simplify this guide, in a production environment you will want to **deny** insecure connections and use mutual TLS authentication.
+
+  </Message>
+
+2. To simulate your sensor device write `my-home/alert` in the `Topic` box and click `Publish`.
+
+3. Verify on your phone that the message was received.
+
+For more information about Scaleway IoT Hub refer to our [product documentation](iot/iot-hub/concepts)

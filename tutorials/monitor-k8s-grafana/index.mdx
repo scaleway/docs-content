@@ -1,0 +1,193 @@
+---
+title: Monitoring a Kubernetes Kapsule Cluster
+description: This tutorial will explain you how to monitor your Kubernetes Kapsule cluster.
+excerpt: |
+  Kubernetes Kapsule provides a managed Kubernetes environment to create, configure and run a cluster of preconfigured machines for containerized applications.  
+  This tutorial will explain you how to monitor your Kubernetes Kapsule cluster.
+totalTime: PT10M
+steps:
+  - step: Preparing the Kubernetes Kapsule Cluster
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/monitor-k8s-grafana/#-Preparing-the-Kubernetes-Kapsule-Cluster
+  - step: Deploying Prometheus
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/monitor-k8s-grafana/#-Deploying-Prometheus
+  - step: Deploying Grafana
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/monitor-k8s-grafana/#-Deploying Grafana
+categories:
+  - compute
+  - kapsule
+tags: compute kubernetes kapsule prometheus monitoring
+image: /assets/scaleway_grafana.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, debian server, linux server, IAAS, baremetal, scalability, ARM, physical server, dedicated server, physicalization, server, compute, kubernetes, kapsule, prometheus, monitoring
+dates:
+  validation: 2021-05-10
+  posted: 2020-03-18
+---
+
+Kubernetes Kapsule provides a managed [Kubernetes](https://kubernetes.io) environment to create, configure and run a cluster of preconfigured machines for containerized applications.
+
+This tutorial will explain how to to monitor your [Kubernetes Kapsule](https://www.scaleway.com/en/kubernetes-kapsule/) cluster.  The stack that we are going to deploy is based on `Prometheus`, `Grafana`, `kube-state-metrics` and `node-exporter`. We will use `Helm` to deploy the whole stack.  All applications used for this how-to are well known open-source software that are widely used and they fit very well in a Kubernetes environment.
+
+- _[Prometheus](https://prometheus.io)_: `Prometheus` is an application used for monitoring and alerting. It records real-time metrics in a time series database. It is based on a pull model and relies on http for scraping the metrics.
+- _[Grafana](https://grafana.com)_: `Grafana` is used for visualizing the metrics scraped by Prometheus and stored in the time serie database
+- _[kube-state-metrics](https://github.com/kubernetes/kube-state-metrics)_: `kube-state-metrics` listens to the Kubernetes API server and generates metrics about the state of the objects. The list of the exported metrics are available [here](https://github.com/kubernetes/kube-state-metrics/tree/master/docs). For instance, `kube-state-metrics` can report the number of pods ready (kube_pod_status_ready), or the number of unschedulable pods (kube_pod_status_unschedulable).
+- _[node-exporter](https://github.com/prometheus/node_exporter)_: The `node-exporter` is a Prometheus exporter for hardware and OS metrics exposed by the Linux Kernel. It will allow you to get metrics about cpu, memory, filesystem for each Kubernetes node.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [created a Kapsule cluster](/compute/kubernetes/how-to/create-cluster/)
+- [kubectl](/compute/kubernetes/how-to/connect-cluster-kubectl/) is working on your machine
+- `helm`, the Kubernetes [packet manager](https://helm.sh/), is installed on your local machine (version 3.2+)
+
+</Message>
+
+
+## Preparing the Kubernetes Kapsule Cluster
+
+1. Ensure you are connected to your cluster and that `kubectl` and `helm` are installed on your local machine.
+
+2. Add the Prometheus Community Helm repo and the stable Kubernetes repo and update them:
+
+  ```
+  $ helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+  $ helm repo add stable https://kubernetes-charts.storage.googleapis.com/
+  $ helm repo update
+  ```
+
+## Deploying Prometheus
+
+We are first going to deploy the `Prometheus` stack in a dedicated Kubernetes [namespace](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/) called "`monitoring`". We will set the retention time for 30 days and create a persistant volume (based on [Scaleway Block Storage](https://www.scaleway.com/en/block-storage/)) to store the `Prometheus` data.
+
+1. Use the `helm` packet manager to install the stable release of Prometheus. Set the following parameters to `helm` for both of these:
+
+    - `server.persistentVolume`: 100Gi
+    - `server.retention`: 30d
+
+  ```
+  $ helm install prometheus prometheus-community/prometheus --create-namespace --namespace monitoring  --set server.persistentVolume.size=100Gi,server.retention=30d
+  NAME:   prometheus
+  LAST DEPLOYED: Fri Oct  9 16:35:50 2020
+  NAMESPACE: monitoring
+  STATUS: DEPLOYED
+  [..]
+  ```
+
+2. Once the stack is deployed, verify that the created pods are all running. It is also possible to check if the 100Gi block volume was created:
+
+  ```
+  $ kubectl get pods,pv,pvc -n monitoring
+  NAME                                                READY   STATUS    RESTARTS   AGE
+  pod/prometheus-alertmanager-6565668c85-5vdxc        2/2     Running   0          67s
+  pod/prometheus-kube-state-metrics-6756bbbb8-6qs9r   1/1     Running   0          67s
+  pod/prometheus-node-exporter-fbg6s                  1/1     Running   0          67s
+  pod/prometheus-pushgateway-6d75c59b7b-6knfd         1/1     Running   0          67s
+  pod/prometheus-server-556dbfdfb5-rx6nl              1/2     Running   0          67s
+
+  NAME                                                        CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                                STORAGECLASS   REASON   AGE
+  persistentvolume/pvc-5a9def3b-22a1-4545-9adb-72823b899c36   100Gi      RWO            Delete           Bound    monitoring/prometheus-server         scw-bssd                67s
+  persistentvolume/pvc-c5e24d9b-3a69-46c1-9120-b16b7adf73e9   2Gi        RWO            Delete           Bound    monitoring/prometheus-alertmanager   scw-bssd                67s
+
+  NAME                                            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS   AGE
+  persistentvolumeclaim/prometheus-alertmanager   Bound    pvc-c5e24d9b-3a69-46c1-9120-b16b7adf73e9   2Gi        RWO            scw-bssd       68s
+  persistentvolumeclaim/prometheus-server         Bound    pvc-5a9def3b-22a1-4545-9adb-72823b899c36   100Gi      RWO            scw-bssd       68s
+  ```
+
+3. To access `Prometheus` use the Kubernetes [port forwarding](https://kubernetes.io/docs/tasks/access-application-cluster/port-forward-access-application-cluster/) feature:
+
+  ```
+  $ export POD_NAME=$(kubectl get pods --namespace monitoring -l "app=prometheus,component=server" -o jsonpath="{.items[0].metadata.name}")
+  $ kubectl --namespace monitoring port-forward $POD_NAME 9090
+  ```
+
+4. Access the `Prometheus` dashboard using the following URL: <http://localhost:9090>
+
+  <Lightbox src="scaleway-prom1.png" alt="" />
+
+5. Verify that both `node-exporter` and `kube-state-metrics` metrics are correctly scrapped by `Prometheus`:
+
+    - The `node-exporter` metrics begin with "node\_"
+
+  <Lightbox src="scaleway-prom2.png" alt="" />
+
+    - The `kube-state-metrics` begin with "kube\_"
+
+  <Lightbox src="scaleway-prom3.png" alt="" />
+
+6. Prometheus is capable of generating graphs on its own. You can test the feature by chosing metrics to analyse directly in the application:
+
+  <Lightbox src="scaleway-prom4.png" alt="" />
+
+## Deploying Grafana
+
+We are going to use and deploy `Grafana` to display the `Prometheus` metrics in some pre-defined dashboards. To do so, we are -as always- using `helm`. Once again we deploy it in the monitoring namespace and enable the persistence:
+
+    - `persistence.enable` : true
+    - `persistence.type` : pvc
+    - `persistence.size` : 10Gi
+
+  Please refer to the [Loki](/tutorials/manage-k8s-logging-loki/) tutorial to have additionnal information about `Grafana`.
+
+1. Add the Helm repo and install Grafana using `helm` with the following commands:
+
+  ```
+  $ helm repo add grafana https://grafana.github.io/helm-charts
+  $ helm install grafana grafana/grafana \
+                                --set persistence.enabled=true,persistence.type=pvc,persistence.size=10Gi \
+                                --namespace=monitoring
+  ```
+
+2. Once `Grafana` is installed retrieve the admin password:
+
+  ```
+  $ kubectl get secret --namespace monitoring grafana -o jsonpath="{.data.admin-password}" | base64 --decode ; echo
+  ```
+
+3. Configure the port forwarding to access the Grafana Webinterface at this address: <http://localhost:3000>:
+
+  ```
+  $ kubectl port-forward --namespace monitoring service/grafana 3000:80
+  Forwarding from 127.0.0.1:3000 -> 3000
+  Forwarding from [::1]:3000 -> 3000
+  ```
+
+4. Open the Grafana Web Interface in a web browser at: <http://localhost:3000>. The login screen displays. Enter the user `admin` and the password recovered in step 2:
+
+  <Lightbox src="scaleway-grafana_login.png" alt="" />
+
+5. The welcome screen displays and invites you to complete the configuration of Grafana. Click **Add data source** to configure a new data source:
+
+  <Lightbox src="scaleway-grafana_home.png" alt="" />
+
+6. Choose **Prometheus** as data source from the list of available options.
+
+7. Enter the details of the data source. You can leave the default settings and add the data source: `http://prometheus-server`. Click **Test & Save** to validate the connection to Prometheus and to save the settings:
+
+  <Lightbox src="scaleway-grafana_datasource.png" alt="" />
+
+8. Click the **+** sign and then **Import** to import a ready-to-use dashboard from the Grafana website. To create a dashboard that uses _kube-state-metrics_, import the dashboard number [8588](https://grafana.com/grafana/dashboards/8588) and get information about your Deployement, Statefulset and Daemonset:
+
+  <Lightbox src="scaleway-grafana_import.png" alt="" />
+
+9. Choose `Prometheus` as data source and click **Import**.
+
+  <Lightbox src="scaleway-grafana_dash_datasource.png" alt="" />
+
+10. Access the dashboard with metrics for Deployement, Statefulset and Daemonset:
+
+  <Lightbox src="scaleway-grafana_dashboard.png" alt="" />
+
+11. You can also configure additional dashobards, for example the node exporter full dashboard ([1860](https://grafana.com/grafana/dashboards/1860)) to display a dashboard with system metrics for each Kubernetes node:
+
+  <Lightbox src="scaleway-monito3.png" alt="" />
+
+You now have a basic monitoring for your Kubernetes Kapsule cluster. For more information how to configure your cluster, refer to the official [Kubernetes documentation](https://kubernetes.io/docs/home/).
+
+## External Links
+
+- [kube-state-metrics](https://github.com/kubernetes/kube-state-metrics)
+- [node-exporter](https://github.com/prometheus/node_exporter)
+- [Prometheus and Alert Manager](https://prometheus.io)
+- [Grafana](https://grafana.com)

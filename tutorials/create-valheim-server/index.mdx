@@ -1,0 +1,269 @@
+---
+title: How to create a Valheim server with Scaleway Elements
+description: In this tutorial you will learn how to create your own Valheim server with Scaleway Elements Virtual Instances. We offer a large range of instances that will suits your gaming needs for your Valheim server.
+tags: compute image gameserver game play valheim valheim-server
+image: /assets/images/docs/scaleway.png
+excerpt: |
+  In this tutorial you will learn how to create your own Valheim server with Scaleway Elements Virtual Instances. We offer a large range of instances that will suits your gaming needs for your Valheim server.
+totalTime: PT20M
+steps:
+  - step: Deploying a Virtual Instance
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorias/create-valheim-server/#deploying-your-virtual-instance
+  - step: Installing SteamCMD
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorias/create-valheim-server/#installing-steamCMD
+  - step: Installing the Valheim server
+    type: HowToStep
+    url: https://www.scaleway.come/en/docs/tutorias/create-valheim-server/#installing-the-valheim-server
+  - step: Creating a systemd service
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorias/create-valheim-server/#creating-a-systemd-service
+  - step: Protecting the server
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorias/create-valheim-server/#protecting-the-server
+categories: 
+  - compute
+  - instance-dev
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, valheim, valheim game, valheim download, valheim server, game server, gameserver, online game, self-hosted
+---
+
+
+## Valheim Server - Overview
+
+[Valheim](https://www.valheimgame.com/) is a survival and sandbox video game that was released in early access on 2 February 2021 for Windows and Linux on Steam. Within only one month after its release the game sold more than 5 million copies and is one of the most played games on Steam. 
+
+Players of the game are Vikings in an afterlife where they have to complete missions like crafting tools, building shelters, and fighting enemies to survive. The game has multiple biomes available, such as meadows, swamps, ashlands, mountains, and oceans. Each of these biomes is unique and comes with its own difficulty level - which means players are confronted with different items and enemies. Players can travel through these biomes by either foot or boat. The game supports multiplayer mode with up to ten concurrent players. 
+
+<Lightbox src="scaleway-valheim-logo.png" alt="" />
+
+At Scaleway, we offer a large range of instances that will suit the gaming needs of your Valheim server. In this tutorial you will learn how to create your own Valheim server with Scaleway Elements Virtual Instances. 
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+
+</Message>
+
+## Deploying a Virtual Instance
+
+1. Click **Instances** in the **Compute** section of the Scaleway Console side menu. 
+
+2. Click on **Create an Instance** and enter the required information for your Virtual Instance: 
+    * The **Availability Zone** is the geographical region in which your Virtual Instance will be deployed. In this tutorial, we use `FR-PAR2`, but you can choose the one closest to your location. 
+    * The **image** that runs on your instance. In this tutorial, we use **Ubuntu Focal Fossa (20.04)** 
+    * An **Instance Type**. It characterizes the performances of your instance. In this tutorial, we use a **DEV1-L** instance which provides 8GB RAM. If required you can choose a more powerful instance for very large multiplayer sessions. 
+
+Click **Create Instance** to deploy the Virtual Instance. You can [click on this link](https://console.scaleway.com/instance/servers/create?area=fr-par&imageGroup=distribution_ubuntu&imageKey=3f1b9623-71ba-4fe3-b994-27fcdaa850ba&region=fr-par-2&selectedImageTab=distribution&selectedServerGroup=Development&serverKey=fr-par-2DEV1-L) to have the instance creation page prefilled with the required information. If you have the [Scaleway CLI](https://www.scaleway.com/en/cli/) installed on your computer, you can also use the following command to deploy the instance: 
+
+```
+scw instance server create type=DEV1-L zone=fr-par-2 image=ubuntu_focal root-volume=l:80G name=valheim-server ip=new 
+```
+
+## Installing SteamCMD
+
+1. Log into your Virtual Instance using [SSH](/compute/instances/how(to/connect-to-instance). 
+
+2. The Valheim Server requires [SteamCMD](https://developer.valvesoftware.com/wiki/SteamCMD), a command line client of the Steam client. It requires the `i386` architecture available in the `apt` package manager. Add it with the following command: 
+
+    ```
+    dpkg --add-architecture i386
+    ```
+
+3. Update the `apt` package repositories and upgrade the software already installed on the machine to the latest version available in Ubuntu's repositories
+
+    ```
+    apt update && apt upgrade -y
+    ```
+
+4. Install `steamcmd` and its prerequisites using the `apt` package manager: 
+
+    ```
+    apt install curl wget file tar bzip2 gzip unzip bsdmainutils python util-linux ca-certificates binutils bc jq tmux netcat lib32gcc1 lib32stdc++6 steamcmd sudo ufw
+    ```
+
+
+## Installing the Valheim server
+
+<Message type="tip">
+
+To avoid potential security risks, it is not recommended to run applications under the `root` account. 
+
+</Message>
+
+1.  Create a new `valheim` user account using the following command: 
+
+    ```
+    adduser valheim
+    ```
+
+2. Add the `valheim` user to the SuDoers file: 
+
+    ```
+    adduser valheim sudo
+    ```
+
+3. Change into the `valheim` user account:
+
+    ```
+    su valheim
+    ```
+
+4. Change into the users home directory:
+
+    ```
+    cd ~/
+    ```
+
+5. Create a new sub-folder in the users home directory to store the Valheim server files in: 
+
+    ```
+    mkdir valheim-server
+    ```
+
+6. Run the following command to download the Valheim server files into the newly created directory using `steamcmd`:
+
+    ```
+    steamcmd +login anonymous +force_install_dir /home/valheim/valheim-server +app_update 896660 validate +exit
+    ```
+
+    The Steam command line tool downloads the latest udpates and installs the Valheim server into our directory. This may take some time. Once completed the following message displays:
+
+    ```
+    Success! App '896660' fully installed.
+    ```
+    
+7. Change into the `valheim-server` directory and make a copy of the `start_server.sh` script to avoid it being overwritten by an eventual update of Steam: 
+
+    ```
+    cd valheim-server && cp start_server.sh start_valheim_server.sh
+    ```
+
+8. Open the script in a text editor, for example `nano`:
+
+    ```
+    nano start_valheim_server.sh
+    ```
+
+9. Modify the script as follows to download automatically the latest Valheim updates from Steam during the applications' start. Replace the values `My Server` with the name of your server, `Dedicated` with the world you want use on the server, and `secret_password` with your servers password. Make sure to edit the path of your `valheim_server` executable to the complete path to the binary file. Once edited, save the file by pressing **CTRL+O**, then leave nano by pressing **CTRL+X**.
+
+    ```sh
+    export templdpath=$LD_LIBRARY_PATH
+    export LD_LIBRARY_PATH=./linux64:$LD_LIBRARY_PATH
+    export SteamAppId=892970
+
+    echo "Downloading application updates."
+
+    /home/valheim/.steam/steamcmd/steamcmd.sh +login anonymous +force_install_dir /home/valheim/valheim-server/ +app_update $SteamAppID +quit
+
+    echo "Starting server PRESS CTRL-C to exit"
+
+    # Tip: Make a local copy of this script to avoid it being overwritten by Steam.
+    # NOTE: Minimum password length is 5 characters & the password can't be in the server name.
+    # NOTE: You need to make sure the ports 2456-2458 are being forwarded to your server through your firewall.
+
+    /home/valheim/valheim-server/valheim_server.x86_64 -name "My server" -port 2456 -world "Dedicated" -password "secret_password"
+
+    export LD_LIBRARY_PATH=$templdpath
+
+    echo "Server started."
+    ```
+
+10. Start the Valheim server by running the following command: 
+
+    ```
+    ./start_valheim_server.sh
+    ```
+
+## Creating a systemd service
+
+Currently we are able to launch the Valheim server manually by connecting using SSH. However after a server reboot it will not start automatically again. We use [systemd](https://systemd.io/) to automatically launch the Valheim server application after a reboot of our server. 
+
+1. Create a new systemd service file called `valheim.service` and open it in `nano` or another text editor of your choice
+
+    ```
+    sudo touch /etc/systemd/system/valheim.service && sudo nano /etc/systemd/system/valheim.service
+    ```
+
+2. Copy and paste the following content into the service file. It tells SystemD to launch the Valheim server automatically during boot once the network is ready: 
+
+    ```
+    [Unit]
+    Description=Valheim Server Service
+    Wants=network.target
+    After=syslog.target network-online.target
+
+    [Service]
+    Type=simple
+    Restart=on-failure
+    RestartSec=10
+    User=valheim
+    WorkingDirectory=/home/valheim/valheim-server/
+    ExecStart=/bin/bash /home/valheim/valheim-server/start_valheim_server.sh
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
+    Save the service file by pressing **CTRL+O**, then leave `nano` by pressing **CTRL+X**.
+
+3. Reload the systemd daemon to make the new service available on the system: 
+
+    ```
+    sudo systemctl daemon-reload
+    ```
+
+4. Enable the new service so that it starts automatically upon the next reboot of the instance:
+
+    ```
+    sudo systemctl enable valheim.service
+    ```
+
+5. Start the Valheim Server service:
+
+    ```
+    sudo systemctl start valheim
+    ```
+
+6. Wait a few seconds and run the following command to see if the Valheim server runs: 
+
+    ```
+    sudo systemctl status valheim
+    ```
+
+    If ever you want to stop your Valheim server, run the following command: 
+
+    ```
+    sudo systemctl stop valheim
+    ```
+
+## Protecting the server
+
+You can configure Uncomplicated Firewall (UFW) to restrict access to our Valheim game server for security reasons. Drop all connections except SSH and the ports of our Valheim server application.
+
+1. Check the status of the firewall. It should be deactivated before we configure it: 
+
+    ```
+    sudo ufw status
+    ```
+
+2. Add the following rules to the configuration: 
+
+    ```
+    sudo ufw deny any
+    sudo ufw allow ssh
+    sudo ufw allow 2456:2458/udp
+    ```
+
+    The rules above drop all incoming connections by default, but allow SSH connections and connections to the ports `2456` - `2458`, which are used by the Valheim server. 
+
+3. Enable the firewall by running the following command:
+
+    ```
+    sudo ufw enable
+    ```
+
+## Conclusion
+
+You have now configured your own Valheim server on a Scaleway Virtual Instance, installed basic protection through UFW and are ready to invite your friends to explore the different worlds of Valheim. For more information about the game, refer to the official [Valheim website](https://www.valheimgame.com/).

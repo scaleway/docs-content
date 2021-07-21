@@ -1,0 +1,331 @@
+---
+title: How to Install and Configure Foreman on Ubuntu Xenial
+description: Discover how to install and configure Foreman on Ubuntu Xenial
+tags: foreman puppet getting started
+excerpt: |
+  Foreman is a tool that helps system administrators managing servers throughout their lifecycle, from provisioning and configuration to orchestration and monitoring. In short, it is a complete lifecycle management tool for physical and virtual servers. Foreman, available as open source software, becomes even more powerful when integrated with other open source projects such as Puppet, Chef, Salt, Ansible.
+totalTime: PT20M
+steps:
+  - step: Creating your Foreman Server
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/foreman-puppet/#-Creating-your-Foreman-Server
+  - step: Installing Foreman on Ubuntu Xenial
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/foreman-puppet/#-Installing-Foreman-on-Ubuntu-Xenial
+  - step: Managing Puppet
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/foreman-puppet/#-Managing-Puppet
+  - step: The Foreman Web Interface
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/foreman-puppet/#-The-Foreman-Web-Interface
+  - step: Foreman Dashboard
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/foreman-puppet/#-Foreman-Dashboard
+  - step: Changing the Admin Password
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/foreman-puppet/#-Changing-the-Admin-Password
+  - step: Adding NTP Module To Foreman
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/foreman-puppet/#-Adding-NTP-Module-To-Foreman
+  - step: Overriding Default NTP Pool
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/foreman-puppet/#-Overriding-Default-NTP-Pool
+  - step: Configuring Foreman Host to Use NTP Module
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/foreman-puppet/#-Configuring-Foreman-Host-to-Use-NTP-Module
+  - step: Viewing Puppet Configuration
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/foreman-puppet/#-Viewing-Puppet-Configuration
+  - step: Running the Puppet Agent
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/foreman-puppet/#-Running-the-Puppet-Agent
+categories:
+  - compute
+  - instance-dev
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, linux server, baremetal, scalability, ARM, physical server, dedicated server, foreman, playbook, hosts, roles, puppet, modules
+dates:
+  validation: 2021-05-10
+  posted: 2018-08-06
+---
+
+## Foreman Overview
+
+[Foreman](https://www.theforeman.org/) is a tool that helps system administrators managing servers throughout their lifecycle, from provisioning and configuration to orchestration and monitoring. In short, it is a complete lifecycle management tool for physical and virtual servers. Foreman, available as open source software, becomes even more powerful when integrated with other open source projects such as [Puppet](/tutorials/configure-puppet/), [Chef](/tutorials/configure-chef-ubuntu-xenial/), [Salt](https://docs.saltstack.com/en/latest/), [Ansible](/tutorials/ansible-bionic-beaver/).
+
+Foreman helps to automatize the OS installation. After that – through its very good integration with puppet – the new system will be configured towards the desired state. Finally Puppet will send facts about the system to Foreman which helps to monitor the whole system over its complete lifecycle. With a discovery plugin Foreman can also discover new machines in the network based on their mac address.
+
+This tutorial assumes that Foreman is being installed on a fresh instance, which will also act as the Puppet master server. Foreman requires a working Puppet installation to perform the configuration management of hosts.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key)
+- You have [created an Instance](/compute/instances/how-to/create-an-instance/) which is running Ubuntu Xenial
+- You have root access to all of the servers you want to manage
+- Port 8140 on the Puppet master must be reachable
+- It is recommended to run Foreman on a machine with at least 8GB of RAM for optimal performances.
+
+</Message>
+
+## Creating your Foreman Server
+
+The installation tool is a collection of Puppet modules that installs everything required for a full working Foreman setup.
+
+**The Foreman installer uses Puppet (> 3.x required) to install the software.**
+
+1. Connect to the instance using SSH:
+
+  ```
+  ssh root@SERVER_IP
+  ```
+
+  To retrieve the instances IP, list your exiting servers using `scw ps` (Scaleway CLI). For more information on the Scaleway CLI, refer to the tutorial on the [Scaleway Command Line Interface](https://www.scaleway.com/docs/manage-cloud-servers-with-scaleway-cli/).
+
+  The instances IP can also be retrieved from the Scaleway Console. Once logged in, check the **IP Adresses** in the **Instances** tab of the left menu.
+
+2. Check your instances full hostname to ensure the hostname is set to [FQDN](https://en.wikipedia.org/wiki/Fully_qualified_domain_name)
+
+  ```
+  hostname
+  ```
+
+  You should see the complete hostname of your instance (e.g. `foreman.example.com`). If this is the case, skip the remaining steps and jump directly to the next section.
+
+3. (Optional) In case a short name is returned (e.g. `foreman`), configure the complete hostname. To do so, edit the `hosts` file in a text editor:
+
+  ```
+  sudo nano /etc/hosts
+  ```
+
+4. (Optional) Add the FQDN before the short hostname.
+
+  ```
+  foreman.example.com foreman
+  ```
+
+5. Save and exit nano.
+
+6. Edit the hostname file:
+
+  ```
+  sudo nano /etc/hostname
+  ```
+
+7. Change the entry in the file to the instances FQDN, e.g. `foreman.example.com`. Then save and exit the editor.
+
+8. Run the following command to reconfigure the instances hostname according to the changes made in the previous steps:
+
+  ```
+  sudo hostname --file /etc/hostname
+  ```
+
+## Installing Foreman on Ubuntu Xenial
+
+The fastest way to install Foreman is by using the installer, which installs and configures automatically all of the required components to run Foreman, these include:
+
+- Foreman
+- Puppet master/agent
+- The Apache Web Server with SSL and Passenger modules
+
+1. Install Puppet 5.x from the Puppetlabs repository as following.
+
+  ```
+  apt-get -y install ca-certificates
+  -O /tmp && wget https://apt.puppetlabs.com/puppet5-release-xenial.deb
+  dpkg -i /tmp/puppet5-release-xenial.deb
+  ```
+
+2. Add the Foreman repository to the [APT packet manager sources list](https://en.wikipedia.org/wiki/APT_(Debian):
+
+  ```
+  echo "deb http://deb.theforeman.org/ xenial 1.18" | sudo tee /etc/apt/sources.list.d/foreman.list
+  echo "deb http://deb.theforeman.org/ plugins 1.18" | sudo tee -a /etc/apt/sources.list.d/foreman.list
+  sudo apt-get -y install ca-certificates
+  wget -q https://deb.theforeman.org/pubkey.gpg -O- | sudo apt-key add -
+  ```
+
+3. Download the installer via APT:
+
+  ```
+  sudo apt-get update && sudo apt-get -y install foreman-installer
+  ```
+
+4. Run the Foreman Installer by typing the following command:
+
+  ```
+  foreman-installer
+  ```
+
+  The command returns the following output:
+
+  ```
+  Installing             Done                                               [100%] [..]
+    Success!
+    * Foreman is running at https://foreman.example.com
+        Initial credentials are admin / 6fHtmSWpqNbGo7nn
+    * Foreman Proxy is running at https://foreman.example.com:8443
+    * Puppetmaster is running at port 8140
+    The full log is at /var/log/foreman-installer/foreman.log
+  ```
+
+## Managing Puppet
+
+During installation, the installation tool will sets up a puppet master on the host, which is fully integrated with Foreman. Run the Puppet agent on the instance to send the first Puppet report to Foreman, This creates the host automatically in Foremans database.
+
+1. Install `puppet-agent` with the following command:
+
+  ```
+  apt-get install puppet-agent
+  ```
+
+2. Add the host to Foreman's database by running the puppet agent command
+
+  ```
+  sudo puppet agent --test
+  ```
+
+  This adds the local Foreman host as the first Puppet agent node, managed by Foreman.
+
+## The Foreman Web Interface
+
+The web interface of Foreman can be accessed on the public IP address of your instance.
+By default, Foreman uses Puppets self-signed certificates, which are probably not trusted by your browser. Accept the notification about the certificate and proceed.
+
+You can login to Foreman using the credentials that were returned once it was installed.
+
+- Username: admin
+- Password: random
+
+<Lightbox src="scaleway-foreman_login.png" alt="" />
+
+## Foreman Dashboard
+
+After login, the Foreman dashboard displays an overview of your Puppet environment.
+
+It displays a summary of "Host Configuration Status", showing the number of Puppet agent nodes and their respective statuses. At the first connection, one signle instance should be visible in the "good host" section.
+
+<Lightbox src="scaleway-dashboard.png" alt="" />
+
+## Changing the Admin Password
+
+Before doing anything else, change the admin user password for security reasons.
+
+1. Go to **Admin User** and select **My Account**
+
+2. In the **User** section, fill in the **current password** and set a new password in the **password** and **verify** tabs.
+
+3. Click **Submit**
+
+## Adding NTP Module To Foreman
+
+Puppet requires accurate time-keeping, therefore the [NTP service](https://en.wikipedia.org/wiki/Network_Time_Protocol) runs on the Foreman host (which acts also as Puppet master).
+
+1. Install NTP and [Stdlib](https://forge.puppet.com/puppetlabs/stdlib) on the Puppet master:
+
+  ```
+  puppet module install -i /etc/puppet/environments/production/modules puppetlabs/ntp
+  ```
+
+  The command returns
+
+  ```
+  Notice: Created target directory /etc/puppet/environments/production/modules
+  Notice: Downloading from https://forgeapi.puppet.com ...
+  Notice: Installing -- do not interrupt ...
+  /etc/puppet/environments/production/modules
+  └─┬ puppetlabs-ntp (v7.2.0)
+    └── puppetlabs-stdlib (v4.25.1)
+  ```
+
+  The module requires to be added to Foreman before being usable.
+
+2. When connected to the Foreman web UI, click **Configure**> **Puppet**> **Classes**:
+
+   <Lightbox src="scaleway-configure_classes.png" alt="" />
+
+3. Click the `Import environments from foreman.example.com` button.
+
+  <Lightbox src="scaleway-import.png" alt="" />
+
+  This imports the environment and displays the **Changed environments** panel.
+
+4. Tick the ntp checkbox next to the item and click **Update** to import the ntp module.
+
+  <Lightbox src="scaleway-ntp_prod.png" alt="" />
+
+## Overriding Default NTP Pool
+
+Update the settings and configure the NTP module to use the [French NTP pool](https://www.pool.ntp.org/zone/fr) by default.
+
+1. In the **Puppet Classes** screen, click **ntp** class to edit it.
+
+2. Click the **Smart Class Parameter** tab.
+
+3. Scroll down to find the **servers** item in the left sidebar, and select it
+
+<Lightbox src="scaleway-ntp_servers.png" alt="" />
+
+4. Tick the **Override** checkbox. In the **Parameter type** menu, choose **array** and change the **Default value** from the default NTP pool to the desired one:
+
+  ```
+  ["0.fr.pool.ntp.org","1.fr.pool.ntp.org","2.fr.pool.ntp.org","3.fr.pool.ntp.org"]
+  ```
+
+5. Click **Submit** to update the configuration and to use the French NTP pool as default.
+
+## Configuring Foreman Host to Use NTP Module
+
+Configure the NTP module to manage NTP on the Foreman host.
+
+1. Click **Hosts** on the side menu and select **All hosts**
+
+2. Click **Edit** on the far right of your Foreman host.
+
+  <Lightbox src="scaleway-hosts.png" alt="" />
+
+3. Click the **Puppet Classes** tab. Within the Available Classes section, click the ntp class, then click the plus sign next to "ntp":
+
+  <Lightbox src="scaleway-ntp_add.png" alt="" />
+
+The ntp class is being moved to the Included Classes section. The next time the Puppet agent checks in, it will have this module applied to it.
+
+  <Lightbox src="scaleway-ntp_included.png" alt="" />
+
+4. Click **Submit** to activate the configuration.
+
+## Viewing Puppet Configuration
+
+After editing Foreman host's configuration, a redirection to Foreman host's summary page applies.
+
+  <Lightbox src="scaleway-hosts_dashboard.png" alt="" />
+
+Click the **YAML** button, to see the information provided to Puppet when an agent node checks in.
+
+## Running the Puppet Agent
+
+Run the Puppet agent on the Foreman instance to apply all the changes that were made above
+
+  ```
+  sudo puppet agent --test
+  ```
+
+  The command returns the following output:
+
+  ```
+  root@foreman:~# puppet agent --test
+  Info: Using configured environment 'production'
+  Info: Retrieving pluginfacts
+  Info: Retrieving plugin
+  Info: Retrieving locales
+  Notice: /File[/opt/puppetlabs/puppet/cache/locales/ja/puppetlabs-ntp.po]/ensure: defined content as '{md5}7265ff57e178feb7a65835f7cf271e2c'
+  Info: Loading facts
+  Info: Caching catalog for foreman.example.com
+  Info: Applying configuration version '1533720851'
+  Notice: Applied catalog in 0.42 seconds
+  ```
+
+  In the web UI, go back to the Foreman host and click the **Reports** button.
+
+  A new report entry indicates that some changes were applied and a service was restarted.
+  Click the report. Several notices indicate that the NTP service was installed, configured, and restarted.

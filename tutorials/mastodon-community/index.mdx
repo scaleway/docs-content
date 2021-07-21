@@ -1,0 +1,463 @@
+---
+layout: docs
+title: Installing a Mastodon Community on Ubuntu Focal Fossa
+description: This page shows you how to install a Mastodon Community on Ubuntu 20.04 Focal Fossa
+excerpt: |
+  Mastodon is an open-source, self-hosted, social media and social networking service. It allows the hosting of your own instances which may have their own code of conduct, terms of service and moderation policies. There is no central server and Mastodon instances are connected as a federated social network, allowing users from different instances to interact with each other. The platform provides privacy features allowing users to adjust the privacy settings of each of their posts.
+totalTime: PT30M
+steps:
+  - step: Installation Prework
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/installing-mastodon-community/#-Installation-Prework
+  - step: Configuring PostgreSQL
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/installing-mastodon-community/#-Configuring-PostgreSQL
+  - step: Downloading Mastodon
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/installing-mastodon-community/#-Downloading-Mastodon
+  - step: Requesting a Let's Encrypt Certificate
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/installing-mastodon-community/#-Requesting-a-Lets-Encrypt-Certificate
+  - step: Configuring Nginx
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/installing-mastodon-community/#-Configuring-Nginx
+  - step: Configuring the Mastodon Application
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/installing-mastodon-community/#-Configuring-the-Mastodon-Application
+  - step: Creating Systemd Scripts
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/installing-mastodon-community/#-Settingup-systemd-Services
+categories:
+  - compute
+brands:
+  - elements
+tags: compute communication messaging self-hosted social network socialnetwork
+image: /assets/scaleway_mastodon.png
+permalink: docs/installing-mastodon-community/
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, ubuntu server, debian server, linux server, IAAS, baremetal, scalability, ARM, physical server, dedicated server, physicalization, server, communication, messaging, self-hosted, social network, socialnetwork, social-network
+dates:
+  validation: 2021-05-10
+  posted: 2019-03-05
+---
+
+[Mastodon](https://www.joinmastodon.org/) is an open-source, self-hosted, social media and social networking service. It allows the hosting of your own instances which may have their own code of conduct, terms of service and moderation policies. There is no central server and Mastodon instances are connected as a federated social network, allowing users from different instances to interact with each other. The platform provides privacy features allowing users to adjust the privacy settings of each of their posts.
+
+As there is no central server, may choose to join or leave an instance according to its policy without actually leaving Mastodon Social Network. Mastodon is a part of [Fediverse](https://fediverse.party/), allowing users to interact with users on other platforms that support the same protocol for example: [PeerTube](https://joinpeertube.org/en/), [Friendica](https://friendi.ca/) and [GNU Social](https://gnu.io/social/).
+
+Mastodon provides the possibility to use [S3 compatible Object Storage](/storage/object/how-to/create-a-bucket/) to store media content uploaded to instances, making it flexible and scalable.
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+  - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key)
+  - You have [created an Instance](/compute/instances/how-to/create-an-instance) that runs Ubuntu Focal Fossa
+  - You have a domain name or subdomain pointing to the instance
+  - You have enabled the SMTP ports to send out email notifications
+
+</Message>
+
+## Installing Prework
+
+1. [Connect to your instance](/compute/instances/how-to/connect-to-instance/) via SSH.
+
+2. Update the APT packet cache and the software already installed on the instance.
+
+  ```
+  apt update && apt upgrade -y
+  ```
+
+3. Make sure `curl` is installed on the system and add an external repository for the required version of Node.js, install it by running the following commands:
+
+  ```
+  apt install curl -y
+  curl -sL https://deb.nodesource.com/setup_12.x | bash -
+  ```
+
+4. Mastodon uses the [Yarn](https://yarnpkg.com/en/) packet manager. Install the repository for the required version of Yarn by running the following commands:
+
+  ```
+  curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
+  echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
+  apt update
+  ```
+
+5. Mastodon depends on various other packages, which have to be installed before the installation of the software:
+
+    - [Imagemagick](https://www.imagemagick.org/) for image related operations
+    - [FFmpeg](https://www.ffmpeg.org/) for conversion of GIFs to MP4s
+    - [Protobuf](https://github.com/protocolbuffers/protobuf) with `libprotobuf-dev` and `protobuf-compiler`, used for language detection
+    - [Nginx](https://nginx.org/) as frontend web server
+    - [Redis](https://redis.io/) for its in-memory data structure store
+    - [PostgreSQL](https://www.postgresql.org/) is used as SQL database for Mastodon
+    - [Node.js](https://nodejs.org/en/) is used for Mastodon's streaming API
+    - [Yarn](https://yarnpkg.com/en/) is a Node.js package manager
+    - [Certbot](https://certbot.eff.org/) is a tool to manage TLS certificated issued by the [Let's Encrypt](https://letsencrypt.org/) nonprofit "Certificate Authority" (CA)
+
+  As well as some other `-dev` packages and `g++` - These packages are required for the compilation of Ruby using ruby-build.
+
+  Install them via the apt packet manager:
+
+  ```
+  apt install -y imagemagick ffmpeg libpq-dev libxml2-dev libxslt1-dev file git-core g++ libprotobuf-dev protobuf-compiler pkg-config nodejs gcc autoconf bison build-essential libssl-dev libyaml-dev libreadline6-dev zlib1g-dev libncurses5-dev libffi-dev libgdbm6 libgdbm-dev nginx redis-server redis-tools postgresql postgresql-contrib certbot python3-certbot-nginx yarn libidn11-dev libicu-dev libjemalloc-dev
+  ```
+
+6. We are going to use `rbenv` to manage Ruby versions. The application must be installed for a single Linux user, therefore, first we must create a user under which Mastodon will run. The `--disabled-login` flag disables direct login to the user account for increased security:
+
+  ```
+  adduser --disabled-login mastodon
+  ```
+
+7. Then log into the `mastodon` user account and enter into the home directory of the user:
+
+  ```
+  su mastodon
+  cd
+  ```
+
+8. Setup [rbenv](https://github.com/rbenv/rbenv) and [ruby-build](https://github.com/rbenv/ruby-build):
+
+  ```
+  git clone https://github.com/rbenv/rbenv.git ~/.rbenv
+  cd ~/.rbenv && src/configure && make -C src
+  echo 'export PATH="$HOME/.rbenv/bin:$PATH"' >> ~/.bashrc
+  echo 'eval "$(rbenv init -)"' >> ~/.bashrc
+  # Restart the users shell
+  exec bash
+  # Check if rbenv is correctly installed
+  type rbenv
+  # Install ruby-build as a rbenv plugin
+  git clone https://github.com/rbenv/ruby-build.git ~/.rbenv/plugins/ruby-build
+  ```
+
+9. Install and enable the [Ruby](https://www.ruby-lang.org/en/) version that is used by Mastodon. This step may last some time:
+
+  ```
+  RUBY_CONFIGURE_OPTS=--with-jemalloc rbenv install 2.6.6
+  rbenv global 2.6.6
+  ```
+
+10. Finally install `bundler` by running the following command:
+
+  ```
+  gem install bundler --no-document
+  ```
+
+Once this is done, you can switch back into the root account by typing `exit`.
+
+## Configuring PostgreSQL
+
+Mastodon requires access to a postgreSQL database to store its configuration and user data.
+
+1. Change into the `postgres` user account, run `psql` and create a database:
+
+  ```
+  sudo -u postgres psql
+  ```
+
+2. In the PostgreSQL prompt create the database user for Mastodon and exit from it afterwards:
+
+  ```
+  CREATE USER mastodon CREATEDB;
+  \q
+  ```
+
+## Downloading Mastodon
+
+1. Switch into the `mastodon` user account:
+
+  ```
+  su - mastodon
+  ```
+
+2. Enter the users home directory and clone the Mastodon Git repository into the directory `live`:
+
+  ```
+  git clone https://github.com/tootsuite/mastodon.git live && cd live
+  ```
+
+3. Checkout to the latest stable branch
+
+  ```
+  git checkout $(git tag -l | grep -v 'rc[0-9]*$' | sort -V | tail -n 1)
+  ```
+
+4. Continue by installing the remaining Ruby dependencies:
+
+  ```
+  bundle config deployment 'true'
+  bundle config without 'development test'
+  bundle install -j$(getconf _NPROCESSORS_ONLN)
+  ```
+
+5.  Use yarn to install the node.js dependencies:
+
+  ```
+  yarn install --pure-lockfile
+  ```
+
+6. Exit back to the root account by typing `exit`.
+
+## Requesting a Let's Encrypt Certificate
+
+1. Stop Nginx before requesting the certificate:
+
+  ```
+  systemctl stop nginx
+  ```
+
+2. Request a certificate by using `certbot` with TLS SNI validation in standalone mode. Replace `example.com` with your domain name:
+
+  ```
+  certbot certonly --standalone -d example.com
+  ```
+
+3. As Let's Encrypt have a validity of 90 days, a cron-job can be used to renew them and to restart nginx automatically. Create a new file and open it in a text editor like nano:
+
+  ```
+  nano /etc/cron.daily/letsencrypt-renew
+  ```
+
+4. Copy the following content into the file, save it and exit nano:
+
+  ```
+  #!/usr/bin/env bash
+  certbot renew
+  systemctl reload nginx
+  ```
+
+5. Allow execution of the script and restart the cron daemon. It will run the script daily:
+
+  ```
+  chmod +x /etc/cron.daily/letsencrypt-renew
+  systemctl restart cron
+  ```
+
+## Configuring Nginx
+
+1. Copy the example configuration file shipped with Mastodon in your Nginx `sites-available` directory and create a symlink to it in the `sites-enabled` directory:
+
+  ```
+  cp /home/mastodon/live/dist/nginx.conf /etc/nginx/sites-available/mastodon
+  ln -s /etc/nginx/sites-available/mastodon /etc/nginx/sites-enabled/mastodon
+  ```
+
+2. Open the configuration file in a text editor, for example nano:
+
+  ```
+  nano /etc/nginx/sites-available/mastodon
+  ```
+
+3. Replace `example.com` in the configuration file with your domain or subdomain. Replace it also with your domain in all following occurences.
+
+  ```
+  map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+  }
+
+  upstream backend {
+      server 127.0.0.1:3000 fail_timeout=0;
+  }
+
+  upstream streaming {
+      server 127.0.0.1:4000 fail_timeout=0;
+  }
+
+  proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=CACHE:10m inactive=7d max_size=1g;
+
+  server {
+    listen 80;
+    listen [::]:80;
+    server_name example.com;  <- /!\ Replace example.com with your domain name /!\
+    root /home/mastodon/live/public;
+    location /.well-known/acme-challenge/ { allow all; }
+    location / { return 301 https://$host$request_uri; }
+  }
+
+  server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name example.com;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!MEDIUM:!LOW:!aNULL:!NULL:!SHA;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+
+    # Uncomment these lines once you acquire a certificate:
+    # ssl_certificate     /etc/letsencrypt/live/example.com/fullchain.pem; <- /!\ Replace example.com with your domain name and uncomment this line /!\
+    # ssl_certificate_key /etc/letsencrypt/live/example.com/privkey.pem; <- /!\ Replace example.com with your domain name and uncomment this line /!\
+
+    keepalive_timeout    70;
+    sendfile             on;
+    client_max_body_size 80m;
+
+    root /home/mastodon/live/public;
+
+    gzip on;
+    gzip_disable "msie6";
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_buffers 16 8k;
+    gzip_http_version 1.1;
+    gzip_types text/plain text/css application/json application/javascript text/xml application/xml application/xml+rss text/javascript;
+
+    add_header Strict-Transport-Security "max-age=31536000";
+
+    location / {
+      try_files $uri @proxy;
+    }
+
+    location ~ ^/(emoji|packs|system/accounts/avatars|system/media_attachments/files) {
+      add_header Cache-Control "public, max-age=31536000, immutable";
+      add_header Strict-Transport-Security "max-age=31536000";
+      try_files $uri @proxy;
+    }
+
+    location /sw.js {
+      add_header Cache-Control "public, max-age=0";
+      add_header Strict-Transport-Security "max-age=31536000";
+      try_files $uri @proxy;
+    }
+
+    location @proxy {
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header Proxy "";
+      proxy_pass_header Server;
+
+      proxy_pass http://backend;
+      proxy_buffering on;
+      proxy_redirect off;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+
+      proxy_cache CACHE;
+      proxy_cache_valid 200 7d;
+      proxy_cache_valid 410 24h;
+      proxy_cache_use_stale error timeout updating http_500 http_502 http_503 http_504;
+      add_header X-Cached $upstream_cache_status;
+      add_header Strict-Transport-Security "max-age=31536000";
+
+      tcp_nodelay on;
+    }
+
+    location /api/v1/streaming {
+      proxy_set_header Host $host;
+      proxy_set_header X-Real-IP $remote_addr;
+      proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+      proxy_set_header X-Forwarded-Proto https;
+      proxy_set_header Proxy "";
+
+      proxy_pass http://streaming;
+      proxy_buffering off;
+      proxy_redirect off;
+      proxy_http_version 1.1;
+      proxy_set_header Upgrade $http_upgrade;
+      proxy_set_header Connection $connection_upgrade;
+
+      tcp_nodelay on;
+    }
+
+    error_page 500 501 502 503 504 /500.html;
+  }
+  ```
+
+Save the file by pressing on `CTRL+O`, then exit nano by pressing on `CTRL+X`.
+
+## Configuring the Mastodon Application
+
+1. Enter the `mastodon` user account:
+
+  ```
+  su - mastodon
+  ```
+
+2. Change into the **/home/mastodon/live** directory and run the Mastodon installer:
+
+  ```
+  cd /home/mastodon/live
+  RAILS_ENV=production bundle exec rake mastodon:setup
+  ```
+
+  The interactive installer guides through the setup process.
+
+  When asked enter the domain name or subdomain of the instance.
+  When asked to use Docker choose **No**. Most of the other values are already pre-filled with the correct settings. Edit them if required for your setup.
+
+  To set up Mastodon with Object Storage choose **Amazon S3** as service provider and enter the following information for the account. Valid [API Key](/console/my-project/how-to/generate-api-key/) are required for the configuration with Object Storage.
+
+  When asked, enter the details as following:
+
+  ```
+  Provider Amazon S3
+  S3 bucket name: [scaleway_bucket_name]
+  S3 region: fr-par
+  S3 hostname: s3.fr-par.scw.cloud
+  S3 access key: [scaleway_access_key]
+  S3 secret key: [scaleway_secret_key]
+  ```
+
+  <Message type="note">
+
+    If your bucket is located in Amsterdam, use `nl-ams` as region and `s3.nl-ams.scw.cloud` as S3 hostname If it is located in Warsaw, use `pl-waw` and `s3.pl-waw.scw.cloud`.
+
+  </Message>
+
+  Once the configuration is complete, the installer will start to compile the application. This may take some time and consume a lot of RAM.
+
+3. Once the application is installed, you will be asked if you want to create an Administrator account for your Mastodon instance. Type `Y` to create the account. Enter the username for the admin user, followed by your email address. A random password will be generated. Take a note of it, as you will require it to connect to your instance.
+
+  ```
+  All done! You can now power on the Mastodon server 🐘
+
+  Do you want to create an admin user straight away? Yes
+  Username: admin  <-- Enter the username for your Mastodon admin account
+  E-mail: me@myemail.com <-- Enter your email address
+  You can login with the password: 9dc4d92d93a26e9b6c021bb75b4a3ce2
+  ```
+
+4. Type `exit` to switch back into the root account.
+
+## Setting-up systemd Services
+
+Systemd scripts are used to manage services on Ubuntu systems. Three different scripts are required for Mastodon. These scripts come with the Mastodon package, you need to copy them to their final destination, then activate the services.
+
+1. Copy the Mastodon `systemd` scripts into their final destination:
+
+  ```
+  cp /home/mastodon/live/dist/mastodon-*.service /etc/systemd/system/
+  ```
+
+2. Reload the systemd daemon:
+
+  ```
+  systemctl daemon-reload
+  ```
+
+3. Start the services and enable them, so they will start automatically upon the next system reboot:
+
+  ```
+  systemctl start mastodon-web mastodon-sidekiq mastodon-streaming
+  systemctl enable mastodon-web mastodon-sidekiq mastodon-streaming
+  ```
+
+4. Verify if all services are running:
+
+  ```
+  systemctl status mastodon-*.service
+  ```
+
+If everything is running, open a web browser and go to your domain name. You will see the home page of your Mastodon instance:
+
+<Lightbox src="scaleway-mastodon_home_new.png" alt="" />
+
+You can log in with the admin account that you have created during the installation to configure additional parameters of your instance, link the instance with another one to join a federated network, create another user account and start sharing posts and photos on your timeline. If configured with Object Storage, all files uploaded to the instance are automatically stored in the Object Storage bucket and embedded in the users timeline:
+
+<Lightbox src="scaleway-mastodon_feed.png" alt="" />
+
+For more information and advanced configuration of Mastodon, refer to the [official documentation](https://github.com/tootsuite/documentation#running-mastodon).

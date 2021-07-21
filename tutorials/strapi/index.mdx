@@ -1,0 +1,320 @@
+---
+layout: docs
+title: How to deploy Strapi on a Virtual Instance
+permalink: docs/tutorials/strapi/
+image: /assets/scaleway_strapi.png
+categories:
+  - compute
+  - instances
+description: Strapi is an open-source, Node.js based, headless CMS to manage content and make it available through a fully customizable API. In this tutorial you will learn how to deploy Strapi on a Scaleway Virtual Instance, in order to create and access a simple Hello World blog post.
+excerpt: |
+  Strapi is an open-source, Node.js based, headless CMS to manage content and make it available through a fully customizable API. Unlike traditional CMSs such as Wordpress, with Strapi the content is decoupled from the front end.
+steps:
+  - step: Installing dependencies
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/strapi/#-Installing-dependencies
+  - step: Creating a Strapi project
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/strapi/#-Installing-Strapi-and-creating-a-project
+  - step: Setting up Strapi and adding content
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/strapi/#-Setting-up-Strapi-and-adding-content
+  - step: Deploying PM2 to run Strapi as-a-Service
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/strapi/#-Deploying-PM2-to-run-Strapi-as-a-service
+  - step: Conclusion
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/strapi/#-Conclusion
+totalTime: PT15M
+keywords: strapi, headless CMS, virtual instance, PM2, cloud tutorials, cloud documentations, cloud server, cloud hosting, ubuntu server, debian server, linux server
+tags: strapi headless CMS virtual instance ubuntu
+dates:
+  validation: 2021-05-10
+  posted: 2020-11-30
+---
+
+## Strapi - Overview
+
+[Strapi](https://strapi.io/) is an open-source, Node.js based, headless CMS to manage content and make it available through a fully customizable API. Unlike traditional CMSs such as Wordpress, with Strapi the content is decoupled from the front end. Strapi simultaneously provides for **content creators**, who get an easy-to-use, database-driven interface to create, organize and manage content, and **developers**, who get the convenience of an API that they can use to query, deliver and integrate that content to diverse applications and front ends.
+
+In this tutorial you will learn how to deploy Strapi on a [Scaleway Virtual Instance](/compute/instances/how-to/create-an-instance/).
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have a [Virtual Instance running on Ubuntu Bionic Beaver (18.04)](/compute/instances/how-to/create-an-instance/).
+
+</Message>
+
+## Installing dependencies
+
+1. Connect to your Virtual Instance using [SSH](/compute/instances/how-to/connect-to-instance/).
+
+2. Update the apt packet cache and upgrade the software already installed on the instance:
+
+  ```
+  apt update && apt upgrade -y
+  ```
+
+3. Strapi requires Node.js minimum version 12.x in order to run, as well as npm minimum version 6.x. Use the following command to add a maintained and up to date repository for Debian-based Node.js:
+
+  ```
+  apt install -y curl && curl -sL https://deb.nodesource.com/setup_14.x | bash -
+  ```
+
+4. Install Node.js with the following command (npm will also install):
+
+  ```
+  apt-get install -y nodejs
+  ```
+
+5. Check that Node.js and npm are installed in minimum versions 12.x and 6.x respectively:
+
+  ```
+  node -v && npm -v
+  ```
+
+  You should see an output confirming the installed version number of each.
+
+6. Strapi uses the yarn package manager. Install the repository for the required version of Yarn by running the following commands:
+
+  ```
+  curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add -
+  echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list
+  apt update && apt install yarn
+  ```
+
+7. Check that yarn has installed with the following command:
+
+  ```
+  yarn -v
+  ```
+
+  You should see an output confirming the installed version number.
+
+## Installing Strapi and creating a project
+
+1. Navigate to a your home directory and create a new folder for your Strapi project:
+
+  ```
+  cd /home/<user>
+  mkdir strapi-projects
+  ```
+
+2. Install Strapi in this directory and create a new project:
+
+  ```
+  cd strapi-projects
+  yarn create strapi-app my-strapi-project --quickstart
+  ```
+
+  <Message type="note">
+
+  Using the `--quickstart` flag installs Strapi using an SQLite database. You can omit this flag, but you need to [follow some other steps](https://strapi.io/documentation/3.0.0-beta.x/guides/databases.html#sqlite-installation) to configure an alternative database (Strapi supports [PostgreSQL](/tutorials/install-postgresql/), [MongoDB](/tutorials/mongodb-ubuntu-1604/), SQLite, [MySQL](/tutorials/setup-mysql/) and [MariaDB](/tutorials/mariadb-ubuntu-bionic/)). Your choice of database must be installed and running locally before you create your Strapi project.
+
+  </Message>
+
+  You should see Strapi install and run (this may take a few minutes). There is some useful information at the end of this output that you may wish to read and take note of, particularly about the different commands like `yarn develop` and `yarn start` that you can use to run your Strapi app in different modes. In any case, the output should finish with a message like:
+
+    ```
+    Create your first administrator 💻 by going to the administration panel at:
+
+    ┌─────────────────────────────┐
+    │ http://localhost:1337/admin │
+    └─────────────────────────────┘
+
+    [2020-12-02T09:20:59.034Z] debug HEAD /admin (14 ms) 200
+    [2020-12-02T09:20:59.038Z] info ⏳ Opening the admin panel...
+
+    ```
+
+  We're now ready to start configuring our Strapi app.
+
+  <Message type="tip">
+
+  There is some useful information about working with Strapi in the rest of the output in your terminal here, that you may wish to read and take note of.
+
+  </Message>
+
+## Setting up Strapi and adding content
+
+In this step, we'll use the Strapi dashboard to configure Strapi for a very simple blog use case. First we need to create a SuperAdmin user, then set up a database to hold our blog posts, then write a "Hello World" blog post and see how to access it.
+
+1. In a browser, go to `http://<Virtual Instance IP Address>:1337/admin`.
+
+  You should see the following:
+
+  <Lightbox src="scaleway-create-admin.png" alt="" />
+
+2. Complete the form with your desired information in order to create an admin user, then click `Let's Start`:
+
+  <Lightbox src="scaleway-create-admin-completed.png" alt="" />
+
+  The following screen displays:
+
+  <Lightbox src="scaleway-create-first-content.png" alt="" />
+
+  Next, we will essentially define a new database to hold our blog content.
+
+3. Click `Create Your First Content Type`:
+
+  The following screen displays:
+
+  <Lightbox src="scaleway-create-collection-type.png" alt="" />
+
+4. Enter `Blog` as the display name (UID will auto-complete), and click `Continue`:
+
+  <Lightbox src="scaleway-create-blog.png" alt="" />
+
+  The following screen displays:
+
+  <Lightbox src="scaleway-select_collection_fields.png" alt="" />
+
+  Next, we will define the fields for our Blog database. We'll add two text fields, one to hold the title of each blog post, and one to hold the content of each post:
+
+5. Click `Text`. The following screen displays:
+
+  <Lightbox src="scaleway-add-text-field.png" alt="" />
+
+6. Enter `Title` in the name field, and click `Add another field`:
+
+  <Lightbox src="scaleway-add-title.png" alt="" />
+
+  You are taken back to the list of possible field types:
+
+  <Lightbox src="scaleway-select_collection_fields.png" alt="" />
+
+7. Click `Text`. The following screen displays:
+
+  <Lightbox src="scaleway-add-text-field.png" alt="" />
+
+8. Enter `Content` in the name field, and select `Long text` underneath, then click `Finish`:
+
+  <Lightbox src="scaleway-add-content.png" alt="" />
+
+9. A summary of the Blog collection that you have just created displays. Cick `Save`:
+
+  <Lightbox src="scaleway-blog-created.png" alt="" />
+
+  Strapi will restart and refresh your dashboard.
+
+  Now that we have set up the database to hold our blog, we will create a quick "Hello World" blog post:
+
+10. Click `Blogs`, which now appears as a Collection Type in the top left of the screen:
+
+  <Lightbox src="scaleway-blogs-click.png" alt="" />
+
+  The following screen displays:
+
+  <Lightbox src="scaleway-blog-screen.png" alt="" />
+
+11. Click `Add New Blog` in the top right. The following screen displays:
+
+  <Lightbox src="scaleway-create-entry.png" alt="" />
+
+12. Enter a title and content of your choice, or use the following 'Hello World' examples. Then click `Save`, followed by `Publish`:
+
+  <Lightbox src="scaleway-hello-world-blog.png" alt="" />
+
+  The screen should now look like this:
+
+  <Lightbox src="scaleway-after-publish.png" alt="" />
+
+  The final step is to make all our blog content publicly available.
+
+13. In the left-hand menu, click `Settings`, then under the `Users & Permissions plugin` click `Roles`:
+
+  <Lightbox src="scaleway-roles-permissions.png" alt="" />
+
+14. Click `Public`. The following screen displays:
+
+  <Lightbox src="scaleway-permissions.png" alt="" />
+
+15. Under `Permissions`, you can see our `BLOG` application. Check the `findone` and `find` boxes to enable the public to find our blog posts. Then click `Save`:
+
+  <Lightbox src="scaleway-permissions-checked.png" alt="" />
+
+  Now we can access our "Hello World" blog post from the built-in API with the following action:
+
+16. Open a new browser tab, and go to `http://<Your-Virtual-Instance-IP:1337/blogs`. The following will display:
+
+  <Lightbox src="scaleway-accessing-content.png" alt="" />
+
+<Message type="note">
+
+You can also retrieve your blog post from the command line by running `curl http://<Your-Virtual-Instance-IP>1337/blogs`
+
+</Message>
+
+## Deploying PM2 to run Strapi as-a-Service
+
+Now you can access your Strapi admin interface, configure your app, create content and access it via the API. However, there is a problem: as soon as you close your terminal or disconnect from your Virtual Instance, your Strapi project will go offline. Your content and admin interface will no longer be available until you reconnect to your Instance and restart Strapi. To get around this, you can use [PM2](https://pm2.keymetrics.io/), a daemon process manager, to run Strapi as-a-Service and keep keep your Strapi project online 24/7, even when you are disconnected from your Instance.
+
+<Message type="note">
+
+If your Strapi app is still running in your terminal at this point, kill it with `CTRL+C`.
+
+</Message>
+
+1. On your virtual instance, use yarn to install PM2:
+
+  ```
+  yarn global add pm2
+  ```
+
+  Next, you need to edit your `.bashrc` file to permit the use of global Yarn packages:
+
+2. Open your `.bashrc` file with a text editor. Here, we use nano:
+
+  ```
+  nano ~/.bashrc
+  ```
+
+3. Add the following to the very end of the file and save the changes:
+
+  ```
+  export PATH="$PATH:$(yarn global bin)"
+  ```
+
+4. Now, to get that modification to the `.bashrc` file to take effect, type:
+
+  ```
+  source ~/.bashrc
+  ```
+
+5. Make sure you are in your Strapi app's directory, and run the following command to launch Strapi as-a-Service with PM2. You can replace `my-strapi-project` with your chosen name:
+
+  ```
+  pm2 start npm --name my-strapi-project -- run develop
+  ```
+
+  <Message type="note">
+
+  The `run develop` part of this command will launch your project in develop mode, which allows you to do certain actions not available in production mode, eg edit and create collection types. If you want to run in production mode however, replace `run develop` with `run start`
+
+  </Message>
+
+  You should see an output like the following:
+
+    ```
+    [PM2] Starting /usr/bin/npm in fork_mode (1 instance)
+    [PM2] Done.
+    ┌─────┬──────────────────────┬─────────────┬─────────┬─────────┬──────────┬────────┬──────┬───────────┬──────────┬──────────┬──────────┬──────────┐
+    │ id  │ name                 │ namespace   │ version │ mode    │ pid      │ uptime │ ↺    │ status    │ cpu      │ mem      │ user     │ watching │
+    ├─────┼──────────────────────┼─────────────┼─────────┼─────────┼──────────┼────────┼──────┼───────────┼──────────┼──────────┼──────────┼──────────┤
+    │ 0   │ my-strapi-project    │ default     │ N/A     │ fork    │ 25501    │ 0s     │ 0    │ online    │ 0%       │ 28.4mb   │ root     │ disabled │
+    └─────┴──────────────────────┴─────────────┴─────────┴─────────┴──────────┴────────┴──────┴───────────┴──────────┴──────────┴──────────┴──────────┘
+    ```
+
+  Now, even when you disconnect from your Instance, you will still be able to access your Strapi app's admin dashboard and API.
+
+  <Message type="note">
+
+  There are alternative ways to run your Strapi project with PM2, eg via an `ecosystem.config.js` file. You can also use PM2 to start Strapi on boot. See the [official PM2 documentation](https://pm2.keymetrics.io/docs/usage/application-declaration/), or the [Strapi Process Manager Documentation](https://strapi.io/documentation/3.0.0-beta.x/guides/process-manager.html) for more information on using PM2.
+
+  </Message>
+
+## Conclusion
+
+You now know how to deploy a simple Strapi app on a Scaleway Virtual Instance. Here, we've just seen the beginning of what you can do with Strapi. For more complex use cases, and more information on using the API, [please visit the official Strapi documentation](https://strapi.io/documentation/v3.x/getting-started/introduction.html)

@@ -1,0 +1,256 @@
+---
+layout: docs
+title: Load Testing with Vegeta
+description: This page shows you how to simulate load to a web application with Vegeta
+tags: advanced settings
+excerpt: |
+  Load testing allows testing the behaviour of an application under real conditions by simulating concurrent user requests. This can help to determine the behaviour of an application when multiple users access it simultaneously. This tutorial shows how to use Vegeta, an open source application written in the Go programming language, to run load testings on an application.
+totalTime: PT15M
+steps:
+  - step: Downloading and Installing Vegeta
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/vegeta-load-testing/#-Downloading-and-Installing-Vegeta
+  - step: Running a Load Test with Vegeta
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/vegeta-load-testing/#-Running-a-Load-Test-with-Vegeta
+  - step: Setting up a Target File
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/vegeta-load-testing/#-Setting-up-a-Target-File
+  - step: Generating a Report
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/vegeta-load-testing/#-Generating-a-Report
+categories:
+  - compute
+brands:
+  - elements
+image: /assets/images/docs/scaleway.png
+permalink: docs/vegeta-load-testing/
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, ubuntu server, debian server, linux server, IAAS, baremetal, scalability, ARM, physical server, dedicated server, physicalization, server
+dates:
+  validation: 2021-05-10
+  posted: 2019-05-20
+---
+
+## Load Testing Overview
+
+Load testing allows testing the behavior of an application under real conditions by simulating concurrent user requests. This can help to determine the behavior of an application when multiple users access it simultaneously. This tutorial shows how to use [Vegeta](https://github.com/tsenart/vegeta), an open-source application written in the [Go programming language](docs/tutorials/install-golang-ubuntu-bionic), to run load testings on an application.
+
+The following problems can be identified with the help of load testing, before moving an application into a production environment:
+
+- Response time checking for each request
+- Performance of the overall system under different loads
+- Database performances under heavy loads
+- Verification if load balancing is working as designed
+- Network latency between the client and the application
+- Performance limitations due the technical specifications of the instances used
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+  - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+  - You have [created an Instance](/compute/instances/how-to/create-an-instance)
+
+</Message>
+
+## Downloading and Installing Vegeta
+
+1. [Connect to your instance](/compute/instances/how-to/connect-to-instance/) via SSH.
+2. [Download](https://github.com/tsenart/vegeta/releases) the latest Vegeta binary:
+
+  ```
+  wget https://github.com/tsenart/vegeta/releases/download/cli%2Fv12.5.1/vegeta-12.5.1-linux-amd64.tar.gz
+  ```
+
+3. Unpack the binary file:
+
+  ```
+  tar xfz vegeta-12.5.1-linux-amd64.tar.gz
+  ```
+
+4. Move the binary file into `/usr/bin` to make it available system-wide:
+
+  ```
+  mv vegeta /usr/bin/vegeta
+  ```
+
+## Running a Load Test with Vegeta
+
+To run a load test during 120 seconds, run the following command:
+
+```
+echo "GET http://<application_url>/" | vegeta attack -duration=120s | tee results.bin | vegeta report
+```
+
+The command above will return a report like the following:
+
+```
+Requests      [total, rate]            6000, 50.01
+Duration      [total, attack, wait]    2m0.072491358s, 1m59.980003112s, 92.488246ms
+Latencies     [mean, 50, 95, 99, max]  76.235976ms, 72.996349ms, 109.192641ms, 133.960662ms, 187.907358ms
+Bytes In      [total, mean]            65862000, 10977.00
+Bytes Out     [total, mean]            0, 0.00
+Success       [ratio]                  100.00%
+Status Codes  [code:count]             200:6000
+Error Set:
+```
+
+- `Requests` shows the total number of requests sent during the test and the rate of the requests
+- `Duration` shows the total duration of the test, the attack period simulating load on the application and the wait time
+- `Latencies` shows the mean latency, 50th, 95th an 99th percentiles, respectively, of the latencies of all requests in an attack as well as the maximum latency recognized.
+- `Bytes In` and `Bytes Out` shows:
+  - The `total` number of bytes sent (out) or received (in) with the request or response bodies.
+  - The `mean` number of bytes sent (out) or received (in) with the request or response bodies.
+- `Success` shows the percentiles of successful requests sent to the application
+- `Status Codes` provides a counter of the HTTP response codes received and their occurrence. A `0` status codes mean a request failed to be sent.
+
+As visible in the example above, 100 % of the requests sent to the application were successful.
+
+Following another result:
+
+```
+Requests      [total, rate]            6000, 50.01
+Duration      [total, attack, wait]    2m9.500461177s, 1m59.980081991s, 9.520379186s
+Latencies     [mean, 50, 95, 99, max]  843.903272ms, 77.954318ms, 3.744635321s, 25.164627897s, 30.000611567s
+Bytes In      [total, mean]            62842863, 10473.81
+Bytes Out     [total, mean]            0, 0.00
+Success       [ratio]                  95.38%
+Status Codes  [code:count]             0:45  200:5723  500:33  502:13  503:186
+Error Set:
+500 Internal Server Error
+502 Bad Gateway
+Get http://<application_url>/: EOF
+503 Service Unavailable
+Get http://<application_url>/: net/http: request canceled (Client.Timeout exceeded while awaiting headers)
+```
+
+As visible in the output above, only 95.38% of the requests sent to the application were successful. In the `Status Code` section, it is visible that 5723 requests were successful (HTTP Code 200), 186 requests received an HTTP 503 error, and 13 requests received an HTTP 502 error.
+
+These results show that the application has trouble handling the load and needs optimization.
+
+## Setting up a Target File
+
+Vegeta also supports multiple targets to attack an application with multiple endpoints (i.e., an API) simultaneously.
+
+1. Create a target file and open it in a text editor:
+
+  ```
+  nano target.list
+  ```
+
+2. Put the different endpoints into it:
+
+  ```
+  GET http://<application_url>/list/user/1
+  GET http://<application_url>/list/user/2
+  GET http://<application_url>/list/user/3
+  ```
+
+  It is also possible to define `POST` or `PUT` commands into the file.
+
+  ```
+  POST http://<application_url>/create/newuser/
+  Content-Type: application/json
+  @/path/to/newuser.json
+  ```
+
+  The content of the file `/path/to/newuser.json` contains the body of the request:
+
+  ```
+  {
+    "name": "Peter";
+    "lastname": "Smith";
+    "email": "psmith@example.com"
+  }
+  ```
+
+2. Run Vegeta, the `-duration` flag specifies the duration of the attack, the `-rate` flag defines the number of requests per time unit (the default value is set to 50/1s):
+
+  ```
+  vegeta attack -duration=5s -rate=5 -targets=target.list
+  ```
+
+## Generating a Report
+
+Every load test executed to collect data that can be saved in an output file using the -output parameter.
+
+The data collected during each load test is stored in an output file.
+
+1. Run an attack in Vegeta. The default filename of the output file is `results.bin`. It can be specified to any name with the `-output` flag:
+
+  ```
+  vegeta attack -duration=120s -rate=100 -targets=target.list -output=attack-5.bin
+  ```
+
+2. Generate the HTML report and plot with the `vegeta plot` command. The `-title` flag allows specifying a title for the plot.
+
+  ```
+  vegeta plot -title=Attack%20Results attack-5.bin > results.html
+  ```
+
+3. Open the HTML file in a web browser to view the plot:
+
+  <Lightbox src="scaleway-vegeta-plot.png" alt="" />
+
+4. Alternatively, it is also possible to generate the report as JSON output:
+
+  ```
+  vegeta report -type=json results.bin
+  ```
+
+  Returning a JSON output as follows:
+
+  ```
+  {
+    "latencies":{
+        "total":5018316104,
+        "mean":418193,
+        "50th":393268,
+        "95th":523664,
+        "99th":737809,
+        "max":13479790
+    },
+    "bytes_in":{
+        "total":7344000,
+        "mean":612
+    },
+    "bytes_out":{
+        "total":0,
+        "mean":0
+    },
+    "earliest":"2019-05-23T15:14:25.216411448+02:00",
+    "latest":"2019-05-23T15:16:25.206316941+02:00",
+    "end":"2019-05-23T15:16:25.206710805+02:00",
+    "duration":119989905493,
+    "wait":393864,
+    "requests":12000,
+    "rate":100.00841279685865,
+    "success":1,
+    "status_codes":{
+        "200":12000
+    },
+    "errors":[
+
+    ]
+  }
+  ```
+
+5. To view the report directly in the terminal, run:
+
+  ```
+  vegeta report results.bin
+  ```
+
+  Which provides an report in the format seen in the first steps:
+
+  ```
+  Requests      [total, rate]            12000, 100.01
+  Duration      [total, attack, wait]    1m59.990299357s, 1m59.989905493s, 393.864µs
+  Latencies     [mean, 50, 95, 99, max]  418.193µs, 393.268µs, 523.664µs, 737.809µs, 13.47979ms
+  Bytes In      [total, mean]            7344000, 612.00
+  Bytes Out     [total, mean]            0, 0.00
+  Success       [ratio]                  100.00%
+  Status Codes  [code:count]             200:12000
+  Error Set:
+  ```
+
+For more information about Vegeta, refer to the [official documentation](https://github.com/tsenart/vegeta/blob/master/README.md).

@@ -1,0 +1,455 @@
+---
+title: How to use and configure Chef on Ubuntu Xenial
+description: This page explains how to use and configure Chef on Ubuntu Xenial
+tags: compute image
+excerpt: |
+  Chef is a configuration management tool that is written in Ruby and Erlang. It's capable of managing both your on premise and cloud instances with ease.
+
+  As your infrastructure requirements grow, managing each server by hand becomes an increasingly difficult task.
+  Configuration management solutions are designed to turn your infrastructure administration into a code base. Instead of performing individual tasks on a number of machines, these tools allow you to commit your requirements to a central location where each component can connect, pull down their configuration, and apply it.
+
+  You can easily manage up to 10000 nodes using chef. Replicating the infrastructure components is easy once we have them automated via chef.
+totalTime: PT30M
+steps:
+  - step: Core Concepts
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/configure-chef-ubuntu-xenial/#-Core-Concepts
+  - step: Configuring a Chef Server
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/configure-chef-ubuntu-xenial/#-Configuring-a-Chef-Server
+  - step: Configuring a Chef Workstation
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/configure-chef-ubuntu-xenial/#-Configuring-a-Chef-Workstation
+  - step: Configuring Knife to Manage your Chef Environment
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/configure-chef-ubuntu-xenial/#-Configuring-Knife-to-Manage-your-Chef-Environment
+categories:
+  - compute
+  - instance-dev
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, debian server, linux server, chef, scalability, ARM, physical server, dedicated server, xenial, chef server, chef node, chef workstation, configuration management
+dates:
+  validation: 2021-05-10
+  posted: 2018-07-05
+---
+
+## Chef Overview
+
+Chef is a configuration management tool that is written in Ruby and Erlang. It's capable of managing both your on premise and cloud instances with ease.
+
+As your infrastructure requirements grow, managing each server by hand becomes an increasingly difficult task.
+Configuration management solutions are designed to turn your infrastructure administration into a code base. Instead of performing individual tasks on a number of machines, these tools allow you to commit your requirements to a central location where each component can connect, pull down their configuration, and apply it.
+
+You can easily manage up to 10000 nodes using chef. Replicating the infrastructure components is easy once we have them automated via chef.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [created an Instance](/compute/instances/how-to/create-an-instance/) which is running Ubuntu Xenial
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key)
+
+</Message>
+
+## Core Concepts
+
+- **Chef Server:** This central server holds all configuration data that the nodes will use for configuration.
+- **Workstation:** This machine holds all the configuration data that can later be pushed to the central chef server. Several chef command line utilities will be available in this system, which can be used to interact with nodes, update configurations etc.
+- **Node:** It is client-server/system that will be registered to the central chef server, from where it can pull configuration data that needs to be applied.
+
+## Configuring a Chef Server
+
+### Accessing the Server by Hostname
+
+1. Connect to your server using SSH
+
+  ```
+  ssh root@SERVER_IP
+  ```
+
+  If you do not know your server IP, you can list your existing servers using `scw ps` (Scaleway CLI).
+
+  Type `yes` when prompted to confirm that we wish to proceed. If the Scaleway CLI is not installed, you have several options:
+
+    - (Preferred) On Mac OS using Homebrew and launching `brew install scw`
+    - On Mac OS using a manual install
+
+    ```
+    Install the latest stable release on Mac OS X manually:
+    # prepare for first install and upgrade
+    mkdir -p /usr/local/bin
+    mv /usr/local/bin/scw /tmp/scw.old
+    # get latest release
+    wget "https://github.com/scaleway/scaleway-cli/releases/download/v1.19/scw-darwin-amd64" -O /usr/local/bin/scw
+    # test
+    scw version
+    Install the latest release on Linux:
+    # get latest release
+    export ARCH=amd64  # can be 'i386', 'amd64' or 'armhf'
+    wget "https://github.com/scaleway/scaleway-cli/releases/download/v1.19/scw_1.16_${ARCH}.deb" -O /tmp/scw.deb
+    dpkg -i /tmp/scw.deb && rm -f /tmp/scw.deb
+    # test
+    scw version
+    ```
+
+    - On Windows by downloading the [scw-windows-amd64.exe](https://github.com/scaleway/scaleway-cli/releases/latest/)
+
+  Prior to installing Chef, ensure that the that the hostname of the server is a resolvable fully qualified domain name or IP address.
+
+2. On the server where you plan to install Chef, launch:
+
+  ```
+  hostname -f
+  ```
+
+3. If the command does not return an address where the server can be reached, edit the configuration file to add a domain name or IP address where the server can be reached:
+
+  ```
+  sudo nano /etc/hosts
+  ```
+
+4. Edit the configuration file to like the example below:
+
+  ```
+  127.0.1.1 fqdn_or_IP_address host_alias
+  127.0.0.1 localhost
+  IP_address fqdn_or_IP_address host_alias
+  ```
+
+5. Check that the value was set correctly:
+
+  ```
+  hostname -f
+  ```
+
+  The command returns the value that you can use to reach your Chef server from anywhere in your infrastructure.
+
+## Installing Chef Server
+
+  <Message type="note">
+  
+  If you use the root user, you can remove the `sudo` before each command.
+
+  </Message>
+
+1. Update Ubuntu packet manager:
+
+  ```
+  sudo apt-get update
+  ```
+
+2. Upgrade the Ubuntu packages already installed:
+
+  ```
+  sudo apt-get upgrade
+  ```
+
+3. Go on the [downloads page](https://www.chef.io/chef/get-chef/) and copy the URL of the **Chef** Server for Ubuntu
+
+4. Launch the installation command with the URL retrieved from the website:
+
+  ```
+  wget https://packages.chef.io/files/stable/chef-server/12.17.33/ubuntu/16.04/chef-server-core_12.17.33-1_amd64.deb
+  ```
+
+5. Once the download is complete, install the package:
+
+  ```
+  sudo dpkg -i chef-server*.deb
+  ```
+
+6. Call the `reconfigure` command, which configures the components that make up the server to work together in your specific environment:
+
+  ```
+  sudo chef-server-ctl reconfigure
+  ```
+
+### Creating an Admin User and Organization
+
+Creating an admin user enables a specific user to make changes to the infrastructure components in the organization. An Organization is a grouping of infrastructure and configuration within Chef.
+
+1. Launch the `chef-server-ctl`with the `user-create` subcommand:
+
+  ```
+  chef-server-ctl user-create USERNAME FIRST_NAME LAST_NAME EMAIL PASSWORD
+  ```
+
+  For our example, we will create a user with the following information:
+
+    - **Username:** testuser
+    - **First Name:** test
+    - **Last Name:** user
+    - **Email:** testuser@example.com
+    - **Password:** pwdexample
+    - **Filename:** testuser.pem
+
+  We will also add `-f` option in order to specify a filename in which to output our new user's private RSA key. We will need this in order to authenticate using the `knife` management command later. In the end, the command translates to:
+
+  ```
+  chef-server-ctl user-create testuser test user testuser@example.com pwdexample -f testuser.pem
+  ```
+
+2. Launch the `chef-server-ctl` with the `org-create` subcommand:
+
+  ```
+  chef-server-ctl org-create SHORTNAME LONGNAME --association_user USERNAME
+  ```
+
+  For our example, we will create an organization with the following information:
+
+    - **Short Name** (refers to the organization within Chef): scaleway
+    - **Long Name** (name of the organization): Scaleway, Inc.
+    - **Association User** (username that has access to administer the organization): testuser
+    - **Filename:** scaleway-file.pem
+
+  Again, we will add the `-f` flag to specify the private key file location. The key that will be created is used to validate new clients as part of the organization until they can get their own unique client key. In the end, the command translates to:
+
+  ```
+  chef-server-ctl org-create scaleway "Scaleway, Inc." --association_user testuser -f scaleway-file.pem
+  ```
+
+The Chef server installation is now complete.
+
+## Configuring a Chef Workstation
+
+The actual infrastructure coordination and configuration does not take place on the Chef server. This work is done on a workstation which then uploads the data to the server to influence the Chef environment.
+
+### Installing the Chef Development Kit (CDK)
+
+The Chef Development Kit, a suite of software designed for Chef workstations.
+
+1. On another server, download the CDK which is available [here](https://downloads.chef.io/chefdk/3.0.36)
+
+  ```
+  wget https://packages.chef.io/files/stable/chefdk/3.0.36/ubuntu/16.04/chefdk_3.0.36-1_amd64.deb
+  ```
+
+2. Install the package:
+
+  ```
+  sudo dpkg -i chefdk_*.deb
+  ```
+
+3. After the installation, you can verify that all of the components are available in their expected location through the new chef command:
+
+  ```
+  chef verify
+  ```
+
+  <Message type="note">
+  
+  If your workstation is primarily used to manage Chef for your infrastructure, you will likely want to default to the version of Ruby installed with Chef. You can do this by modifying your .bash_profile so that Chef's Ruby takes precedence:
+
+  </Message>
+
+  ```
+  echo 'eval "$(chef shell-init bash)"' >> ~/.bash_profile
+  ```
+
+  Afterwards, you can source your .bash_profile file to set the correct environmental variables for the current session:
+
+  ```
+  source ~/.bash_profile
+  ```
+
+### Cloning the Chef Repository
+
+The Chef configuration for your infrastructure is maintained in a hierarchical file structure known as a Chef repo. As the Chef GitHub repository is deprecated, we recommend using the `chef generate repo` command that comes with ChefDK.
+
+  ```
+  chef generate repo chef_repo
+  ```
+
+### Downloading the Authentication Keys to the Workstation
+
+At this point, your workstation has all of the software needed to interact with a Chef server and compose infrastructure configurations. However, it is not yet configured to interact with your Chef server and your environment.
+
+Create the hidden directory where you can store the user key and the organization validator key that we created on the Chef server.
+
+  ```
+  mkdir ~/chef_repo/.chef
+  ```
+
+The method that you use to connect to the Chef server will determine how to download the keys.
+
+#### Option 1: (Recommended) Downloading Keys when Connecting to a Chef Server Using SSH Keys
+
+1. Leave your workstation
+
+  ```
+  exit
+  ```
+
+2. Once you are back on your local computer, you need to add the SSH keys you use to connect to the Chef server to an SSH agent.
+
+  ```
+  eval $(ssh-agent)
+  ```
+
+  which should return something similar to
+
+  ```
+  Agent pid 2893
+  ```
+
+3. Once the agent is started, add your SSH key to it:
+
+  ```
+  ssh-add
+  ```
+
+4. This will keep your SSH key stored in memory. Now, you can forward the stored key to your workstation using the `-A` option with ssh. It allows you to connect to any computer from your workstation as if you were connecting from your local computer:
+
+  ```
+  ssh -A username@workstation_domain_or_IP
+  ```
+
+Now, you can connect to your Chef server without needing a password using the forwarded SSH credentials.
+
+If you log into the Chef server using the root user account, your commands will look something like this.
+
+```
+scp root@server_domain_or_IP:/root/testuser.pem ~/chef_repo/.chef
+scp root@server_domain_or_IP:/root/scaleway-file.pem ~/chef_repo/.chef
+```
+
+If you connect to your Chef server using a non-root user, the commands will look more like this:
+
+```
+scp username@server_domain_or_IP:/home/username/testuser.pem ~/chef_repo/.chef
+scp username@server_domain_or_IP:/home/username/scaleway-file.pem ~/chef_repo/.chef
+```
+
+#### Option 2: Downloading Keys when Connecting to a Chef Server with Passwords
+
+<Message type="note">
+
+By default, Scaleway deactivates server connection with password. For more information, refer to the dedicated [Ubuntu Forum](https://askubuntu.com/questions/101670/how-can-i-allow-ssh-password-authentication-from-only-certain-ip-addresses)
+
+</Message>
+
+On your workstation:
+
+1. Specify the username and domain name or IP address used to connect to the Chef server.
+
+2. Follow this immediately with a colon (:) and the path to the file you wish to download.
+
+3. After adding a space, indicate the directory on the local computer where you wish the download the files to be placed (`~/chef_repo/.chef` in our case).
+
+If you log into the Chef server using the root user account, your commands will look something like this.
+
+```
+scp root@server_domain_or_IP:/root/testuser.pem ~/chef_repo/.chef
+scp root@server_domain_or_IP:/root/scaleway-file.pem ~/chef_repo/.chef
+```
+
+If you connect to your Chef server using a non-root user, the commands will look more like this:
+
+```
+scp username@server_domain_or_IP:/home/username/testuser.pem ~/chef_repo/.chef
+scp username@server_domain_or_IP:/home/username/scaleway-file.pem ~/chef_repo/
+```
+
+## Configuring Knife to Manage your Chef Environment
+
+Now that you have your Chef credentials available on your workstation, we can configure the `knife` command with the information it needs to connect to and control your Chef infrastructure.
+
+This is done through a `knife.rb` file that we will place in the `~/chef_repo/.chef` directory along with our keys.
+
+1. Open up a file called `knife.rb` in that directory in your text editor:
+
+  ```
+  nano ~/chef_repo/.chef/knife.rb
+  ```
+
+2. Paste the following information replacing the information with your infrastructure information:
+
+  ```
+  current_dir = File.dirname(__FILE__)
+  log_level                :info
+  log_location             STDOUT
+  node_name                "name_for_workstation"
+  client_key               "#{current_dir}/name_of_user_key"
+  validation_client_name   "organization_validator_name"
+  validation_key           "#{current_dir}/organization_validator_key"
+  chef_server_url          "https://server_domain_or_public_IP/organizations/organization_name"
+  syntax_check_cache_path  "#{ENV['HOME']}/.chef/syntaxcache"
+  cookbook_path            ["#{current_dir}/../cookbooks"]
+  ```
+
+    - **node_name:** Specifies the name that knife will use to connect to your Chef server. This should match your username.
+    - **client_key:** Name and path to the user key that you copied over from the Chef server. We can use the `#{current_dir}` snippet to fill in the path if the key is in the same directory as the `knife.rb` file.
+    - **validation_client_name:** Name of the validation client that knife will use to bootstrap new nodes. This will take the form of your organization short name, followed by `-validator`.
+    - **validation_key:** Like the `client_key`, this includes the name and path to the validation key you copied from the Chef server. Again, you can use the `#{current_dir}`.
+    - **chef_server_url:** This is the URL where the Chef server can be reached. It should begin with `https://`, followed by your Chef server's domain name or **Public IP address**. Afterwards, the path to your organization should be specified by appending /organizations/your_organization_name.
+
+  For our tutorial, the file looks this:
+
+  ```
+  current_dir = File.dirname(__FILE__)
+  log_level                :info
+  log_location             STDOUT
+  node_name                "testuser"
+  client_key               "#{current_dir}/testuser.pem"
+  validation_client_name   "scaleway-validator"
+  validation_key           "#{current_dir}/scaleway-file.pem"
+  chef_server_url          "https://domaine_name_or_public_IP/organizations/scaleway"
+  syntax_check_cache_path  "#{ENV['HOME']}/.chef/syntaxcache"
+  cookbook_path            ["#{current_dir}/../cookbooks"]
+  ```
+
+3. Save and close the `knife.rb` file.
+
+4. Test the configuration file. We need to be in our `~/chef-repo` directory for our configuration file to be read correctly:
+
+  ```
+  cd ~/chef_repo
+  knife client list
+  ```
+
+  which returns an error similar to:
+
+  ```
+  ERROR: SSL Validation failure connecting to host: 51.15.240.56 - SSL_connect returned=1 errno=0 state=error: certificate verify failed (self signed certificate)
+  ERROR: Could not establish a secure connection to the server.
+  Use `knife ssl check` to troubleshoot your SSL configuration.
+  If your Chef Server uses a self-signed certificate, you can use
+  `knife ssl fetch` to make knife trust the server's certificates.
+
+  Original Exception: OpenSSL::SSL::SSLError: SSL Error connecting to https://51.15.240.56/organizations/scaleway/clients - SSL_connect returned=1 errno=0 state=error: certificate verify failed (self signed certificate)
+  ```
+
+  It occurs because we do not have our Chef server's SSL certificate on our workstation.
+
+5. Launch
+
+  ```
+  knife ssl fetch
+  ```
+
+  which returns
+
+  ```
+  WARNING: Certificates from public_IP will be fetched and placed in your trusted_cert
+  directory (/root/chef_repo/.chef/trusted_certs).
+
+  Knife has no means to verify these are the correct certificates. You should
+  verify the authenticity of these certificates after downloading.
+
+  Adding certificate for public_IP in /root/chef_repo/.chef/trusted_certs/public_IP.crt
+  ```
+
+  After the SSL certificate has been fetched, the previous command should now work.
+
+6. Launch
+
+  ```
+  knife client list
+  ```
+
+  which returns
+
+  ```
+  scaleway-validator
+  ```
+
+  If the above command correctly returns, your workstation is now set up to control your Chef environment.

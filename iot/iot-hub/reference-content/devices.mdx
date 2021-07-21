@@ -1,0 +1,147 @@
+---
+title: Scaleway Elements IoT Hub - Devices
+description: Overview of the IoT Hub - Devices
+excerpt: |
+  A Device is a representation of a device or program that is connected to the cloud. Through a Hub, it exchanges messages with other Devices and cloud services.
+  Devices and their Hub use the MQTT protocol to send and receive messages.
+totalTime: PT10M
+steps:
+  - step: Identification and Security
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/iot/iot-hub/reference-content/devices/#-Security-modes
+  - step: Message filters
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/iot/iot-hub/reference-content/devices/#-Message-filters
+  - step: How to create a Device
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/iot/iot-hub/reference-content/devices/#-How-to-create-a-Device
+  - step: How to delete a Device
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/iot/iot-hub/reference-content/devices/#-How-to-delete-a-Device
+categories: 
+  - iot
+  - iot-hub
+tags: Scaleway IoT Device
+image: /assets/images/docs/scaleway.png
+permalink: docs/scaleway-iothub-device/
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, object storage, s3, functions, containers, serverless, iot, smart, connected, embedded, devices, hubs, mqtt
+---
+
+A Device is a representation of a device or program that is connected to the cloud. Through a [Hub](/iot/iot-hub/concepts/#iot-hub), it exchanges messages with other Devices and cloud services.
+
+Devices use the [MQTT](http://mqtt.org/) protocol to send and receive messages. MQTT over Websocket is also supported through a dedicated [Network](/iot/iot-hub/concepts/#network).
+
+The Hub provides per-device usage metrics, see [this page](/iot/iot-hub/how-to/view-metrics) for more information.
+
+---
+
+## Security modes
+
+A device can be configured to either **Deny** or **Allow** insecure connections. In other words, connection security is either required or optional. Here is how this translates with the 3 available connection methods.
+
+By default, you can only open a single connection per Device. Opening a second one with the same credentials will terminate the first one, so you will notice if your device credentials are used by another MQTT client. If you want multiple MQTT to share the same credentials, you can turn on the `allow multiple connections` setting for a Device (not available on Shared plan Hubs).
+
+The Device ID therefore provides a simple way of authenticating a device, which should not be considered secure. To establish a secure connection, a Device must connect using mutual TLS authentication.
+
+* **Mutual-authentication TLS**
+  This is the strongest security for a Device. The connection is encrypted with TLS, and during the handshake the Hub will verify the identity of the Device, and the Device the identity of the Hub.  
+  For that two-way verification to occur, the client must possess the Device's certificate and private key, which are displayed only once at the creation of the Device (Scaleway does not store them). It must also possess the certificate authority of the Hub, which can be downloaded from the Hub overview.
+
+  If the Device is configured to **Deny Insecure connection**, it **must** connect in this mode.<br/>
+  If the Device is configured to **Allow Insecure connection**, it **may** connect in this mode.
+
+* **Server-authentication TLS**
+  This mode offers an intermediate level of security. The connection is still encrypted, but only the Device verifies the identity of the Hub, not the other way around.
+  For that one-way verification to occur, the physical device must only possess the certificate authority of the Hub, which can be downloaded from the Hub's Network tab.
+
+  If the Device is configured to **Deny Insecure connection**, it **cannot** connect in this mode.<br/>
+  If the Device is configured to **Allow Insecure connection**, it **may** connect in this mode.
+
+* **Plain**
+  This mode offers least security. The connection is neither encrypted nor authenticated. This is a good starting point for application development, but we recommend avoiding it in production stage.
+
+  If the Device is configured to **Deny Insecure connection**, it **cannot** connect in this mode.<br/>
+  If the Device is configured to **Allow Insecure connection**, it **may** connect in this mode.
+
+For both TLS modes, your MQTT clients can authenticate the Hub with the Server Certificate Authority, which is available in the IoT Hub Networks tab in your [Scaleway Console](https://console.scaleway.com), in the Default MQTT Network item.
+
+> Please note you will deal with 2 different Certificate Authorities (CA): the Hub CA which signs Device certificates, and the Server CA which signs IoT Hub Endpoint certificate.
+
+Devices can also be identified by a custom certificate authority (CA). See [this page](/iot/iot-hub/how-o/provide-own-certificate-authority) for instructions on how install a custom CA on a Hub. When using a custom CA, devices will be identified by the common name of their provided certificates. If a device with that name does not exist in the Hub, it will be disconnected during the TLS handshake, unless you enable device auto-provisioning. When device auto-provisioning is enabled, if there's no Hub device corresponding to the common name, a Hub device will be created and the device won't be disconnected. See [this page](/iot/iot-hub/how-to/enable-auto-provisioning) for instructions on how enable device auto-provisioning.
+If you want to customize auto-provisioned devices, you can set up a REST route to trigger on the associated [Hub events](/iot/iot-hub/how-to/simulate-event).
+
+<Message type="important">
+
+When using a custom CA, the complete certificate chain, from the device certificate up to the custom CA installed in the Hub, must be provided when establishing the TLS connection. Failing to do so will result in the client being disconnected during the TLS handshake. The Hub relies on the Certificate Authority to find your Hub, and on the certificate chain to check that the device certificate was directly or indirectly signed by the custom CA.
+
+</Message>
+
+## Device Identification
+
+A Device can identify itself to IoT Hub in 2 different ways:
+
+* **By certificate**
+  Issue a certificate with the `Common Name` field set to the Device Name. This can only be used when the Device connects with mutual-authentication TLS, in other modes the Device doesn't use a certificate.
+
+* **By device ID**
+  Use the Device ID in the MQTT Username field. Alternatively, you can also use it as MQTT Client ID. However, this is not recommended for new applications as this option is now deprecated.
+
+---
+
+## Multiple connections for a Device
+
+By default, you can only open a single connection per Device. Opening a second one with the same credentials will terminate the first one so you will notice if your device credentials are used by another MQTT client. If you want multiple MQTT to share the same credentials, you can turn on the `allow multiple connections` setting for a Device (not available on Shared plan Hubs).
+
+---
+
+## Message filters
+
+Message filters allow you to control which topics a device can **publish** and **subscribe** to. There is a publish filter and a subscribe filter, each filter operates independently.
+
+You can either **accept** topics in the list (topic whitelist) or **reject** topics in the list (topic blacklist). Topics in the lists may contain MQTT wildcards. You can type in as many topics as you want, one topic per line.
+
+A message published to a forbidden topic will be dropped.
+When subscribing, if at least one subscription matches a forbidden topic (directly or using a wildcard) the whole subscription will be rejected.
+In both cases yon can monitor [Hub events](/iot/iot-hub/how-to/understand-event-messages) to detect such errors.
+
+The default filter does not restrict publications and subscriptions, thus accepting all topics.
+
+<Message type="note">
+
+This is not equivalent to "Accept #" because MQTT '#' wildcard excludes topics starting with '$', as per the MQTT specification.
+
+</Message>
+
+### Message filters template
+
+<Message type="note">
+
+This feature is currently in **beta** status.
+
+</Message>
+
+The Message filters now accept templating to use some metadata associated with the Hub and Device to be used in the filter.
+
+The following elements are available:
+* `hub.name`: The Hub's name
+* `hub.id`: The Hub's ID
+* `device.name`: The Device's name
+* `device.id`: The Device's ID
+
+To use them in your message filters use double curly brackets arround the element you want to use.
+For example:
+```
+    {% raw %}/{{ hub.name }}/{{ device.name }}/#{% endraw %}
+```
+Will build the following filter when the Hub is named `MyHub` and the Device `MyDevice`:
+```
+    /MyHub/MyDevice/#
+```
+
+Issues when parsing the template will be reported through [Hub events](/iot/iot-hub/how-to/simulate-event) as warnings, in that case the filter may be dropped from the list.
+
+<Message type="note">
+
+This feature is currently in "beta", it might still change while we add templating to other components of the IoT Hub, in order to unify the experience inside the platform.
+
+</Message>

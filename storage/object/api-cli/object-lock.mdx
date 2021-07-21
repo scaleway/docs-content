@@ -1,0 +1,463 @@
+---
+title: Setting up object lock
+description: This page explains how to lock objects to prevent them from being deleted or overwritten.
+excerpt: |
+  This page explains how to lock objects to prevent them from being deleted or overwritten.
+totalTime: PT15M
+steps:
+  - step: TODO
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/storage/object/api-cli/object-lock
+image: /assets/images/docs/scaleway.png
+keywords: object storage, create, Howto
+dates:
+  validation: 2021-05-28
+  posted: 2021-05-27
+---
+
+The **Scaleway S3 object lock** API feature allows users to lock objects to prevent them from being deleted or overwritten. Objects can be put on lock for a specific amount of time or indefinitely. The lock period is defined by the user.
+
+The feature uses a write-once-read-many (WORM) data protection model. This model is generally used in cases where data cannot be altered once it has been written. It provides [regulatory compliance](https://en.wikipedia.org/wiki/Regulatory_compliance) and protection against ransomware, and malicious or accidental deletion of objects. 
+
+Setting Object Lock can only be achieved upon the creation of a bucket. In addition, versioning is automatically enabled on the bucket and cannot be disabled. Object lock must be enabled on a bucket in order to write a lock configuration using the PUT Object Lock Configuration API that has its object lock flag set.
+  <Message type="note">
+
+  Object Lock can be used with Object Storage **Standard** and **Glacier** classes.
+
+  </Message>
+
+## How to configure Bucket Lock
+
+The Lock Configuration enables you to set a lock configuration on a specified bucket. Once set, the rule specified in the Object Lock configuration is applied by default to every new object placed in the specified bucket.
+
+### XML Lock Configuration Tokens
+`ObjectLockConfiguration`
+  - **Description:** Root level tag for the ObjectLockConfiguration parameters.
+  - **Required:** Yes
+
+`ObjectLockEnabled`
+  - **Description:** Indicates whether this bucket has an Object Lock configuration enabled.
+  - **Type:** String
+  - **Valid Values:** `Enabled`
+  - **Required:** Yes
+
+`Rule`
+  - **Description:** The Object Lock rule in place for the specified object.
+  - **Type:** ObjectLockRule data type
+  - **Required:** No
+
+`Mode`
+  - **Description:** The default Object Lock retention mode you want to apply to new objects placed in the specified bucket.
+  - **Type:** String
+  - **Valid Values:** `GOVERNANCE` or `COMPLIANCE`
+
+`Days`
+  - **Description:** The number of days that you want to specify for the default retention period.
+  - **Type:** Integer
+
+`Years`
+  - **Description:** The number of years that you want to specify for the default retention period.
+  - **Type:** Integer 
+
+
+### PUT Bucket 
+
+This operation creates a new bucket with Object Lock. The `/lockedbucket` header is added to the standard PUT Bucket operation. 
+
+<Message type="note">
+
+If the operation is successful no output will be returned.
+
+</Message>
+
+**Sample Request**
+```xml
+PUT /lockedbucket HTTP/1.1
+x-amz-bucket-object-lock-enabled: True
+```
+### PUT Object Lock Configuration
+
+This operation applies the Lock configuration on a bucket. 
+
+<Message type="note">
+
+If the operation is successful no output will be returned.
+
+</Message>
+
+**Sample Request**
+
+```xml
+PUT /lockedbucket?object-lock HTTP/1.1
+
+<ObjectLockConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <ObjectLockEnabled>Enabled</ObjectLockEnabled>
+    <Rule>
+        <DefaultRetention>
+            <Mode>COMPLIANCE</Mode>
+            <Days>1000</Days>
+        </DefaultRetention>
+    </Rule>
+</ObjectLockConfiguration>
+```
+
+**Sample Request**
+```xml
+PUT /lockedbucket?object-lock HTTP/1.1
+
+<ObjectLockConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <ObjectLockEnabled>Enabled</ObjectLockEnabled>
+    <Rule>
+        <DefaultRetention>
+            <Mode>GOVERNANCE</Mode>
+            <Years>30</Years>
+        </DefaultRetention>
+    </Rule>
+</ObjectLockConfiguration>
+```
+
+**Sample Request**
+```xml
+PUT /lockedbucket?object-lock HTTP/1.1
+
+<ObjectLockConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <ObjectLockEnabled>Enabled</ObjectLockEnabled>
+</ObjectLockConfiguration>
+```
+### GET Object Lock Configuration
+
+This operation returns the Lock Configuration.
+
+**Sample Request**
+```xml
+GET /lockedbucket?object-lock HTTP/1.1
+```
+
+**Sample Response**
+```xml
+<ObjectLockConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <ObjectLockEnabled>Enabled</ObjectLockEnabled>
+    <Rule>
+        <DefaultRetention>
+            <Mode>COMPLIANCE</Mode>
+            <Days>1000</Days>
+        </DefaultRetention>
+    </Rule>
+</ObjectLockConfiguration>
+```
+
+**Sample Request**
+```xml 
+GET /lockedbucket?object-lock HTTP/1.1
+```
+
+**Sample Response**
+```xml
+<ObjectLockConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <ObjectLockEnabled>Enabled</ObjectLockEnabled>
+    <Rule>
+        <DefaultRetention>
+            <Mode>GOVERNANCE</Mode>
+            <Years>30</Years>
+        </DefaultRetention>
+    </Rule>
+</ObjectLockConfiguration>
+```
+
+**Sample Request**
+```xml
+GET /lockedbucket?object-lock HTTP/1.1
+```
+
+**Sample Response**
+```xml
+<ObjectLockConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <ObjectLockEnabled>Enabled</ObjectLockEnabled>
+</ObjectLockConfiguration>
+```
+### AWS-CLI Object Lock Configuration
+
+To use Object Lock, you have to create a bucket that supports the feature.
+
+You can create a bucket with the `--object-lock-enabled-for-bucket` flag, which enables Object Lock but does not activate it by default. If a bucket is created without `--object-lock-enabled-for-bucket`, the flag cannot be added later.
+
+  <Message type="important">
+
+  The following command does not apply Object Lock to the bucket's objects. Object Lock has to be activated with a different command in a next step.
+
+  </Message>
+
+```
+$> aws s3api create-bucket --object-lock-enabled-for-bucket --bucket test-is-lock
+``` 
+By default, Object Lock is not activated on buckets. To activate it, you can run the following command:
+
+  <Message type="note">
+
+  In the example below, the object-lock-configuration is set to a 50-day object lock on the specified bucket.
+
+  </Message>
+
+```
+$> aws s3api put-object-lock-configuration \
+    --bucket my-bucket-with-object-lock \
+    --object-lock-configuration '{ "ObjectLockEnabled": "Enabled", "Rule": { "DefaultRetention": { "Mode": "COMPLIANCE", "Days": 50 }}}'
+```
+
+To view the Object Lock configuration of a bucket, run:
+```json
+$> aws s3api get-object-lock-configuration 
+       --bucket test-is-lock
+{
+    "ObjectLockConfiguration": {
+        "ObjectLockEnabled": "Enabled",
+        "Rule": {
+            "DefaultRetention": {
+                "Mode": "COMPLIANCE",
+                "Days": 50
+            }
+        }
+    }
+}
+```
+
+## How to configure Object Retention
+
+Object Retention is a feature that guarantees your object is WORM-protected and cannot be overwritten or deleted.
+
+Object Lock provides two modes to manage Object Retention: **Compliance** and **Governance**. It allows retention settings on individual objects in addition to default retention settings for all objects within a bucket.
+
+### Retention Modes
+
+**Compliance** 
+
+When this mode is set, an object version cannot be overwritten or deleted by any user. If the **Compliance** mode is configured for an object, then its retention mode cannot be changed, and its retention period can't be shortened. In other words, it ensures that an object version cannot be overwritten or deleted for the duration of the retention period.
+  <Message type="note">
+
+  When the compliance mode is enabled, it is only possible to overwrite it or delete an object once the Object Lock expires or upon deleting your Scaleway account. 
+
+  </Message>
+
+**Governance** 
+
+When this mode is set, all users can alter lock settings. As Scaleway currently does not handle permissions via IAM, this permission is by default for all S3 users. 
+
+<Message type="note">
+
+The **Governance** mode ensures extra protection before any alterations can be completed. Indeed, an object can be permanently deleted only if:
+  - A retention rule is applied, the governance retention date must be anterior to the present time
+  - The object does not have a legal hold in place. If it does, the legal hold [status token](https://scaleway.com/en/docs/s3-object-lock#-XML-Legal-Hold-Configuration-Token) must be set to OFF before deletion.
+    When the above criteria are met, you will be able to use `delete-object --version-id` to permanently delete an object.
+
+</Message>
+
+### Retention Periods
+
+A retention period specifies a fixed period of time during which an object remains locked.
+
+### XML Retention Configuration Token
+
+`Mode`
+  - **Description:** Indicates the Retention mode for the specified object.
+  - **Type:** String
+  - **Valid Values:** `GOVERNANCE` or `COMPLIANCE`
+  - **Required:** Yes
+
+`RetainUntilDate`
+  - **Description:** The date on which this Object Lock Retention will expire.
+  - **Type:** Timestamp (iso format)
+  - **Required:** Yes
+
+### Put Object Retention
+
+Places an Object Retention configuration on an object. 
+
+<Message type="note">
+
+If the operation is successful no output will be returned.
+
+</Message>
+
+**Sample Request**
+```xml
+PUT /lockedbucked/myobject?retention HTTP/1.1
+X-Amz-Date: 20201028T052225Z
+X-Amz-Content-SHA256: c6998888096fe13a5d84de6db902e3b3c0b623565cd5f2be70330d6ed40dca91
+Authorization: XXX
+Content-Length: 149
+
+<Retention xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Mode>COMPLIANCE</Mode>
+    <RetainUntilDate>2021-01-01T21:42:42Z</RetainUntilDate>
+</Retention>
+```
+
+**Sample Request**
+```xml
+PUT /lockedbucked/myobject?retention HTTP/1.1
+X-Amz-Date: 20201028T052346Z
+X-Amz-Content-SHA256: 470bfbbffadc821f4b4a398154e9c300d741093205ddbdb25514351b64d64b31
+Authorization: XXX
+Content-Length: 149
+
+<Retention xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Mode>GOVERNANCE</Mode>
+    <RetainUntilDate>2025-12-12T00:00:00Z</RetainUntilDate>
+</Retention>
+```
+
+
+### GET Object Retention
+
+This operation returns the object retention settings.
+
+**Sample Request**
+```xml
+GET /lockedbucket/myobject?retention HTTP/1.1
+```
+
+**Sample Response**
+```xml
+<Retention xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Mode>COMPLIANCE</Mode>
+    <RetainUntilDate>2021-01-01T21:42:42Z</RetainUntilDate>
+</Retention>
+```
+
+**Sample Request**
+```xml
+GET /lockedbucket/myobject?retention HTTP/1.1
+```
+
+**Sample Response**
+```xml
+<Retention xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Mode>GOVERNANCE</Mode>
+    <RetainUntilDate>2025-12-12T00:00:00Z</RetainUntilDate>
+</Retention>
+```
+
+### AWS-CLI Object Retention
+
+```bash
+$> aws s3api put-object-retention \
+       --bucket test-is-lock \
+       --key go \
+       --retention '{ "Mode": "COMPLIANCE", "RetainUntilDate":
+"2021-01-01T21:42:42Z" }'
+$> aws s3api get-object-retention 
+       --bucket test-is-lock 
+       --key ohno
+{
+    "Retention": {
+        "Mode": "COMPLIANCE",
+        "RetainUntilDate": "2050-09-21T18:52:27Z"
+    }
+}
+```
+## How to manage Object Legal Hold
+
+Legal Hold is an ON/OFF switch that can be applied on every object in a locked bucket, independently from the lock configuration, the object retention or the object age. It can be applied on objects which are locked. 
+
+A Legal Hold provides the same protection as a retention period, but it has no expiration date. Instead, a legal hold remains in place until you explicitly remove it.
+
+### XML Legal Hold Configuration Token
+
+`Status`: 
+  - **Description:** Indicates whether the specified object has a Legal Hold in place.
+  - **Type:** String
+  - **Valid Values:** `ON` or `OFF`
+  - **Required:** Yes
+
+### Put Object Legal Hold
+
+Applies a Legal Hold configuration to the specified object. 
+
+<Message type="note">
+
+If the operation is successful no output will be returned.
+
+</Message>
+
+**Sample Request**
+```xml
+PUT /lockedbucked/myobject?legal-hold HTTP/1.1
+X-Amz-Date: 20201028T052448Z
+X-Amz-Content-SHA256: 96b73c95a8d33e664ab2170e095025b47ebd55978bb71cebd6a51e394bf96722
+Authorization: XXX
+Content-Length: 90
+
+<LegalHold xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Status>ON</Status>
+</LegalHold>
+```
+
+**Sample Request**
+```xml
+PUT /lockedbucked/myobject?legal-hold HTTP/1.1
+X-Amz-Date: 20201028T052547Z
+X-Amz-Content-SHA256: 33cb1c62439a66fbcbca4ffb243b013ceb212075048f72ab4383f73afb5c4bd9
+Authorization: XXX
+Content-Length: 91
+
+<LegalHold xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Status>OFF</Status>
+</LegalHold>
+```
+
+### GET Object Legal Hold
+
+Returns the Legal Hold configuration of the specified object. 
+
+**Sample Request**
+```xml
+GET /lockedbucked/myobject?legal-hold HTTP/1.1
+```
+**Sample Response**
+```xml
+<LegalHold xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Status>ON</Status>
+</LegalHold>
+```
+
+**Sample Request**
+```xml
+GET /lockedbucked/myobject?legal-hold HTTP/1.1
+```
+
+**Sample Response**
+```xml
+<LegalHold xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Status>OFF</Status>
+</LegalHold>
+```
+### AWS-CLI Object Legal Hold
+
+```bash
+$> aws s3api put-object-legal-hold 
+       --bucket test-is-lock 
+       --key go 
+       --version-id 1601317928668527 
+       --legal-hold Status=ON
+$> aws s3api get-object-legal-hold 
+       --bucket test-is-lock 
+       --key go 
+       --version-id 1601317928668527
+{
+    "LegalHold": {
+        "Status": "ON"
+    }
+}
+```
+### Object Lock Limitations
+
+For optimal performance, note the current limitations of the feature:
+
+  - When enabling the compliance mode, the only way to overwrite it is to wait for the lock to be outdated or to delete your Scaleway account. 
+  - A bucket that has Object Lock enabled cannot be deleted via the Scaleway Console.
+  - If you set lifecycle expiration rules on some of your objects, the objects that are locked or have a legal Hold enabled are ignored by the lifecycle engine. Hence, those objects will not be deleted.
+
+<Navigation title="See Also">
+  <PreviousButton to="/network/load-balancer/how-to/create-load-balancer/">How to create a Load Balancer</PreviousButton>
+  <NextButton to="/network/load-balancer/how-to/setup-ssl-offloading/">How to set up TLS/SSL offloading</NextButton>
+</Navigation>

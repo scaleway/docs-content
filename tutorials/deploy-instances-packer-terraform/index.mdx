@@ -1,0 +1,378 @@
+---
+title: Deploy Cloud Instances with Packer and Terraform
+description: This tutorial explains how to build and deploy Cloud Instances with Packer and Terraform
+excerpt: |
+  Packer is a tool for creating identical machine images for multiple platforms from a single source configuration file. It can build images for multiple cloud hosting platforms, including Scaleway.
+
+  Terraform is an open source tool for building, changing, and versioning infrastructure safely and efficiently.
+
+  Both applications are available for Linux, MacOS, Windows, FreeBSD and NetBSD.
+totalTime: PT20M
+steps:
+  - step: Downloading and Installing Packer
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/deploy-instances-packer-terraform/#-Downloading-and-Installing-Packer
+  - step: Packer Configuration Files
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/deploy-instances-packer-terraform/#-Packer-Configuration-Files
+  - step: Building an Image with Packer
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/deploy-instances-packer-terraform/#-Building-an-Image-with-Packer
+  - step: Deploying Machine Images with Terraform
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/deploy-instances-packer-terraform/#-Deploying-Machine-Images-with-Terraform
+categories:
+  - compute
+  - instance-dev
+tags: image server cloudserver cloud-server manage packer imagebuilder
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, scalability, ARM, physical server, dedicated server, server, image, operating system, imagebuilder, image builder
+dates:
+  validation: 2021-05-10
+  posted: 2018-08-01
+---
+
+## Overview
+
+[Packer](https://www.packer.io/docs/builders/scaleway.html) is a tool for creating identical machine images for multiple platforms from a single source configuration file. It can build images for multiple cloud hosting platforms, including Scaleway.
+
+[Terraform](https://terraform.io) is an open source tool for building, changing, and versioning infrastructure safely and efficiently.
+
+Both applications are available for Linux, MacOS, Windows, FreeBSD and NetBSD.
+
+## Downloading and Installing Packer
+
+1. Download [Packer](https://www.packer.io/downloads.html) for your Operating system. If you want to have some specific configuration, you can also [build the application](https://www.packer.io/intro/getting-started/install.html#compiling-from-source) from source.
+
+2. Install the application on your computer
+
+3. Verify that the application is working properly, by opening a terminal and typing `packer --help`. You will see an output like the following:
+
+  ```bash
+  $ packer --help
+  Usage: packer [--version] [--help] <command> [<args>]
+
+  Available commands are:
+      build       build image(s) from template
+      fix         fixes templates from old versions of packer
+      inspect     see components of a template
+      push        push a template and supporting files to a Packer build service
+      validate    check that a template is valid
+      version     Prints the Packer version
+  ```
+
+4. Make sure you are running at least version 1.6.3 of Packer.
+
+## Packer Configuration Files
+
+Packer builds images by taking a base image and installing additional software on it.
+
+To use Packer with Scaleway, you must [generate an API Key](/console/my-project/how-to/generate-api-key/) from the management console.
+
+Packer uses JSON files for the configuration.
+
+The following are the **required** configuration parameters for a minimal configuration file:
+
+- `project_id` (string) - The project ID to use to identify your project. It can also be specified via environment variable `SCW_DEFAULT_PROJECT_ID`.
+
+- `access_key` (string) - The Scaleway API Access Key. It can also be specified via environment variable `SCW_ACCESS_KEY`.
+
+- `secret_key` (string) - The Scaleway API Secret Key. It can also be specified via environment variable `SCW_SECRET_KEY`.
+
+- `image` (string) - The UUID of the base image to use. This will be used to boot the server on, before launching the additional tasks. A complete list of all base image UUIDs is available at [https://api-marketplace.scaleway.com/images](https://api-marketplace.scaleway.com/images).
+
+- `zone` (string) - The name of the zone to launch the server and where the snapshot will be available.
+
+- `commercial_type` (string) - The name of the commercial type used to boot: RENDER-S, DEV1-S, DEV1-M, DEV1-L, GP1-L, GP1-M, GP1-S, GP1-XS, ENT1-2XL, ENT1-XL, ENT1-L, ENT1-M, ENT1-S.
+
+A basic configuration should look like the following example:
+
+```json
+{
+  "type": "scaleway",
+  "project_id": "<YOUR_PROJECT_ID>",
+  "access_key": "<YOUR_ACCESS_KEY>",
+  "secret_key": "<YOUR_SECRET_KEY>",
+  "image": "UUID OF THE BASE IMAGE",
+  "zone": "fr-par-1",
+  "commercial_type": "DEV1-S",
+  "ssh_username": "root",
+  "ssh_private_key_file": "/home/user/.ssh/id_rsa"
+}
+```
+
+> When you do not specify the `ssh_private_key_file`, a temporarily SSH keypair will be generated to connect to the server. This key will only allow the root user to connect the server.
+
+There are also some optional parameters that you can use:
+
+- `server_name` (string) - The name assigned to the server. Default packer-UUID
+
+- `image_name` (string) - The name of the resulting image that will appear in your account. Default packer-TIMESTAMP
+
+- `snapshot_name` (string) - The name of the resulting snapshot that will appear in your account. Default packer-TIMESTAMP
+
+- `bootscript` (string) - The id of an existing bootscript to use when booting the server.
+
+- `remove_volume` (bool) - Force Packer to delete volume associated with the resulting snapshot after the build. Default to false.
+
+See the rest of the paramaters on the [Packer documentation](https://www.packer.io/docs/builders/scaleway).
+
+## Building an Image with Packer
+
+As exemplified below, we will build an Ubuntu Image with Apache preinstalled:
+
+1. Set your credentials as environment variable on your computer. For example in bash, you have to edit the file `~/.bashrc`, for zsh the procedure is the same, but the file to edit is `~/.zshrc`:
+
+  ```bash
+  export SCW_DEFAULT_PROJECT_ID=<YOUR_PROJECT_ID>
+  export SCW_ACCESS_KEY=<YOUR_ACCESS_KEY>
+  export SCW_SECRET_KEY=<YOUR_SECRET_KEY>
+  ```
+
+2. Create and edit the file `packer.json` by putting the following content in it:
+
+  ```json
+  {
+    "variables": {
+      "project_id": "",
+      "access_key": "",
+      "secret_key": ""
+    },
+    "builders": [
+      {
+        "project_id": "{{ user `project_id` }}",
+        "access_key": "{{ user `access_key` }}",
+        "secret_key": "{{ user `secret_key` }}",
+        "server_name": "apache",
+        "image_name": "ubuntu-apache",
+        "snapshot_name": "ubuntu-apache-snapshot",
+        "type": "scaleway",
+        "image": "<BASE_IMAGE_ID>",
+        "zone": "fr-par-1",
+        "commercial_type": "DEV1-S",
+        "ssh_private_key_file": "/Users/myaccount/.ssh/id_rsa",
+        "ssh_username": "root"
+      }
+    ],
+    "provisioners": [
+      {
+        "type": "shell",
+        "inline": [
+          "sleep 30",
+          "apt-get update",
+          "apt-get -y upgrade",
+          "apt-get install -y apache2"
+        ]
+      }
+    ]
+  }
+  ```
+
+3. Save the file and launch packer:
+
+  ```bash
+
+  packer build -var "project_id=${SCW_DEFAULT_PROJECT_ID}" -var="access_key=${SCW_ACCESS_KEY}" -var="secret_key=${SCW_SECRET_KEY}" packer.json
+  ```
+
+  You can also use the following file:
+
+  ```json
+  {
+    "builders": [
+      {
+        "server_name": "apache",
+        "image_name": "ubuntu-apache",
+        "snapshot_name": "ubuntu-apache-snapshot",
+        "type": "scaleway",
+        "image": "<BASE_IMAGE_ID>",
+        "zone": "fr-par-1",
+        "commercial_type": "DEV1-S",
+        "ssh_private_key_file": "/Users/myaccount/.ssh/id_rsa",
+        "ssh_username": "root"
+      }
+    ],
+    "provisioners": [
+      {
+        "type": "shell",
+        "inline": [
+          "sleep 30",
+          "apt-get update",
+          "apt-get -y upgrade",
+          "apt-get install -y apache2"
+        ]
+      }
+    ]
+  }
+  ```
+
+  And build with this (the environment variables will be used):
+
+  ```bash
+
+  packer build packer.json
+  ```
+
+  You will see an output like the following:
+
+  ```
+  $ packer build scaleway.json
+  scaleway output will be in this color.
+
+  ==> scaleway: Prevalidating image name: ubuntu-apache
+  ==> scaleway: Prevalidating snapshot name: ubuntu-apache-snapshot
+  ==> scaleway: Using existing SSH private key
+  ==> scaleway: Creating server...
+  ==> scaleway: Waiting for server to become active...
+  ==> scaleway: Using ssh communicator to connect: 51.15.234.151
+  ==> scaleway: Waiting for SSH to become available...
+  ==> scaleway: Connected to SSH!
+  ==> scaleway: Provisioning with shell script: /tmp/packer-shell591856108
+  ==> scaleway: Shutting down server...
+  ==> scaleway: Creating snapshot: ubuntu-apache-snapshot
+  ==> scaleway: Creating image: ubuntu-apache
+  ==> scaleway: Destroying server...
+  Build 'scaleway' finished.
+
+  ==> Builds finished. The artifacts of successful builds are:
+  --> scaleway: An image was created: 'ubuntu-apache' (ID: e6e764cf-7f46-4c13-b251-a9e47367e284) in zone 'fr-par-1' based on snapshot 'ubuntu-apache-snapshot' (ID: 7abb7315-fae6-4317-9389-8ecf3c5e8a7b)
+  ```
+
+  And the newly created image will appear in the image list in your account:
+
+  <Lightbox src="scaleway-packer-image.png" alt="" />
+
+4. You can now start one or a series of servers with your new image.
+
+## Deploying Machine Images with Terraform
+
+1. Download [Terraform](https://www.terraform.io/downloads.html) for your operating system.
+
+2. Set your credentials as environment variable on your computer. For example in bash, you have to edit the file `~/.bashrc`, for zsh the procedure is the same, but the file to edit is `~/.zshrc`:
+
+  ```bash
+  export SCW_DEFAULT_PROJECT_ID=<YOUR_PROJECT_ID>
+  export SCW_ACCESS_KEY=<YOUR_ACCESS_KEY>
+  export SCW_SECRET_KEY=<YOUR_SECRET_KEY>
+  ```
+
+3. Create a configuration file `scaleway.tf` with the following contents:
+
+  ```hcl
+  terraform {
+    required_providers {
+      scaleway = {
+        source = "scaleway/scaleway"
+      }
+    }
+    required_version = ">= 0.13"
+  }
+
+  provider "scaleway" {
+    zone = "fr-par-1"
+  }
+
+  resource "scaleway_instance_ip" "ip" {
+  }
+
+  data "scaleway_instance_image" "ubuntu-apache" {
+    architecture = "x86_64"
+    name         = "ubuntu-apache"
+  }
+
+  resource "scaleway_instance_server" "ubuntu-apache-server" {
+    name  = "ubuntu-apache-server"
+    ip_id = scaleway_instance_ip.ip.id
+    image = data.scaleway_instance_image.ubuntu-apache.id
+    type  = "DEV1-S"
+    security_group_id = scaleway_instance_security_group.web.id
+  }
+
+  resource "scaleway_instance_security_group" "web" {
+    name        = "http"
+    description = "allow HTTP and HTTPS traffic"
+
+    inbound_rule {
+      action = "accept"
+      port = 80
+      ip_range = "0.0.0.0/0"
+      protocol = "TCP"
+    }
+
+    inbound_rule {
+      action = "accept"
+      port = 443
+      ip_range = "0.0.0.0/0"
+      protocol = "TCP"
+    }
+  }
+  ```
+
+3. Initialize Terraform:
+
+  ```bash
+  terraform init
+  ```
+
+  You will see an output like the following:
+
+  ```
+  Initializing provider plugins...
+    - Finding latest version of scaleway/scaleway...
+    - Installing scaleway/scaleway v1.17.0...
+    - Installed scaleway/scaleway v1.17.0 (signed by a HashiCorp partner, key ID F5BF26CADF6F9614)
+
+  Partner and community providers are signed by their developers.
+  If you'd like to know more about provider signing, you can read about it here:
+  https://www.terraform.io/docs/plugins/signing.html
+
+  The following providers do not have any version constraints in configuration,
+  so the latest version was installed.
+
+  To prevent automatic upgrades to new major versions that may contain breaking
+  changes, we recommend adding version constraints in a required_providers block
+  in your configuration, with the constraint strings suggested below.
+
+    * scaleway/scaleway: version = "~> 1.17.0"
+
+  Terraform has been successfully initialized!
+  ```
+
+4. Run a **dry run** of the configuration to check it:
+
+  ```bash
+  terraform plan
+  ```
+
+5. Start your server from Terraform:
+
+  ```bash
+  terraform apply
+  ```
+
+  An output like the following will appear on the screen:
+
+  ```
+  Do you want to perform these actions?
+    Terraform will perform the actions described above.
+    Only 'yes' will be accepted to approve.
+
+    Enter a value: yes
+
+  scaleway_instance_ip.ip: Creating...
+  scaleway_instance_volume.data: Creating...
+  scaleway_instance_security_group.http: Creating...
+  scaleway_instance_ip.ip: Creation complete after 1s [id=fr-par-1/278d1009-bd9f-4175-ab56-3ce6811ace72]
+  scaleway_instance_server.ubuntu-apache-server: Creating...
+  scaleway_instance_security_group.http: Creation complete after 4s [id=fr-par-1/065adee2-a74a-450f-a28c-bce3578c34a3]
+  scaleway_instance_server.ubuntu-apache-server: Still creating... [10s elapsed]
+  scaleway_instance_server.ubuntu-apache-server: Still creating... [20s elapsed]
+  scaleway_instance_server.ubuntu-apache-server: Still creating... [30s elapsed]
+  scaleway_instance_server.ubuntu-apache-server: Still creating... [40s elapsed]
+  scaleway_instance_server.ubuntu-apache-server: Still creating... [50s elapsed]
+  scaleway_instance_server.ubuntu-apache-server: Creation complete after 51s [id=fr-par-1/b3d9f0d3-a150-4d08-a505-9e5a4058958a]
+
+  Apply complete! Resources: 4 added, 0 changed, 0 destroyed.
+  ```
+
+To find out more about all resources that you can manage with Terraform, check out the [official documentation](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs).

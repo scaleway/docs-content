@@ -1,0 +1,448 @@
+---
+title: How to deploy ERPNext on Ubuntu 18.04 LTS (Bionic Beaver)
+description: Discover how to deploy the ERPNext application on a Scaleway Dedibox dedicated server
+tags: erpnext erp odoo
+excerpt: |
+  ERPNext is a free and open-source ERP software desigend to be used by manufacteres, distribuors and service companies. It includes a full range of modules including accounting, sales, CRM, purchasing, warehouse management and inventory. Moreover, specialised modules are available tailored to the needs of schools, healthcare, agriculture and non-proift sectors. It uses a MariaDB database to store its dat, is written in Python and based on the Frappé Framework. The application is released under the GNU GPLv3 license and its sourcecode is hosted on GitHub.
+totalTime: PT30M
+steps:
+  - step: Configuring Locales
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/erpnext/#Configuring-Locales
+  - step: Installing MariaDB
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/erpnext/#Installing-MariaDB
+  - step: Setting up ERPNext
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/erpnext/#Setting-up-ERPNext
+  - step: Getting Production-ready
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/erpnext/#Getting-Production-ready
+  - step: Configuring ERPNext
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/erpnext/#Configuring-ERPNext
+  - step: Going Further
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/erpnext/#Going-Further
+categories:
+  - dedicated servers
+  - dedibox
+image: /assets/scaleway_erpnext.png
+keywords: cloud tutorials, cloud documentations, cloud instance, bare metal, baremetal, baremetal server, erp, odoo, erpnext, open-source
+dates:
+  validation: 2020-07-28
+  posted: 2020-07-28
+---
+
+## ERPNext - Overview
+
+[ERPNext](https://www.erpnext.com/) is a free and open-source ERP software designed to be used by manufacturers, distributors, and service companies. It includes a full range of modules, including accounting, sales, CRM, purchasing, warehouse management, and inventory. Moreover, specialized modules are available tailored to schools, healthcare, agriculture, and non-profit sectors. It uses a MariaDB database to store its data, is written in Python, and based on the [Frappé Framework](https://frappeframework.com/). The application is released under the GNU GPLv3 license, and its source code is hosted on [GitHub](https://github.com/frappe/erpnext).
+
+In this tutorial, you will learn how to install and configure ERPNext on Ubuntu 18.04 (Bionic Beaver) on a Scaleway Dedibox dedicated server.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key)
+- You have a [Scaleway Dedibox dedicated server](https://www.scaleway.com/en/dedibox/), running on Ubuntu 18.04 (Bionic Beaver)
+- You have sudo privileges or access to the root user
+- You have configured an A-record pointing to your server's IP address
+
+</Message>
+
+## Configuring Locales
+
+Start by configuring the system's keyboard mapping for the console as well as the language and character encoding on the host. This step is required to avoid any possible troubles during the ERPNext installation process and does not affect the UI language you will use on the ERPNext web interface.
+
+1. Update the apt package manager and upgrade the software already installed on the system:
+
+  ```
+  sudo apt update && sudo apt upgrade -y
+  ```
+
+2. Configure the locale of the system to `en_US.utf8`:
+
+  ```
+  localectl set-keymap us && localectl set-locale LANG=en_US.utf8
+  ```
+
+3. Open the file `/etc/environment` in a text editor and add the following lines at the end of the file:
+
+  ```
+  sudo nano /etc/environment
+  ```
+
+  ```
+  [...]
+  LC_ALL=en_US.UTF-8
+  LC_CTYPE=en_US.UTF-8
+  LANG=en_US.UTF-8
+  ```
+
+  Save the file, exit the text editor, and reboot your instance using the `reboot` command.
+
+All following steps will be executed from the newly created user account and by using `sudo`.
+
+## Installing MariaDB
+
+1. ERPNext relies on MariaDB as database engine, but the version available by default in the repositories of Ubuntu 18.04 LTS is too old and not supported by ERPNext. Therefore add a MariaDB mirror to the `apt` configuration which allows us to install a more recent version on the system:
+
+  ```
+  sudo apt install software-properties-common
+  sudo apt-key adv --fetch-keys 'https://mariadb.org/mariadb_release_signing_key.asc'
+  sudo add-apt-repository 'deb [arch=amd64,arm64,ppc64el] http://ftp.igh.cnrs.fr/pub/mariadb/repo/10.4/ubuntu bionic main'
+  sudo apt update
+  ```
+
+2. Then install MariaDB using the `apt` package manager:
+
+  ```
+  sudo apt install mariadb-server-10.4 mariadb-client-10.4
+  ```
+
+3. Once the MariaDB server is installed, install the following packages which are required for ERPNext:
+
+  ```
+  sudo apt install libmysqlclient-dev python3-mysqldb
+  ```
+
+4. Finalize the installation of MariaDB by running the interactive setup tool:
+
+  ```
+  sudo mysql_secure_installation
+  ```
+
+  The setup tool asks you to enter the current MySQL password. As we have a fresh installation, no password is configured yet, press _Enter_ to continue. When asked to set a root password for MySQL, press _Y_ and enter a secret password and its confirmation. Press _Y_ to remove anonymous users when prompted, then press _Y_ again to disallow root login, confirm removing the test database and reload the privileges to activate the new configuration.
+
+5. We will use a non-root user with superuser privileges to connect to the database with ERPNext. Log in to the MySQL shell:
+
+  ```
+  sudo mysql
+  ```
+
+6. Create a database named after the user that you want to use for connections to your MariaDB server. In this tutorial, we use `timmy`, but you can choose whatever identifier you like.
+
+  ```
+  CREATE DATABASE timmy;
+  ```
+
+7. Create the new user account and grant superuser privileges to it. Replace `strong_database_password` in the following command with a secure password for the user:
+
+  ```
+  GRANT ALL PRIVILEGES ON *.* TO 'timmy'@'%' IDENTIFIED BY 'strong_database_password' WITH GRANT OPTION;
+  ```
+
+8. Flush the privileges to activate the new user account:
+
+  ```
+  FLUSH PRIVILEGES;
+  ```
+
+9. Exit the MariaDB shell:
+
+  ```
+  EXIT;
+  ```
+
+10. Open the file `/etc/mysql/conf.d/50-server.cnf` in a text editor:
+
+  ```
+  sudo nano /etc/mysql/conf.d/50-server.cnf
+  ```
+
+  And make sure that the character set is set to `utfmb4_unicode_ci`. Then save the file and exit the text editor:
+
+  ```
+  [mysqld]
+  character-set-client-handshake = FALSE
+  character-set-server = utf8mb4
+  collation-server = utf8mb4_unicode_ci
+
+  [mysql]
+  default-character-set = utf8mb4
+  ```
+
+11. Restart the MariaDB server:
+
+  ```
+  sudo service mysql restart
+  ```
+
+## Setting up ERPNext
+
+### Installing Prerequisites
+
+1. Install the following dependencies using the `apt` package manager before continuing with the installation of ERPNext:
+
+  ```
+  sudo apt install -y apt-transport-https build-essentials curl mariadb-client python3-setuptools python3-dev python3-mysqldb libffi-dev python3-pip libcurl4 dnsmasq fontconfig git htop libcrypto++-dev libfreetype6-dev liblcms2-dev libldap2-dev libcups2-dev pv libjpeg8-dev libtiff5-dev tcl8.6-dev tk8.6-dev libssl-dev libdate-manip-perl zlib1g-dev libsasl2-dev libwebp-dev libxext6 libxrender1 libxslt1-dev libxslt1.1 libffi-dev logwatch ntpdate postfix python3-dev python-tk screen vim xfonts-75dpi xfonts-base
+  ```
+
+2. Continue to install the required python dependencies and upgrade `pip`
+
+  ```
+  sudo -H python3 -m pip install --upgrade setuptools cryptography psutil
+  ```
+
+3. Download a script to add the NodeSource repository to your system and save it locally:
+
+  ```
+  curl -sL https://deb.nodesource.com/setup_12.x -o nodesource_setup.sh
+  ```
+
+4. Run the script to configure the NodeSource repository with the `apt` package manager:
+
+  ```
+  sudo bash nodesource_setup.sh
+  ```
+
+5. Now install NodeSource usin `apt`:
+
+  ```
+  sudo apt install nodejs
+  ```
+
+6. Next install `yarn` using `npm`:
+
+  ```
+  sudo npm install -g yarn
+  ```
+
+7. ERPNext uses the `wkhtmltopdf` tool to convert HTML content into PDF files using the Qt WebKit rendering engine for generating printable invoices, quotations, and other reports. To install it, change into the `/tmp` directory and download the required package:
+
+  ```
+  cd /tmp && wget https://github.com/wkhtmltopdf/wkhtmltopdf/releases/download/0.12.5/wkhtmltox_0.12.5-1.bionic_amd64.deb
+  ```
+
+8. Install the downloaded package using `dpkg`:
+
+  ```
+  sudo dpkg -i wkhtmltox_0.12.5-1.bionic_amd64.deb
+  ```
+
+9. Following the installation, copy all the relevant binary files to the `/usr/bin` directory:
+
+  ```
+  sudo cp /usr/local/bin/wkhtmlto* /usr/bin/
+  ```
+
+10. Once the files are in place, make them executable:
+
+  ```
+  sudo chmod a+x /usr/bin/wkhtmlto*
+  ```
+
+11. Then return back into the `/home` directory of the user:
+
+  ```
+  cd /home/timmy
+  ```
+
+### Installing Redis
+
+ERPNext uses the caching features of [Redis](https://redis.io/) to increase database performance.
+
+1. Install it using the `apt` package manager:
+
+  ```
+  sudo apt install redis-server
+  ```
+
+2. Configure Redis to start automatically during system boot:
+
+  ```
+  sudo systemctl enable redis-server
+  ```
+
+### Installing the Frappe Bench CLI
+
+As the ERPNext stack's major prerequisites are installed, go on by installing the Frappe `bench` command-line interface. It has been designed to assist users with installing, configuring, and managing applications using the [Frappe Framework](https://frappeframework.com/), like ERPNext.
+
+1. Clone the `bench` [GitHub repository](https://github.com/frappe/bench) using `git`:
+
+  ```
+  git clone https://github.com/frappe/bench /home/timmy/.bench --depth 1 --branch master
+  ```
+
+2. Install the `bench` CLI using `pip3`:
+
+  ```
+  sudo pip3 install -e /home/timmy/.bench
+  ```
+
+### Installing the Frappe Framework
+
+1. During the Frappe Framework installation, you may exceed Ubuntu’s file limit, increase it, and use the following command:
+
+  ```
+  echo fs.inotify.max_user_watches=524288 | sudo tee -a /etc/sysctl.conf && sudo sysctl -p
+  ```
+
+2. In the next step initialize the Frappe framework using the following command. Remember to replace `/home/timmy` with the proper home path of your user:
+
+  ```
+  bench init /home/timmy/frappe-bench --frappe-path https://github.com/frappe/frappe --frappe-branch version-12 --python python3
+  ```
+
+  Once the installation completes, you will see an output like the following example:
+
+  ```
+  ✨  Done in 94.7s
+  Done in 96.74s.
+  INFO:bench.utils:setting up backups
+  no crontab for timmy
+  SUCCESS: Bench /home/timmy/frappe-bench initialized
+  ```
+
+### Installing ERPNext web application
+
+1. Change into the directory into which `frappe-bench` has been installed:
+
+  ```
+  cd /home/timmy/frappe-bench
+  ```
+
+2. Download ERPNext using the `bench` command-line interface:
+
+  ```
+  bench get-app ERPNext https://github.com/frappe/erpnext --branch version-12
+  ```
+
+3. Create a new site for your ERPNext installation:
+
+  ```
+  bench new-site your_erpnext_domain --admin-password 'a_secure_erpnext_admin_password' --mariadb-root-username timmy --mariadb-root-password 'your_mariadb_root_password'
+  ```
+
+  The site creation may take a moment, and you can follow the progress in the status bars:
+
+  ```
+  Installing frappe...
+  Updating DocTypes for frappe        : [========================================]
+  Updating country info               : [========================================]
+  ```
+
+4. Once created install ERPNext on your new site using `bench`:
+
+  ```
+  bench --site your_erpnext_domain install-app ERPNext
+  ```
+
+  Once again you can follow the process in the status bar:
+
+  ```
+  Installing ERPNext...
+  Updating DocTypes for ERPNext       : [========================================]
+  Updating customizations for Address
+  ```
+
+6. Now test the installation of the site using `bench`:
+
+  ```
+  bench start
+  ```
+
+  Bench will deploy a test environment and you can access ERPNext at `http://your_erpnext_domain:8000`. If you open this URL in your web browser, the ERPNext login screen displays:
+
+  <Lightbox src="scaleway-erpnext_test.png" width="900" alt="" />
+
+  Press `CTRL + C` in your terminal to stop the test environment.
+
+## Getting Production-ready
+
+Our test environment has proven that our ERPNext installation is working, but some additional steps are required to secure it and make it production-ready. We are again using the `bench` command-line tool to install the following tools on the machine:
+
+- **Fail2Ban**, a useful tool that analyses server log files for recurring patterns of failures, allowing us to block IP’s trying to run bruteforce attacks against a server.
+- **Nginx**, a versatile web server that will be used as a proxy to redirect all requests on the standard HTTP (Port 80) and HTTPS (Port 443) to the ERPNext application listening on port 8000.
+- **Supervisor**, a service that ensures all required processes of ERPNext are constantly up and running. In case of any failure, it will restart them.
+
+1. The following command must be executed from the `frappe-bench` directory of your user. Run `bench` with these parameters and replace `timmy` with the name of your user owning the production environment:
+
+  ```
+  sudo bench setup production timmy
+  ```
+
+  It will create the following configuration files:
+
+    - **Nginx:** Two configuration files: `/etc/nginx/nginx.conf`, and `/etc/nginx/conf.d/frappe-bench.conf`
+    - **Fail2Ban:** One proxy jail (`/etc/fail2ban/jail.d/nginx-proxy.conf`), and one filter configuration (`/etc/fail2ban/filter.d/nginx-proxy.conf`)
+
+  The default values configured in these files are suitable for an essential start and the goals of this tutorial. However, depending on your workload, you may tweak them further.
+
+2. To increase security, we will use TLS to encrypt the connection between clients and the server. For this purpose, we install [`certbot`](https://certbot.eff.org) on the machine, a tool that can manage the request and renewal of Let's Encrypt certificates and the automatic configuration of Nginx. Add the certbot packet archive to the `apt` package manage:
+
+  ```
+  sudo add-apt-repository universe
+  sudo add-apt-repository ppa:certbot/certbot
+  sudo apt update
+  ```
+
+2. Then install certbot using `apt`:
+
+  ```
+  sudo apt install certbot python3-certbot-nginx
+  ```
+
+3. Run `certbot` to obtain a Let's Encrypt TLS certificate and to reconfigure Nginx to use it:
+
+  ```
+  sudo certbot --nginx
+  ```
+
+  When prompted, enter your email address, agree to the terms of service, and choose to redirect all requests to HTTPS.
+  Certbot will then request the certificate and update the Nginx configuration accordingly. A message displays once the configuration is done:
+
+  ```
+  IMPORTANT NOTES:
+  - Congratulations! Your certificate and chain have been saved at:
+    /etc/letsencrypt/live/your_erpnext_domain/fullchain.pem
+    Your key file has been saved at:
+    /etc/letsencrypt/live/your_erpnext_domain/privkey.pem
+  [...]
+  ```
+
+## Configuring ERPNext
+
+1. Now, as the installation of ERPNext is completed, open a web browser on your local computer and point it to `https://your_erpnext_domain/`. The login page displays. Enter the user name **Administrator** and the password defined during the setup. Then click **Login**:
+
+  <Lightbox src="scaleway-erpnext_login.png" width="900" alt="" />
+
+2. You are now logged into the ERPNext installation wizard. Start by choosing your language, then click **Next**:
+
+  <Lightbox src="scaleway-erpnext_setup_1.png" width="500" alt="" />
+
+3. Set your country, timezone, and currency, then click **Next**:
+
+  <Lightbox src="scaleway-erpnext_setup_2.png" width="500" alt="" />
+
+4. Configure your first user account. Enter your full name, your e-mail address, and a secret password. Click **Next** to proceed:
+
+  <Lightbox src="scaleway-erpnext_setup_3.png" width="500" alt="" />
+
+5. Select your domains. Domains include a predefined set of modules that are designed for different usage-types. You can choose one or several domains. If you are not sure which to one to choose, select **Distribution** and click **Next** to go to the following step:
+
+  <Lightbox src="scaleway-erpnext_setup_4.png" width="500" alt="" />
+
+6. Configure your brand: Enter your company name and an abbreviation of it. Once done click **Next** to continue:
+
+  <Lightbox src="scaleway-erpnext_setup_5.png" width="500" alt="" />
+
+7. In this last step, ERPNext asks you to enter details about your organization. Enter information about what your company does, your bank's name, the charts template to use, as well as information on your financial year. Then click **Complete Setup**:
+
+  <Lightbox src="scaleway-erpnext_setup_6.png" width="500" alt="" />
+
+8. ERPNext is now configuring your parameters. The configuration may take a moment. The status bar gives you information about the progress of this task:
+
+  <Lightbox src="scaleway-erpnext_setup_7.png" width="500" alt="" />
+
+9. The ERPNext dashboard displays. You can see an overview of all available categories:
+
+  <Lightbox src="scaleway-erpnext_dashboard.png" width="900" alt="" />
+
+10. Click **Getting Started** to launch the configuration of your newly installed application. ERPNext provides wizards to customize all parameters towards the business needs of your company:
+
+  <Lightbox src="scaleway-erpnext_getting_started.png" width="900" alt="" />
+
+## Going Further
+
+You have now installed, configured, and secured a complete ERPNext 12 application. In the next step, you may want to configure it towards your business needs. For more information regarding the configuration and maintenance of the application, refer to the [official ERPNext handbook](https://docs.erpnext.com/docs/user/manual/en).

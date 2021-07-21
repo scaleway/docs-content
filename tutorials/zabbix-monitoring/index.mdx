@@ -1,0 +1,499 @@
+---
+layout: docs
+title: How to monitor Instances with Zabbix on Ubuntu Bionic
+description: Zabbix is an open source monitoring solution for devices and services
+tags: compute instances zabbix monitoring
+excerpt: |
+  Zabbix is open-source software offering real-time monitoring of servers, virtual machines, network devices, and web applications. Zabbix provides monitoring metrics, among others network utilization, CPU load and disk space consumption.
+totalTime: PT15M
+steps:
+  - step: Installing the Zabbix Server
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/zabbix-monitoring/#-Installing-the-Zabbix-Server
+  - step: Setting up the MariaDB database
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/zabbix-monitoring/#-Setting-up-the-MariaDB-database
+  - step: Configuring Nginx
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/zabbix-monitoring/#-Configuring-Nginx
+  - step: Configuring the Zabbix Web Interface
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/zabbix-monitoring/#-Configuring-the-Zabbix-Web-Interface
+  - step: Configuring Zabbix Agent
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/zabbix-monitoring/#-Configuring-Zabbix-Agent
+  - step: Adding a Host to Zabbix
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/zabbix-monitoring/#-Adding-a-Host-to-Zabbix
+  - step: Adding Users
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/zabbix-monitoring/#-Adding-Users
+  - step: Configuring Email Notifications
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/zabbix-monitoring/#-Configuring-Email-Notifications
+  - step: Displaying Status Graphs
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/zabbix-monitoring/#-Displaying-Status-Graphs
+categories:
+  - compute
+  - instance
+image: /assets/images/docs/scaleway.png
+permalink: docs/tutorials/zabbix-monitoring/
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, ubuntu server, debian server, linux server, monitoring, zabbix, database, security
+dates:
+  validation: 2021-05-10
+  posted: 2019-06-17
+---
+
+## Zabbix Overview
+
+[Zabbix](https://www.zabbix.com/) is an open-source software offering real-time monitoring of servers, virtual machines, network devices, and web applications. Zabbix provides monitoring metrics, among others network utilization, CPU load and disk space consumption.
+
+Metrics are collected and stored in a database, allowing to determine the health status of an IT infrastructure, help to analyze data over time which can be used to plan upgrades in the infrastructure when requirements grow.
+
+This tutorial uses two [Ubuntu Bionic (18.04)](https://www.scaleway.com/en/imagehub/) compute instances. One acting as a server hosting the Zabbix and other acting as a client being monitored
+
+<Message type="requirement">
+
+- You have an account and are logged into [cloud.scaleway.com](https://cloud.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have sudo privileges or access to the root user.
+- You have two [Virtual Instances](https://www.scaleway.com/en/virtual-instances/) running Ubuntu Bionic Beaver
+- The instance acting as server should have a [LEMP-Stack](/tutorials/installation-lemp-ubuntu-bionic/) installed
+
+</Message>
+
+## Installing the Zabbix server
+
+<Message type="important">
+
+Make sure that a [LEMP-Stack](/tutorials/installation-lemp-ubuntu-bionic/) is installed on the instance before continuing.
+
+</Message>
+
+1. The version of Zabbix available within the repositories of Ubuntu is outdated. Start by downloading the repository configuration package. Refer to the [Zabbix website](https://www.zabbix.com/download) for the latest version of the repository:
+
+  ```
+  wget https://repo.zabbix.com/zabbix/4.4/ubuntu/pool/main/z/zabbix-release/zabbix-release_4.4-1+bionic_all.deb
+  ```
+
+2. Install the repository configuration with the help of `dpkg`:
+
+  ```
+  dpkg -i zabbix-release_4.4-1+bionic_all.deb
+  ```
+
+3. Update the apt packet cache to use the newly installed repository:
+
+  ```
+  apt update
+  ```
+
+4. Install the Zabbix server, the web frontend and `zabbix-agent` which collects information about the instance itself:
+
+  ```
+  apt install -y zabbix-server-mysql zabbix-frontend-php zabbix-apache-conf zabbix-agent
+  ```
+
+## Setting up the MariaDB database
+
+Data of the Zabbix server is stored in a rational database and the application comes with support for [MariaDB (MySQL)](/tutorials/mariadb-ubuntu-bionic/) and [PostgreSQL](/tutorials/install-postgresql). It is also possible to store data in nosql databases, like [Elasticsearch](/tutorials/collecting-visualizing-logs-elastic-stack/).
+
+This tutorial uses a **MariaDB** database with Zabbix.
+
+1. Log into MariaDB with the user **root** and the password set during the [installation](/tutorials/mariadb-ubuntu-bionic/#securing-mariadb):
+
+  ```
+  mysql -uroot -p
+  ```
+
+2. Create the Zabbix database and set the charset to UTF-8:
+
+  ```
+  create database zabbix character set utf8 collate utf8_bin;
+  ```
+
+3. Create a user for the Zabbix server, grant access to the database created previously and set a password for the user (`secure_zabbix_mariadb_password`):
+
+  ```
+  grant all privileges on zabbix.* to zabbix@localhost identified by 'secure_zabbix_mariadb_password';
+  ```
+
+4. Flush the privileges to apply the new configuration:
+
+  ```
+  flush privileges;
+  ```
+
+5. Exit the MariaDB console:
+
+  ```
+  quit;
+  ```
+
+6. Setup the database schema and import the data into the database created previously with `zcat` as the file is compressed. When prompted, enter the password of the MariaDB user created previously. No output is returned when the data is imported successfully:
+
+  ```
+  zcat /usr/share/doc/zabbix-server-mysql/create.sql.gz | mysql -uzabbix -p zabbix
+  ```
+
+7. Set the password in the Zabbix configuration file by opening it in a text editor (i.e. `nano`):
+
+  ```
+  nano /etc/zabbix/zabbix_server.conf
+  ```
+
+  Scroll down to this section:
+
+  ```
+  ### Option: DBPassword
+  #       Database password.
+  #       Comment this line if no password is used.
+  #
+  # Mandatory: no
+  # Default:
+  # DBPassword=
+  ```
+
+  Uncomment the line `# DBPassword` by removing the leading hash and set the password for the Zabbix MariaDB user. Then safe the file and quit the text editor.
+
+## Configuring Nginx
+
+1. Create a Nginx configuration file for the Zabbix web interface and open it in a text editor. Make sure to replace `zabbix.example.com` with the hostname of your instance:
+
+  ```
+  nano /etc/nginx/sites-available/zabbix.example.com
+  ```
+
+2. Copy the following content into the configuration file:
+
+  ```
+  server {
+      listen       80;
+      server_name  zabbix.example.com;
+      root /usr/share/zabbix;
+
+      location / {
+      index index.php index.html index.htm;
+      }
+
+      location ~ \.php$ {
+      fastcgi_pass unix:/run/php/php7.2-fpm.sock; # Important: Make sure that the path corresponds to the PHP version installed on the instance
+      fastcgi_index index.php;
+      fastcgi_param SCRIPT_FILENAME  $document_root$fastcgi_script_name;
+      include fastcgi_params;
+      fastcgi_param PHP_VALUE "
+      max_execution_time = 300
+      memory_limit = 128M
+      post_max_size = 16M
+      upload_max_filesize = 2M
+      max_input_time = 300
+      date.timezone = Europe/Paris
+      always_populate_raw_post_data = -1
+      ";
+      fastcgi_buffers 8 256k;
+      fastcgi_buffer_size 128k;
+      fastcgi_intercept_errors on;
+      fastcgi_busy_buffers_size 256k;
+      fastcgi_temp_file_write_size 256k;
+          }
+  }
+  ```
+
+  <Message type="important">
+
+  For security reasons, it is recommended to use an encrypted connection to the Zabbix web interface. A free certificate can be obtained from [Let's Encrypt](/tutorials/installation-lemp-ubuntu-bionic/#configuring-ssl-with-let's-encrypt).
+
+  </Message>
+
+3. Create a symlink to activate the new server block
+
+  ```
+  ln -s /etc/nginx/sites-available/zabbix.example.com /etc/nginx/sites-enabled/
+  ```
+
+4. Check the spelling syntax of the Nginx configuration:
+
+  ```
+  nginx -t
+  ```
+
+5. If no errors were detected, restart Nginx to activate the new configuration:
+
+  ```
+  systemctl restart nginx.service
+  ```
+
+6. Start the Zabbix service and enable it to be started automatically during the system startup:
+
+  ```
+  systemctl start zabbix-server && systemctl enable zabbix-server
+  ```
+
+7. Verify the status of the Zabbix server:
+
+  ```
+  systemctl status zabbix-server
+  ```
+
+## Configuring the Zabbix web interface
+
+1. Type the domain name of your Zabbix instance in a web browser and open the page. The Installation wizard displays. Click **Next step** to launch it:
+
+  <Lightbox src="scaleway-zabbix_44.png" alt="" />
+
+2. A check of pre-requirements displays, all off the values must have the status **OK**. Click **Next step** to continue:
+
+  <Lightbox src="scaleway-zabbix_install_02.png" alt="" />
+
+3. Enter the MariaDB (MySQL) database information. They are already configured for the Zabbix server, but the web interface requires them too. Click **Next step** once the information is filled in the form:
+
+  <Lightbox src="scaleway-zabbix_install_03.png" alt="" />
+
+4. The default values on this screen are fine. Click **Next step** to continue.
+
+  <Lightbox src="scaleway-zabbix_install_04.png" alt="" />
+
+5. An pre-installation summary displays. Check that all given information are correct and click **Next step** to continue.
+
+6. Click **Finish** to complete the installation of the Zabbix web interface:
+
+  <Lightbox src="scaleway-zabbix_install_05.png" alt="" />
+
+## Configuring Zabbix agent
+
+<Message type="important">
+
+The following steps must be done on the second instance which shall be monitored by Zabbix.
+
+</Message>
+
+1. Log into the second instance via SSH.
+
+2. As on the server, the Zabbix repository needs to be added to apt, to be able to use the latest release of the tool. Download and install the repository configuration:
+
+  ```
+  wget https://repo.zabbix.com/zabbix/4.4/ubuntu/pool/main/z/zabbix-release/zabbix-release_4.4-1+bionic_all.deb
+  dpkg -i zabbix-release_4.4-1+bionic_all.deb
+  ```
+
+3. Update the apt packet index:
+
+  ```
+  apt update
+  ```
+
+4. Install `zabbix-agent`:
+
+  ```
+  apt install zabbix-agent
+  ```
+
+5. Generate a [pre-shared key (PSK)](https://www.zabbix.com/documentation/4.2/manual/encryption/using_pre_shared_keys) to secure the connection between the server and agent.
+
+  ```
+  sh -c "openssl rand -hex 32 > /etc/zaabix/zabbix_agentd.psk" && cat /etc/zabbix/zabbix_agentd.psk
+  ```
+
+  <Message type="important">
+
+  Zabbix also supports [TLS certificates](https://www.zabbix.com/documentation/4.2/manual/encryption/using_certificates) for authentication. In this tutorial PSKs are used as a basic authentication method.
+
+  </Message>
+
+  An output as the following displays. Take a note of it, as it is required again later:
+
+  ```
+  01134cd49a5a27cc07d8469ebe9610841ce4062337d7cbaa337a4290682b6acc
+  ```
+
+6. Open the Zabbix Agent configuration file in a text editor (i.e. `nano`):
+
+  ```
+  nano /etc/zabbix/zabbix_agentd.conf
+  ```
+
+7. Scroll down until the following block displays on screen:
+
+  ```
+  ### Option: Server
+  #       List of comma delimited IP addresses, optionally in CIDR notation, or DNS names of Zabbix servers and $
+  #       Incoming connections will be accepted only from the hosts listed here.
+  #       If IPv6 support is enabled then '127.0.0.1', '::127.0.0.1', '::ffff:127.0.0.1' are treated equally
+  #       and '::/0' will allow any IPv4 or IPv6 address.
+  #       '0.0.0.0/0' can be used to allow any IPv4 address.
+  #       Example: Server=127.0.0.1,192.168.1.0/24,::1,2001:db8::/32,zabbix.example.com
+  #
+  # Mandatory: yes, if StartAgents is not explicitly set to 0
+  # Default:
+  # Server=
+
+  Server=127.0.0.1
+  ```
+
+  Replace `127.0.0.1` with the IP of the Zabbix server instance.
+
+8. Scroll down further in the configuration file until the `TLSConnect` block displays on screen.
+
+  ```
+  ### Option: TLSConnect
+  #       How the agent should connect to server or proxy. Used for active checks.
+  #       Only one value can be specified:
+  #               unencrypted - connect without encryption
+  #               psk         - connect using TLS and a pre-shared key
+  #               cert        - connect using TLS and a certificate
+  #
+  # Mandatory: yes, if TLS certificate or PSK parameters are defined (even for 'unencrypted' connection)
+  # Default:
+  # TLSConnect=unencrypted
+  ```
+
+  Uncomment the Line `# TLSConnect=unencrypted` and modify it as follows: `TLSConnect=psk`.
+
+9. Next scroll down to the `TLSAccept` block which manages incoming connections:
+
+  ```
+  ### Option: TLSAccept
+  #       What incoming connections to accept.
+  #       Multiple values can be specified, separated by comma:
+  #               unencrypted - accept connections without encryption
+  #               psk         - accept connections secured with TLS and a pre-shared key
+  #               cert        - accept connections secured with TLS and a certificate
+  #
+  # Mandatory: yes, if TLS certificate or PSK parameters are defined (even for 'unencrypted' connection)
+  # Default:
+  # TLSAccept=unencrypted
+  ```
+
+  Uncomment the line `# TLSAccept=unencrypted` and modify it as follows: `TLSAccept=psk`.
+
+10. Now scroll down to the `TLSPSKIdentity` block in the configuration file:
+
+  ```
+  ### Option: TLSPSKIdentity
+  #       Unique, case sensitive string used to identify the pre-shared key.
+  #
+  # Mandatory: no
+  # Default:
+  # TLSPSKIdentity=
+  ```
+
+  Uncomment the last line of the block and set a unique name to identify the PSK used: `TLSPSKIdentity=ZabbixPSK-01`. This value is used as **PSK ID** when adding the host through the Zabbix web interface.
+
+11. Scroll down to the `TLSPSKFile` block in the configuration file to provide the file path to the key generated in a previous step:
+
+  ```
+  ### Option: TLSPSKFile
+  #       Full pathname of a file containing the pre-shared key.
+  #
+  # Mandatory: no
+  # Default:
+  # TLSPSKFile=
+  ```
+
+  Uncomment the last line of block and set the path to the PSK file: `TLSPSKFile=/etc/zabbix/zabbix_agentd.psk`. Then save the file and exit the editor.
+
+12. Restart the `zabbix-agent` service and enable it to start automatically during the system boot:
+
+  ```
+  systemctl restart zabbix-agent
+  systemctl enable zabbix-agent
+  ```
+
+13. In case ufw is installed and active on the instance, allow traffic on port 10050:
+
+  ```
+  ufw allow 10050/tcp
+  ```
+
+## Adding a host to Zabbix
+
+1. Open a web browser and navigate to your Zabbix server instance (i.e. `http://zabbix.example.com/`). The Login screen displays, enter the Username **Admin** and the Password **zabbix**, then click **Sign in**:
+
+  <Lightbox src="scaleway-zabbix_login.png" alt="" />
+
+2. Once logged in click **Configuration**, then **Hosts**. On the hosts page, click **Create Host** to add the second instance:
+
+  <Lightbox src="scaleway-zabbix_create_host.png" alt="" />
+
+3. Enter the **Host name** of the second instance and its **IP address**. Optionally one or several groups can be chosen to bundle instances in groups.
+
+  <Lightbox src="scaleway-zabbix_add_server_01.png" alt="" />
+
+4. Click the **Templates** tab to choose a configuration template for the instance. Select `Template OS Linux` and click **Add**.
+
+  <Lightbox src="scaleway-zabbix_add_server_02.png" alt="" />
+
+5. Click the **Encryption** tab and set PSK for both **Connections to host** and **Connections from host**. Set **PSK identity** to the value of the `TLSPSKIdentity` confiured in the Zabbix Agent configuration (i.e. **ZabbixPSK-01**) and set the PSK value to the key generated during the configuration of the Agent. Once set, click **Add** at the bottom of the page to add the instance to Zabbix.
+
+  <Lightbox src="scaleway-zabbix_add_server_03.png" alt="" />
+
+7. Once added, wait for about one minute before reloading the server list. The new instance appears and the labels **ZBX** and **PSK** indicate that the Zabbix agent is running on the instance and that the connection is encrypted with a pre-shared key.
+
+  <Lightbox src="scaleway-zabbix_hosts.png" alt="" />
+
+## Adding users
+
+1. Click **Administration** in the navigation bar on the top of the page, then on **Users**
+
+2. Click **Create user** to create a new user account.
+
+3. Fill in the details of the new user. Required information are:
+
+    - **Alias** - The login of the user
+    - **Name** - The first name of the user
+    - **Surname** - The family name of the user
+    - **Groups** - The groups to which the user belongs. Choose **Zabbix Administrators** to create a new admin user
+    - **Password** and **Password confirmation**
+
+  The other values are already pre-set in working condition.
+
+  <Lightbox src="scaleway-zabbix_newuser.png" alt="" />
+
+  Once all information are entered, click **Add** to create the user.
+
+## Configuring email notifications
+
+Zabbix proposes a wide range of [notification plugins](https://www.zabbix.com/integrations?cat=notifications_alerting) including emails, jabber, SMS and many more to get alerted in case of an issue.
+
+1. To configure email notifications, click **Administration**, then on **Media types** in the navigation bar on the top of the page. A list of all pre-configured notification options displays:
+
+  <Lightbox src="scaleway-zabbix_media_types.png" alt="" />
+
+2. Click **Email** to edit the settings:
+
+  <Lightbox src="scaleway-zabbix_email.png" alt="" />
+
+  Enter the SMTP credentials of your email provider, choose between HTML or plaintext mails and update the configuration by clicking on **Update**.
+
+  <Message type="note">
+
+  To send email from instance, make sure to [unblock](https://www.scaleway.com/en/faq/why-can-i-not-send-any-email/) the SMTP ports in the instances security group.
+
+  </Message>
+
+3. Click **Administration** in the navigation bar on the top of the page, then on **Users**
+
+4. Click the **Alias** of the user to modify.
+
+5. Click the **Media** tab, then on **Add** to configure a new notification:
+
+  <Lightbox src="scaleway-users_add_notif.png" alt="" />
+
+6. Enter the destination email address and notification time-ranges, then click **Add**:
+
+  <Lightbox src="scaleway-zabbix_media.png" alt="" />
+
+7. Click **Update** to make the modifications effective. An email notification is being sent on each event.
+
+## Displaying status graphs
+
+Zabbix collects status information of the instances and generates status graphs from them.
+
+1. Click **Monitoring**, then on **Graphs** in the navigation bar on top of the page.
+
+2. Select the instance and the services to display, then choose the desired time-frame for the graph:
+
+  <Lightbox src="scaleway-zabbix_graph.png" alt="" />
+
+This setup allows basic monitoring of instances. For more information on how to monitor devices and services with Zabbix, refer to the [official documentation.](https://www.zabbix.com/documentation/current/manual)

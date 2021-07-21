@@ -1,0 +1,216 @@
+---
+title: Migrating existing databases to a managed Database Instance
+description: This page provides information how to migrate your existing MySQL and PostgreSQL databases into Scaleway Database
+tags: compute database mysql postgresql pgsql migration mysqldump
+excerpt: |
+  The Managed Database product provides reliable high-performance managed SQL database engines, both for PostgreSQL and MySQL. Using the service allows you to stay focussed on the development of your applications and to profit from Scaleway's expertise in the management of your database engines. In this guide you will learn how to migrate your existing databases on your Managed Database Instances using an intermediate host.
+totalTime: PT20M
+steps:
+  - step: Database migration for PostgreSQL
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/migrate-databases-instance//#Database-migration-for-PostgreSQL
+  - step: Configuring the Primary Instance
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/migrate-databases-instance//#Database-migration-for-MySQL
+categories:
+  - storage
+  - database
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, mysql, postgresql, pgsql, migration, database, managed database, dbaas
+dates:
+  validation: 2021-05-10
+  posted: 2020-09-21
+---
+
+The [Managed Database](https://www.scaleway.com/en/database/) product provides reliable high-performance managed SQL database engines, both for PostgreSQL and MySQL. Using the service allows you to stay focussed on the development of your applications and to profit from Scaleway's expertise in the management of your database engines.
+
+In this guide you will learn how to migrate your existing databases on your Managed Database Instances using an intermediate host.
+
+This guide consists of two parts, depending on which database Engine your instances are running:
+
+- Database migration for PostgreSQL
+- Database migration for MySQL
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have a [Managed Database](https://www.scaleway.com/en/database/) for PostgreSQL or MySQL.
+- You have a [Virtual Instance](https://www.scaleway.com/en/virtual-instances/) available as intermediate host for the migration
+
+</Message> 
+
+<Message type="important">
+
+  If you run your database in a private network with no public endpoint, you have to create the intermediate instance in your private network and attach a NAT gateway to be able to reach public Internet, and then run the migration steps from there.
+
+</Message>
+
+## Database migration for PostgreSQL
+
+### Exporting the source database
+
+1. Connect to your Virtual Instance using SSH:
+  ```
+  ssh root@<virtual_instance_ip>
+  ```
+
+2. Update the `apt` packet cache and upgrade the software already installed on the system:
+  ```
+  apt update && apt upgrade -y
+  ```
+
+3. We use `pg_dump` to dump the content of the database to migrate. It is included in the package `postgresql-client-common`. Install it using apt:
+  ```
+  apt install postgresql-client-common
+  ```
+
+4. Dump the content of the originating database into a local SQL file on the Virtual Instance:
+  ```
+  pg_dump –-host=<host> --port=<port> --username=<user> --dbname=<database_name> --file=<filename>.sql
+  ```
+
+  In the above command, replace the following values as follows:
+
+  - `<host>`: The database server hosting the PostgreSQL database
+  - `<port>`: The TCP port on which the database server is listening (by default `5432`)
+  - `<user>`: The username used for the connection to the database server
+  - `<database_name>`: The name of the database to export
+  - `<filename>`: The name of the local file of the exported database
+
+  <Message type="tip">
+
+  If your database is running in a Docker container, the command to use will be:
+
+  ```
+  docker exec -it $CONTAINER_NAME pg_dump --username=<name> --dbname=<database_name> > <database>.sql
+  ```
+
+  </Message>
+
+### Preparing the Managed Database for PostgreSQL
+
+<Message type="note">
+
+In case you do not have a Managed Database for PostgreSQL yet, [create a new one](/storage/database/how-to/create-a-database/) from your [Scaleway Console](https://console.scaleway.com/rdb/instances).
+
+</Message>
+
+1. Enter the Database section of the [Scaleway Console](https://console.scaleway.com/rdb/instances).
+
+2. Select your Managed Database Instance from the list.
+
+3. Click the **Databases** tab, then on **+ Create Database** to create a new database in the instance.
+
+4. Enter the name of the new database and click **Create Database** to confirm the operation:
+<Lightbox src="scaleway-create_database.png" alt="" />
+
+5. Click the **Users** tab to visualize a list of all your database users. To create a new user for your database, click **+ Add user**.
+
+6. Click the **Permissions** tab and grant `All` permissions to your database for the user:
+<Lightbox src="scaleway-user_permissions.png" alt="" />
+
+7. Click the **User Information** tab and enter the credentials for the new user. Confirm by clicking on **Create a user**:
+<Lightbox src="scaleway-user_information.png" alt="" />
+
+### Importing the database
+
+Once you have created both, the destination database and its users, import your data from the SQL file to your Managed Database Instance by using the `psql` command-line tool.
+
+1. Retrieve the database host and port from your Scaleway console. The **Endpoint** information is visible on your Managed Database information page:
+<Lightbox src="scaleway-db_endpoint.png" alt="" />
+
+2. Use the `psql` command-line tool to import your database with the following command:
+  ```
+  psql --file=<filename>.sql --host=<managed_database_endpoint_ip> --port=<managed_database_endpoint_port> --username=<user> --dbname=<database_nme>
+  ```
+
+  In the above command, replace the following values as follows:
+
+  - `<filename>`: The file name of the exported database
+  - `<managed_database_endpoint_ip>`: The IP address of the Endpoint of your Managed Database for PostgreSQL
+  - `<managed_database_endpoint_port>`: The TCP port of the Endpoint of your Managed Database Instance
+  - `<user>`: The username for the Managed Database
+  - `<database_name>`: the name of the Managed Database
+
+## Database migration for MySQL
+
+### Exporting the source database
+
+1. Connect to your Virtual Instance using SSH:
+  ```
+  ssh root@<virtual_instance_ip>
+  ```
+
+2. Update the `apt` packet cache and upgrade the software already installed on the system:
+  ```
+  apt update && apt upgrade -y
+  ```
+
+3. We use `mysqldump` to dump the content of the database to migrate. It is included in the package `mysql-client`. Install it using apt:
+  ```
+  apt install mysql-client
+  ```
+
+4. Dump the content of the originating database into a local SQL file on the Virtual Instance:
+  ```
+  mysqldump -P <port> -h <host> -u <user> -p <password> --opt <database_name> > <filename>.sql
+  ```
+
+  In the above command, replace the following values as follows:
+
+  - `<port>`: The TCP port on which the database server is listening (by default `3306`)
+  - `<host>`: The database server hosting the MySQL database
+  - `<user>`: The username used for the connection to the database server
+  - `<database_name>`: The name of the database to export
+  - `<filename>`: The name of the local file of the exported database
+
+### Preparing the Managed Database for MySQL
+
+<Message type="note">
+
+In case you do not have a Managed Database for MySQL yet, [create a new one](/storage/database/how-to/create-a-database/) from your [Scaleway Console](https://console.scaleway.com/rdb/instances).
+
+</Message>
+
+1. Enter the Database section of the [Scaleway Console](https://console.scaleway.com/rdb/instances).
+
+2. Select your Managed Database Instance from the list.
+
+3. Click the **Databases** tab, then on **+ Create Database** to create a new database in the instance.
+
+4. Enter the name of the new database and click **Create Database** to confirm the operation:
+<Lightbox src="scaleway-create_mysql.png" alt="" />
+
+5. Click the **Users** tab to visualize a list of all your database users. To create a new user for your database, click **+ Add user**.
+
+6. Click the **Permissions** tab and grant `All` permissions to your database for the user:
+<Lightbox src="scaleway-user_permissions.png" alt="" />
+
+7. Click the **User Information** tab and enter the credentials for the new user. Confirm by clicking on **Create a user**:
+<Lightbox src="scaleway-user_information.png" alt="" />
+
+### Importing the database
+
+Once you have created both, the destination database and its users, import your data from the SQL file to your Managed Database Instance by using the `psql` command-line tool.
+
+1. Retrieve the database host and port from your Scaleway console. The **Endpoint** information is visible on your Managed Database information page:
+<Lightbox src="scaleway-endpoint_mysql.png" alt="" />
+
+2. Use the `mysql` command-line tool to import your database with the following command:
+  ```
+  mysql -P <managed_database_endpoint_port> -h <managed_database_endpoint_ip> -u <user> -p <password> <database_name> < <filename>.sql
+  ```
+
+  In the above command, replace the following values as follows:
+
+  - `<managed_database_endpoint_port>`: The TCP port of the Endpoint of your Managed Database Instance
+  - `<managed_database_endpoint_ip>`: The IP address of the Endpoint of your Managed Database for MySQL
+  - `<user>`: The username for the Managed Database
+  - `<password>`: The password for the database user
+  - `<database_name>`: The name of the Managed Database
+  - `<filename>`: The file name of the exported database
+
+## Conclusion
+
+You now have exported your existing PostgreSQL or MySQL database and imported it into a Scaleway Managed Datatabase instance. To finish the migration process of your database, update the credentials and server information in the configuration files of your existing application. Once these information are updated your application will use your database on instances managed by Scaleway Elements. For more information about the Managed Database product, refer to the [product information page](https://www.scaleway.com/en/database/) and the [product documentation](/storage/database).

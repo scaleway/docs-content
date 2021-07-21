@@ -1,0 +1,281 @@
+---
+title: How to use the Proxy protocol v2 with Load Balancer
+description: ProxyProtocol allows you to identify the clients IP address on load balanced infrastructures
+tags: compute
+excerpt: |
+  The Scaleway managed Load Balancer supports the PROXY Protocol v2.
+  It allows an application, like a web server like Apache or Nginx, to retrieve client information of a user passing via a load balanced infrastructure.
+totalTime: PT15M
+steps:
+  - step: Enabling PROXY Protocol from the Management Console
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/proxy-protocol-v2-load-balancer/#-Enabling-PROXY-Protocol-from-the-Management-Console
+  - step: Configuring Proxy Protocol in Nginx Web Server
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/proxy-protocol-v2-load-balancer/#-Configuring-Proxy-Protocol-in-Nginx-Web-Server
+  - step: Configuring Proxy Protocol in Apache Web Server
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/proxy-protocol-v2-load-balancer/#-Configuring-Proxy-Protocol-in-Apache-Web-Server
+categories:
+  - network
+  - load-balancer
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, ubuntu server, debian server, linux server, AwStats, Apache, mail server statistics, ftp
+dates:
+  validation: 2021-05-10
+  posted: 2019-06-28
+---
+
+## Proxy Protocol V2 Overview
+
+The [PROXY Protocol](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) allows an application, like a web server like Apache or Nginx, to retrieve client information of a user passing via a load balanced infrastructure.
+
+The protocol transports connection information including the originating IP address, the proxy server IP address, and both ports.
+
+This information can be useful for automatic delivery of localized contents, blacklisting of abusive users or for logging purposes.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key)
+- You have [created and configured a Load Balancer](/network/load-balancer/how-to/create-load-balancer/) in front of your servers
+- You have sudo privileges or access to the root user.
+
+</Message>
+
+When using a [Load Balancer](/network/load-balancer/concepts) in front of your web servers, the load balancers IP address is passed by default to your web servers. This result is visible in the access log files of the web server:
+
+  ```
+  51.159.26.16 - - [28/Jun/2019:13:42:25 +0000] "GET /favicon.ico HTTP/1.1" 200 26066 "http://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
+  51.159.26.16 - - [28/Jun/2019:13:42:25 +0000] "GET / HTTP/1.1" 200 26099 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
+  51.159.26.16 - - [28/Jun/2019:13:42:26 +0000] "GET /favicon.ico HTTP/1.1" 200 26068 "http://example.com/" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
+  51.159.26.16 - - [28/Jun/2019:13:42:49 +0000] "GET / HTTP/1.1" 200 26022 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/12.1.1 Safari/605.1.15"
+  ```
+
+Only the IP `51.159.26.16` is visible in the log file, which is the load balancers IP address and not the IP of the different users.
+
+<Message type="important">
+
+The originating IP is also visible in the `X-Forwarded-for:` HTTP header.
+
+</Message> 
+
+## Enabling PROXY Protocol from the Management Console
+
+1. When creating a new load balancer or backend rule, enable the **Proxy** option in the Backend settings:
+
+  <Lightbox src="scaleway-lb_proxy.png" alt="" />
+
+2. To enable the PROXY protocol for a load balancer that already exists, enter the **Load Balancer** section of the [management console](https://console.scaleway.com) and click the **Backends** tab.
+
+3. Click the Backend rule to modify:
+
+  <Lightbox src="scaleway-lb_backend_list.png" alt="" />
+
+4. Enable the **Proxy** option for the rule before saving the configuration:
+
+  <Lightbox src="scaleway-lb_edit_backend.png" alt="" />
+
+The Load Balancer is now configured to use the proxy protocol. Continue by configuring Nginx or Apache.
+
+## Configuring Proxy Protocol in Nginx Web Server
+
+The `proxy_protocol` parameter must be set within the `http {}` block of the listen directive of a server block to configure NGINX to accept PROXY protocol headers.
+
+1. Make sure that Nginx is installed with the `http_realip_module`. This is the case in the precompiled version that is delivered with Ubuntu Bionic Beaver (18.04).
+
+  ```
+  nginx -V 2>&1 | grep -- 'http_realip_module'
+  ```
+
+2. Open the configuration file of nginx, i.e. `/etc/nginx/nginx.conf` in a text editor, for example, `nano`:
+
+  ```
+  nano /etc/nginx/nginx.conf
+  ```
+
+3. Enable the `proxy_protocol` by adding/modifying the following lines in the `server {}` block:
+
+  ```
+  server {
+      ...
+      listen 80   proxy_protocol;
+      listen 443  ssl proxy_protocol;
+      ...
+      }
+  ```
+
+4. Set the IP address of the Load Balancer with the `set_real_ip_from` directive in the `server {}` block:
+
+  ```
+  set_real_ip_from 51.159.26.16;
+  ```
+
+5. To change the IP address of the load balancer to the clients IP address, received from the PROXY protocol header, specify in the `server {}` block the `proxy_protocol` parameter to the real_ip_header directive:
+
+  ```
+  real_ip_header proxy_protocol;
+  ```
+
+6. As the clients IP address is now known to Nginx, configure the correct logging of it. Set the `proxy_set_header` directive with the `$proxy_protocol_addr` variable in the `http {}` block:
+
+  ```
+  http {
+      proxy_set_header X-Real-IP       $proxy_protocol_addr;
+      proxy_set_header X-Forwarded-For $proxy_protocol_addr;
+  }
+  ```
+
+7. Configure the `$proxy_protocol_addr` variable to the `log_format` directive in the http block:
+
+  ```
+  http {
+      #...
+      log_format logs '$proxy_protocol_addr - $remote_user [$time_local] '
+                          '"$request" $status $body_bytes_sent '
+                          '"$http_referer" "$http_user_agent"';
+  }
+  ```
+
+8. The configuration file should look like the following example:
+
+  ```
+  http {
+      proxy_set_header X-Real-IP       $proxy_protocol_addr;
+      proxy_set_header X-Forwarded-For $proxy_protocol_addr;
+
+      log_format logs '$proxy_protocol_addr - $remote_user [$time_local] '
+                          '"$request" $status $body_bytes_sent '
+                          '"$http_referer" "$http_user_agent"';
+      #...
+
+      server {
+          server_name example.com;
+
+          listen 80   proxy_protocol;
+
+          set_real_ip_from 51.159.26.16;
+          real_ip_header proxy_protocol;
+
+          #...
+        }
+    }
+  ```
+
+9. Save the configuration file, exit the editor, and test the syntax of the file:
+
+  ```
+  nginx -t
+  ```
+
+10. Restart Nginx:
+
+  ```
+  systemctl nginx restart
+  ```
+
+  When accessing the site via the Load Balancer, the real IP address of the client is written in the logs:
+
+  ```
+  195.154.228.158 - - [28/Jun/2019:15:44:23 +0000] "GET /favicon.ico HTTP/1.1" 200 26062 "http://51.159.26.16/index.php" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
+  51.159.26.16 - - [28/Jun/2019:15:44:31 +0000] "GET /index.php HTTP/1.1" 200 26100 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
+  195.154.228.158 - - [28/Jun/2019:15:44:32 +0000] "GET /favicon.ico HTTP/1.1" 200 26065 "http://51.159.26.16/index.php" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
+  51.159.26.16 - - [28/Jun/2019:15:44:50 +0000] "GET /index.php HTTP/1.1" 200 26097 "-" "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_14_5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
+  ```
+
+  <Message type="important">
+  
+  Once ProxyProtocol is enabled the Nginx virtual host will no longer accept direct connections.
+
+  </Message>
+
+## Configuring Proxy Protocol in Apache Web Server
+
+The Proxy Protocol support in Apache is still in an early stage. It is currently not natively supported with the Apache version provided by Ubuntu. An unofficial plugin [is available](https://github.com/roadrunner2/mod-proxy-protocol) for Apache versions prior to 2.4.30. To use it, follow these steps:
+
+1. Download and install the required software components:
+
+  ```
+  apt install git apache2-dev
+  ```
+
+2. Download the sources of the plugin and enter their directory:
+
+  ```
+  git clone https://github.com/roadrunner2/mod-proxy-protocol.git
+  cd mod-proxy-protocol
+  ```
+
+3. Build the plugin:
+
+  ```
+  apxs -i -a -c mod_proxy_protocol.c
+  ```
+
+4. Activate the module in the configuration of the virtual host:
+
+  ```
+  <VirtualHost *:80>
+      ...
+      ProxyProtocol On
+      ...
+  </VirtualHost>
+  ```
+
+5. Replace all `%h` by `%a` of the `LogFormat` directives in the Apache configuration file (`/etc/apache2/apache2.conf`):
+
+  ```
+  LogFormat "%v:%p %h %l %u %t \"%r\" %>s %O \"%{Referer}i\" \"%{User-Agent}i\"" vhost_combined
+  LogFormat "%a %l %u %t \"%r\" %>s %O \"%{Referer}i\" \"%{User-Agent}i\"" combined
+  LogFormat "%a %l %u %t \"%r\" %>s %O" common
+  LogFormat "%{Referer}i -> %U" referer
+  LogFormat "%{User-agent}i" agent
+  ```
+
+6. Restart Apache to activate the new configuration:
+
+  ```
+  apache2ctl restart
+  ```
+
+  <Message type="important">
+  
+  Once ProxyProtocol is enabled the Apache virtual host will no longer accept direct connections.
+
+  </Message>
+
+## Configuring Proxy Protocol in Apache with mod_remoteip
+
+<Message type="important">
+
+An Apache version >= 2.4.30 is required to use [mod_remoteip](https://httpd.apache.org/docs/2.4/mod/mod_remoteip.html#remoteipproxyprotocol). This version is currently not yet available in Ubuntu's repositories, and you have to install it by yourself. Use it only if you know what you are doing.
+
+</Message>
+
+1. Enable the module `remoteip`:
+
+  ```
+  a2enmod remoteip
+  ```
+
+2. Configure the Apache virtual host configuration:
+
+  ```
+  <VirtualHost *:80>
+      ...
+      RemoteIPProxyProtocol On
+      ...
+  </VirtualHost>
+  ```
+
+3. Restart the Apache web server:
+
+  ```
+  apache2ctl restart
+  ```
+
+  <Message type="important">
+  
+  Once ProxyProtocol is enabled the Apache virtual host will no longer accept direct connections.
+
+  </Message>

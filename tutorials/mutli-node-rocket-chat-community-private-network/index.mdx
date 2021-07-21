@@ -1,0 +1,532 @@
+---
+title: Setting up a multi-node Rocket.Chat community using the Private Network feature
+description: Discover how to set up a multi-node Rocket.Chat community using the Private Network feature
+excerpt: |
+  In this tutorial you will learn how the Private Network feature can help you to build a distributed Rocket.Chat application on General Purpose and Development Virtual Instances using a private network to communicate securely between them:
+  In this tutorial you will use: 
+  1 GP1-S Instance as NGINX Proxy frontend, that distributes the load on the Rocket.Chat applications
+  1 GP1-S Instance as MongoDB host
+  2 DEV1-S Instances running the Rocket.Chat application
+totalTime: PT5M
+steps:
+  - step: Configuring the Private Network
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/mutli-node-rocket-chat-community-private-network/#-Configuring-the-Private-Network
+  - step: Installing MongoDB
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/mutli-node-rocket-chat-community-private-network/#-Installing-MongoDB
+  - step: Installing Rocket.Chat
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/mutli-node-rocket-chat-community-private-network/#-Installing-RocketChat
+  - step: Configuring the NGINX reverse proxy
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/mutli-node-rocket-chat-community-private-network/#-Configuring-the-NGINX-reverse-proxy
+  - step: Setting-up Rocket.Chat
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/mutli-node-rocket-chat-community-private-network/#-Setting-up-RocketChat
+  - step: Conclusion
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/mutli-node-rocket-chat-community-private-network/#-Conclusion
+categories:
+  - network
+  - vpc
+  - private-network
+tags: Private Networks LAN
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, network, private network, vpc, vlan, lan, network, security
+dates:
+  validation: 2021-05-10
+  posted: 2020-10-19
+---
+
+[Private Networks](/network/vpc/concepts#private-networks) are a LAN-like layer 2 ethernet network. A new network interface with a unique MAC address is configured on each instance in a Private Network. You can use this interface to communicate in a secure and isolated network, using private IP addresses of your choice.
+
+In this tutorial, you will learn how the Private Network feature can help you to build a distributed [Rocket.Chat](/tutorials/rocketchat) application on [General Purpose](https://www.scaleway.com/en/virtual-instances/general-purpose/) and [Development](https://www.scaleway.com/en/virtual-instances/development/) Virtual Instances using a private network to communicate securely between them:
+
+<Lightbox src="scaleway-private_network_schema.png" alt="" />
+
+To reach the goal of this tutorial, you will use four instances running on **Ubuntu 20.04 (Focal Fossa)**:
+
+- 1 GP1-S Instance as NGINX Proxy frontend, that distributes the load on the Rocket.Chat applications
+- 1 GP1-S Instance as MongoDB host
+- 2 DEV1-S Instances running the Rocket.Chat application
+- A Private Network between these instances
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key)
+- You have [created four Instances](/compute/instances/how-to/create-an-instance) running on Ubuntu 20.04 Focal Fossa
+
+</Message>
+
+## Configuring the Private Network
+
+1. Log in to your [Scaleway Console](https://console.scaleway.com/) and enter the **Instances** section from the **Compute** group on the side menu.
+
+2. Click **Private Networks** to display a list of your Private Networks. Click **+Create a Private Network** to create a new one.
+
+  <Lightbox src="scaleway-create_private_network.png" alt="" />
+
+3. Enter the details of the Private Network. Make sure to create the Private Network in the same geographical region as your Virtual Instances:
+
+  <Lightbox src="scaleway-new_private_network.png" alt="" />
+
+4. Select the newly created Private Network from your networks list. From the drop-down list, click the **Instances** tab to add your Virtual Instances:
+
+  <Lightbox src="scaleway-pvn_add_instance.png" alt="" />
+
+5. Add all instances for your Rocket.Chat setup to the private network. Once added, they are listed on the network overview page together with their corresponding virtual MAC address:
+
+  <Lightbox src="scaleway-pvn_add_instance.png" alt="" />
+
+6. Log into each of your Virtual Instances using [SSH](/compute/instances/how-to/connect-to-instance/) to configure the private network interface. Use the `ip link show` command to identify the automatically assigned name of the interface:
+
+  ```
+  root@virtual-instance:~# ip link show
+  1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+      link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+  2: ens2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc pfifo_fast state UP mode DEFAULT group default qlen 1000
+      link/ether de:1c:94:5d:d0:4c brd ff:ff:ff:ff:ff:ff
+  3: ens4: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN mode DEFAULT group default qlen 1000
+      link/ether 02:00:00:00:20:c4 brd ff:ff:ff:ff:ff:ff
+  ```
+
+  <Message type="note">
+  
+  In the example above, the Private Network interface is named `ens4`. This name may vary depending on your instance type and operating system. The private interface can be identified by its MAC address, which always begins with `02:00:00:xx:yy:zz`.
+
+  </Message>
+
+7. To facilitate the configuration, give a more convenient name (e.g. `priv0`) to the Private Network interface. Configure the new interface name as follows:
+
+  ```
+  root@virtual-instance:~# ip link set down dev ens4
+  root@virtual-instance:~# ip link set name priv0 dev ens4
+  root@virtual-instance:~# ip link set up dev priv0
+  ```
+
+8. To make these changes persistent at reboot, add the following rule to the `/etc/udev/rules.d/75-persistent-net-generator.rules` file:
+
+  ```
+  SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="02:00:00:00:20:c4", NAME="priv0"
+  ```
+
+  <Message type="note">
+  
+  Make sure to replace the MAC address in the example above with the MAC adress of your interface.
+
+  </Message>
+
+9. Configure the IP address of the private interface. In our example, we use the following IP's for our instances:
+
+    - NGINX Proxy Instance: `192.168.1.1/24`
+    - MongoDB Instance: `192.168.1.2/24`
+    - Rocket.Chat Instance 1: `192.168.1.3/24`
+    - Rocket.Chat Instance 2: `192.168.1.4/24`
+
+  Open the auto-generated configuration file `/etc/netplan/00-installer-config.yaml` and edit it as follows (Replace `192.168.1.X/24` with the IP address of each instance):
+
+  ```
+  network:
+    version: 2
+    renderer: networkd
+    ethernets:
+      priv0:
+        addresses: [192.168.1.X/24]
+  ```
+
+10. Apply the new netplan configuration by running the following command:
+
+  ```
+  root@virtual-instance:~# netplan apply
+  ```
+
+11. Repeat these steps on each of the Virtual Instances used in this tutorial.
+
+## Installing MongoDB
+
+1. Log into your Mongo DB instance using SSH.
+
+2. Update the APT repositories and upgrade the software already installed on the version to the latest version available in Ubuntu's official repositories:
+
+  ```
+  root@mogodb-instance:~# apt update && apt upgrade -y
+  ```
+
+3. Install the required prerequisites and the MongoDB GPG key to your system:
+
+  ```
+  root@mongodb-instance:~# apt install -y gnupg
+  root@mongodb-instance:~# wget -qO - https://www.mongodb.org/static/pgp/server-4.4.asc | apt-key add -
+  ```
+
+4. Add the [MongoDB](/tutorials/mongodb-ubuntu-1604/) repository to your system. In this tutorial, we use MongoDB 4.4:
+
+  ```
+  root@mongodb-instance:~# echo "deb http://repo.mongodb.org/apt/ubuntu focal/mongodb-org/4.4 multiverse" | sudo tee /etc/apt/sources.list.d/mongodb-org-4.4.list
+  ```
+
+5. Update the apt packet cache to make the newly added repository available for the `apt` package manager:
+
+  ```
+  root@mongodb-instance:~# apt update
+  ```
+
+6. Install MongoDB using the `apt` package manager:
+
+  ```
+  root@mongodb-instance:~# apt install mongodb-org -y
+  ```
+
+7. Open the `/etc/mongod.conf` file in a text editor and edit it as follows to configure the storage engine to use (`storage:` section), bind the application to the private IP address (`net:` section) and configure a [ReplicaSet](https://docs.mongodb.com/manual/tutorial/deploy-replica-set/) (`replication` section). Leave other sections as they are.
+
+  ```
+  [...]
+
+  # Where and how to store data.
+  storage:
+    dbPath: /var/lib/mongodb
+    journal:
+      enabled: true
+    engine: wiredTiger
+  #  mmapv1:
+  #  wiredTiger:
+
+  [...]
+
+  # network interfaces
+  net:
+    port: 27017
+    bindIp: 127.0.0.1,192.168.1.2
+
+  [...]
+
+  # replica set
+  replication:
+    replSetName: "rs01"
+  [...]
+  ```
+
+  <Message type="note">
+  
+  In this setup we limit the access to the MongoDB on IP basis, for a production environment it is recommended to use stronger authentication methods. Refer to the [MongoDB Security Checklist](https://docs.mongodb.com/manual/administration/security-checklist/) for more information.
+
+  </Message>  
+
+8. Enable and start the MongoDB service:
+
+  ```
+  root@mongodb-instance:~# systemctl enable mongod && systemctl start mongod
+  ```
+
+9. Initialize the ReplicaSet on the MongoDB using the following command:
+
+  ```
+  root@mongodb-instance:~# mongo --eval "printjson(rs.initiate())"
+  ```
+
+An output like the following example displays:
+
+  ```
+  {
+    "info2" : "no configuration specified. Using a default configuration for the set",
+    "me" : "192.168.1.2:27017",
+    "ok" : 1,
+    "$clusterTime" : {
+      "clusterTime" : Timestamp(1603283232, 1),
+      "signature" : {
+        "hash" : BinData(0,"AAAAAAAAAAAAAAAAAAAAAAAAAAA="),
+        "keyId" : NumberLong(0)
+      }
+    },
+    "operationTime" : Timestamp(1603283232, 1)
+  }
+  ```
+
+  <Message type="note">
+  
+  The `"ok”` value has to be `1`. Any other value means something is wrong.
+
+  </Message>
+
+## Installing Rocket.Chat
+
+> **Important:** These steps must be executed on both Rocket.Chat Instances.
+
+1. Log into your Rocket.Chat instance using SSH.
+
+2. Update the APT repositories and upgrade the software already installed on the version to the latest version available in Ubuntu's official repositoires:
+
+  ```
+  root@rocketchat-instance:~# apt update && apt upgrade -y
+  ```
+
+3. Install [Node.js](https://nodejs.org/en/) by running the following command:
+
+  ```
+  root@rocketchat-instance:~# apt install -y curl && curl -sL https://deb.nodesource.com/setup_12.x | bash -
+  ```
+
+4. Install other prerequisites for running Rocket.Chat:
+
+  ```
+  root@rocketchat-instance:~# apt install build-essential nodejs graphicsmagick
+  ```
+
+5. Use `npm` to install `inherits`, `n`, and the node version required by Rocket.Chat:
+
+  ```
+  root@rocketchat-instance:~# npm install -g inherits n && sudo n 12.18.4
+  ```
+
+6. Download and unpack the latest release of the Rocket.Chat software:
+
+  ```
+  root@rocketchat-instance:~# curl -L https://releases.rocket.chat/latest/download -o /tmp/rocket.chat.tgz
+  root@rocketchat-instance:~# tar -xzf /tmp/rocket.chat.tgz -C /tmp
+  ```
+
+7. Install Rocket.Chat:
+
+  ```
+  root@rocketchat-instance:~# cd /tmp/bundle/programs/server && npm install
+  ```
+
+8. Move the application into its final destination (we use `/opt/Rocket.Chat` in this tutorial, but you are free to choose another directory)
+
+  ```
+  root@rocketchat-instance:~# mv /tmp/bundle /opt/Rocket.Chat
+  ```
+
+9. Add a user for the Rocket.Chat application:
+
+  ```
+  root@rocketchat-instance:~# sudo useradd -M rocketchat && sudo usermod -L rocketchat
+  ```
+
+10. Set the permissions on the Rocket.Chat folder:
+
+  ```
+  root@rocketchat-instance:~# sudo chown -R rocketchat:rocketchat /opt/Rocket.Chat
+  ```
+
+11. Create a Rocket.Chat service:
+
+  ```
+  root@rocketchat-instance:~# cat << EOF |sudo tee -a /lib/systemd/system/rocketchat.service
+  [Unit]
+  Description=Rocket.Chat server
+  After=network.target remote-fs.target nss-lookup.target nginx.target mongod.target
+  [Service]
+  ExecStart=/usr/local/bin/node /opt/Rocket.Chat/main.js
+  StandardOutput=syslog
+  StandardError=syslog
+  SyslogIdentifier=rocketchat
+  User=rocketchat
+  Environment=MONGO_URL=mongodb://192.168.1.2:27017/rocketchat?replicaSet=rs01 MONGO_OPLOG_URL=mongodb://192.168.1.2:27017/local?replicaSet=rs01 ROOT_URL=https://rocketchat.example.com/ PORT=3001 BIND_IP=192.168.1.X
+  [Install]
+  WantedBy=multi-user.target
+  EOF
+  ```
+
+  <Message type="note">
+  
+  Replace the `ROOT_URL` einvironment variable with the DNS hostname of your Rocket.Chat domain and the `BIND_IP` variable with the IP address of your Rocket.Chat instance.
+
+  </Message>
+
+12. Enable and start the Rocket.Chat service with the following command:
+
+  ```
+  root@rocketchat-instance:~# systemctl enable rocketchat && systemctl start rocketchat
+  ```
+
+## Configuring the NGINX reverse proxy
+
+1. Log into your NGINX reverse proxy instance using SSH.
+
+2. Update the APT repositories and upgrade the software already installed on the version to the latest version available in Ubuntu's official repositories:
+
+  ```
+  root@proxy-instance:~# apt update && apt upgrade -y
+  ```
+
+3. Install the NGINX reverse proxy:
+
+  ```
+  root@proxy-instance:~# apt install nginx -y
+  ```
+
+4. Create an NGINX configuration file called `/etc/nginx/sites-available/rocketchat.example.com` (replace `rocketchat.example.com` with the DNS hostname of your instance) and copy the following content into it:
+
+  ```
+  # Upstreams (Your two Rocket.Chat instances inside the Private Network)
+  upstream backend {
+      server 192.168.1.3:3001;
+      server 192.168.1.4:3001;
+  }
+
+  # Proxy Server
+  server {
+      listen 80;
+      server_name rocketchat.example.com;
+
+      # You can increase the limit if you need to.
+      client_max_body_size 200M;
+
+      error_log /var/log/nginx/rocketchat.access.log;
+
+      location / {
+          proxy_pass http://backend/;
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+          proxy_set_header Host $http_host;
+
+          proxy_set_header X-Real-IP $remote_addr;
+          proxy_set_header X-Forward-For $proxy_add_x_forwarded_for;
+          proxy_set_header X-Forward-Proto http;
+          proxy_set_header X-Nginx-Proxy true;
+
+          proxy_redirect off;
+      }
+  }
+  ```
+
+5. Create a symbolic link to activate the proxy in NGINX:
+
+  ```
+  ln -s /etc/nginx/sites-available/rocketchat.example.com /etc/nginx/sites-enabled/rocketchat.example.com
+  ```
+
+6. Test the configuration file for syntax errors by running `nginx -t`:
+
+  ```
+  root@proxy-instance:~# nginx -t
+  nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+  nginx: configuration file /etc/nginx/nginx.conf test is successful
+  ```
+
+7. Reload NGINX to activate the new configuration:
+
+  ```
+  service nginx reload
+  ```
+
+8. Install Certbot
+
+  ```
+  root@proxy-instance:~# apt install certbot python3-certbot-nginx
+  ```
+
+9. Run `certbot --nginx` to generate a new Let's Encrypt TLS certificate and reconfigure NGINX automatically:
+
+  ```
+  root@proxy-instance:~# certbot --nginx
+  Saving debug log to /var/log/letsencrypt/letsencrypt.log
+  Plugins selected: Authenticator nginx, Installer nginx
+  Enter email address (used for urgent renewal and security notices) (Enter 'c' to
+  cancel): my@email.org <-- Enter your e-mail address
+
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  Please read the Terms of Service at
+  https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf. You must
+  agree in order to register with the ACME server at
+  https://acme-v02.api.letsencrypt.org/directory
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (A)gree/(C)ancel: a <-- Press "a" to agree to the terms of Service of Let's Encrypt
+
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  Would you be willing to share your email address with the Electronic Frontier
+  Foundation, a founding partner of the Let's Encrypt project and the non-profit
+  organization that develops Certbot? We'd like to send you email about our work
+  encrypting the web, EFF news, campaigns, and ways to support digital freedom.
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  (Y)es/(N)o: n <-- press "y" if you want to share your email address with the EFF.
+
+  Which names would you like to activate HTTPS for?
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  1: rocketchat.example.com
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  Select the appropriate numbers separated by commas and/or spaces, or leave input
+  blank to select all options shown (Enter 'c' to cancel): 1 <-- Press "1" to request the certificate for the configured domain name
+  Obtaining a new certificate
+  Performing the following challenges:
+  http-01 challenge for rocketchat.example.com
+  Waiting for verification...
+  Cleaning up challenges
+  Deploying Certificate to VirtualHost /etc/nginx/sites-enabled/rocketchat.example.com
+
+  Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  1: No redirect - Make no further changes to the webserver configuration.
+  2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
+  new sites, or if you're confident your site works on HTTPS. You can undo this
+  change by editing your web server's configuration.
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 2 <-- press "2" to automatically redirect all traffic to a secured connection or "1" to disable automatic redirection
+  Redirecting all traffic on port 80 to ssl in /etc/nginx/sites-enabled/rocketchat.example.com
+
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  Congratulations! You have successfully enabled https://rocketchat.example.com
+
+  You should test your configuration at:
+  https://www.ssllabs.com/ssltest/analyze.html?d=rocketchat.example.com
+  - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+  IMPORTANT NOTES:
+  - Congratulations! Your certificate and chain have been saved at:
+    /etc/letsencrypt/live/rocketchat.bene.tf/fullchain.pem
+    Your key file has been saved at:
+    /etc/letsencrypt/live/rocketchat.bene.tf/privkey.pem
+    Your cert will expire on 2021-01-19. To obtain a new or tweaked
+    version of this certificate in the future, simply run certbot again
+    with the "certonly" option. To non-interactively renew *all* of
+    your certificates, run "certbot renew"
+  - Your account credentials have been saved in your Certbot
+    configuration directory at /etc/letsencrypt. You should make a
+    secure backup of this folder now. This configuration directory will
+    also contain certificates and private keys obtained by Certbot so
+    making regular backups of this folder is ideal.
+  - If you like Certbot, please consider supporting our work by:
+
+    Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+    Donating to EFF:                    https://eff.org/donate-le
+  ```
+
+  Your Rocket.Chat instance is ready now.
+
+## Setting up Rocket.Chat
+
+1. Point your web browser to your configured DNS hostname (i.e., `https://rocketchat.example.com`).
+
+2. The Rocket.Chat setup wizard displays. Enter your information for the admin account and click **Continue** to go to the next step:
+
+  <Lightbox src="scaleway-rc_setup_1.png" alt="" />
+
+3. Provide the required information about your organization and click **Continue** to proceed with the configuration:
+
+  <Lightbox src="scaleway-rc_setup_2.png" alt="" />
+
+4. Enter the details for your Rocket.Chat installation and confirm by clicking on **Continue**:
+
+  <Lightbox src="scaleway-rc_setup_3.png" alt="" />
+
+5. You can either register your server with Rocket.Chat to have access to additional services or keep it as a standalone solution:
+
+  <Lightbox src="scaleway-rc_setup_4.png" alt="" />
+
+6. Once you completed all steps, you are automatically logged into your Rocket.Chat application. You can start chatting now and invite other users to your community:
+
+  <Lightbox src="scaleway-rc_chat.png" alt="" />
+
+7. Check the number of running instances from the Rocket.Chat administration interface.
+
+  <Lightbox src="scaleway-rc_admin.png" alt="" />
+
+Once everything is set up and working, you can remove the public flexible IP addresses from both Rocket.Chat instances, as well as from the MongoDB instance. They will be able to communicate securely using the Private Network.
+
+## Conclusion
+
+You have now configured a Rocket.Chat application based on several Virtual Instances and communicating internally using the Private Networks feature. The connection between these instances is isolated from the Internet and the internal network and only the Virtual Instances added to the Private Network are able to communicate with each other. For more advanced configuration options of Rocket.Chat, refer to the [official documentation](https://docs.rocket.chat/). More information about the Private Networks feature is available in our [feature documentation](/network/vpc/concepts#private-networks/). Do you have any remaining question or suggestion? We welcome your feedback on Slack: [Scaleway Community](https://slack.scaleway.com). Join us in the `#private-network` chan.

@@ -1,0 +1,409 @@
+---
+layout: docs
+title: Deploying a Ruby on Rails application on Scaleway Elements
+description: This page shows you how to a Ruby on Rails application on Scaleway Elements using nginx, rbenv, puma, PostgreSQL and systemd on Ubuntu 18.04
+tags: compute server ruby on rails
+excerpt: |
+  Ruby on Rails is a server-side web application framework written in Ruby and released under the MIT License.
+  The popularity of Ruby on Rails emerged in the years 2000 and was greatly influenced by web application development. The framework encourages and facilitates the use of common web standards such as JSON, HTML, CSS and JavaScript for user interfacing.
+totalTime: PT30M
+steps:
+  - step: Installing rbenv and nodejs
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploy-a-ruby-on-rails-application/#-Installing-rbenv-and-nodejs
+  - step: Creating a Non-Administrative User
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploy-a-ruby-on-rails-application/#-Creating-a-NonAdministrative-User
+  - step: Installation and Configuration of PostgreSQL
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploy-a-ruby-on-rails-application/#-Installation-and-Configuration-of-PostgreSQL
+  - step: Installing nginx and puma
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploy-a-ruby-on-rails-application/#-Installing-nginx-and-puma
+  - step: Deploying My Code on the Server
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploy-a-ruby-on-rails-application/#-Deploying-My-Code-on-the-Server
+  - step: Going Further
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/deploy-a-ruby-on-rails-application/#-Going-Further
+categories:
+  - compute
+  - instances
+image: /assets/scaleway_ruby_on_rails.png
+permalink: docs/deploy-a-ruby-on-rails-application/
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, ubuntu server, debian server, linux server, IAAS, baremetal, scalability, ARM, physical server, dedicated server, server, rails, ruby on rails, ror
+dates:
+  validation: 2021-05-10
+  posted: 2020-01-20
+---
+
+## Ruby on Rails - Overview
+
+[Ruby on Rails](https://rubyonrails.org/) is a server-side web application framework written in Ruby and released under the MIT License.
+
+The popularity of Ruby on Rails emerged in the years 2000 and was greatly influenced by web application development. The framework encourages and facilitates the use of common web standards such as [JSON](https://en.wikipedia.org/wiki/JSON), [HTML](https://en.wikipedia.org/wiki/HTML), [CSS](https://en.wikipedia.org/wiki/CSS) and [JavaScript](https://en.wikipedia.org/wiki/JavaScript) for user interfacing.
+
+This article describes basic steps to set up deployment-ready VPS instance using Capistrano with RVM, Puma as application server and Nginx as reverse proxy. Let’s assume we already have working rails application, hosted on remote git repository.
+
+In this tutorial you will learn basic steps to configure a deployment-ready machine using Capistrano, rbenv, Puma as application server and Nginx as a reverse proxy. We assume that you have already a working Ruby on Rails application and deploy it using the following stack on a [Virtual Instance](https://www.scaleway.com/en/virtual-instances/):
+
+- [nginx](https://nginx.org/) as the reverse proxy
+- [PostgreSQL](https://www.postgresql.org) as the database
+- [puma](http://puma.io/) for the Ruby concurrent web server
+- [rbenv](https://github.com/rbenv/rbenv) for managing several Ruby versions
+- [Capistrano](https://capistranorb.com/) as deployment utility
+- [Ubuntu 20.04](https://www.ubuntu.com/) as operating system and [Systemd](https://www.freedesktop.org/wiki/Software/systemd/) for keeping processes up.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have a Virtual Instance or Bare Metal Cloud Server running on Ubuntu Focal Fossa (20.04 LTS).
+- You have sudo privileges or access to the root user.
+
+</Message>
+
+## Installing rbenv and nodejs
+
+Ruby on rails needs to have a ruby runtime to run.
+It could be tempting to just install the ruby version provided by the distribution.
+The problem with that is that this version might be different from the one we currently need.
+Because we want to have the liberty to choose the version of ruby we want, we will install a dedicated ruby version manager called [rbenv](https://github.com/rbenv/rbenv).
+
+This version will also come with a modern ruby installation, but you are free to change it to fit your needs.
+
+1. The installation is done using the `apt` packet manager of Ubuntu. Update the `apt` packet cache prior to installation, to make sure to install the latest available version in the Ubuntu repository:
+
+  ```
+  root@instance:~# apt update
+  root@instance:~# apt install -y rbenv
+  ```
+
+2. Verify that the installation of `rbenv` and `ruby` was successful:
+
+  ```
+  root@instance:~# rbenv --version
+  rbenv 1.1.1
+
+  root@instance:~# ruby --version
+  ruby 2.7.0p0 (2019-12-25 revision 647ee6f091) [x86_64-linux-gnu]
+  ```
+
+In this tutorial we will use the default version of ruby but you are free to download yours to fit your needs.
+In case you need a more recent version of [rbenv](https://github.com/rbenv/rbenv), instructions can be found on the [official installer page](https://github.com/rbenv/rbenv-installer).
+
+### Installing the nodejs runtime
+
+Ruby on Rails requires having [nodejs](https://nodejs.org/en/) installed to compile certain web assets.
+If you do not need a particular version of `nodejs` for your deployment you can use the default one provided by the operating system.
+
+1. Install `nodejs` using the `apt` packet manager:
+
+  ```
+  root@instance:~# apt install nodejs
+  ```
+
+2. To check if the installation has been successful, run the `nodejs --version` command. The output should look similar to this:
+
+  ```
+  root@instance:~# nodejs --version
+  v10.19.0
+  ```
+
+## Creating a non-admin user
+
+Create a non-administrative user that will be able to run programs without having administrative privileges.
+We will call this user `deploy`.
+
+1. Create the user by running the following command as root:
+
+  ```
+  root@instance:~# adduser deploy
+  ```
+
+2. To check that the user creation was successful, log into the user account using the `su` command and check the installed `ruby` version:
+
+  ```
+  root@instance:~# su - deploy
+  deploy@instance:~$ ruby --version
+  ruby 2.7.0p0 (2019-12-25 revision 647ee6f091) [x86_64-linux-gnu]
+  ```
+
+## Installing and configuring of PostgreSQL
+
+Ruby on rails application typically use a SQL database for data persistence.
+In this step we will install all the dependencies required to have a database running.
+
+1. Install the default [PostgreSQL](https://www.postgresql.org/) provided by the operating system using the `apt` packet manager.
+
+  ```
+  root@instance:~# apt install postgresql postgresql-contrib libpq-dev
+  ```
+
+2. Check if the installation was successful, by checking the status of the `postgresql` service:
+
+  ```
+  root@instance:~# service postgresql status
+  ● postgresql.service - PostgreSQL RDBMS
+      Loaded: loaded (/lib/systemd/system/postgresql.service; enabled; vendor preset: enabled)
+      Active: active (exited) since Fri 2020-08-28 13:52:53 UTC; 27s ago
+    Main PID: 843 (code=exited, status=0/SUCCESS)
+        Tasks: 0 (limit: 614)
+      Memory: 0B
+      CGroup: /system.slice/postgresql.service
+
+  Aug 28 13:52:53 scw-vigilant-brown systemd[1]: Starting PostgreSQL RDBMS...
+  Aug 28 13:52:53 scw-vigilant-brown systemd[1]: Finished PostgreSQL RDBMS.
+  ```
+
+3. Create an unprivileged role and database so that rails can connect to the database.  
+   Call this role `deploy`, just like our username on the instance:
+
+4. Use `su` to enter commands as `postgres` user, which is the default administrator of PostgreSQL:
+
+  ```
+  root@instance:~# su - postgres
+
+  ```
+
+5. Once logged as the postgres user, create a database for the user `deploy`.  
+   Enter a strong password, when prompted. It will be your database password.
+
+  ```
+  postgres@rails:~$ createuser --pwprompt deploy
+  Enter password for new role:
+  Enter it again:
+  postgres@instance:~$ createdb -O deploy my_rails_app
+  postgres@instance:~$ exit
+  ```
+
+6. Once this is done, you can check that it worked by using the following command:
+
+  ```
+  root@instance:~# psql --user deploy -h localhost -d my_rails_app
+  Password for user deploy:
+  psql (12.4 (Ubuntu 12.4-0ubuntu0.20.04.1))
+  SSL connection (protocol: TLSv1.3, cipher: TLS_AES_256_GCM_SHA384, bits: 256, compression: off)
+  Type "help" for help.
+
+  my_rails_app=>
+  ```
+
+Above is the shell of the database, ready to receive queries. Exit it by typing `\q`.
+
+## Installing nginx and puma
+
+Now we need to add a reverse proxy and a web server to our deployment.  
+There are two parts: The first part will be the [reverse proxy](https://en.wikipedia.org/wiki/Reverse_proxy) which is called [nginx](https://nginx.org) and will be the process of receiving all the incoming HTTP traffic.
+Then it will route this traffic to one or several applicative server.
+
+The second step is the applicative server.  
+It is a [ruby gem](https://en.wikipedia.org/wiki/RubyGems) called puma that will run the code. [puma](https://github.com/puma/puma) is provided by default in the recent version of rails. So installing the dependencies of our project will install `puma` too.
+
+1. Install the nginx server using the following command via the `apt` packet manager:
+
+  ```
+  root@instance:~# apt install nginx
+  ```
+
+2. Configure nginx to pass all the traffic to the relevant ruby server by creating a file called `/etc/nginx/sites-available/my_rails_app`. Open it in a text editor and enter the following content:
+
+  ```
+  nano /etc/nginx/sites-available/my_rails_app
+  ```
+
+    ```nginx
+    upstream my_rails_app {
+      # This socket file is created by your rails application
+      server unix:///home/vagrant/my_rails_app/tmp/puma.sock;
+    }
+
+    server {
+      listen 80;
+      server_name my_rails_app.com;
+
+      # ~2 seconds is often enough for most folks to parse HTML/CSS and
+      # retrieve needed images/icons/frames, connections are cheap in
+      # nginx so increasing this is generally safe...
+      keepalive_timeout 5;
+
+      # path for static files
+      root /home/deploy/my_rails_app/public;
+
+      # this rewrites all the requests to the maintenance.html
+      # page if it exists in the doc root. This is for capistrano's
+      # disable web task
+      if (-f $document_root/maintenance.html) {
+        rewrite  ^(.*)$  /maintenance.html last;
+        break;
+      }
+
+      location / {
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header Host $http_host;
+
+        # If the file exists as a static file serve it directly without
+        # running all the other rewrite tests on it
+        if (-f $request_filename) {
+          break;
+        }
+
+        # check for index.html for directory index
+        # if it's there on the filesystem then rewrite
+        # the url to add /index.html to the end of it
+        # and then break to send it to the next config rules.
+        if (-f $request_filename/index.html) {
+          rewrite (.*) $1/index.html break;
+        }
+
+        # this is the meat of the rack page caching config
+        # it adds .html to the end of the url and then checks
+        # the filesystem for that file. If it exists, then we
+        # rewrite the url to have explicit .html on the end
+        # and then send it on its way to the next config rule.
+        # if there is no file on the fs then it sets all the
+        # necessary headers and proxies to our upstream pumas
+        if (-f $request_filename.html) {
+          rewrite (.*) $1.html break;
+        }
+
+        if (!-f $request_filename) {
+          proxy_pass http://my_rails_app;
+          break;
+        }
+      }
+
+      # This should work as it gets the filenames with query strings that Rails provides.
+      # However, there's a chance it could break the ajax calls.
+      location ~* \.(ico|css|gif|jpe?g|png|js)(\?[0-9]+)?$ {
+        expires max;
+        break;
+      }
+
+      # Error pages
+      # error_page 500 502 503 504 /500.html;
+      location = /500.html {
+        root /home/deploy/my_rails_app/public;
+      }
+    }
+    ```
+
+  Save the file and exit the text editor.
+
+3. Create a symbolic link to enable the server block:
+
+  ```
+  ln -s /etc/nginx/sites-available/my_rails_app /etc/nginx/sites-enabled/
+  ```
+
+4.  Check the configuration file for syntax errors using the following command:
+
+  ```
+  root@instance:~# nginx -T
+  ```
+
+5. Reload the nginx service to activate the new configuration
+
+  ```
+  root@instance:~# service nginx reload
+  ```
+
+### Configuring systemd to manage the puma process
+
+We do not yet have a `puma` server running.
+Once this server runs, a socket will show up on `/home/vagrant/my_rails_app/tmp/puma.sock`.  
+`nginx` will forward the incoming request to this socket and `puma` will answer over it.
+
+To ensure that `puma` is running and is restarted in case of a crash we will use a systemd configuration file:
+
+1. Create a new service file and open it in a text editor:
+
+  ```
+  root@instance:~# nano /etc/systemd/system/puma.service
+  ```
+
+2. Copy the following content into the file:
+
+    ```
+    [Unit]
+    Description=Puma HTTP Server
+    After=network.target
+
+    # Uncomment for socket activation (see below)
+    # Requires=puma.socket
+
+    [Service]
+    # Foreground process (do not use --daemon in ExecStart or config.rb)
+    Type=simple
+
+    # Preferably configure a non-privileged user
+    User=vagrant
+
+    # The path to the your application code root directory.
+    # Also replace the "<YOUR_APP_PATH>" place holders below with this path.
+    # Example /home/username/myapp
+    WorkingDirectory=/home/vagrant/my_rails_app
+
+    # Helpful for debugging socket activation, etc.
+    # Environment=PUMA_DEBUG=1
+
+    # SystemD will not run puma even if it is in your path. You must specify
+    # an absolute URL to puma. For example /usr/local/bin/puma
+    # Alternatively, create a binstub with `bundle binstubs puma --path ./sbin` in the WorkingDirectory
+    ExecStart=/home/vagrant/.rbenv/shims/puma -C ./config/puma.rb
+
+    Restart=always
+
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
+3. Save the file and exit the text editor.
+
+4. Enable the service so it can be started automatically during system boot:
+
+  ```
+  root@instance:~# systemctl status puma.service
+  ```
+
+5. Start the service manually:
+
+  ```
+  root@instance:~# systemctl start puma.service
+  ```
+
+6. Check if the service is working:
+
+  ```
+  root@instance:~# systemctl status puma.service
+  ```
+
+## Deploying my code on the server
+
+The next step will be to deploy your local code.
+For that we will use [Capistrano](https://capistranorb.com/).
+
+1. In the `Gemfile` of your rails application add the following gems:
+
+  ```
+  gem 'capistrano', '~> 3.11'
+  gem 'capistrano-rails', '~> 1.4'
+  gem 'capistrano-rbenv', '~> 2.1', '>= 2.1.4'
+  ```
+
+2. To push a new version of your code, run the following command:
+
+  ```
+  cap production deploy
+  ```
+
+## Going further
+
+In this tutorial we only installed basic dependencies but there is many other services that could be installed: [elasticsearch](https://github.com/elastic/elasticsearch-rails), [redis](https://redis.io/), ...
+
+<Message type="tip">
+
+All the steps made in this tutorial could be made on a local virtual machine.
+A default rails environment using Vagrant, Ansible and Terraform is available at the following address: [github.com/remyleone/rails-example](https://github.com/remyleone/rails-example).
+
+</Message>

@@ -1,0 +1,306 @@
+---
+layout: docs
+title: Configuring Sentry error tracking
+description: Discover how to configure an Sentry error tracking server on a Scaleway instance.
+tags: compute messaging apache sentry error error-tracking
+excerpt: |
+  Sentry is an open source solution for error tracking in applications. It is written in Python and can provide real-time reporting of errors in applications based on a client/server architecture. You can easily integrate it into your applications via its SDK and let them automatically report the errors via common messaging tools like Slack, IRC and more. This helps to reduce the time for development of your applications and increases the user experience.
+  You can find all reports on a dashboard which makes it easy to triage the problem - how often it occurs, which impact it has on the user experience of your application, which part of your code causes the problem and so on.
+totalTime: PT30M
+steps:
+  - step: Installing Sentry
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/sentry-error-tracking/#-Installing-Sentry
+  - step: Configuring a reverse proxy
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/sentry-error-tracking/#-Configuring-a-reverse-proxy
+  - step: Disabling direct access to the Sentry application
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/sentry-error-tracking/#-Disabling-direct-access-to-the-Sentry-application
+  - step: Connecting to the Sentry interface
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/sentry-error-tracking/#-Connecting-to-the-Sentry-interface
+categories:
+  - compute
+  - instances
+image: /assets/scaleway_sentry.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, debian server, linux server, Object Storage, S3, IAAS, baremetal, scalability, ARM, physical server, dedicated server, physicalization, account, sentry, error, error-tracking, tracking
+dates:
+  validation: 2021-05-10
+  posted: 2018-06-07
+---
+
+## Sentry - Overview
+
+[Sentry](https://sentry.io/welcome/) is an open source solution for error tracking in applications. It is written in Python and can provide real-time reporting of errors in applications based on a client/server architecture. You can easily integrate it into your applications via its SDK and let them automatically report the errors via common messaging tools like Slack, IRC and more. This helps to reduce the time for development of your applications and increases the user experience.
+You can find all reports on a dashboard which makes it easy to triage the problem - how often it occurs, which impact it has on the user experience of your application, which part of your code causes the problem and so on.
+
+This tutorial details how to setup a Sentry server on a Scaleway compute instance to start error tracking in your applications.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have a [Virtual Instance](https://www.scaleway.com/en/virtual-instances/) running on Ubuntu Focal Fossa (20.04 LTS)
+
+</Message>
+
+## Installing Sentry
+
+In this tutorial, we will install sentry on a [Ubuntu Focal Fossa (20.04 LTS)](https://www.ubuntu.com) based Virtual Instance.
+
+<Message type="note">
+
+Sentry needs at a Virtual Instance with at least 4GB of RAM to run on.
+
+</Message>
+
+1. Update the system and install the required prerequisites:
+
+  ```
+  apt update && apt upgrade -y
+  apt install apt-transport-https ca-certificates certbot curl git gnupg-agent nginx python3-certbot-nginx sendmail software-properties-common ufw -y
+  ```
+
+2. Sentry runs in a Docker container using `docker-compose`. Install the GPG Key of Docker and configure Docker's software repositories:
+
+  ```
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
+  add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+  ```
+
+3. Update the apt package manager and install Docker-Engine using `apt`:
+
+  ```
+  apt update && apt install docker-ce docker-ce-cli containerd.io -y
+  ```
+
+4. Download the binary file of `docker-compose` and make the file executable:
+
+  ```
+  curl -L "https://github.com/docker/compose/releases/download/1.27.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+  chmod +x /usr/local/bin/docker-compose
+  ```
+
+5. Enter the `/opt` directory on your instance and clone the `onpremise` repository of Sentry:
+
+  ```
+  cd /opt
+  git clone https://github.com/getsentry/onpremise
+  ```
+
+6. Enter the `onpremise` folder and run the automatic installation Script of Sentry:
+
+  ```
+  cd /opt/onpremise
+  ./insall.sh
+  ```
+
+  The automatic installer runs several compatibility tests on the system and installs Sentry. An output like the following example displays. Fill in the required information when prompted to do so:
+
+    ```
+    [...]
+      Applying sentry.0106_service_hook_project_id_nullable... OK
+      Applying sessions.0001_initial... OK
+      Applying sites.0001_initial... OK
+      Applying sites.0002_alter_domain_unique... OK
+      Applying social_auth.0001_initial... OK
+    Created internal Sentry project (slug=internal, id=1)
+
+    Would you like to create a user account now? [Y/n]: <- Press **Y**
+    Email: me@myemail.org <- Enter your e-mail address
+    Password:
+    Repeat for confirmation:
+    User created: me@myemail.org
+    Added to organization: sentry
+    Creating missing DSNs
+    Correcting Group.num_comments counter
+    Unable to find image 'alpine:latest' locally
+    latest: Pulling from library/alpine
+    df20fa9351a1: Already exists
+    Digest: sha256:185518070891758909c9f839cf4ca393ee977ac378609f700f60a771a2dfe321
+    Status: Downloaded newer image for alpine:latest
+
+    Generating Relay credentials...
+    Creating sentry_onpremise_relay_run ...
+    Creating sentry_onpremise_relay_run ... done
+    Relay credentials written to relay/credentials.json
+
+    ----------------
+    You're all done! Run the following command to get Sentry running:
+
+      docker-compose up -d
+    ```
+
+7. Start Sentry by running the following command:
+
+  ```
+  docker-compose up -d
+  ```
+
+8. Test the installation by pointing your web browser to `http://<your_instance_ip>:9000`. The Sentry login displays:
+
+  <Lightbox src="scaleway-sentry_login.png" alt="" />
+
+## Configuring a reverse proxy
+
+By default, Sentry listens on port `9000`. Therefore we configure a nginx proxy that listens on port `80` (for HTTP) and `443` (for HTTPS) and forwards all requests on these ports to port 9000.
+
+1. Edit the file `/etc/nginx/sites-availble/sentry.example.com.conf` and put the following content in it. Edit the `server_name` to the DNS name of your Sentry instance:
+
+  ```
+      server {
+        listen 80;
+        server_name sentry.exaple.com;
+
+        location / {
+          proxy_pass         http://localhost:9000;
+          proxy_redirect     off;
+
+          proxy_set_header   Host              $host;
+          proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+          proxy_set_header   X-Forwarded-Proto $scheme;
+        }
+
+      }
+  ```
+
+2. Create a symlink to enable the new site in nginx:
+
+  ```
+  ln -s /etc/nginx/sites-available/sentry.local.conf /etc/nginx/sites-enabled/sentry.local.conf
+  ```
+
+3. Restart `nginx` to activate the new configuration:
+
+  ```
+  service nginx restart
+  ```
+
+4. Run `certbot` to request a [Let's Encrypt](https://letsencrypt.org/) TLS certificate for HTTPS connections to Sentry:
+
+  ```
+  certbot --ngnix
+  ```
+
+The interactive certificate creation wizard of `certbot` prompts for additional information during certificate creation:
+
+    ```
+    Enter email address (used for urgent renewal and security notices) (Enter 'c' to
+    cancel): me@myemail.com <- Enter your email address
+
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Please read the Terms of Service at
+    https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf. You must
+    agree in order to register with the ACME server at
+    https://acme-v02.api.letsencrypt.org/directory
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    (A)gree/(C)ancel: a <- Type **a** to accept the terms of service
+
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Would you be willing to share your email address with the Electronic Frontier
+    Foundation, a founding partner of the Let's Encrypt project and the non-profit
+    organization that develops Certbot? We'd like to send you email about our work
+    encrypting the web, EFF news, campaigns, and ways to support digital freedom.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    (Y)es/(N)o: y <- If you like to share your email address with the EFF, press **y**, otherwise **n**
+
+    Which names would you like to activate HTTPS for?
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    1: sentry.example.com
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Select the appropriate numbers separated by commas and/or spaces, or leave input
+    blank to select all options shown (Enter 'c' to cancel): 1 <-- Select the appropriate number for the certificate name. In this example **1**
+    Obtaining a new certificate
+    Performing the following challenges:
+    http-01 challenge for sentry.example.com
+    Waiting for verification...
+    Cleaning up challenges
+    Deploying Certificate to VirtualHost /etc/nginx/sites-enabled/sentry.example.com
+
+    Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    1: No redirect - Make no further changes to the webserver configuration.
+    2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
+    new sites, or if you're confident your site works on HTTPS. You can undo this
+    change by editing your web server's configuration.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 2 <- Type **2** to automatically redirect all HTTP requests to HTTPS. Type **1** to allow plain HTTP connections.
+    Redirecting all traffic on port 80 to ssl in /etc/nginx/sites-enabled/sentry.example.com
+
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Congratulations! You have successfully enabled https://sentry.example.com
+
+    You should test your configuration at:
+    https://www.ssllabs.com/ssltest/analyze.html?d=sentry.example.com
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    IMPORTANT NOTES:
+    - Congratulations! Your certificate and chain have been saved at:
+      /etc/letsencrypt/live/sentry.example.com/fullchain.pem
+      Your key file has been saved at:
+      /etc/letsencrypt/live/sentry.example.com/privkey.pem
+      Your cert will expire on 2020-12-23. To obtain a new or tweaked
+      version of this certificate in the future, simply run certbot again
+      with the "certonly" option. To non-interactively renew *all* of
+      your certificates, run "certbot renew"
+    - Your account credentials have been saved in your Certbot
+      configuration directory at /etc/letsencrypt. You should make a
+      secure backup of this folder now. This configuration directory will
+      also contain certificates and private keys obtained by Certbot so
+      making regular backups of this folder is ideal.
+    - If you like Certbot, please consider supporting our work by:
+
+      Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+      Donating to EFF:                    https://eff.org/donate-le
+    ```
+
+  Your certificate has been generated and nginx has been configured by `certbot`. Your reverse proxy server is now ready to accept HTTPS connections.
+
+## Disabling direct access to the Sentry application
+
+We disable direct access to the Sentry application, running on port `9000` for security reasons. All requests to the application have to pass via the nginx reverse proxy. To do this we use the [UFW firewall](/tutorials/installation-uncomplicated-firewall/).
+
+1. Start by defining the policy, that refuses everything by default:
+
+  ```
+  ufw default deny
+  ```
+
+2. Enable outgoing traffic
+
+  ```
+  ufw default allow outgoing
+  ```
+
+3. Authorize SSH, HTTP and HTTPS connections to the machine:
+
+  ```
+  ufw allow 22/tcp
+  ufw allow 80/tcp
+  ufw allow 443/tcp
+  ```
+
+4. Enable the new firewall configuration:
+
+  ```
+  ufw enable
+  Command may disrupt existing ssh connections. Proceed with operation (y|n)? y <- type **y**
+  Firewall is active and enabled on system startup
+  ```
+
+## Connecting to the Sentry interface
+
+1. Once the installation is finished, connect from a browser: `https://sentry.example.com/`
+
+2. Login with the user that you have created during the installation.
+
+You will be requested to finish the installation by providing some additional parameters and, once done, the Sentry Dashboard displays:
+
+  <Lightbox src="scaleway-sentry_dashboard.png" alt="" />
+
+To create a new project click the **Projects** button in the menu click **New Project**. Select your environment and provide some more details about it. Sentry will show you instructions how to implement it in your project.
+
+  <Lightbox src="scaleway-sentry_project.png" alt="" />
+
+Your Sentry server is running now, and you can integrate it with your applications. You can also add additional features by adding different [Plugins](https://docs.sentry.io/server/plugins/) into Sentry. Sentry is a mighty tool that can be used to automatize your workflow and increase the user experience by reducing the time to market of your applications. There are many [SDK's](https://docs.sentry.io/clients/) for various programming languages available and you can check the documentation for your favourite language.

@@ -1,0 +1,390 @@
+---
+title: Using a load balancer to expose your Kubernetes Kapsule ingress controller service
+description: When you create a Kubernetes Kapsule cluster you have the possibility to deploy an ingress controller at the creation time.
+excerpt: |
+  When you create a Kubernetes Kapsule cluster you have the possibility to deploy an ingress controller at the creation time.
+totalTime: PT10M
+steps:
+  - step: Exposing the Ingress Controller Through a Load Balancer Service
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs//tutorials/kubeflow-on-kapsule/#-Exposing-the-Ingress-Controller-Through-a-Load-Balancer-Service
+  - step: Using Wildcards
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/kubeflow-on-kapsule/#-Using-Wildcards
+  - step: Creating the LoadBalancer Service
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/kubeflow-on-kapsule/#-Creating-the-LoadBalancer-Service
+  - step: Using a Reserved IP as the IP Address of Your Load Balancer
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/kubeflow-on-kapsule/#-Using-a-Reserved-IP-as-the-IP-Address-of-our-Load-Balancer
+  - step: Reserving a LoadBalancer IP using the Scaleway API
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/kubeflow-on-kapsule/#-Reserving-a-LoadBalancer-IP-using-the-Scaleway-API
+  - step: Using this IP Address on Kubernetes LoadBalancer Services
+    type: HowToStep
+    url: https://www.scaleway.com/en/tutorials/kubeflow-on-kapsule/#-Using-this-IP-Address-on-Kubernetes-LoadBalancer-Services
+  - step: Using a Reserved IP as the IP Address of Your Load Balancer
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/kubeflow-on-kapsule/#-Using-a-Reserved-IP-as-the-IP-Address-of-our-Load-Balancer
+categories:
+  - compute
+  - kapsule
+  - storage
+  - load-balancer
+tags: compute kapsule kubernetes ingress k8s
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, debian server, linux server, IAAS, baremetal, scalability, kubernetes, k8s, kapsule, kubernetes kapsule, ingress, ingress controller
+dates:
+  validation: 2021-05-10
+  posted: 2020-05-05
+---
+
+## Kubernetes Ingress Controller - Overview
+
+When you create a [Kubernetes Kapsule](https://www.scaleway.com/en/kubernetes-kapsule/) cluster, you have the possibility to deploy an [ingress controller](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/) at the creation time.
+
+Two choices are available:
+
+- [Nginx](https://github.com/kubernetes/ingress-nginx)
+- [Traefik](https://containo.us/traefik/)
+
+[An ingress controller](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/) is an intelligent HTTP reverse proxy allowing you to expose different websites to the Internet with a single entry point. The ingress controller is in charge of reconfiguring a HTTP web server each time you add or remove an ingress object on `Kubernetes`.
+
+Our goal in this tutorial is to:
+
+- Deploy a test application on our cluster.
+- Expose this test application through an ingress object, using the free DNS wildcard provided by `Scaleway`.
+- Replace the usage of the `DNS` wildcard by a `Scaleway` load balancer.
+- Make the load balancer IP persistent and re-usable between different services.
+
+This tutorial is divided into two parts:
+
+- In the [first part](#-Exposing-the-Ingress-Controller-Through-a-Load-Balancer-Service), we check how to expose the ingress controller shipped with `Kapsule` using a [Scaleway Load Balancer](https://www.scaleway.com/en/load-balancer/). We use a simple test application for this tutorial.
+- In the [second part](#-Using-a-Reserved-IP-as-the-IP-Address-of-Your-Load-Balancer), we show you how to reserve an IP address for this load balancer, as by default on Scaleway Load Balancer IPs are ephemeral.
+
+At the end of this tutorial, you are able to understand and use the ingress controller shipped with Kapsule.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [created a Kapsule cluster](/compute/kubernetes/how-to/create-cluster/) with an ingress controller.
+- You have downloaded the corresponding [kubeconfig](/compute/kubernetes/how-to/edit-cluster/) file and [kubectl](/compute/kubernetes/how-to/connect-cluster-kubectl/) is working
+
+</Message>
+
+## Exposing the Ingress Controller Through a Load Balancer Service
+
+<Message type="important">
+
+You need a Kubernetes Kapsule cluster deployed with an ingress controller to follow this tutorial. To deploy your cluster preinstalled ingress controller, enter the Advanced Options during cluster creation, set Deploy an ingress controller to Yes and select an ingress controller from the drop down list.
+
+</Message>
+
+By default on Kapsule, these ingress controllers are deployed using a [hostPort](https://kubernetes.io/docs/concepts/services-networking/service/). This means that the ingress controller will be accessible on all the machines of your cluster on port 80 and 443.  
+We have decided to do that because the addition of a load balancer adds an extra cost for the final user. By using a host port, you will be able to use the ingress objects just after deploying your cluster. We believe that it is a good solution for test and development purposes.  
+We will see in the second part of the tutorial on how to use a load balancer to make this production-ready.
+
+Let us check on this example below:
+
+The ingress controller is deployed on the cluster just after the creation of this one.
+
+```bash
+# kubectl get ds -n kube-system
+NAME                    DESIRED   CURRENT   READY   UP-TO-DATE   AVAILABLE   NODE SELECTOR   AGE
+[..]
+nginx-ingress           1         1         1       1            1           <none>          13m
+
+```
+
+The ingress controller is exposed to the Internet with the host port configuration.
+
+```yaml
+# kubectl get ds -n kube-system nginx-ingress -o yaml
+[..]
+       ports:
+        - containerPort: 80
+          hostPort: 80
+          name: http
+          protocol: TCP
+        - containerPort: 443
+          hostPort: 443
+          name: https
+          protocol: TCP
+```
+
+### Using Wildcards
+
+By default on Kapsule, a wildcard round-robin DNS record is created, pointing on all your cluster nodes. This means that every time you add or delete a node in your cluster, the DNS record is updated to reflect the state of your nodes.
+
+Once again we can check it in on the example cluster (you can get the FQDN of your cluster in the Scaleway console):
+
+```
+# host test.c39a0d71-f66c-4657-8fe1-c3280012311c.nodes.k8s.fr-par.scw.cloud
+test.49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud is an alias for 49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud
+49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud has address 51.15.207.3
+```
+
+To demonstrate how it works, we will use a test application called `cafe-ingress`, you can find it at this [URL](https://github.com/nginxinc/kubernetes-ingress/tree/master/examples/complete-example). It's a pretty simple application just serving different web pages depending on the URL you type.
+
+```
+$ kubectl create -f https://raw.githubusercontent.com/nginxinc/kubernetes-ingress/master/examples/complete-example/cafe.yaml
+```
+
+Create the ingress object with this YAML manifest. Please note that we use our DNS wildcard on the host stanza of this YAML file.
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cafe-ingress
+spec:
+  rules:
+    - host: test.49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud
+      http:
+        paths:
+          - path: /tea
+            pathType: Prefix
+            backend:
+              service:
+                name: tea-svc
+                port:
+                  number: 80
+          - path: /coffee
+            pathType: Prefix
+            backend:
+              service:
+                name: coffee-svc
+                port:
+                  number: 80
+```
+
+```bash
+# kubectl create -f cafe-ingress.yaml
+# kubectl get ing
+NAME           CLASS    HOSTS                                                                  ADDRESS   PORTS   AGE
+cafe-ingress   <none>   test.49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud             80      4m11s
+```
+
+You can test that this ingress is configured correctly by accessing your test application:
+
+```bash
+# curl http://test.49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud/coffee
+Server address: 100.64.0.181:8080
+Server name: coffee-5f56ff9788-68xs2
+Date: 28/Apr/2020:13:34:26 +0000
+URI: /coffee
+Request ID: 9d2ee64655b936384a64cf89e7a975b0
+```
+
+### Creating the LoadBalancer Service
+
+As this solution may be good for test purposes, you will most of the time, use a LoadBalancer service for your production needs.
+The round-robin DNS record is not recommended for production purposes, and we do advise you to use a Load Balancer for production as it is more reliable if you want a 100% uptime.  
+After using the round-robin DNS records, let us say you prefer to use a load balancer. To do so, you just have to apply this manifest on your cluster:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-ingress
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      name: http
+      targetPort: 80
+    - port: 443
+      name: https
+      targetPort: 443
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+```
+
+If you choose `Traefik` instead of `nginx` use the following manifest:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-ingress
+  namespace: kube-system
+  labels:
+    k8s-app: traefik-ingress-lb
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      name: http
+      targetPort: 80
+    - port: 443
+      name: https
+      targetPort: 443
+  selector:
+    k8s-app: traefik-ingress-lb
+```
+
+```bash
+# kubectl create -f lb.yaml
+service/nginx-ingress created
+```
+
+This manifest creates a service of the LoadBalancer type.
+You will, with this one, get a public IP address.
+As this load balancer is created on Scaleway, you can also see it in your console.
+
+This load balancer is managed automatically for you by the cloud controller manager. If you want to know more about our cloud controller manager be sure to check out [our github](https://github.com/scaleway/scaleway-cloud-controller-manager).
+
+Get the IP address of your newly created load balancer:
+
+```
+# kubectl get svc -n kube-system
+nginx-ingress    LoadBalancer   10.32.18.72    51.159.24.212   80:30122/TCP,443:31362/TCP   90s
+```
+
+In this example, your ingress controller is accessible now through its IP address `51.159.24.212`.
+To do so, you have to create a DNS record bound to this address. For the example below, let us say we have an `A` record for the domain `ingress-test.eu` pointing on this IP address.
+
+You also have to create the ingress object pointing to this new DNS records:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cafe-ingress-lb
+spec:
+  rules:
+    - host: lbtest.ingress-test.eu
+      http:
+        paths:
+          - path: /tea
+            pathType: Prefix
+            backend:
+              service:
+                name: tea-svc
+                port:
+                  number: 80
+          - path: /coffee
+            pathType: Prefix
+            backend:
+              service:
+                name: cofee-svc
+                port:
+                  number: 80
+```
+
+```bash
+# kubectl create -f cafe-ingress-lb.yaml
+# kubectl get ing
+[..]
+cafe-ingress-lb   <none>   lbtest.ingress-test.eu             80      8m21s
+```
+
+The application is now accessible using the DNS records pointing to the IP address of your load balancer:
+
+```bash
+# host lbtest.ingress-test.eu
+lbtest.ingress-test.eu has address 51.159.24.212
+# curl http://ingress-test.eu/coffee
+Server address: 100.64.0.225:8080
+Server name: coffee-5f56ff9788-6m5tf
+Date: 28/Apr/2020:13:37:34 +0000
+URI: /coffee
+Request ID: 0c1c8f4e976bc4cc53de174bbd1039bb
+```
+
+As you can see, it works because we issued a DNS query and it resolved successfully to the IP of our load balancer.
+The ingress has successfully routed our request to the correct service and the underlying pods.
+Please note that you will be in charge of creating your own DNS records with this IP if you want to have wildcard DNS records.
+
+## Using a Reserved IP as the IP Address of Your Load Balancer
+
+When creating Kubernetes services, you have the possibility to create a service of the `LoadBalancer` type.  
+This is what we have done above to expose the ingress controller.  
+That means that a call to the [cloud-controller-manager](https://github.com/scaleway/scaleway-cloud-controller-manager) is made. Meaning that it will spawn a new Load Balancer on Scaleway.  
+The "normal" behavior, in this case, is that a new public IP will be associated with this LoadBalancer, meaning that if you want to create a DNS record (for instance) with that IP, you have to do it every time you spawn a new LoadBalancer.  
+There is a way to avoid that and to:
+
+- Reserve an IP address.
+- Put DNS records on it.
+- Re-use this IP address as many times as you want for different services (one service at a time).
+
+### Reserving a LoadBalancer IP using the Scaleway API
+
+Use the Scaleway API to reserve an IP address (this address has to be a Load Balancer IP).  
+To create a secret key please use the following [tutorial](/console/my-project/how-to/generate-api-key/):
+
+```
+$ curl -X POST "https://api.scaleway.com/lb/v1/regions/$SCW_DEFAULT_REGION/ips" -H "X-Auth-Token: $SCW_SECRET_KEY" -H "Content-Type: application/json" \
+-d "{\"project_id\":\"$SCW_DEFAULT_PROJECT_ID\"}" | jq -r .ip_address
+```
+
+This IP address can be re-used every time you will create a LoadBalancer service (if there is no other Load Balancer using this IP) by using the `loadBalancerIP` field on the service.
+
+Let's say in our case that this IP address is `51.159.24.7`.
+
+### Using this IP Address on Kubernetes LoadBalancer Services
+
+At the time you create or patch a Load Balancer service you can specify the previously "reserved" IP on the service using the `loadBalancerIP` spec on the example below (the public loadBalancer IP address is in this case `51.159.24.7`):
+
+On the example below we will:
+
+- Create a new Load Balancer with the IP reserved before by patching the tea-svc service.
+- Check the IP address was correctly set on this service and that this service is now a LoadBalancer one.
+- Delete the tea-svc service (showing that the IP address is not deleted).
+- Create a new Load Balancer with the IP reserved before by patching the coffee-svc service.
+- By doing that, we show that we can use a reserved IP on `LoadBalancer` creation and that we can "move" this IP from one service to one another.
+
+```bash
+# kubectl get svc
+NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+coffee-svc   ClusterIP   10.32.102.89   <none>        80/TCP    9s
+kubernetes   ClusterIP   10.32.0.1      <none>        443/TCP   3m56s
+tea-svc      ClusterIP   10.32.57.52    <none>        80/TCP    9s
+
+# kubectl patch svc tea-svc --type merge --patch '{"spec":{"loadBalancerIP": "51.159.24.7","type":"LoadBalancer"}}'
+service/tea-svc patched
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   ClusterIP      10.32.102.89   <none>        80/TCP         44s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        4m31s
+tea-svc      LoadBalancer   10.32.57.52    <pending>     80:32434/TCP   44s
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   ClusterIP      10.32.102.89   <none>        80/TCP         45s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        4m32s
+tea-svc      LoadBalancer   10.32.57.52    51.159.24.7   80:32434/TCP   45s
+
+# kubectl delete svc tea-svc
+service "tea-svc" deleted
+
+# kubectl patch svc coffee-svc --type merge --patch '{"spec":{"loadBalancerIP": "51.159.24.7","type":"LoadBalancer"}}'
+service/coffee-svc patched
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   LoadBalancer   10.32.102.89   <pending>     80:31094/TCP   100s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        5m27s
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   LoadBalancer   10.32.102.89   51.159.24.7   80:31094/TCP   103s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        5m30s
+```
+
+As you can see, we have been able to keep the same IP on different load balancers.
+By doing so, we can, for instance, keep the same DNS configuration and move it from one load balancer instance type to one another.
+We have also seen that Kapsule manages the configuration of our load balancer for you.
+The cloud controller manager is in charge of managing the complete lifecycle of your load balancer.
+
+You might be interested in the following tutorial:
+
+- [Loki monitoring](/tutorials/manage-k8s-logging-loki/)
+- [Monitoring a Kubernetes Kapsule Cluster](/tutorials/monitor-k8s-grafana/)
+- [Deploy an image from a private registry](/compute/kubernetes/how-to/deploy-image-from-container-registry)

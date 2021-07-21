@@ -1,0 +1,237 @@
+---
+
+title: Setting up a Nginx reverse proxy with Object Storage
+description: This page shows you how to configure a Nginx reverse proxy to access Object Storage
+tags: compute mediaserver object storage reverse-proxy
+excerpt: |
+  The Scaleway Object Storge service lets you store infinite data in buckets. You can either access the data directly via your bucket. This consumes data transfer and will be deducted from your monthly package or be billed in case you exceed your included data transfer.
+
+  It is possible to access your bucket via a compute instance as a proxy. Transfer of data between your bucket and the compute platform is free of charge and you can use the bandwidth included with your instance to distribute the files in your bucket.
+totalTime: PT20M
+steps:
+  - step: Installing Nginx
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-nginx-reverse-proxy-s3/#Installing-Nginx
+  - step: Configuring Nginx
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-nginx-reverse-proxy-s3/#Configuring-Nginx
+  - step: Configuring HTTPS
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-nginx-reverse-proxy-s3/#Configuring-HTTPS
+categories:
+  - storage
+  - object
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, debian server, linux server, IAAS, baremetal, scalability, ARM, physical server, dedicated server, object storage, objectstorage, reverse proxy, proxy, s3
+dates:
+  validation: 2021-05-10
+  posted: 2020-06-04
+---
+
+## Object Storage Proxy Overview
+
+The [Scaleway Object Storge](/storage/object/) lets you store unlimited data in buckets. You can either access the data directly via your bucket. This consumes data transfer and will be deducted from your monthly package allowance, or be billed when you exceed your included data transfer.
+It is possible to access your bucket via a compute instance as a proxy. Transfer of data between your bucket and the compute platform is free of charge, and you can use the bandwidth included with your instance to distribute the files in your bucket. We will use the [Nginx](http://nginx.org/) reverse proxy to provide read-only access to the bucket's contents.
+
+<Lightbox src="scaleway-object-storage-with-nginx.png" alt="" />
+
+The request to retrieve a bucket is forwarded to the Object Storage bucket by Nginx when the client sends an HTTP request to the Nginx proxy server. The Object Storage platform replies in delivering the requested object to Nginx, which forwards it to the client requesting the object.
+
+To reduce the load on the bucket and to speed up the delivery of frequently requested objects, it is possible to cache them locally in Ngin
+
+<Lightbox src="scaleway-nginx-with-cached-data.png" alt="" />
+
+In this case, an object will be stored temporarily in the cache of Nginx. The client requests an object, and it will be delivered to the client directly from Nginx without forwarding the request to the Object Storage platform.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have a Virtual Instance running Ubuntu or Debian Linux
+- You have a Scaleway Object Storage bucket with [public readable](https://www.scaleway.com/en/faq/how-can-i-make-an-object-public/) objects
+
+</Message>
+
+## Installing Nginx
+
+1. Log into your Virtual Instance using SSH:
+  ```
+  ssh root@<your_instance_ip>
+  ```
+
+2. Make sure the `apt` repositories as well as the software already installed on the compute instance is up to date:
+  ```
+  apt update && apt upgrade -y
+  ```
+
+3. Install `nginx` using the `apt` package manager:
+  ```
+  apt install nginx -y
+  ```
+
+## Configuring Nginx
+
+1. Open the Nginx configuration file in a text editor:
+    ```
+    nano /etc/ngnix/ngnix.conf
+    ```
+
+2. Edit the file as follows:
+
+  <Message type="note">
+
+  Remember to replace `s3proxy.mydomain.eu` with the domain name of your compute instance and `myobjectstoragebucket.s3.fr-par.scw.cloud` with the URL of your Object Storage bucket.
+  
+  </Message>
+
+      user www-data;
+      worker_processes auto;
+      pid /run/nginx.pid;
+      include /etc/nginx/modules-enabled/*.conf;
+
+      events {
+        worker_connections  768;
+      }
+
+      http {
+        default_type       text/html;
+        #access_log         /;
+        sendfile           on;
+        keepalive_timeout  65;
+
+        proxy_cache_path   /tmp/ levels=1:2 keys_zone=s3_cache:10m max_size=500m
+                          inactive=60m use_temp_path=off;
+
+        server {
+          listen 80;
+
+          # Configure your domain name here:
+          server_name  s3proxy.mydomain.eu;
+          access_log   /var/log/s3proxy.access.log  combined;
+
+          # Configure your Object Storage bucket URL here:
+          set $bucket "myobjectstoragebucket.s3.fr-par.scw.cloud";
+
+          # This configuration provides direct access to the Object Storage bucket:
+          location /s3/ {
+            resolver 62.210.16.6;
+            proxy_http_version     1.1;
+            proxy_redirect off;
+            proxy_set_header       Connection "";
+            proxy_set_header       Authorization '';
+            proxy_set_header       Host $bucket;
+            proxy_set_header       X-Real-IP $remote_addr;
+            proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_hide_header      x-amz-id-2;
+            proxy_hide_header      x-amz-request-id;
+            proxy_hide_header      x-amz-meta-server-side-encryption;
+            proxy_hide_header      x-amz-server-side-encryption;
+            proxy_hide_header      Set-Cookie;
+            proxy_ignore_headers   Set-Cookie;
+            proxy_intercept_errors on;
+            add_header             Cache-Control max-age=31536000;
+            proxy_pass             https://$bucket/;
+          }
+
+          # This configuration uses a 60 minute cache for files requested:
+          location /s3_cached/ {
+            resolver 62.210.16.6;
+            proxy_cache            s3_cache;
+            proxy_http_version     1.1;
+            proxy_redirect off;
+            proxy_set_header       Connection "";
+            proxy_set_header       Authorization '';
+            proxy_set_header       Host $bucket;
+            proxy_set_header       X-Real-IP $remote_addr;
+            proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_hide_header      x-amz-id-2;
+            proxy_hide_header      x-amz-request-id;
+            proxy_hide_header      x-amz-meta-server-side-encryption;
+            proxy_hide_header      x-amz-server-side-encryption;
+            proxy_hide_header      Set-Cookie;
+            proxy_ignore_headers   Set-Cookie;
+            proxy_cache_revalidate on;
+            proxy_intercept_errors on;
+            proxy_cache_use_stale  error timeout updating http_500 http_502 http_503 http_504;
+            proxy_cache_lock       on;
+            proxy_cache_valid      200 304 60m;
+            add_header             Cache-Control max-age=31536000;
+            add_header             X-Cache-Status $upstream_cache_status;
+            proxy_pass             https://$bucket/;
+          }
+
+        }
+      }
+
+  Save the file and exit `nano` once it is edited.
+
+3. Make sure that there are no typos in the Nginx configuration file by syntax checking it using the following command:
+  ```
+  nginx -t
+  ```
+
+4. Restart Ngnix to apply the new configuration:
+  ```
+  service nginx restart
+  ```
+
+You can now access the files of your bucket either directly by going to for example `http://s3proxy.mydomain.eu/s3/myfile.txt` or access a cached version after the first retrieval by going to `http://s3proxy.mydomain.eu/s3_cached/myfile.txt`
+
+## Configuring HTTPS
+
+Connections to your S3 proxy are currently available in plain, unencrypted HTTP only. It is possible to encrypt the connection between the client and the Nginx proxy by configuring HTTPS. To do so, we will obtain a free SSL certificate issued by [Let's Encrypt](https://letsencrypt.org/) using [Certbot](https://certbot.eff.org/), a tool to obtain, manage and renew Let's Encrypt certificates automatically.
+
+1. Certbot is in active development and it is possible, that the packages included in Ubuntu are already Outdated. Therefore add the Certbot repository to apt to download the latest release of the software:
+  ```
+  add-apt-repository ppa:certbot/certbot
+  ```
+  Press `Enter` when asked to confirm the action.
+
+2. Install Certbot for Nginx:
+  ```
+  apt install python-certbot-nginx -y
+  ```
+
+3. Launch the certificate generation:
+  ```
+  certbot --nginx -d
+  ```
+  When running Certbot for the first time, you will be asked to enter your email address. Confirm it by pressing `Enterù on your keyboard.
+
+4. Once confirmed Certbot will run a challenge and request the certificate. When asked to redirect all traffic to HTTPS, press `2`, then `Enter` on your keyboard:
+    ```
+    Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    1: No redirect - Make no further changes to the webserver configuration.
+    2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
+    new sites, or if you're confident your site works on HTTPS. You can undo this
+    change by editing your web server's configuration.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Select the appropriate number [1-2] then [enter] (press 'c' to cancel):
+    ```
+
+    Certbot will now reconfigure Nginx and once you see the following message your certificate is successfully installed:
+
+    ```
+    IMPORTANT NOTES:
+    - Congratulations! Your certificate and chain have been saved at:
+      /etc/letsencrypt/live/example.com/fullchain.pem
+      Your key file has been saved at:
+      /etc/letsencrypt/live/example.com/privkey.pem
+      Your cert will expire on 2019-04-15. To obtain a new or tweaked
+      version of this certificate in the future, simply run certbot again
+      with the "certonly" option. To non-interactively renew *all* of
+      your certificates, run "certbot renew"
+    - Your account credentials have been saved in your Certbot
+      configuration directory at /etc/letsencrypt. You should make a
+      secure backup of this folder now. This configuration directory will
+      also contain certificates and private keys obtained by Certbot so
+      making regular backups of this folder is ideal.
+    - If you like Certbot, please consider supporting our work by:
+
+      Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+      Donating to EFF:                    https://eff.org/donate-le
+
+    ```
+
+You have now securized the connection between the client and your Nginx proxy using TLS. You can verify it by opening a web browser and going to for example `https://s3proxy.mydomain.eu/s3/myfile.txt`. The file will be downloaded using an encrypted connection.

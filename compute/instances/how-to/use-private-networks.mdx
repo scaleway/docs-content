@@ -1,0 +1,282 @@
+---
+title: How to use Private Networks
+description: This page explains how to use Private Networks for your Instances
+excerpt: |
+  This page explains how to use Private Networks for your Instances
+totalTime: PT15M
+steps:
+  - step: TODO
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/compute/instances/how-to/use-private-networks
+image: /assets/images/docs/scaleway.png
+keywords: instance, cloud computing, scaleway, instance, private netowrk
+dates:
+  validation: 2021-05-26
+  posted: 2021-05-26
+---
+
+[Private Networks](/network/vpc/concepts#private-networks) allow your Instances to communicate in an isolated and secure network without needing to be connected to the public Internet. Each Instance can be connected to one or several Private Networks, letting you build your own network topologies.
+
+Private Networks are LAN-like layer 2 ethernet networks. A new network interface with a unique media access control address (MAC address) is configured on each Instance in a Private Network.
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+  - You have [created an Instance](/compute/instances/how-to/create-an-instance)
+
+</Message>
+
+## How to create a Private Network
+
+1. Click **Instances** (A) in the **Compute** section of the side menu. The Instances page displays.
+  <Lightbox src="scaleway-private-networks.png" alt=""/>
+
+2. Click the **Private Networks** tab (B).
+
+3. Click the **Create a Private Network** button (C). The creation wizard displays.
+
+4. Complete the following steps in the wizard: 
+
+    - Enter a **Name** for your private network, or leave the randomly-generated name in place. Optionally, you can also add [tags](/compute/instances/concepts/#tags) to help you organize your private networks. 
+    - Choose an **Availability Zone**, which is the geographical region where your private network will be deployed. You can only add Instances from this  same Availability Zone to the private network. 
+
+5. Click **Create a Private Network** to finish. Your private network is created. You are taken back to the Private Networks tab, where your new private network is now displayed in the list.
+
+## How to attach Instances to a Private Network
+
+1. Navigate to the **Private Networks** tab (click **Instances** in the **Compute** section of the side menu, then click **Private Networks**)
+
+2. Click the private network you want to add Instances to (A). Alternatively, click the **...** icon next to the private network in question and select **More Info** from the dropdown list (B).
+
+  <Lightbox src="scaleway-pn-list.png" alt=""/>
+
+  You are taken to the **Overview** page for that network.
+
+  <Lightbox src="scaleway-pn-instances.png" alt=""/>
+
+3. Click the **Instances** tab (A).
+
+4. Use the drop down menu to select an Instance to add to your private network (B), then click **Add Instance**.
+
+  <Message type="note">
+
+  Only Instances from the same Availability Zone as your private network will be available in the drop down menu.
+
+  </Message>
+
+  You are taken back to the Instance tab, where the Instance you just added now displays in the list along with its associated MAC address.
+
+## How to detach Instances from a Private Network
+
+1. Navigate to the **Instances** tab of the Private Network in question (see steps 1-3 [above](/compute/instances/how-to/use-private-networks/#how-to-create-a-private-network)). The list of Instances attached to this private network displays.
+
+  <Lightbox src="scaleway-pn-detach-inst.png" alt=""/>
+
+2. Click the **unlink** button next to the Instance you wish to detach from the private network. A pop up displays, asking you to confirm.
+
+3. Click **Detach this Instance**.
+
+  You are taken back to the Instances tab, where the Instance you just detached is now removed from the list.
+
+## How to configure the private network interface on your Instances
+
+Once you have added all the required Instances to a private network, you should configure the virtual network interface on each one.
+
+<Message type="note">
+
+  While it is theoretically possible to use any IP range within your Private Network, it is not recommended to use any IP subnets that are publicly routed. Whilst the configuration may work for your Instances to communicate with each other, you might experience connectivity issues to machines on the public Internet within these ranges. 
+  It is therefore recommended that you configure your Private Network using IPs from the following private IP ranges: 
+  * `192.168.0.0` - `192.168.255.255` (65,536 IP addresses) and
+  * `172.16.0.0` - `172.31.255.255` (1,048,576 IP addresses)   
+  You can use any [subnet mask](https://en.wikipedia.org/wiki/Subnetwork) allowed by these ranges. The only constrain is that all interfaces in the same Private Network must be configured with the same subnet mask. If you are not sure, use `/24` for your Private Network. 
+  Using the `10.0.0.0/8` private IP range is **not recommended**, as this block is used for Instances own private IPs and infrastructure services. Do not do this, unless you known what you are doing.
+
+</Message> 
+
+1. Connect to the Instance using [SSH](/compute/instances/how-to/connect-to-instance/).
+
+2. Find the virtual interface corresponding to the Private Network using the `ip link show` command: 
+
+  ```bash
+  root@virtual-instance:~# ip link show
+  1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+      link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+  2: ens2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+      link/ether de:1c:94:64:20:44 brd ff:ff:ff:ff:ff:ff
+  3: ens5: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+      link/ether 02:00:00:00:1a:ae brd ff:ff:ff:ff:ff:ff
+  ```
+  The Private Network interface can be identified by its associated MAC address, which always begins with `02:00:00:xx:yy:zz`.
+
+  <Message type="note">
+
+  The network interface names may be different, depending on the operating system and the release you use.
+
+  </Message> 
+
+3. For convenience, give a more significant name (e.g. `priv0`) to the Private Network interface. Configure the new interface name as follows:
+
+  ```bash
+  root@virtual-instance:~# ip link set down dev ens5
+  root@virtual-instance:~# ip link set name priv0 dev ens5
+  root@virtual-instance:~# ip link set up dev priv0
+  ```
+
+4. Make these changes persistent at reboot to ensure the Private Networks interface always gets the same name based on its MAC address. This is done by adding the following rule to the `/etc/udev/rules.d/75-persistent-net-generator.rules` file:
+
+  ```bash
+  SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="02:00:00:00:1a:ae", NAME="priv0"
+  ```
+  <Message type="note">
+
+  If you want to attach a server to multiple private networks, create a rule for each network by replacing the MAC address and the interface name `priv0` by `priv1`, `priv2` and so on.
+
+  </Message>
+
+## How to configure the private network's IP address
+
+Once you have brought up the private network via the previous steps, you need to configure it’s IP address. The steps required to configure the IP address change depending on your Linux distribution:
+
+### IP Configuration on Debian & Ubuntu (up to 16.04) Distributions
+
+1. On one of the Instances attached to the private network, open the file `/etc/network/interfaces` in a text editor and add an interface configuration for the Private Network interface (called `priv0`) as follows:
+
+  ```bash
+  # interfaces(5) file used by ifup(8) and ifdown(8)
+  # from Scaleway
+  # The loopback network interface
+  auto lo
+  iface lo inet loopback
+
+  # Network configuration for Private Network "pvn-hungry-albattani":
+  auto priv0
+  iface priv0 inet static
+          address 192.168.42.2
+          netmask 255.255.255.0
+
+  # Include all other interfaces from /etc/network/interfaces.d:
+  source /etc/network/interfaces.d/*.cfg
+  ```
+
+  In this example the IP subnet `192.168.42.0/24` is being used. The IP address of the Instance is set to `192.168.42.2` and the corresponding netmaks is configured as `255.255.255.0`. 
+
+  Once the interface is configured, save the file and exit the text editor. 
+
+2. Restart the network service using the following command to bring the configured network up:
+
+  ```bash
+  root@virtual-instance:~# systemctl restart network.service
+  ``` 
+
+3. Repeat these steps on the other Instances attached to the Private Network. 
+
+### IP Configuration on Ubuntu (18.04 and 20.04) Distributions using Netplan
+
+1. To configure a static IP address on the Private Network interface (previously named `priv0`), open the Netplan configuration file and configure the interface as follows:
+
+  <Message type="note">
+
+  The location of the Netplan configuration file varies depending on the Ubuntu release:
+    - Ubuntu 20.04: `/etc/netplan/00-installer-config.yaml`
+    - Ubuntu 18.04: `/etc/netplan/01-netcfg.yaml`
+
+  </Message>
+
+  ```
+  network:
+    version: 2
+    renderer: networkd
+    ethernets:
+      priv0:
+        addresses: [192.168.42.2/24]
+  ```
+
+  In this example the IP subnet `192.168.42.0/24` is being used. 
+
+  Once the interface is configured, save the file and exit the editor. 
+
+2. Bring the interface up using the command `netplan apply`. 
+
+3. Repeat these steps on the other Instances that will communicate within the Private Network. 
+
+### IP Configuration on CentOS
+
+1. Open the file `/etc/sysconfig/network-scripts/ifcfg-priv0` (replace `priv0` with the name of the private interface) and configure the virtual network interface as follows:
+
+  ```
+  DEVICE=priv0
+  BOOTPROTO=none
+  ONBOOT=yes
+  USERCTL=no
+  IPV6INIT=no
+  TYPE=Ethernet
+  # configure the IPADDR and NETMASK towards the parameters of your Private Network
+  NETMASK=255.255.255.0
+  IPADDR=192.168.43.4
+  ARP=yes
+  # replace HWADDR with the MAC address assoicated to the interface
+  HWADDR=02:00:00:00:1a:ae
+  ```
+
+  In this example the IP subnet `192.168.42.0/24` is being used. The interface uses the MAC address (`02:00:00:00:1a:b0`) assigned to the Instance as it was attached to the Private Network.  
+
+  Once the interface is configured, save the file and exit the text editor. 
+
+2. Restart the network service to bring the configured interface up:
+
+    - On **CentOS 7** use the following command: 
+
+    ```bash 
+    root@virtual-instance:~# systemctl restart network.service
+    ```
+
+    - On **CentOS 8** use the following command: 
+
+    ```bash
+    root@virtual-instance:~# systemctl restart NetworkManager.service
+    ```
+
+3. Repeat these steps on the other Instances that will communicate within the Private Network. 
+
+## How to test your Private Network configuration
+
+You can test the connection between the Instances on a private network, once you've followed the above steps, as follows. 
+
+1. Enter the `ping` command, pinging the relevant IP address for your Instances/private network.
+
+```bash
+root@virtual-instance:~# ping 192.168.42.3
+PING 192.168.42.3 (192.168.42.3): 56 data bytes
+64 bytes from 192.168.42.3: icmp_seq=0 ttl=64 time=0.824 ms
+64 bytes from 192.168.42.3: icmp_seq=1 ttl=64 time=1.180 ms
+64 bytes from 192.168.42.3: icmp_seq=2 ttl=64 time=0.852 ms
+64 bytes from 192.168.42.3: icmp_seq=3 ttl=64 time=0.871 ms
+--- 192.168.42.3 ping statistics ---
+4 packets transmitted, 4 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 0.824/0.932/1.180/0.144 ms
+```
+
+When configured properly, the Instance should reply to the `ping` command. The Private Network is working and you can start to configure your services.
+
+## How to delete a Private Network
+
+<Message type="note">
+
+Prior to deleting a Private Network, all Instances attached to the network have to be [detached](/compute/instances/how-to/use-private-networks/#how-to-detach-instances-from-a-private-network).
+
+</Message>
+
+1. Navigate to the **Private Networks** tab (click **Instances** in the **Compute** section of the side menu, then click **Private Networks**)
+
+2. Click **...** next to the private network you wish to delete, and select **Delete**. A pop up displays asking you to confirm the action
+
+  <Lightbox src="scaleway-pn-delete.png" alt=""/>
+
+3. Confirm by typing **DELETE** in the box, and clicking **Delete this Private Network**
+
+You are taken back to the Private Networks tab, where the network you just deleted no longer displays.
+
+<Navigation title="See Also">
+  <PreviousButton to="/compute/instances/how-to/use-security-groups/">How to use Security Groups</PreviousButton>
+  <NextButton to="/compute/instances/how-to/configure-reverse-dns/">How to configure reverse DNS</NextButton>
+</Navigation>

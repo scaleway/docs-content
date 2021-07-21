@@ -1,0 +1,185 @@
+---
+layout: docs
+title: Configuring an Nginx HTTPs Reverse Proxy on Ubuntu Bionic
+description: This page shows how to configure a Nginx HTTPS/SSL reverse proxy
+
+excerpt: |
+  A Nginx HTTPS reverse proxy is an intermediary proxy service which takes a client request, passes it on to one or more servers, and subsequently delivers the server’s response back to the client. While most common applications are able to run as web server on their own, the Nginx web server is able to provide a number of advanced features such as load balancing, TLS/SSL capabilities and acceleration that most specialized applications lack. By using a Nginx reverse proxy all applications can benefit from these features.
+totalTime: PT20M
+steps:
+  - step: Benefits of Using a Nginx Reverse Proxy on an Instance
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/how-to-configure-nginx-reverse-proxy/#-Benefits-of-Using-a-Nginx-Reverse-Proxy-on-an-Instance
+  - step: Installing and Configuring Nginx
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/how-to-configure-nginx-reverse-proxy/#-Installing-and-Configuring-Nginx
+  - step: Adding TLS to your Nginx Reverse Proxy using Let's Encrypt
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/how-to-configure-nginx-reverse-proxy/#-Adding-TLS-to-your-Nginx-Reverse-Proxy-using-Lets-Encrypt
+categories:
+  - compute
+brands:
+  - elements
+tags: compute activating a stateful cloud firewall
+image: /assets/images/docs/scaleway.png
+permalink: docs/how-to-configure-nginx-reverse-proxy/
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, proxy, reverse, nginx, http, https
+dates:
+  validation: 2021-05-10
+  posted: 2018-10-11
+---
+
+A [Nginx HTTPS reverse proxy](https://nginx.org) is an intermediary proxy service which takes a client request, passes it on to one or more servers, and subsequently delivers the server’s response back to the client. While most common applications are able to run as web server on their own, the Nginx web server is able to provide a number of advanced features such as load balancing, TLS/SSL capabilities and acceleration that most specialized applications lack. By using a Nginx reverse proxy all applications can benefit from these features.
+
+There are a important benefits of setting up a Nginx HTTPS reverse proxy:
+
+- **Load Balancing:** A Nginx reverse proxy can perform load balancing which helps distribute client requests evenly across backend servers. It also improves redundancy as if one server goes down, the reverse proxy will simply reroute requests to a different server according to the routing policy.
+- **Increased Security:** A Nginx reverse proxy also acts as a line of defense for your backend servers. Configuring a reverse proxy ensures that the identity of your backend servers remains unknown.
+- **Better Performance:** Nginx has been known to perform better in delivering static content file and analyse URLs
+- **Easy Logging and Auditing:** Since there is only one single point of access when a Nginx reverse proxy is implemented, this makes logging and auditing much simpler.
+- **Encrypted Connection** By encrypting the connection between the client and the Nginx reverse Proxy with TLS, users profit from a encrypted and securized HTTPS connection, protecting their data.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have [created an Instance](/compute/instances/how-to/create-an-instance) that runs Ubuntu Bionic Beaver
+- You have sudo privileges or access to the root user
+- Make sure your domain name points towards your server ip (A or AAAA record)
+- You have a web application running on a non-standard web port on the instance (You can for example install a lightweight web server like [Webfsd](http://manpages.ubuntu.com/manpages/trusty/man1/webfsd.1.html), which runs on port 8000 by default to be reachable on the standard HTTP(s) ports via the proxy.)
+
+</Message> 
+
+## Installing and Configuring Nginx
+
+In the following example, we will configure an Nginx reverse proxy in front of an Apache web server. As a result, we assume that Apache is already installed and configured (on the same machine).
+
+1. Update the APT packet cache and install the Nginx web server via the packet manager:
+
+  ```
+  apt update
+  apt install nginx
+  ```
+
+2. Disable the default virtual host, that is pre-configured when Nginx is installed via Ubuntu's packet manager apt:
+
+  ```
+  unlink /etc/nginx/sites-enabled/default
+  ```
+
+3. Enter the directory `/etc/nginx/sites-available` and create a `reverse proxy` configuration file.
+
+  ```
+  cd /etc/nginx/sites-available
+  nano reverse-proxy.conf
+  ```
+
+4. Paste the following Nginx configuration in the text editor. The proxy server redirects all incomming connections on port 80 to the Webfsd server, listening on port 8000. Edit the port value depending on the applications specific port.
+
+  ```
+  server {
+          listen 80;
+          listen [::]:80;
+
+          access_log /var/log/nginx/reverse-access.log;
+          error_log /var/log/nginx/reverse-error.log;
+
+          location / {
+                      proxy_pass http://127.0.0.1:8000;
+    }
+  }
+  ```
+
+  <Message type="note">
+  
+    Accesses and errors are located in a log files at `/var/log/nginx`.
+
+  </Message> 
+
+5. Copy the configuration from `/etc/nginx/sites-available` to `/etc/nginx/sites-enabled`.
+   It is recommended to use a symbolic link.
+
+    ```
+    ln -s /etc/nginx/sites-available/reverse-proxy.conf /etc/nginx/sites-enabled/reverse-proxy.conf
+    ```
+
+6. Test the Nginx configuration file
+
+  ```
+  nginx -t
+  ```
+  ```
+  nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+  nginx: configuration file /etc/nginx/nginx.conf test is successful
+  ```
+
+7. Open a web browser on your local computer and paste your `public_ip` which will display your web applications homepage.
+
+## Adding TLS to your Nginx Reverse Proxy using Let's Encrypt
+
+> **Important:** Make sure your domain name points towards your server ip (A or AAAA record).
+
+With the current setup, all incoming traffic on the standard, non-securized, HTTP port is anserwered by Nginx, which passes it to the web application on the instance.
+
+For security reasons, it is recommended to add an encryption layer with TLS/SSL and to use HTTPS. Whilst it is technically possible to use self-signed certficates, it may cause very inconveniences as a warning is displayed by default in an users web browser when a self-signed certificate is used. A certificate authentity (CA) can issue trusted certificates which a recognized by most modern web browsers. The CA [Let's Encrypt](https://letsencrypt.org) provides TLS certificate for free and the configuration of Nginx can be done easily with [Certbot](https://certbot.eff.org/), a tool provided by the [EFF](https://www.eff.org/).
+
+1. Install Certbot on your instance by using the APT packet manager:
+
+  ```
+  apt-get update
+  apt-get install software-properties-common
+  add-apt-repository ppa:certbot/certbot
+  apt-get update
+  apt-get install python-certbot-nginx
+  ```
+
+2. Certbot provides a plugin designed for the Nginx web server, automatizing most of the configuration work related with requesting, installing and managing the TLS certificate:
+
+  ```
+  certbot --nginx
+  ```
+
+3. Answer the prompts that display on the screen to request a valid Let's Encrypt TLS certificate:
+
+    ```
+    Saving debug log to /var/log/letsencrypt/letsencrypt.log
+    Plugins selected: Authenticator nginx, Installer nginx
+
+    Which names would you like to activate HTTPS for?
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    1: your.domain.com
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Select the appropriate numbers separated by commas and/or spaces, or leave input
+    blank to select all options shown (Enter 'c' to cancel): 1
+    Obtaining a new certificate
+    Performing the following challenges:
+    http-01 challenge for your.domain.com
+    Waiting for verification...
+    Cleaning up challenges
+    Deploying Certificate to VirtualHost /etc/nginx/sites-enabled/reverse-proxy.conf
+
+    Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    1: No redirect - Make no further changes to the webserver configuration.
+    2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
+    new sites, or if you're confident your site works on HTTPS. You can undo this
+    change by editing your web server's configuration.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 2
+    Redirecting all traffic on port 80 to ssl in /etc/nginx/sites-enabled/reverse-proxy.conf
+
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Congratulations! You have successfully enabled https://your.domain.com
+
+    You should test your configuration at:
+    https://www.ssllabs.com/ssltest/analyze.html?d=your.domain.com
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    ```
+
+  <Message type="note">
+
+  When asked if you want to redirect HTTP traffic automatically to HTTPS, choose the option **2**. This enables the automatic redirection of all incoming requests via an unencrypted HTTP connection to a secure HTTPS connection. Providing an additional layer of security for the Web application running behind the Nginx reverse proxy.
+
+  </Message>
+
+

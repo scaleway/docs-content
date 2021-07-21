@@ -1,0 +1,72 @@
+---
+layout: docs
+title: Triggering IoT Hub events via the API
+description: This page explains how to trigger IoT Hub events.
+excerpt: |
+  In this tutorial we will use the API through the well known utility curl. This will show you how to trigger IoT Hub events.
+totalTime: PT30M
+categories:
+  - iot
+brands:
+  - elements
+tags: Scaleway IoT Device curl
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, object storage, s3, functions, containers, serverless, iot, smart, connected, embedded, devices, hubs, mqtt
+---
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com) 
+- You have `mosquitto-clients` (mqtt client), and `jq` (json parsing tool) installed on your computer
+- You have [installed the Scaleway CLI and read the accompanying IOT document](/iot/iot-hub/api-cli/getting-started-with-iot-hub-cli)
+
+</Message>
+
+Device information, such as events or errors, are reported on your Hub under the default topic prefix `$SCW/events`. For more information on Hub Events, you can read the [IoT Hub events documentation](/iot/iot-hub/how-to/understand-event-messages).
+
+In the following example we will trigger an event by trying to connect without security on a device where security is required.
+
+First, we connect to previously created `dev1` device as _events consumer_
+(we want only _error_ events)
+
+```bash
+# In one terminal
+mosquitto_sub \
+  -h $(jq -r '.endpoint' hub.json) -p 1883 \
+  -i $(jq -r '.device.id' dev1.json) \
+  -t '$SCW/events/error/#'
+```
+
+Then we create a secured-only device and try to connect it in insecure mode:
+
+```bash
+curl -sS -H "X-Auth-Token: $SCW_TOKEN" -d '{
+    "hub_id": "'$(jq -r '.id' hub.json)'",
+    "name": "my_secured_device",
+    "allow_insecure": false
+  }' $IOT_API/devices > secure-dev.json
+
+jq < secure-dev.json
+```
+
+```bash
+# In another terminal
+mosquitto_pub \
+  -h $(jq -r '.endpoint' hub.json) -p 1883 \
+  -i $(jq -r '.device.id' secure-dev.json) \
+  -t mytopic/mysubtopic \
+  -m 'This should fail'
+```
+
+dev1 will receive following message, on topic `$SCW/events/device/<secure-dev-id>/error`:
+
+```
+{
+  "time":"2020-01-17T15:01:29Z",
+  "severity": "error",
+  "object-type": "device",
+  "object-id": "dev3-id",
+  "msg":"connection refused because this device requires mutual TLS authentication",
+  "packet":"CONNECT: dup: false qos: 0 retain: false rLength: 48"
+}
+```

@@ -1,0 +1,271 @@
+---
+layout: docs
+title: Setting up a private mesh VPN with WireGuard®
+description: In this tutorial you will learn how to setup and configure a private mesh VPN using WireGuard®.
+tags: mesh vpn wireguard multi-site
+excerpt: |
+  WireGuard is a modern VPN (Virtual Private Network) software. It is designed to be run almost anywhere and to be cross-platform. Compared to other similar software, it is faster, more secure and simpler. In the first part of this tutorial you configured Wireguard as a VPN to provide a securized Internet access. ‡In this second part we will spin up private mesh network using wireguard to have a secure private connection between your different servers.
+totalTime: PT30M
+image: /assets/scaleway_wireguard.png
+categories:
+  - compute
+  - instances
+dates:
+  validation: 2021-05-10
+  posted: 2020-07-02
+---
+
+## WireGuard - Overview
+
+[WireGuard](https://www.wireguard.com/) is a modern VPN (Virtual Private Network) software. It is designed to be run almost anywhere and to be cross-platform. Compared to other similar software, it is faster, more secure and simpler. In the [first part](/tutorials/install-wireguard/) of this tutorial you configured Wireguard as a VPN to provide a secured Internet access.
+
+In this second part we will spin up a private mesh network to create a secure private connection between your different servers and compute instances. A mesh network allows your devices to communicate between each other using a virtual private network without the need for a central server:
+
+<Lightbox src="scaleway-wireguard_mesh.png" alt="" />
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have a cloud Instance configured with local boot and running on a Linux kernel ≥ 3.10.
+
+</Message> 
+
+In this tutorial we will use two Virtual Compute instances, one located in our `PAR-1` region, the other located in the `AMS-1` region to create a virtual network between them.
+
+## Downloading and installing WireGuard
+
+1. Log into your instances using SSH:
+
+  ```
+  ssh root@my.compute.instance.ip
+  ```
+
+2. Install the kernel headers for your version, add the WireGuard `apt` repository to the package manager, update it and install WireGuard using `apt`:
+
+  ```
+  apt install linux-headers-$(uname --kernel-release) # installs the right kernel headers for your version
+  add-apt-repository ppa:wireguard/wireguard
+  apt update
+  apt install wireguard
+  ```
+
+3. Once WireGuard is installed, you can check the successful installation by running: `wg`. If you get no output, it's all good. In order to check that the WireGuard kernel module has loaded you can run `modprobe wireguard`. Depending on your system configuration, a reboot might be required to activate the `wireguard` module.
+
+4. Generate the public and private keys for WireGuard:
+
+```
+cd /etc/wireguard
+umask 077
+wg genkey | tee privatekey | wg pubkey > publickey
+```
+
+## Configuring Wireguard manually
+
+Smaller VPNs can be configured using the `wg0.conf` configuration file of Wireguard. The following parameters are set in the configuration file:
+
+- `192.168.1.1` is a randomly chosen private IP address for the VPN interface of the virtual compute instances located in `PAR-1`.
+- `192.168.1.2` is a randomly chosen private IP address for the VPN interface of the virtual compute instances located in `AMS-1`.
+- The `Endpoint` is the public IP address of every other instance.
+- `52345` is a random chosen UDP port number used for the communication of the VPN.
+
+### On the first instance
+
+<Message type="note">
+
+In this example we assume the instance is located in the `PAR-1` region.
+
+</Message>
+
+Create the file `/etc/wireguard/wg0.conf` with the following content:
+
+  ```
+  [Interface]
+  PrivateKey = PAR-1 compute instances private key
+  Address = 192.168.1.1
+  ListenPort = 52345
+
+  [Peer]
+  PublicKey = AMS-1 compute instances strings
+  AllowedIPs = 192.168.1.2
+  Endpoint = 51.15.220.166:52345
+  ```
+
+### On the second instance:
+
+<Message type="note">
+
+In this example we assume the instance is located in the `AMS-1` region.
+
+</Message>
+
+Create the file `/etc/wireguard/wg0.conf` with the following content:
+
+  ```
+  [Interface]
+  PrivateKey = AMS-1 compute instances private key
+  Address = 192.168.1.2
+  ListenPort = 52345
+
+  [Peer]
+  PublicKey = AMS-1 compute instances strings
+  AllowedIPs = 192.168.1.1
+  Endpoint = 212.47.15.33:52345
+  ```
+
+## Enabling the Wireguard VPN
+
+1. Enable and start Wireguard on both instances using `systemctl`:
+
+```
+systemctl enable wg-quick@wg0
+systemctl start wg-quick@wg0
+```
+
+2. Test the VPN connection on each instance using the `ping` command:
+
+  ```
+  root@PAR-1:~# ping 192.168.1.2
+  PING 192.168.1.2 (192.168.1.2) 56(84) bytes of data.
+  64 bytes from 192.168.1.2: icmp_seq=1 ttl=64 time=2.87 ms
+  64 bytes from 192.168.1.2: icmp_seq=2 ttl=64 time=0.992 ms
+  64 bytes from 192.168.1.2: icmp_seq=3 ttl=64 time=1.37 ms
+  64 bytes from 192.168.1.2: icmp_seq=4 ttl=64 time=1.21 ms
+  64 bytes from 192.168.1.2: icmp_seq=5 ttl=64 time=1.57 ms
+  ©64 bytes from 192.168.1.2: icmp_seq=6 ttl=64 time=1.43 ms
+  --- 192.168.1.2 ping statistics ---
+  6 packets transmitted, 6 received, 0% packet loss, time 5008ms
+  rtt min/avg/max/mdev = 0.992/1.577/2.873/0.607 ms
+  ```
+
+  ```
+  root@AMS-1:~# ping 192.168.1.1
+  PING 192.168.1.1 (192.168.1.1) 56(84) bytes of data.
+  64 bytes from 192.168.1.1: icmp_seq=1 ttl=64 time=1.72 ms
+  64 bytes from 192.168.1.1: icmp_seq=2 ttl=64 time=1.45 ms
+  64 bytes from 192.168.1.1: icmp_seq=3 ttl=64 time=1.35 ms
+  64 bytes from 192.168.1.1: icmp_seq=4 ttl=64 time=1.35 ms
+  64 bytes from 192.168.1.1: icmp_seq=5 ttl=64 time=1.25 ms
+  64 bytes from 192.168.1.1: icmp_seq=6 ttl=64 time=1.44 ms
+  --- 192.168.1.1 ping statistics ---
+  6 packets transmitted, 6 received, 0% packet loss, time 5008ms
+  rtt min/avg/max/mdev = 1.257/1.429/1.724/0.148 ms
+  ```
+
+  As you can see, every other instance is responding to the `ping` command, indicating that your VPN connection is active.
+  You can now share your data between your instances over a securized and private network connection.
+
+## Automatizing configuration generation
+
+When managing a large number of machines in a WireGuard mesh network, the manual configuration of them can be time-consuming. Several projects facilitate the generation of WireGuard configurations to manage your mesh network with ease. We will use a python script called [WireGuard Mesh Configurator](https://github.com/k4yt3x/wg-meshconf) to generate the configurations for our instances.
+
+1. Make sure `git`, `python3-pip`, and `python3` are installed on your machine:
+
+  ```
+  apt install git python3-pip python3 libncurses-dev -y
+  ```
+
+2. Clone the GitHub repository of the configurator script:
+
+  ```
+  git clone https://github.com/k4yt3x/wg-meshconf
+  ```
+
+3. Enter the script's directory and install the requirements for it:
+
+  ```
+  cd wg-meshconf
+  pip3 install -r requirements.txt
+  ```
+
+4. Launch the interactive WCG shell:
+
+  ```
+  python3 wireguard_mesh_configurator.py int
+  ```
+
+  Every profile in created in the WireGuard Mesh Configurator (WCG) contains a complete network topology. Start by creating a new profile for the mesh network. Once a new profile is created, you will be prompted automatically to enroll new peers.
+
+5. In the WCG shell, type `new` to launch the creation of a new profile:
+
+  ```
+  [WGC]> new
+  ```
+
+  ```
+  WireGuard Mesh Configurator 1.2.0
+  (C) 2018-2019 K4YT3X
+  Licensed under GNU GPL v3
+  [WGC]> new
+  [!] WARNING: This will flush the currently loaded profile!
+  ```
+
+6. Type `add` to add a new peer and enter the details of the new peer:
+
+  ```
+  [WGC]> add
+  [?] USER: Address (leave empty if client only) [IP/CIDR]: 10.1.0.1/16
+  [?] USER: Public address (leave empty if client only) [IP|FQDN]: 1.1.1.1
+  [?] USER: Listen port (leave empty for client) [1-65535]: 7000
+  [?] USER: Private key (leave empty for auto generation):
+  [?] USER: Keep alive? [y/N]:
+
+  [?] USER: Alias (optional):
+  [?] USER: Description (optional):
+  [+] INFO: 10.1.0.1/16 information summary:
+  Address: 10.1.0.1/16
+  Public Address: 1.1.1.1
+  Listen Port: 7000
+  Private Key: 2JgqbhrtAiN1yZ5C3tjvlRwFWOrXflb3pKKhW/DJ3EI=
+  ```
+
+  Repeat these step for all peers in the mesh network.
+
+7. Once we have configured all peers in the profile, it is time to export everything into wireguard configuration files. Use the following command to generate the configuration files and dump them in the `/tmp/wg-conf` directory:
+
+  ```
+  [WGC]> gen /tmp/wg-conf
+  ```
+
+  ```
+  [WGC]> gen /tmp/wg-conf
+  [+] INFO: Generating configuration files
+  [?] USER: Output directory doesn't exist. Create output directory? [Y/n]:
+
+  2020-07-27 14:51:29.787508 [+] INFO: Generating configuration file for 10.1.0.1/16
+  gNNBi1eYUj5Wa6Qh21VvpEQhB9CFt4y6breHLhk49lo=
+  mFWz1E/ZLdavy8dz9pKPx58x7UBTwHpd61ZLxDjjFFU=
+  AEJ42t6rT/FxBq5MF1klzTZZrexh5qXvDUnnAU1njnY=
+  2020-07-27 14:51:29.802540 [+] INFO: Generating configuration file for 10.2.0.1/16
+  2JgqbhrtAiN1yZ5C3tjvlRwFWOrXflb3pKKhW/DJ3EI=
+  mFWz1E/ZLdavy8dz9pKPx58x7UBTwHpd61ZLxDjjFFU=
+  AEJ42t6rT/FxBq5MF1klzTZZrexh5qXvDUnnAU1njnY=
+  2020-07-27 14:51:29.817690 [+] INFO: Generating configuration file for 10.3.0.1/16
+  2JgqbhrtAiN1yZ5C3tjvlRwFWOrXflb3pKKhW/DJ3EI=
+  gNNBi1eYUj5Wa6Qh21VvpEQhB9CFt4y6breHLhk49lo=
+  AEJ42t6rT/FxBq5MF1klzTZZrexh5qXvDUnnAU1njnY=
+  2020-07-27 14:51:29.832823 [+] INFO: Generating configuration file for 10.4.0.1/16
+  2JgqbhrtAiN1yZ5C3tjvlRwFWOrXflb3pKKhW/DJ3EI=
+  gNNBi1eYUj5Wa6Qh21VvpEQhB9CFt4y6breHLhk49lo=
+  mFWz1E/ZLdavy8dz9pKPx58x7UBTwHpd61ZLxDjjFFU=
+  ```
+
+  Then exit WGC:
+
+  ```
+  [WGC]> exit
+  [!] WARNING: Exiting
+  ```
+
+8. Copy the created Wireguard configuration files to each device using any method you like (sftp, ftps, plain copy & paste, etc.). Make sure to store the configuration at `/etc/wireguard/wg0.conf` to be able to use the `wg-quick` command for express configuration.
+
+9. SSH into each of the peers and configure WireGuard. We use the `wg-quick` command to create an interface using our generated configuration and make it a service, so the interface will be configured automatically duing system boot. Repeat these step on any of the peers.
+
+  ```
+  wg-quick up wg0
+  systemctl enable wg-quick@wg0
+  ```
+
+You now have sucessfully configured a mesh network using WireGuard which allows to communicate for all of your instances using a private and encrypted connection, as there is no central server, the network will continue to work in case one of the peers fails. For more information about WireGuard, refer to the [official documentation](https://www.wireguard.com/quickstart/).
+
+“WireGuard” is a registered trademark of [Jason A. Donenfeld](https://www.zx2c4.com/).

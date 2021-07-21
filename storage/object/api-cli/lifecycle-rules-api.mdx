@@ -1,0 +1,247 @@
+---
+title: Managing the lifecycle of objects
+description: This page explains how to manage the lifecycle of objects.
+excerpt: 
+  This page explains how to manage the lifecycle of objects.
+totalTime: PT15M
+steps:
+  - step: TODO
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/storage/object/api-cli/lifecycle-rules-api
+image: /assets/images/docs/scaleway.png
+keywords: object storage, create, Howto
+dates:
+  validation: 2021-06-15
+  posted: 2019-05-14
+---
+
+It is possible to configure a lifecycle of a group of objects so that their storage costs can be effectively managed. A lifecycle configuration is a set of rules that defines actions applied to a group of objects stored on Object Storage.
+
+Currently the **expiration**, **transition** and **incomplete multipart uploads** actions are supported on the platform:
+  * **Expiration** defines when objects expire, to delete objects automatically on your behalf.
+  * **Transition** defines when objects change their storage class
+  * **Incomplete Multipart Uploads** allows you to stop uploads automatically if they are not completed.
+
+There might, for example, be a need to store log files for a week or a month, after which they become obsolete. It is possible to set a lifecyle rule to delete them automatically when they become obsolete. Also, if you consider that a 3-month old object is rarely used but still has a value, you might want configure a rule to send it automatically to [C14 Cold Storage](https://www.scaleway.com/en/c14-cold-storage/), for example.
+
+Lifecyle management on Object Storage is available on every AWS S3 compliant tool (sdk, aws-cli, boto, etc), as well as from the Scaleway [console](https://console.scaleway.com/organization).
+
+
+## Lifecycle specification
+
+A lifecycle configuration is an XML file, containing a set of rules with predefined actions that you want Object Storage to perform on objects during their lifetime:
+
+```xml 
+<LifecycleConfiguration>
+  <Rule>
+  ...
+  </Rule>
+  <Rule>
+  ...
+  </Rule>
+  ...
+</LifecycleConfiguration>
+```
+
+Each `Rule` consists of the following:
+- `Filter` identifying a subset of objects to which the rule applies.
+- `Status` whether the rule is in effect (a rule can be present but `Disabled`)
+- Lifecycle transition(s) to perform on the selected objects
+
+## Available XML tokens
+
+### Rule
+**Description**
+: Container for a lifecycle rule. There is a limit of one thousand (1000) rules per bucket.
+
+**Parent**
+: `LifecycleConfiguration`
+
+### Filter
+**Description**
+: Container for elements that describes the subset of the object the rule applies for. If the content of the tag is empty, the rule applies to all objects in the bucket.
+
+**Parent**
+: `Rule`
+
+### And
+**Description**
+: Container for chaining rule filters. 
+
+**Parent**
+: `Rule`
+
+**Sample**
+```xml
+<And>
+  <Prefix>myprefix</Prefix>
+  <Tag>
+    <Key>mytagkey1</Key>
+    <Value>mytagvalue1</Value>
+  </Tag>
+</And>
+```
+This applies the `Prefix` rule *and* the `Tag`.
+
+### Prefix
+**Description**
+: Object key prefix identifying one or more objects to which the rule applies. Object Storage limits this token to 1 per `Filter` Rule.
+
+**Parent**
+: `Filter` or `And`
+
+### Tag
+**Description**
+: Container for specifying a `Key` and a `Value`.
+
+**Parent**
+: `Filter` or `And`
+
+
+### Status
+**Description**
+: Describes whether or not a rule is enabled.
+
+**Parent**
+: `Rule`
+
+**Values**
+: `Enabled`, `Disabled`
+
+### Transition 
+**Description**
+: Specifies a period and a destination for an object lifetime
+
+**Parent**
+: `Rule`
+
+### Days
+**Description**
+: Specifies the number of days after object creation when the rule takes effect.
+
+**Parent**
+: `Transition` and / or `Expiration`
+
+### StorageClass
+**Description**
+: Specifies the Storage Class to which the object shall be transferred. On the Scaleway Elements platform the storage classes `STANDARD` and `GLACIER` are available.
+
+**Parent**
+: `Transition`
+
+### Expiration
+**Description**
+: Describes the expiration of the object lifetime. If versioning is enabled, this rule only deletes the current version of an object.
+
+**Parent**
+: `Rule`
+
+### ID 
+**Description**
+: Unique identifier for the rule. This value is limited to 255 characters.
+
+**Parent**
+: `Rule`
+
+**Configuration example**
+
+```xml
+<LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Rule>
+    <ID>id-1</ID>
+      <Expiration>
+        <Days>1</Days>
+      </Expiration>
+    <Filter>
+      <And>
+        <Prefix>myprefix</Prefix>
+      <Tag>
+        <Key>mytagkey1</Key>
+        <Value>mytagvalue1</Value>
+      </Tag>
+      <Tag>
+        <Key>mytagkey2</Key>
+        <Value>mytagvalue2</Value>
+      </Tag>
+      </And>
+    </Filter>
+    <Status>Enabled</Status>
+  </Rule>
+</LifecycleConfiguration>
+```
+
+The lifecycle configuration above translates to the following effective rules:
+
+- on the rule named `id-1`, we set the objects with the `myprefix` Prefix
+- the tags `mytagkey1`, `mytagkey2` sets to `mytagvalue1` 
+- 'mytagvalue2' is set to expire after one day.
+
+<Message type="note"> 
+
+  To see examples of lifecycle rules API requests, please refer to the Bucket Operations [documentation page](/storage/object/api-cli/bucket-operations#put-bucket-lifecycle).
+
+</Message>
+
+## Setting rules for incomplete multipart uploads
+
+When using the `awscli` to perform a [multipart upload](/storage/object/api-cli/multipart-uploads/) it is possible to set up a bucket lifecycle rule that allows you to automate the *stoppage* of uploads if they are not completed. You can define a deadline for the expected completion with a lifecycle rule. If the multipart upload is incomplete by the end of the defined timeframe, it will be stopped and the parts associated with it are deleted. 
+
+You can automate the removal of incomplete multipart uploads by adding or uploading a lifecycle policy to your bucket. The set-up can be done via an API call or an [AWS-CLI](/storage/object/api-cli/object-storage-aws-cli/) command. 
+
+Send a [PUT bucket lifecycle](/storage/object/api-cli/bucket-operations#get-bucket-lifecycle) request with the following XML payload:
+
+```xml no-copy
+<?xml version="1.0" encoding="UTF-8"?>
+<LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+<Rule>
+    <ID>Remove uncompleted uploads</ID>
+    <Filter>
+       <Prefix></Prefix>
+    </Filter>
+    <Status>Enabled</Status>
+    <AbortIncompleteMultipartUpload>
+         <DaysAfterInitiation>1</DaysAfterInitiation>
+    </AbortIncompleteMultipartUpload>
+</Rule>
+</LifecycleConfiguration>
+```
+<Message type="note">
+
+  In this example, the multipart upload timeframe is of one day. You may change the number of `DaysAfterInitiation` according to your preference by replacing `1` in the XML payload.
+
+</Message>
+
+**CLI command** 
+
+- Create a file called `incomplete-upload-lifecycle-policy.json` with the following content.
+
+<Message type="note">
+
+  In this example, the multipart upload timeframe is of one day. You may change the number of `DaysAfterInitiation` according to your preference by replacing `1` in the `.json` file body.
+
+</Message>
+
+```json
+{
+  "Rules": [{
+    "ID": "Remove uncompleted uploads",
+    "Status": "Enabled",
+    "Filter": {
+      "Prefix": ""
+    },
+    "AbortIncompleteMultipartUpload": {
+      "DaysAfterInitiation": 1
+    }
+  }]
+}
+```
+- Run the command:
+
+```bash
+$ aws s3api put-bucket-lifecycle-configuration --bucket mybucket --lifecycle-configuration file://incomplete-upload-lifecycle-policy.json
+```
+
+<Navigation title="See Also">
+  <PreviousButton to="/storage/object/api-cli/object-operations/">Understanding object operations</PreviousButton>
+  <NextButton to="/storage/object/api-cli/multipart-uploads/">Managing multipart uploads</NextButton>
+</Navigation>

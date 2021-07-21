@@ -1,0 +1,408 @@
+---
+layout: docs
+title: Deploying an e-commerce website with PrestaShop
+description: Learn how to install and configure PrestaShop on Ubuntu Focal Fossa (20.04) to set up your own e-commerce website.
+excerpt: |
+  PrestaShop is a popular open-source e-commerce solution used by more than 300,000 shops worldwide and available in about 60 different languages. The software is written in the PHP programming language and uses the MySQL database management system to store its data. It is published under the Open Software License (OSL).
+  The application comes with several hundred built-in features for managing products, payments, shipping options, suppliers, and more. It uses a template system to allow users to customize their stores towards additional add-ons modules available in the PrestaShop Addon marketplace, a platform enabling third-party developers to publish and sell additional themes and modules to shop owners.
+  In this tutorial, you will learn how to install and configure PrestaShop on Ubuntu Focal Fossa 20.04 on a Scaleway Dedibox dedicated server.
+totalTime: PT30M
+steps:
+  - step: Installing PrestaShop
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs//tutorials/prestashop-dedibox#Installing-PrestaShop
+  - step: Setting up MariaDB
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs//tutorials/prestashop-dedibox#Setting-up-MariaDB
+  - step: Obtaining a Let's Encrypt TLS Certificate
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs//tutorials/prestashop-dedibox#Obtainig-a-Lets-Encrypt-TLS-certificate
+  - step: Configuring PrestaShop
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs//tutorials/prestashop-dedibox#Configuring-PrestaShop
+  - step: Setting up TLS encryption
+    type: HowToStep
+    url: https://www.scaleway.com//en/docs//tutorials/prestashop-dedibox#Setting-up-TLS-encryption
+  - step: Going further
+    type: HowToStep
+    url: https://www.scaleway.com//en/docs//tutorials/prestashop-dedibox#Going-further
+categories:
+  - dedicated serversxz
+  - dedibox
+image: /assets/scaleway_prestashop.png
+tags: dedibox prestashop e-commerce ecommerce webshop onlineshop
+permalink: docs//tutorials/prestashop-dedibox
+keywords: dedibox tutorials, dedibox documentations, dedicated server, cloud hosting, ubuntu server, e-shop, eshop, web shop, online shop, prestashop, e-commerce, e-retail, shopping, shop, dedibox
+dates:
+  validation: 2020-08-07
+  posted: 2020-08-07
+---
+
+## Prestashop - Overview
+
+[PrestaShop](https://www.prestashop.com/en) is a popular open-source e-commerce solution used by more than 300,000 shops worldwide and available in about 60 different languages. The software is written in the PHP programming language and uses the MySQL database management system to store its data. It is published under the Open Software License (OSL).
+The application comes with several hundred built-in features for managing products, payments, shipping options, suppliers, and more. It uses a template system to allow users to customize their stores towards additional add-ons modules available in the PrestaShop Addon marketplace, a platform enabling third-party developers to publish and sell additional themes and modules to shop owners.
+
+In this tutorial, you will learn how to install and configure PrestaShop on Ubuntu Focal Fossa 20.04 on a [Scaleway Dedibox](https://www.scaleway.com/en/dedibox/).
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have a [Dedibox](https://www.scaleway.com/en/dedibox/) dedicated server running on Ubuntu 20.04 (Focal Fossa)
+- You have sudo privileges or access to the root user
+- You have configured an A-record pointing to your servers IP address
+
+</Message>
+
+## Installing PrestaShop
+
+1. Update and upgrade the system. Then, install the `apt-transport-https` package, which allows the use of repositories accessed via the HTTP Secure protocol (HTTPS).
+
+  ```
+  apt update && apt -y upgrade
+  apt -y install apt-transport-https
+  ```
+
+2. Install the `nginx` webserver, PHP and `unzip` using `apt`:
+
+  ```
+  apt install nginx php7.4-fpm php7.4-xml php7.4-zip php-7.4-curl php7.4-libgd php7.4-mysql php7.4-intl unzip wget
+  ```
+
+3. Create a directory for PrestaShop in the document root of Nginx:
+
+  ```
+  mkdir /var/www/html/eshop
+  ```
+
+4. Create an Nginx configuration file for your PrestaShop. In this tutorial, we assume our shop's domain name will be `eshop.example.com` - replace it with the domain name you want to use for your shop.
+
+  ```
+  nano /etc/nginx/sites-available/eshop.example.com
+  ```
+
+  And put the following configuration into it:
+
+  ```
+  server {
+          listen 80;
+          root /var/www/html/eshop;
+          index index.php index.html index.htm;
+          server_name eshop.example.com;
+
+          location / {
+                  try_files $uri $uri/ =404;
+          }
+
+          location ~ \.php$ {
+                  include snippets/fastcgi-php.conf;
+                  fastcgi_pass unix:/var/run/php/php7.4-fpm.sock;
+          }
+
+          location ~ /\.ht {
+                  deny all;
+          }
+  }
+  ```
+
+  Then save the file and close the text editor.
+
+5. Create a symbolic link to enable the server block:
+
+  ```
+  ln -s /etc/nginx/sites-available/example.com /etc/nginx/sites-enabled/
+  ```
+
+6. Test the configuration for syntax errors:
+
+  ```
+  nginx -t
+  ```
+
+7. Reload Nginx to activate the new configuration:
+
+  ```
+  systemctl reload nginx
+  ```
+
+8. Download the [latest version](http://www.prestashop.com/en/download) of PrestaShop from the official website. At the time of writing this tutorial, it is version 1.7.6.7, and we will use it here. Replace the link with the latest version if required.
+
+  ```
+  cd /tmp
+  wget https://download.prestashop.com/download/releases/prestashop_1.7.6.7.zip
+  unzip prestashop_*.zip
+  unzip prestashop.zip -d /var/www/html/eshop
+  rm prestashop*.zip
+  ```
+
+9. Set the ownership of the extracted files to the Nginx user and group:
+
+  ```
+  chown -R www-data:www-data /var/www/html/eshop
+  ```
+
+## Setting up MariaDB
+
+PrestaShop relies on the MariaDB (MySQL) database engine. Initialize it and create a database in which PrestaShop will store its data.
+
+1. Install MariaDB using the `apt` package manager:
+
+  ```
+  apt install mariadb-server mariadb-client
+  ```
+
+2. Run the interactive MariaDB initialization tool to configure the database server:
+
+  ```
+  mysql_secure_installation
+  ```
+
+3. You will be asked to enter the current root password for the MariaDB server. As by default, no password is configured, press Enter.
+
+4. Press `Y` to set a new password for the MariaDB root user:
+
+  ```
+  Setting the root password ensures that nobody can log into the MariaDB
+  root user without the proper authorisation.
+
+  Set root password? [Y/n]
+  ```
+
+5. Enter the new password and press Enter, then repeat this step for its confirmation.
+
+6. The installer will ask you some further questions. You can keep the settings proposed by default and validate them by pressing Enter on your keyboard.
+
+7. Once the inital setup is done connect to the MariaDB shell und using the root account and its newly set password and create the new database and its associated user for PrestaShop:
+
+  ```
+  mysql -u root -p
+  ```
+
+  ```sql
+  MariaDB [(none)]> create database prestashop_db;
+  MariaDB [(none)]> create user 'prestashop'@'localhost' identified by 'A_SECRET_PASSWORD';
+  MariaDB [(none)]> grant all privileges on prestashop_db.* TO 'prestashop'@'localhost';
+  MariaDB [(none)]> flush privileges;
+  MariaDB [(none)]> exit;
+  ```
+
+## Obtaining a Let's Encrypt TLS certificate
+
+To secure the connection between your visitors and the server, we will use a TLS/SSL certificate issued by [Let's Encrypt](https://letsencrypt.org/), a certificate authority providing free TLS certificates. The certificate request and management can be simplified by using the [certbot](https://certbot.eff.org/) tool.
+
+1. Certbot is available in the _Universe_ repositories of Ubuntu. Make sure they are configured on your system to install the application using the `apt` package manager:
+
+  ```
+  apt update
+  apt install software-properties-common
+  add-apt-repository universe
+  apt update
+  ```
+
+2. Install `certbot` on the system:
+
+  ```
+  apt install certbot python3-certbot-nginx
+  ```
+
+3. Run the application to request the certificate for your e-shop and reconfigure your Nginx webserver to use an encrypted connection by default:
+
+  ```
+  certbot --nginx
+  ```
+
+4. Certbot will ask you a series of questions, answer them as in the following example:
+
+    ```
+    Saving debug log to /var/log/letsencrypt/letsencrypt.log
+    Plugins selected: Authenticator nginx, Installer nginx
+    Enter email address (used for urgent renewal and security notices) (Enter 'c' to
+    cancel): myinbox@example.com <-- Enter your email address here
+
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Please read the Terms of Service at
+    https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf. You must
+    agree in order to register with the ACME server at
+    https://acme-v02.api.letsencrypt.org/directory
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    (A)gree/(C)ancel: A <-- Type A to accept the Terms of Service of Let's Encrpyt
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Would you be willing to share your email address with the Electronic Frontier
+    Foundation, a founding partner of the Let's Encrypt project and the non-profit
+    organization that develops Certbot? We'd like to send you email about our work
+    encrypting the web, EFF news, campaigns, and ways to support digital freedom.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    (Y)es/(N)o: Y <-- Type Y if you want to share your email address with the EFF, otherwise press N
+
+    Which names would you like to activate HTTPS for?
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    1: eshop.example.com
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Select the appropriate numbers separated by commas and/or spaces, or leave input
+    blank to select all options shown (Enter 'c' to cancel): 1 <-- Press 1 to request the certificate for the domain name "eshop.example.com"
+    Obtaining a new certificate
+    Performing the following challenges:
+    http-01 challenge for eshop.example.com
+    Waiting for verification...
+    Cleaning up challenges
+    Deploying Certificate to VirtualHost /etc/nginx/sites-enabled/eshop.example.com
+
+    Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    1: No redirect - Make no further changes to the webserver configuration.
+    2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
+    new sites, or if you're confident your site works on HTTPS. You can undo this
+    change by editing your web server's configuration.
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 1 <-- Press 1 here, you can enable the redirection directly in Prestashop after setup
+    Redirecting all traffic on port 80 to ssl in /etc/nginx/sites-enabled/eshop.example.com
+
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+    Congratulations! You have successfully enabled https://eshop.example.com
+
+    You should test your configuration at:
+    https://www.ssllabs.com/ssltest/analyze.html?d=eshop.example.com
+    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    IMPORTANT NOTES:
+    - Congratulations! Your certificate and chain have been saved at:
+      /etc/letsencrypt/live/eshop.example.com/fullchain.pem
+      Your key file has been saved at:
+      /etc/letsencrypt/live/eshop.example.com/privkey.pem
+      Your cert will expire on 2020-11-09. To obtain a new or tweaked
+      version of this certificate in the future, simply run certbot again
+      with the "certonly" option. To non-interactively renew *all* of
+      your certificates, run "certbot renew"
+    - Your account credentials have been saved in your Certbot
+      configuration directory at /etc/letsencrypt. You should make a
+      secure backup of this folder now. This configuration directory will
+      also contain certificates and private keys obtained by Certbot so
+      making regular backups of this folder is ideal.
+    - If you like Certbot, please consider supporting our work by:
+
+      Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+      Donating to EFF:                    https://eff.org/donate-le
+    ```
+
+## Configuring PrestaShop
+
+The basic installation of your PrestaShop is done now, and you can start the configuration of the application using the web-based configuration wizard.
+
+1. Open your web browser and point it to `http://eshop.example.com/install`. The configuration wizard displays. Choose the language you want to use for your e-commerce site and click **Next**:
+
+  <Lightbox src="scaleway-prestashop_install_1.png" width="900" alt="" />
+
+2. Read the license terms of PrestaShop and tick the box **I agree to the above terms and conditions**, then click **Next**
+
+  <Lightbox src="scaleway-prestashop_install_2.png" width="900" alt="" />
+
+3. The configuration wizard checks the compatibility of your system. If all requirements are fulfilled you see a confirmation message, and you can click **Next** to proceed further with the configuration:
+
+  <Lightbox src="scaleway-prestashop_install_3.png" width="900" alt="" />
+
+4. Enter the information about your shop, your account credentials, and choose a secure password for your administrator account. Click **Next** to continue with the installation:
+
+  <Lightbox src="scaleway-prestashop_install_4.png" width="900" alt="" />
+
+5. Enter the connection details for your database. You have set the credentials for the database user in a previous step. If you want to use PrestaShop with a [Managed Database for MySQL](https://www.scaleway.com/en/database/), you will find the credentials in your Scaleway console. Click **Test your database connection now!** to verify that the connection is successful. Once done, click **Next** to continue.
+
+  <Lightbox src="scaleway-prestashop_install_5.png" width="900" alt="" />
+
+6. The setup wizard will create the database structure for PrestaShop. This step may take a moment, and you are being redirected to the next page once this task has completed:
+
+  <Lightbox src="scaleway-prestashop_install_6.png" width="900" alt="" />
+
+7. The installation is finished. A summary of the installation displays:
+
+  <Lightbox src="scaleway-prestashop_install_7.png" width="900" alt="" />
+
+8. Remove the installation directory to complete the installation:
+
+  ```
+  rm -rf /var/www/html/eshop/install
+  ```
+
+## Setting up TLS encryption
+
+By default, Prestashop uses plain, unencrypted HTTP connections, which could be a security risk. As we have already obtained a TLS certificate for our site, we will configure our PrestaShop installation to use HTTPS.
+
+1. Go to `http://eshop.example.com/admin`. The administrator login displays. Connect yourself to the administrator area using the credentials set during the installation:
+
+  <Lightbox src="scaleway-prestashop_login.png" width="900" alt="" />
+
+  <Message type="note">
+
+  For security reasons, PrestaShop will rename the `/admin` directory to a random string. In case you experience 404 file not found errors in the admin area, add the following location block to your Nginx configuration file (`/etc/nginx/sites-available/eshop.example.com`). Remember to replace `yourAdminDirectory` with the name of your admin directory:
+
+    ```
+    location /yourAdminDirectory/ {
+                try_files $uri $uri/ /yourAdminDirectory/index.php?$args;
+            }
+    ```
+
+  </Message>
+
+2. Click **Shop Parameters** > **General** in the menu on the left:
+
+  Lightbox src="scaleway-prestashop_config.png" width="200" alt="" />
+
+3. Click the link **Please click here to check if your shop supports HTTPS**. You are being redirected to a secure HTTPS connection.:
+
+  <Lightbox src="scaleway-prestashop_ssl_1.png" width="900" alt="" />
+
+4. Enable HTTPS connections by clicking on the corresponding button. By default, PrestaShop uses HTTPS only on the member and checkout section. If you want to use HTTPS on all pages, enable the option by clicking on the corresponding button. Then validate the configuration by clicking on **Save** at the bottom of the page:
+
+  <Lightbox src="scaleway-prestashop_ssl_2.png" width="900" alt="" />
+
+Your e-commerce site now uses secure HTTPS for connections, and you can start adding products to your online shop.
+
+## Going further
+
+Your e-commerce website is now ready to test the PrestaShop application. For production use, it is recommended to take additional security measures by installing a firewall, for example, UFW, which provides an easy-to-use command-line interface for `iptables`.
+
+1. Install UFW using the `apt` package manager:
+
+  ```
+
+  apt install ufw
+
+  ```
+
+2. For security reasons we deactivate by default all incoming connections to the server :
+
+  ```
+
+  ufw default deny
+
+  ```
+
+3. Allow all outgoing connections from the server by default:
+
+  ```
+
+  ufw default allow outgoing
+
+  ```
+
+4. Allow inbound traffic on the Nginx HTTP and HTTPS ports as well as SSH connections:
+
+  ```
+
+  ufw allow 'Nginx HTTP'
+  ufw allow 'Nginx HTTPS'
+  ufw allow 'OpenSSH'
+
+  ```
+
+5. Enable the firewall configuration:
+
+  ```
+
+  sudo ufw enable
+
+  ```
+
+You now have a very basic but working firewall configured on your e-shop server. You can set [additional rules](/tutorials/installation-uncomplicated-firewall/) for more complex setups and configure additional protection of the machine using [fail2ban](/tutorials/protect-server-fail2ban/).
+
+For more information on how to configure your PrestaShop e-shop towards your business requirements, refer to the [official documentation](https://www.prestashop.com/en/help).

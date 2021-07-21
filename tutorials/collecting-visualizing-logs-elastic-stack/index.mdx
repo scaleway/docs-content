@@ -1,0 +1,489 @@
+---
+title: How to collect and visualize your logs with the Elastic stack (Elasticsearch, Logstash, Kibana - ELK Stack)
+description: How to collect and visualize your logs with the Elastic stack (Elasticsearch Logstash Kibana)
+tags: compute ELK log Elastic Stack log files
+excerpt: |
+  Historically ELK is a bundle of three open source software projects: Elasticsearch, Logstash, and Kibana. All these products are maintained by the company Elastic. This bundle consists of:
+   * Elasticsearch, a NoSQL database based on the Lucene search engine.
+   * Logstash, a server-side data processing pipeline that accepts data from various simultaneously, transforms it, and exports the data to various targets.
+   * Kibana, a visualization layer that works on top of Elasticsearch.
+  Elastic has recently included a family of log shippers called Beats and renamed the stack as Elastic Stack. The solution is flexible and is mostly used to centralize logging requirements.
+totalTime: PT10M
+steps:
+  - step: Installing Elastic Stack
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/collecting-visualizing-logs-elastic-stack/#-Installing-Elastic-Stack
+  - step: Configuring rsyslog
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/collecting-visualizing-logs-elastic-stack/#-Configuring-rsyslog
+  - step: Configuring Logstash
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/collecting-visualizing-logs-elastic-stack/#-Configuring-Logstash
+  - step: Configuring Filebeat
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/collecting-visualizing-logs-elastic-stack/#-Configuring-Filebeat
+  - step: Exploring Kibana
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/collecting-visualizing-logs-elastic-stack/#-Exploring-Kibana
+categories:
+  - compute
+  - instance-dev
+  - bare-metal
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, debian server, linux server, S3, IAAS, baremetal, scalability, ARM, physical server, dedicated server, physicalization, account, ELK, Elastic, ELK Stack, Elastic Stack, kibana, filebeat, logstash
+dates:
+  validation: 2021-05-10
+  posted: 2015-06-10
+---
+
+## Elastic Stack Overview
+
+Historically ELK is a bundle of three open source software projects: [Elasticsearch](https://www.elastic.co/products/elasticsearch), [Logstash](https://www.elastic.co/products/logstash), and [Kibana](https://www.elastic.co/products/kibana). All these products are maintained by the company [Elastic](https://www.elastic.co/).
+This bundle consists of:
+
+- **Elasticsearch**, a NoSQL database based on the Lucene search engine.
+- **Logstash**, a server-side data processing pipeline that accepts data from various simultaneously, transforms it, and exports the data to various targets.
+- **Kibana**, a visualization layer that works on top of Elasticsearch.
+
+Elastic has recently included a family of log shippers called **Beats** and renamed the stack as **Elastic Stack**.
+The solution is flexible and is mostly used to centralize logging requirements.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key)
+- You have created [an Instance](/compute/instances/how-to/create-an-instance/) or a [Bare Metal Cloud Server](/compute/bare-metal-cloud/how-to/create-server/) with at least 4GB of RAM
+
+</Message>
+
+## Installing Elastic Stack
+
+1. Start by installing Java, we use the [OpenJDK](http://openjdk.java.net/) package for this tutorial:
+
+  ```
+  apt install -y openjdk-8-jdk
+  ```
+
+2. Now install the Elastic GPG Key to validate the packages to install:
+
+  ```
+  wget -qO - https://artifacts.elastic.co/GPG-KEY-elasticsearch | apt-key add -
+  ```
+
+3. Install HTTPS transport to download the packages over a secure connection:
+
+  ```
+  apt install -y apt-transport-https
+  ```
+
+4. Add the Elastic repository to the APT configuration:
+
+  ```
+  echo "deb https://artifacts.elastic.co/packages/7.x/apt stable main" | tee -a /etc/apt/sources.list.d/elastic-7.x.list
+  ```
+
+5. Update APT and install Elasticsearch:
+
+  ```
+  apt update && apt install -y elasticsearch
+  ```
+
+6. Edit the file `/etc/elasticsearch/elasticsearch.yml` and limit the connection to Elasticsearch to **localhost** by adding the following lines:
+
+  ```
+  network.host: 127.0.0.1
+  http.port:9200
+  ```
+
+7. Install Logstash and rsyslog
+
+  ```
+  apt install -y logstash rsyslog
+  ```
+
+8. Install Filebeat
+
+  ```
+  apt install -y filebeat
+  ```
+
+9. Install Kibana
+
+  ```
+  apt install -y kibana
+  ```
+
+10. Start Elasticsearch:
+
+  ```
+  systemctl start elasticsearch
+  ```
+
+  To verify if Elasticsearch is running, run a `curl -X GET "localhost:9200"`. The output should be looking similar to this example:
+
+  ```
+  {
+    "name" : "elastic-stack",
+    "cluster_name" : "elasticsearch",
+    "cluster_uuid" : "LiIyk5P1TMuR6MqOWcs_DQ",
+    "version" : {
+      "number" : "7.8.0",
+      "build_flavor" : "default",
+      "build_type" : "deb",
+      "build_hash" : "757314695644ea9a1dc2fecd26d1a43856725e65",
+      "build_date" : "2020-06-14T19:35:50.234439Z",
+      "build_snapshot" : false,
+      "lucene_version" : "8.5.1",
+      "minimum_wire_compatibility_version" : "6.8.0",
+      "minimum_index_compatibility_version" : "6.0.0-beta1"
+    },
+    "tagline" : "You Know, for Search"
+  }
+  ```
+
+11. Open the file `/etc/kibana/kibana.yml` and uncomment the following lines:
+
+  ```
+  server.port: 5601
+  server.host: "localhost"
+  elasticsearch.hosts: ["http://localhost:9200"]
+  ```
+
+  Enable and start the Kibana service in systemd:
+
+  ```
+  systemctl enable kibana
+  systemctl start kibana
+  ```
+
+12. Install nginx as a proxy to Kibana:
+
+  ```
+  apt install -y nginx
+  ```
+
+13. Use OpenSSL to create a user and password for the Elastic Stack webinterface. The command generates a `htpasswd` file, containing the user `kibana` and your password:
+
+  ```
+  echo "kibana:`openssl passwd -apr1`" | tee -a /etc/nginx/htpasswd.users
+  ```
+
+14. Edit the file `/etc/nginx/sites-available/elastic.local` and paste the following content to create a proxy to Kibana. Make sure to replace `elastic.local` with the DNS name of your instance:
+
+  ```
+      server {
+        listen 80;
+        server_name elastic.local;
+
+        auth_basic "Restricted Access";
+        auth_basic_user_file /etc/nginx/htpasswd.users;
+
+        location / {
+          proxy_pass         http://localhost:5601;
+          proxy_redirect     off;
+
+          proxy_set_header   Host              $host;
+          proxy_set_header   X-Forwarded-For   $proxy_add_x_forwarded_for;
+          proxy_set_header   X-Forwarded-Proto $scheme;
+        }
+
+      }
+  ```
+
+15. Create a symbolic link to enable the site in nginx:
+
+  ```
+  ln -s /etc/nginx/sites-available/elastic.local /etc/nginx/sites-enabled/elastic.local
+  ```
+
+16. Reload the nginx configuration to activate the proxy:
+
+  ```
+  systemctl restart nginx
+  ```
+
+17. You can now access your Elastic Dashboard at the DNS name of your instance, for example `http://elastic.local`:
+
+<Lightbox src="scaleway-elasticstack.png" alt="" />
+
+You can either start with an empty stack and start collecting your metrics or load some samle data to play around:
+
+<Lightbox src="scaleway-elasticsampledata.png" alt="" />
+
+<Message type="tip">
+
+You can [request a free SSL certificate](/tutorials/installation-lemp-ubuntu-bionic/#-Configuring-SSL-with-Lets-Encrypt) from [Let's Encrypt](https://letsencrypt.org/) to secure the connection between your browser and the Kibana Dashboard.
+
+</Message>
+
+## Configuring rsyslog
+
+  Edit the file `/etc/rsyslog.conf` and uncomment the following lines, then save the file:
+
+  ```
+  # provides UDP syslog reception
+  module(load="imudp")
+  input(type="imudp" port="514")
+  ```
+
+## Configuring Logstash
+
+Logstash allows you to collect data from different sources, transform it into a common format, and to export it to a defined destination.
+
+Logshash configuration files are written in JSON and can be found in the `/etc/logstash/conf.d` directory.
+
+1. Configure a Filebeat input in the configuration file `02-beats-input.conf`:
+
+  ```
+  nano /etc/logstash/conf.d/02-beats-input.conf
+  ```
+
+  Copy the following information into the file, save and close it. This configuration lets the `beats` input listen on port `5044`:
+
+  ```
+  input {
+    beats {
+      port => 5044
+    }
+  }
+  ```
+
+2. Create a file `/etc/logstash/conf.d/10-syslog-filter.conf` and paste the following contents. This filter parses incoming system logs to make them structured and usable by the Kibana Dashboards. For more information you may refer to the [official documentation](https://www.elastic.co/guide/en/logstash/6.x/logstash-config-for-filebeat-modules.html#parsing-system). Save and close the file once edited.
+
+  ```
+  filter {
+    if [type] == "syslog" {
+      grok {
+        match => { "message" => "%{SYSLOGTIMESTAMP:syslog_timestamp} %{SYSLOGHOST:syslog_hostname} %{DATA:syslog_program}(?:\[%{POSINT:syslog_pid}\])?: %{GREEDYDATA:syslog_message}" }
+        add_field => [ "received_at", "%{@timestamp}" ]
+        add_field => [ "received_from", "%{host}" ]
+      }
+      syslog_pri { }
+      date {
+        match => [ "syslog_timestamp", "MMM  d HH:mm:ss", "MMM dd HH:mm:ss" ]
+      }
+    }
+  }
+  ```
+
+3. Create a file `/etc/logstash/conf.d/30-elasticsearch-output.conf` and put the following content into it. Save and exit the file once edited.
+   The output rules defined in this file sends the data to Elasticsearch, running at port 9200 on `localhost`. It also stores the data in an index named after the Beat used.
+
+  ```
+  output {
+    elasticsearch {
+      hosts => ["localhost:9200"]
+      manage_template => false
+      index => "%{[@metadata][beat]}-%{[@metadata][version]}-%{+YYYY.MM.dd}"
+      document_type => "%{[@metadata][type]}"
+    }
+  }
+  ```
+
+  In case you want to add filters that use the Filebeat input, make sure these filters are named between the input and output configuration (between `02` and `30`).
+
+4. Start and enable the Filebeat service:
+
+  ```
+  systemctl start logstash
+  systemctl enable logstash
+  ```
+
+## Configuring Filebeat
+
+The Elastic Stack uses lightweight data shippers (called [Beats](https://www.elastic.co/products/beats)) to collect data from various sources and transport them to Logstash or Elasticsearch. This tutorial uses [Filebeat](https://www.elastic.co/products/beats/filebeat) to process log files.
+
+Other Beats are available, for example: [Metricbeat](https://www.elastic.co/products/beats/metricbeat) to collect metrics of systems and services, [Packetbeat](https://www.elastic.co/products/beats/packetbeat) to analize network traffic or [Heartbeat](https://www.elastic.co/products/beats/heartbeat) to monitor the availability of services.
+
+1. Open the Filebeat configuration:
+
+  ```
+  nano /etc/filebeat/filebeat.yml
+  ```
+
+  <Message type="note">
+
+  The file is written in [YAML](http://yaml.org/spec/1.2/spec.html) format and it is important that you respect the formatting rules when you edit the file.
+
+  </Message>
+
+2. Add the following configuration for syslog in the `filebeat.inputs` section of the file:
+
+  ```
+    - type: syslog
+      protocol.udp:
+        host: "localhost:514"
+  ```
+
+3. Search for `output.elasticsearch` and comment-out the lines as follows:
+
+  ```
+  [...]
+  #output.elasticsearch:
+    # Array of hosts to connect to.
+    #hosts: ["localhost:9200"]
+  [...]
+  ```
+
+4. Search for `output.logstash` and uncomment the lines as follows:
+
+  ```
+  [...]
+  output.logstash:
+    # The Logstash hosts
+    hosts: ["localhost:5044"]
+  [...]
+  ```
+
+5. Filebeat uses [different modules](https://www.elastic.co/guide/en/beats/filebeat/6.4/filebeat-modules.html) to parse different log files. Enable the [system plugin](https://www.elastic.co/guide/en/beats/filebeat/6.4/filebeat-module-system.html) to handle generic system log files with Filebeat. Enable the plugin:
+
+  ```
+  filebeat modules enable system
+  ```
+
+  <Message type = "note">
+
+  You can keep the default configuration of the module for this tutorial. If you want to learn more about the parsing rules applied, you may check the configuration of the module located at `/etc/filebeat/modules.d/system.yml`.
+
+  </Message>
+
+6. Load the index template into Elasticsearch:
+
+  ```
+  filebeat setup --template -E output.logstash.enabled=false -E 'output.elasticsearch.hosts=["localhost:9200"]'
+  ```
+
+7. Disable the Logstash output and enable Elasticsearch output to load the dashboards when Logstash is enabled:
+
+  ```
+  filebeat setup -e -E output.logstash.enabled=false -E output.elasticsearch.hosts=['localhost:9200'] -E setup.kibana.host=localhost:5601
+  ```
+
+  An output similar to the following displays:
+
+  ```
+  [...]
+  Loaded machine learning job configurations
+  2020-07-22T11:48:00.660Z	INFO	eslegclient/connection.go:97	elasticsearch url: http://localhost:9200
+  2020-07-22T11:48:00.667Z	INFO	[esclientleg]	eslegclient/connection.go:306	Attempting to connect to Elasticsearch version 7.8.0
+  2020-07-22T11:48:00.670Z	INFO	eslegclient/connection.go:97	elasticsearch url: http://localhost:9200
+  2020-07-22T11:48:00.674Z	INFO	[esclientleg]	eslegclient/connection.go:306	Attempting to connect to Elasticsearch version 7.8.0
+  2020-07-22T11:48:01.405Z	INFO	fileset/pipelines.go:134	Elasticsearch pipeline with ID 'filebeat-7.8.0-system-auth-pipeline' loaded
+  2020-07-22T11:48:01.637Z	INFO	fileset/pipelines.go:134	Elasticsearch pipeline with ID 'filebeat-7.8.0-system-syslog-pipeline' loaded
+  2020-07-22T11:48:01.637Z	INFO	cfgfile/reload.go:262	Loading of config files completed.
+  2020-07-22T11:48:01.637Z	INFO	[load]	cfgfile/list.go:118	Stopping 1 runners ...
+  Loaded Ingest pipelines
+  ```
+
+8. You can now start and enable the Filebeat service:
+
+  ```
+  systemctl start filebeat
+  systemctl enable filebeat
+  ```
+
+9. To verify that your Filebeat service is running, you may run the following command:
+
+  ```
+  curl -XGET 'http://localhost:9200/filebeat-*/_search?pretty'
+  ```
+
+  The output should look like the following example:
+
+  ```
+  {
+    "took" : 11,
+    "timed_out" : false,
+    "_shards" : {
+      "total" : 2,
+      "successful" : 2,
+      "skipped" : 0,
+      "failed" : 0
+    },
+    "hits" : {
+      "total" : {
+        "value" : 2058,
+        "relation" : "eq"
+      },
+      "max_score" : 1.0,
+      "hits" : [
+        {
+          "_index" : "filebeat-7.8.0-2020.07.22",
+          "_type" : "_doc",
+          "_id" : "ZIpbdnMBenM2E5SX9FAi",
+          "_score" : 1.0,
+          "_source" : {
+            "message" : "Jul 22 11:17:44 eleastic-stack kernel: Command line: BOOT_IMAGE=/boot/vmlinuz-5.4.0-1018-kvm root=PARTUUID=fc220e13-bb33-43c7-a49a-90d85d9edc7f ro console=tty1 console=ttyS0 panic=-1",
+            "@version" : "1",
+            "fileset" : {
+              "name" : "syslog"
+            },
+            "host" : {
+              "containerized" : false,
+              "mac" : [
+                "de:1c:4c:3e:90:3a"
+              ],
+              "hostname" : "eleastic-stack",
+              "name" : "eleastic-stack",
+              "os" : {
+                "codename" : "focal",
+                "version" : "20.04 LTS (Focal Fossa)",
+                "kernel" : "5.4.0-1018-kvm",
+                "family" : "debian",
+                "name" : "Ubuntu",
+                "platform" : "ubuntu"
+              },
+              "architecture" : "x86_64",
+              "id" : "a4d9477d47d14c4fb551f52adb5eb810",
+              "ip" : [
+                "10.65.100.115",
+                "2001:bc8:47b0:1239::1",
+                "fe80::dc1c:4cff:fe3e:903a"
+              ]
+            },
+            "ecs" : {
+              "version" : "1.5.0"
+            },
+            "service" : {
+              "type" : "system"
+            },
+            "log" : {
+              "offset" : 344,
+              "file" : {
+                "path" : "/var/log/syslog"
+              }
+            },
+            "input" : {
+              "type" : "log"
+            },
+            "@timestamp" : "2020-07-22T11:49:57.578Z",
+            "agent" : {
+              "ephemeral_id" : "348ca814-7f48-408e-9956-d8650d74420b",
+              "version" : "7.8.0",
+              "type" : "filebeat",
+              "hostname" : "eleastic-stack",
+              "name" : "eleastic-stack",
+              "id" : "76a478aa-6c78-47c8-a045-a962e89a1046"
+            },
+            "tags" : [
+              "beats_input_codec_plain_applied"
+            ],
+            "event" : {
+              "dataset" : "system.syslog",
+              "module" : "system",
+              "timezone" : "+00:00"
+            }
+          }
+        },
+  [...]
+  ```
+
+## Exploring Kibana
+
+Data collected by your setup is now available in Kibana, to visualize it:
+
+<Lightbox src="scaleway-elasticsyslog.png" alt="" />
+
+Use the menu on the left to navigate to the **Dashboard** page and search for **Filebeat** System dashboards. You can browse the sample dashboards included with Kibana or create your own dashboards based on the metrics you want to monitor.
+
+For more information how to use the Elastic stack, refer to the [official documentation](https://www.elastic.co/guide/index.html).

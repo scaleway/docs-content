@@ -1,0 +1,366 @@
+---
+layout: docs
+title: How to deploy WordPress with LEMP
+description: In this tutorial, you will learn how to install WordPress on a freshly created Ubuntu Bionic instance with LEMP.
+tags: wordpress instance compute blog cms php lemp
+excerpt: |
+  WordPress is a popular, free and open source blogging tool and a content management system (CMS) based on PHP and MySQL. WordPress has seen incredible adoption and is a great choice for getting a website up and running quickly. After setup, almost all administration can be done through the web frontend.
+
+  In this tutorial, we will learn how to install WordPress on a freshly created Ubuntu Bionic instance with LEMP (Linux + Nginx - pronounced engine x + MySQL + PHP). Compared to Apache, Nginx is a HTTP server that uses much less resources and delivers pages a lot of faster, especially static files.
+totalTime: PT20M
+steps:
+  - step: Installing the Stack
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/wordpress-lemp-stack/#-Installing-the-Stack
+  - step: Configuring Ngnix to serve Wordpress
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/wordpress-lemp-stack/#-Configuring-Nginx-to-Serve-Wordpress
+  - step: Configuring PHP
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/wordpress-lemp-stack/#-Configuring-PHP
+  - step: Setting up the MySQL database
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/wordpress-lemp-stack/#-Setting-up-the-MySQL-database
+  - step: Installing the WordPress Files
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/wordpress-lemp-stack/#-Installing-the-WordPress-Files
+  - step: Completing the Installation Through the Web Interface
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/wordpress-lemp-stack/#-Completing-the-Installation-Through-the-Web-Interface
+categories:
+  - compute
+  - instances
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, debian server, linux server, wordpress, lemp, Linux, Apache, MySQL, PHP
+dates:
+  validation: 2021-05-10
+  posted: 2018-11-09
+---
+
+## Wordpress with LEMP - Overview
+
+WordPress is a popular, free and open source blogging tool and a content management system (CMS) based on PHP and MySQL. WordPress has seen incredible adoption and is a great choice for getting a website up and running quickly. After setup, almost all administration can be done through the web frontend.
+
+In this tutorial, we will learn how to install WordPress on a freshly created Ubuntu Bionic instance with LEMP (Linux + Nginx - pronounced "engine x" + MySQL + PHP). Compared to Apache, Nginx is a HTTP server that uses much less resources and delivers pages a lot of faster, especially static files.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have sudo privileges or access to the root user.
+- You have [LEMP installed](/installation-lemp-ubuntu-bionic/)
+- You have [secured your LEMP stack with TLS/SSL](/tutorials/installation-lemp-ubuntu-bionic/#configuring-ssl-with-let's-encrypt)
+
+</Message>
+
+## Installing the stack
+
+As a tutorial on LEMP is already available, you can follow the procedure at [Installing LEMP on Ubuntu Bionic.](/installation-lemp-ubuntu-bionic/)
+
+In addition, WordPress serves dynamic content and handles user authentication and authorization. TLS/SSL is the technology that allows you to encrypt the traffic from your site so that your connection is secure. To secure your connection, can follow the procedure at [Configuring SSL with Let's Encrypt](https://www.scaleway.com/docs/installing-lemp-stack-on-ubuntu-linux-nginx-mysql-php/#-Configuring-SSL-with-Lets-Encrypt)
+
+## Configuring Nginx to serve Wordpress
+
+You will now need to configure Nginx to deliver traffic to the future WordPress installation.
+
+1. Create a new server block for Nginx:
+
+  ```
+  nano /etc/nginx/sites-available/wordpress
+  ```
+
+2. Paste the following configuration. Make sure to change the configuration at the `server_name` line.
+
+    ```
+    server {
+            listen 80;
+
+            root /var/www/wordpress;
+            index index.php index.html index.htm;
+
+            server_name blog.scw-site.ml;
+
+            error_page 404 /404.html;
+
+            error_page 500 502 503 504 /50x.html;
+            location = /50x.html {
+                    root /usr/share/nginx/html;
+            }
+    location / {
+                    # try_files $uri $uri/ =404;
+                    try_files $uri $uri/ /index.php?q=$uri&$args;
+            }
+
+            location ~ \.php$ {
+                    try_files $uri =404;
+                    fastcgi_split_path_info ^(.+\.php)(/.+)$;
+                    fastcgi_pass unix:/var/run/php5-fpm.sock;
+                    fastcgi_index index.php;
+                    fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+                    include fastcgi_params;
+            }
+
+    location = /favicon.ico {
+            access_log off;
+            log_not_found off;
+            expires max;
+    }
+    location = /robots.txt {
+            access_log off;
+            log_not_found off;
+    }
+
+    # Cache Static Files For As Long As Possible
+    location ~*
+    \.(ogg|ogv|svg|svgz|eot|otf|woff|mp4|ttf|css|rss|atom|js|jpg|jpeg|gif|png|ico|zip|tgz|gz|rar|bz2|doc|xls|exe|ppt|tar|mid|midi|wav|bmp|rtf)$
+    {
+            access_log off;
+            log_not_found off;
+            expires max;
+    }
+    # Security Settings For Better Privacy Deny Hidden Files
+    location ~ /\. {
+            deny all;
+            access_log off;
+            log_not_found off;
+    }
+    # Return 403 Forbidden For readme.(txt|html) or license.(txt|html)
+    if ($request_uri ~* "^.+(readme|license)\.(txt|html)$") {
+        return 403;
+    }
+    # Disallow PHP In Upload Folder
+    location /wp-content/uploads/ {
+            location ~ \.php$ {
+                    deny all;
+            }
+    }
+    }
+    ```
+
+3. Test the configuration to ensure that it will function correctly:
+
+  ```
+  nginx -t
+  ```
+
+  which returns
+
+  ```
+  nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+  nginx: configuration file /etc/nginx/nginx.conf test is successful
+  ```
+
+4. Enable the server block by symlinking:
+
+  ```
+  ln -s /etc/nginx/sites-available/wordpress /etc/nginx/sites-enabled/wordpress
+  ```
+
+5. Delete the Nginx default server block:
+
+  ```
+  rm /etc/nginx/sites-enabled/default
+  ```
+
+6. Open the Nginx configuration file:
+
+  ```
+  nano /etc/nginx/nginx.conf
+  ```
+
+7. Edit the following:
+
+    <Message type="tip">
+
+    Ensure the number of worker processes equals to the number of cores in your instance
+
+    </Message>
+
+    ```
+    user www-data;
+    worker_processes 1;
+    pid /run/nginx.pid;
+    ```
+
+    - Add `use epoll` to the events block
+
+    ```
+    events {
+    worker_connections 4096;
+    multi_accept on;
+    use epoll;
+    }
+    ```
+
+    - Add `client_max_body_size` and `server_tokens` off directive. Set `keepalive_timeout` to 30 seconds.
+
+    ```
+          # Basic Settings
+
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 30;
+    types_hash_max_size 2048;
+    server_tokens off;
+    client_max_body_size  100m;
+
+          # server_names_hash_bucket_size 64;
+          # server_name_in_redirect off;
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    ```
+
+    - Make sure that the whole Gzip settings block is similar to
+
+    ```
+            # Gzip Settings
+
+    gzip on;
+    gzip_disable "msie6";
+
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_buffers 16 8k;
+    gzip_http_version 1.1;
+    gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript;
+    ```
+
+8. Restart the server:
+
+  ```
+  service nginx restart
+  ```
+
+## Configuring PHP
+
+If you want to upload files more than 2mb to your WordPress site, you have to increase PHP upload size variables in php.ini.
+
+1. Open the `php.ini` file:
+
+  ```
+  nano /etc/php/7.2/fpm/php.ini
+  ```
+
+2. Press `Ctrl+W` and search for `upload_max_filesize` and set it to 100m.
+
+3. Press `Ctrl+W`and search for `post_max_size`. It needs to be the same size or larger than `upload_max_filesize`.
+
+  ```
+  post_max_size=100M
+  ```
+
+4. Restart PHP.
+
+  ```
+  sudo service php7.2-fpm restart
+  ```
+
+## Setting up the MySQL database
+
+In this section, we will create the database user and tables.
+
+1. Log into the MySQL shell using your MySQL root password
+
+  ```
+  mysql -u root -p
+  ```
+
+2. Create a WordPress database, along with a user in the database. First, let's make the database (feel free to give it whatever name you like):
+
+  ```
+  MariaDB [(none)]> CREATE DATABASE wordpress;
+  Query OK, 1 row affected (0.00 sec)
+  ```
+
+3. Create a new user. Please replace the database, name, and password with whatever you prefer:
+
+  ```
+  CREATE USER wordpressuser@localhost;
+  Query OK, 0 rows affected (0.00 sec)
+  ```
+
+4. Set a password for the new user:
+
+  ```
+  SET PASSWORD FOR wordpressuser@localhost= PASSWORD("password");
+  Query OK, 0 rows affected (0.00 sec)
+  ```
+
+5. Grant all privileges to the new user. Without this command, the WordPress installer will not be able to start up:
+
+  ```
+  GRANT ALL PRIVILEGES ON wordpress.* TO wordpressuser@localhost IDENTIFIED BY 'password';
+  Query OK, 0 rows affected (0.00 sec)
+  ```
+
+6. Refresh MySQL:
+
+  ```
+  FLUSH PRIVILEGES;
+  Query OK, 0 rows affected (0.00 sec)
+  ```
+
+7. Exit the MySQL shell:
+
+  ```
+  exit
+  ```
+
+## Installing the WordPress Files
+
+1. Navigate to the site root directory:
+
+  ```
+  mkdir /var/www/
+  cd /var/www/
+  ```
+
+2. Download the latest version of WordPress:
+
+  ```
+  wget http://wordpress.org/latest.tar.gz
+  ```
+
+3. Extract it from the archive:
+
+  ```
+  tar -xzvf latest.tar.gz
+  ```
+
+4. Give the permissions of `/var/www/wordpress` to `www-data` user. It will allow future automatic updating of WordPress plugins and file editing with SFTP.
+
+  ```
+  chown -R www-data:www-data wordpress/
+  usermod -a -G www-data www-data
+  ```
+
+## Completing the installation through the web interface
+
+Now that the server configuration is complete, we can finish up the installation through the web interface.
+
+In your web browser, navigate to your server's domain name or public IP address:
+
+`http://server_domain_or_IP/wordpress/`
+
+1. Select your language.
+
+2. Enter the information in relevance with your account.
+
+  <Lightbox src="scaleway-wordpress_lemp.png" alt="" />
+
+  <Message type="note">
+
+  Make sure the wp.config.php matches your information in relevance with your database. This file is located in the root of your WordPress file directory and contains your website's base configuration details, such as database connection information.
+
+  </Message>
+
+3. Once your have entered you database information, complete the five-minute WordPress installation process.
+
+  <Lightbox src="scaleway-wordpress_install.png" alt="" />
+
+4. Logging in. Your dashboard displays.
+
+  <Lightbox src="scaleway-wordpress_dashboard.png" alt="" />

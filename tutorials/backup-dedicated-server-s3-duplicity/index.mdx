@@ -1,0 +1,339 @@
+---
+
+title: How to backup your dedicated server on Object Storage with Duplicity
+description: Automatize your backups with Duplicity and Scaleway Object Storage
+tags:  duplicity backup objectstorage
+excerpt: |
+  In this article, we will learn how to backup our data. We will take advantages of Scaleway’s Object Storage service and Duplicity. Duplicity is a free and open-source tool that backs up folders to a remote server. Using libsync and GPG, Duplicity is able to make space-efficient encrypted backups.
+totalTime: PT20M
+steps:
+  - step: Creating an Object Storage bucket
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/backup-dedicated-server-s3-duplicity/#Creating-an-Object-Storage-bucket
+  - step: Installing software requirements
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/backup-dedicated-server-s3-duplicity/#Installing-software-requirements
+  - step: Creating a GPG key
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/backup-dedicated-server-s3-duplicity/#Creating-a-GPG-key
+  - step: Combining Duplicity and Scaleway
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/backup-dedicated-server-s3-duplicity/#Combining-Duplicity-and-Scaleway
+  - step: Conclusion
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/backup-dedicated-server-s3-duplicity/#Conclusion
+categories:
+  - storage
+  - object
+image: /assets/images/docs/scaleway.png
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, debian server, linux server, Object Storage, S3, dedicated server, online, duplicity, dedibox, Duplicity, Backup
+dates:
+  validation: 2021-05-10
+  posted: 2018-10-13
+---
+
+## Duplicity - Overview
+
+In this article, we will learn how to backup our data. We will take advantages of [Scaleway’s Object Storage](/storage/object/quickstart/) service and Duplicity. [Duplicity](http://duplicity.nongnu.org/) is a free and open-source tool that backs up folders to a remote server. Using libsync and GPG, Duplicity is able to make space-efficient encrypted backups.
+
+Our objectives are to:
+
+- Make production-ready automatic backups of our data.
+- Save cost using bandwidth and space-efficient incremental backups.
+- Preserve a robust layer of security and privacy with an asymmetrical encryption.
+
+To achieve this, we will:
+
+- Create a bucket in Scaleway’s Object Storage
+- Install the free and open-source backup solution: [Duplicity](http://duplicity.nongnu.org/)
+- Generate a GPG Key
+- Combine Duplicity and Scaleway
+
+You can easily backup your existing dedicated server with Duplicity. When you are using a [Online by Scaleway Dedibox](https://www.online.net/en/dedicated-server) or a [Scaleway Bare Metal Server](https://www.scaleway.com/en/bare-metal-servers/), the data transfer is free of charge within the same region.
+
+<Message type="requirement">
+
+- You have access to a Ubuntu/Debian server
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have generated [your API key](/console/my-project/how-to/generate-api-key/)
+
+</Message>
+
+## Creating an Object Storage Bucket
+
+1. Log in to the Scaleway Console
+
+2. Click **Storage** from the left side menu. The Storage page lists all your buckets. At first, your list is empty as you have not created any bucket yet.
+
+3. Click **Create a Bucket** to create a bucket that will store your objects.
+
+4. Name your bucket and validate your bucket creation. A bucket name must be unique and contain only alphanumeric and lowercase characters.
+
+## Installing Software Requirements
+We are going to install Duplicity. To make sure we can generate a GPG Key, we need to create some entropy, we suggest using [Haveged](http://www.issihosts.com/haveged/) constantly on your sever to generate a small amount of entropy. You can find the link to the latest version of Duplicity on their [website](http://duplicity.nongnu.org/). 
+
+<Message type="note">
+
+You may replace the link used with `wget` if a newer version is available.
+
+</Message>
+
+Run the following command to update the apt package manager, upgrade the software installed already installed on the server and to download and install Duplicity:
+```bash
+    apt update && apt upgrade
+    apt install -y python3-boto python3-pip haveged gettext librsync-dev
+    wget https://code.launchpad.net/duplicity/0.8-series/0.8.12/+download/duplicity-0.8.12.1612.tar.gz
+    tar xaf duplicity-0.8.*.tar.gz
+    cd duplicity-0.8.*/
+    pip3 install -r requirements.txt
+    python3 setup.py install
+```
+
+## Creating a GPG Key
+
+1. To generate the GPG key, launch this command.
+  ```bash
+      gpg --full-generate-key
+  ```
+
+  Enter and remember a passphrase.
+  You will be asked to define the characteristics of your keys. We will go with default settings:
+
+  - What kind of key you want: (1) RSA and RSA (default)
+  - What keysize do you want: (3072)
+  - How long the key should be valid: 0 = key does not expire
+
+  GPG will then ask how to call your key, an address and a description.
+
+  ```bash
+      $ gpg --full-generate-key
+
+      gpg (GnuPG) 2.1.18; Copyright (C) 2017 Free Software Foundation, Inc.
+      This is free software: you are free to change and redistribute it.
+      There is NO WARRANTY, to the extent permitted by law.
+
+      Please select what kind of key you want:
+        (1) RSA and RSA (default)
+        (2) DSA and Elgamal
+        (3) DSA (sign only)
+        (4) RSA (sign only)
+      Your selection? 1
+
+      RSA keys may be between 1024 and 4096 bits long.
+      What keysize do you want? (3072) 3072
+      Requested keysize is 3072 bits
+
+      Please specify how long the key should be valid.
+        0 = key does not expire
+        <n>  = key expires in n days
+        <n>w = key expires in n weeks
+        <n>m = key expires in n months
+        <n>y = key expires in n years
+      Key is valid for? (0) 0
+      Key does not expire at all
+      Is this correct? (y/N) y
+
+      GnuPG needs to construct a user ID to identify your key.
+
+      Real name: backups
+      Email address: me@scaleway.com
+      Comment: Scaleway Object Storage backups
+      You selected this USER-ID:
+        backups (Scaleway Object Storage backups) <me@scaleway.com>
+
+      Change (N)ame, (C)omment, (E)mail or (O)kay/(Q)uit? O
+      We need to generate a lot of random bytes. It is a good idea to perform
+      some other action (type on the keyboard, move the mouse, utilize the
+      disks) during the prime generation; this gives the random number
+      generator a better chance to gain enough entropy.
+
+      gpg: key XXXXXXXXXXXXXXXX marked as ultimately trusted
+      public and secret key created and signed.
+      pub   rsa3072  2020-03-26 [SC]
+        XXXXXXXXXXXXX-FINGERPRINT-XXXXXXXXXXXXXX
+      uid                      backups (Scaleway Object Storage backups) <me@scaleway.com>
+      sub   rsa3072  2020-03-26 [E]
+  ```
+
+2 . You need to use the GPG Key fingerprint, it could be an 8, 16 or 40 char long hash. You can also find the fingerprint of your key with the command :
+  ```bash
+      $ gpg --list-keys
+      gpg: checking the trustdb
+      gpg: marginals needed: 3  completes needed: 1  trust model: pgp
+      gpg: depth: 0  valid: 1  signed: 0  trust: 0-, 0q, 0n, 0m, 0f, 1u
+      /home/me/.gnupg/pubring.kbx
+      ------------------------------
+
+      pub rsa3072 2020-03-26 [SC]
+        XXXXXXXXXXXXX-FINGERPRINT-XXXXXXXXXXXXXX
+      uid 		[ultimate] backups (Scaleway Object Storage backups) <me@scaleway.com>
+      sub rsa3072 2020-03-26 [E]
+  ```
+<Message type="tip">
+
+If you lose access to your current server, having the GPG private and public keys stored somewhere else will come in handy. Export the GPG keys with:
+
+```bash
+    gpg --armor --export backups
+    gpg --armor --export-secret-key backups
+
+ backups
+```
+
+</Message>
+
+## Combining Duplicity and Scaleway
+
+Asverything is installed and ready, we will now configure and script our interactions between our server and the cloud.
+
+### Editing the onfiguration
+
+1. Create our initial scripts files, and our log files.
+  ```bash
+      touch scw-backups.sh scw-restore.sh .scw-configrc
+      chmod 700 scw-backups.sh scw-restore.sh
+      chmod 600 .scw-configrc
+
+      mkdir -p /var/log/duplicity
+      touch /var/log/duplicity/logfile{.log,-recent.log}
+  ```
+
+2. Add the following lines to `.scw-configrc` :
+  ```bash
+      # Scaleway credentials keys
+      export AWS_ACCESS_KEY_ID="<SCALEWAY ACCESS KEY>"
+      export AWS_SECRET_ACCESS_KEY="<SCALEWAY SECRET ACCESS KEY>"
+      export SCW_BUCKET="s3://s3.fr-par.scw.cloud/<NAME OF YOUR BUCKET>"
+
+      # GPG Key information
+      export PASSPHRASE="<YOUR GPG KEY PASSPHRASE>"
+      export GPG_FINGERPRINT="<YOUR GPG KEY FINGERPRINT>"
+
+      # Folder to backup
+      export SOURCE="<PATH TO FOLDER TO BACKUP>"
+
+      # Will keep backup up to 1 month
+      export KEEP_BACKUP_TIME="1M"
+
+      # Will make a full backup every 10 days
+      export FULL_BACKUP_TIME="10D"
+
+      # Log files
+      export LOGFILE_RECENT="/var/log/duplicity/logfile-recent.log"
+      export LOGFILE="/var/log/duplicity/logfile.log"
+
+      log () {
+        date=`date +%Y-%m-%d`
+        hour=`date +%H:%M:%S`
+        echo "$date $hour $*" >> ${LOGFILE_RECENT}
+      }
+      export -f log
+  ```
+
+Our current backup policy is to make a full backup every 10 days and remove all backups older than one month.
+
+### Backup script
+
+Using the configuration and duplicity, we automatize the backups. 
+
+1. Copy the following script to `scw-backup.sh`:
+  ```bash
+      #!/bin/bash
+      source <FULL PATH TO>/.scw-configrc
+
+      currently_backuping=$(ps -ef | grep duplicity  | grep python | wc -l)
+
+      if [ $currently_backuping -eq 0 ]; then
+        # Clear the recent log file
+        cat /dev/null > ${LOGFILE_RECENT}
+
+        log ">>> removing old backups"
+        duplicity remove-older-than ${KEEP_BACKUP_TIME} ${SCW_BUCKET} >> ${LOGFILE_RECENT} 2>&1
+
+        log ">>> creating and uploading backup to c14 cold storage"
+        duplicity \
+        incr --full-if-older-than ${FULL_BACKUP_TIME} \
+        --asynchronous-upload \
+        --s3-use-glacier \
+        --encrypt-key=${GPG_FINGERPRINT} \
+        --sign-key=${GPG_FINGERPRINT} \
+        ${SOURCE} ${SCW_BUCKET} >> ${LOGFILE_RECENT} 2>&1
+
+        cat ${LOGFILE_RECENT} >> ${LOGFILE}
+      fi
+  ```
+
+  <Message type="note">
+
+  The option `--s3-use-glacier` will move backups into [C14 Cold Storage](https://www.scaleway.com/en/c14-cold-storage/). If you prefer to store your backups on regular Object Storage, remove the line `--s3-use-glacier \` from the script.
+
+  </Message>
+
+2. Let's test the script. Run the script `./scw-backups.sh` to make sure the configuration is correctly set. Check Scaleway's bucket on the web interface and the logs with :
+```bash
+    cat /var/log/duplicity/logfile-recent.log
+```
+
+### Script the recovery of data
+
+The other duty of duplicity is to recover a backup, we will create a script to make the process easier. 
+
+1. In `scw-restore.sh`, add the following:
+  ```
+      #!/bin/bash
+      source <FULL PATH TO>/.scw-configrc
+
+      if [ $# -lt 2 ]; then
+        echo -e "Usage $0 <time or delta> [file to restore] <restore to>
+    Exemple:
+    \t$ $0 2018-7-21 recovery/  ## recovers * from closest backup to date
+      \t$ $0 0D secret data/  ## recovers most recent file nammed 'secret'";
+      exit; fi
+
+      if [ $# -eq 2 ]; then
+        duplicity \
+          --time $1 \
+          ${SCW_BUCKET} $2
+      fi
+
+      if [ $# -eq 3 ]; then
+        duplicity \
+          --time $1 \
+          --file-to-restore $2 \
+          ${SCW_BUCKET} $3
+      fi
+  ```
+
+2. Let’s try recover the data you uploaded in the previous section:
+  ```bash
+      ./scw-restore.sh 0D /tmp/backup-recovery-test/
+  ```
+
+3. You can also recover one specific file with the following format from a backup 5 days ago with:
+  ```bash
+      ./scw-restore.sh 5D <file> /tmp/backup-recovery-test/
+  ```
+
+### Automation of the backups
+
+1. Use the command `crontab -e` to edit your crontab file and add the line to create a script that will run twice a day at 1:00 and 13:00 (1 AM and 1 PM) :
+  ```bash
+      crontab -e
+  ```
+
+2. And after selection of your editor, write down:
+  ```bash
+      PATH=/usr/local/sbin:/usr/local/bin:/sbin:/bin:/usr/sbin:/usr/bin
+      SHELL=/bin/bash
+      00 1,13 * * * <FULL PATH TO>/scw-backup.sh > /dev/null 2>&1
+  ```
+
+## Conclusion
+
+We manage to create an automatic backup using Duplicity, hosting encrypted data on Scaleway’s Object Storage. We are able to recover specific files or the entire backup itself at a given date.
+
+To continue your implementation, you may want to consider the following:
+
+- [Duply](https://duply.net/), giving you a front-end view of the backups.
+- Backuping more than one folder using `“SOURCE=/”` and the `--include=` and `--exclude=` options of duplicity.
+- Adapt the backup policy with more frequent backups, that are conserved

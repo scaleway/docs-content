@@ -1,0 +1,292 @@
+---
+layout: docs
+title: Setting up web analytics with Matomo on Ubuntu Bionic
+description: This page shows you how to install and configure Matomo web analytics on Ubuntu Bionic Beaver (18.04)
+excerpt: |
+  This page shows how to install Matomo, an open-source web-analytics platform, designed to evaluate the visitor's behaviour for one or multiple websites.
+totalTime: PT30M
+steps:
+  - step: Installing the LEMP-Stack
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/setting-up-web-analytics-with-matomo-on-ubuntu-bionic/#-Installing-the-LEMPStack
+  - step: Downloading Matomo
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/setting-up-web-analytics-with-matomo-on-ubuntu-bionic/#-Downloading-Matomo
+  - step: Configuring the Nginx Web Server
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/setting-up-web-analytics-with-matomo-on-ubuntu-bionic/#-Configuring-the-Nginx-Web-Server
+  - step: Creating a MySQL Database for Matomo
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/setting-up-web-analytics-with-matomo-on-ubuntu-bionic/#-Creating-a-MySQL-Database-for-Matomo
+  - step: Running the Matomo Web Installer
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/setting-up-web-analytics-with-matomo-on-ubuntu-bionic/#-Running-the-Matomo-Web-Installer
+  - step: Logging into Matomo
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/setting-up-web-analytics-with-matomo-on-ubuntu-bionic/#-Logging-into-Matomo
+categories:
+  - compute
+brands:
+  - elements
+image: /assets/images/docs/scaleway.png
+permalink: docs/setting-up-web-analytics-with-matomo-on-ubuntu-bionic/
+keywords: cloud tutorials, cloud documentations, cloud server, cloud hosting, ubuntu server, debian server, linux server, IAAS, baremetal, scalability, statistics, analytics, matomo, pikwik, webanalytics, webstats, webalizer, awstats
+dates:
+  validation: 2021-05-10
+  posted: 2019-07-24
+---
+
+
+[Matomo](https://matomo.org/) (former: Piwik) is an open-source web-analytics platform designed to evaluate the visitor's behaviour for one or multiple websites.
+
+The tool is written in PHP and stores its data in a MySQL/MariaDB database.
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+  - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key)
+  - You have [created an Instance](/compute/instances/how-to/create-an-instance) that runs Ubuntu Bionic Beaver
+  - You have sudo privileges or access to the root user.
+
+</Message>
+
+
+## Installing the LEMP-Stack
+
+Matomo is a web application written in [PHP](https://php.net/) and uses [MySQL/MariaDB](https://mariadb.org/) database to store its data. To serve the web contents, it relies on a web server, for example [Nginx](http://nginx.org/). Therefore a working [LEMP-Stack](/tutorials/installation-lemp-ubuntu-bionic) is required on the Matomo instance.
+
+1. Update the apt packet cache and upgrade the packets already installed on the instance:
+
+  ```
+  apt update && apt -y upgrade
+  ```
+
+2. Install the required software via apt:
+
+  ```
+  apt install -y ufw nginx mariadb-server php-fpm php-mysql php-curl php-gd php-cli php-xml php-mbstring software-properties-common
+  ```
+
+3. [Secure the MariaDB server](http://localhost:8003/tutorials/mariadb-ubuntu-bionic#securing-mariadb) by executing the following command:
+
+  ```
+  mysql_secure_installation
+  ```
+
+  When asked for the current MySQL root password, press **Enter** as no password is set by default.
+
+4. Install [Certbot](https://certbot.eff.org/) to manage the TLS/SSL certificate:
+
+  ```
+  add-apt-repository ppa:certbot/certbot
+  apt update
+  apt install -y python-certbot-nginx
+  ```
+
+## Downloading Matomo
+
+1. Enter the directory `/var/www/html`
+
+  ```
+  cd /var/www/html
+  ```
+
+2. Download the latest release of Matomo:
+
+  ```
+  wget https://builds.matomo.org/matomo-latest.tar.gz
+  ```
+
+3. Unpack Matomo:
+
+  ```
+  tar xfz matomo-lastest.tar.gz
+  ```
+
+4. Set the ownership of the Matomo files to the `www-data` user:
+
+  ```
+  chown -R www-data:www-data matomo
+  ```
+
+## Configuring the Nginx Web Server  
+  
+<Message type="important">
+
+  When doing the following steps, replace `matomo.example.com` with the domain name your Matomo will run on.
+
+</Message>
+
+1. Create a Nginx Configuration file and open it in a text editor:
+
+  ```
+  nano /etc/nginx/sites-available/matomo.example.com
+  ```
+
+2. Copy the following content into the configuration file:
+
+  ```
+  server {
+          listen 80;
+          root /var/www/html/matomo;
+          index index.php index.html index.htm;
+          server_name matomo.example.com;
+
+          location / {
+                  try_files $uri $uri/ =404;
+          }
+
+          location ~ \.php$ {
+                  include snippets/fastcgi-php.conf;
+                  fastcgi_pass unix:/var/run/php/php7.2-fpm.sock;
+          }
+
+          location ~ /\.ht {
+                  deny all;
+          }
+  }
+  ```
+
+3. Enable the newly created site by creating a symlink:
+
+  ```
+  ln -s /etc/nginx/sites-available/matomo.example.com /etc/nginx/sites-enabled/
+  ```
+
+4. Check the Nginx configuration file for possible errors:
+
+  ```
+  nginx -t
+  ```
+
+5. Reload Nginx to activate the new configuration:
+
+  ```
+  service nginx reload
+  ```
+
+6. [Run Certbot](/tutorials/installation-lemp-ubuntu-bionic#configuring-ssl-with-let's-encrypt) with the `--nginx` flag to request a Let's Encrypt TLS/SSL certificate for the newly created server block:
+
+  ```
+  certbot --nginx
+  ```
+
+## Creating a MySQL Database for Matomo
+
+1. Log into the MySQL shell with the `root` user.
+
+  ```
+  mysql -u root -p
+  ```
+
+  <Message type="important">
+
+    The password of the MySQL root user is the one configured during the secure installation of MySQL.
+
+  </Message>
+
+2. Run the following commands from the MySQL shell to create the database for Matomo:
+
+  ```
+  CREATE DATABASE matomodb;
+  GRANT ALL ON matomodb.* TO matomo@localhost IDENTIFIED BY 'SECURE-DATABASE-PASSWORD';
+  FLUSH PRIVILEGES;
+  quit;
+  ```
+
+## Running the Matomo Web Installer
+
+1. To finalize the installation of Matomo, open a web browser and go to `https://matomo.example.com/`. The web installer displays. Click **Next** to go to the second step:
+
+  <Lightbox src="scaleway-matomo1.png" alt="" />
+
+2. Matomo launches some automatic checks if all pre-requirements are fulfilled. If everything is green, click **Next** to continue with the installation:
+
+  <Lightbox src="scaleway-matomo2.png" alt="" />
+
+3. Proceed with the database configuration
+
+   <Lightbox src="scaleway-matomo3.png" alt="" />
+
+    - **Database Server**: `127.0.0.1`
+    - **Login**: The Matomo database user (`matomo`)
+    - **Password**: The Matomo database password (`SECURE-DATABASE-PASSWORD`)
+    - **Database Name**: The Matomo database name (`matomodb`)
+    - **Table Prefix**: A prefix for the Matomo tables, you can keep the default values (`matomo_`)
+    - **Adapter**: Leave the default value (`PDO\MYSQL`)
+
+  Click **Next** to proceed with the installation.
+
+4. Matomo verifies the MySQL/MariaDB credentials. If everything is working well, the database structure is created automatically and a success message displays. Click **Next** to continue with the installation:
+
+  <Lightbox src="scaleway-matomo4.png" alt="" />
+
+5. Configure a super-user (or admin) user for Matomo. This user will be the master user which is able to configure all settings of the tool and can add additional users and sites:
+
+  <Lightbox src="scaleway-matomo5.png" alt="" />
+
+    - **Super user login**: Choose an identifier for the user
+    - **Password**: Choose a secure password for the user
+    - **Password (repeat)**: Repeat the secure password for the user
+    - **Email**: Link an email address to the super-user account
+    - Tick the first box to receive notifications about Matomo updates by email (optional)
+    - Tick the second box if you want to receive commercial information from Matomo by email (optional)
+
+  Click **Next** to create the super user account and to proceed with the installation.
+
+6. Setup a first website that shall be tracked and analysed by Matomo:
+
+  <Lightbox src="scaleway-matomo6.png" alt="" />
+
+    - **Website name**: Enter a name of the website
+    - **Website URL**: Enter the website URL
+    - **Website time zone**: Set the time zone for the website. This is important so Maotomo can track the visitors with the correct time of their visit
+    - **Ecommerce**: Enable specific tracking methods if the website is an ecommerce site
+
+  Click **Next** to validate the form and to continue with the installation.
+
+  <Message type="important">
+
+    Additional websites can be configured once the initial setup has been completed.
+
+  </Message>
+
+7. A tracking shows up. Make sure this code is on every page of your website so it can be tracked correctly. It is recommended to put it in the header-section of the website, immediately before the closing `</head>` tag.
+
+  Copy the displayed tracking code and put it into your website header. The tracking code looks like the following example:
+
+  ```
+  <!-- Matomo -->
+  <script type="text/javascript">
+    var _paq = window._paq || [];
+    /* tracker methods like "setCustomDimension" should be called before "trackPageView" */
+    _paq.push(['trackPageView']);
+    _paq.push(['enableLinkTracking']);
+    (function() {
+      var u="//matomo.scw-site.ml/";
+      _paq.push(['setTrackerUrl', u+'matomo.php']);
+      _paq.push(['setSiteId', '1']);
+      var d=document, g=d.createElement('script'), s=d.getElementsByTagName('script')[0];
+      g.type='text/javascript'; g.async=true; g.defer=true; g.src=u+'matomo.js'; s.parentNode.insertBefore(g,s);
+    })();
+  </script>
+  <!-- End Matomo Code -->
+  ```
+
+  Click **Next** once you have copied the code to continue with the installation.
+
+8. The installation is completing. It is possible to anonymize the data tracked by Matomo. This is recommended to comply with data protection regulations.
+
+## Logging in to Matomo
+
+1. Once the installation is completed, the login screen displays:
+
+  <Lightbox src="scaleway-matomo-login.png" alt="" />
+
+  Enter the **super-user** login and the password set in a previous step.
+
+2. The **Matomo Dashboard** displays. If the tracking code was added to the website, the application begins to track users and generates usage statistics over the time:
+
+  <Lightbox src="scaleway-matomo-dashboard.png" alt="" />
+
+Matomo is now installed, counting visitors and analyzing their behaviour. For more information about the integration of Matomo on different [Content Management Systems (CMS)](https://matomo.org/docs/integration/) and [advanced configuration](https://matomo.org/docs/include-piwik-in-your-project/) of the tool, refer to the [official documentation](https://matomo.org/docs/#configuration).

@@ -1,0 +1,190 @@
+---
+title: Using Object Storage with s3fs
+description: During this tutorial you will learn how to use s3fs as a client for Object Storage.
+tags: object-storage
+excerpt: |
+  During this tutorial you will learn how to use s3fs as a client for Scaleway Object Storage.
+totalTime: PT10M
+steps:
+  - step: Retrieving your Credentials
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/object-storage-s3fs/#Retrieving-your-Credentials
+  - step: Downloading s3fs
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/object-storage-with-s3fs/#Downloading-s3fs
+  - step: Configuring s3fs
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/object-storage-with-s3fs/#Configuring-s3fs
+  - step: Using Object Storage with s3fs
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/object-storage-with-s3fs/#Using-Object-Storage-with-s3fs
+categories:
+  - storage
+  - object
+image: /assets/images/docs/scaleway.png
+permalink: docs/object-storage-with-s3fs/
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, ubuntu server, debian server, linux server, Object Storage, S3, IAAS, baremetal, scalability, ARM, physical server, dedicated server, physicalization,
+dates:
+  validation: 2021-05-10
+  posted: 2018-07-16
+---
+
+During this tutorial you will learn how to use s3fs as a client for Object Storage.
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+  - You have generated [your API key](/console/my-project/how-to/generate-api-key/)
+
+</Message>
+
+Object Storage allows you to store any kind of objects (documents, images, videos, etc.).
+You can retrieve them anytime and from anywhere.
+
+For instance, you can store images and they will be accessible using HTTP. You can use the control panel to manage your storage.  
+As our API is S3 compatible, it can be used with many tools that are created to interact with S3 compatible Object Storage.
+
+This tutorial details how to use the Object Storage with s3fs.
+Pleas note that using s3fs with Scaleway, you are limited to a [maximum file size of 128GB](#configuring-s3fs).
+
+<Message type="important">
+
+  The version of `s3fs` available for installation using the systems packet manager does not support files larger than 10GB. It is therefore recommended to compile a version, including the reqired corrections, from the sourcecode repository of the tool. This tutorial will guide you through the process of fixing, compiling and installing `s3fs` on your machine.
+
+</Message>
+
+## Retrieving your credentials
+
+You can access Object Storage buckets using API key. Refer to [How to generate API key](/console/my-project/how-to/generate-api-key/) for more information about it.
+
+## Downloading s3fs
+
+s3fs allows Linux and macOS X to mount an S3 bucket via FUSE. s3fs preserves the native object format for files, to be able to use them with other tools.
+
+### Installing Dependencies
+
+#### Debian and Ubuntu
+
+To install `s3fs-fuse` on **Debian** and **Ubuntu** based operating systems start by installing the dependencies:
+
+```bash
+apt update && apt upgrade -y
+apt -y install automake autotools-dev fuse g++ git libcurl4-gnutls-dev libfuse-dev libssl-dev libxml2-dev make pkg-config
+```
+
+#### RedHat and CentOS
+
+To install `s3fs-fuse` on **RedHad** and **CentOS** based operating systems start by installing the dependencies:
+
+```bash
+yum update
+yum install automake fuse fuse-devel gcc-c++ git libcurl-devel libxml2-devel make openssl-devel
+```
+
+#### macOS
+
+On macOS, install the dependencies via [Homebrew](https://brew.sh):
+
+```
+brew install --cask osxfuse
+brew install autoconf automake pkg-config gnutls libgcrypt nettle git
+```
+
+<Message type="note">
+
+On macOS Big Sur you need to add permissions to FUSE in the `Settings > Security & Privacy > General` tab to allow the extension.
+
+</Message>
+
+### Installing s3fs-fuse
+
+1. Download the Git repository of s3fs-fuse:
+  ```bash
+  git clone https://github.com/s3fs-fuse/s3fs-fuse.git
+  ```
+
+2. Enter the s3fs-fuse directory
+  ```bash
+  cd s3fs-fuse
+  ```
+
+3. Update the `MAX_MULTIPART_CNT` value in the `fdcache.cpp` file:
+
+    - On **Linux**:
+
+    ```bash
+    sed -i 's/MAX_MULTIPART_CNT = 10 /MAX_MULTIPART_CNT = 1 /' src/fdcache.cpp
+    ```
+
+    - On **macOS**:
+
+    ```bash
+    sed -i '' -e 's/MAX_MULTIPART_CNT = 10 /MAX_MULTIPART_CNT = 1 /' src/fdcache.cpp
+    ```
+
+4. Run the `autogen.sh` script to generate a configuration file, configure the application and compile it from the master branch:
+  ```bash
+  ./autogen.sh
+  ./configure
+  make
+  ```
+
+5. Then run the installation of the application using the `make install` command:
+  ```bash
+  make install
+  ```
+
+6. Copy the application into its final destination to complete the installation:
+  ```bash
+  cp ~/s3fs-fuse/src/s3fs /usr/local/bin/s3fs
+  ```
+
+## Configuring s3fs
+
+1. Enter your S3 credentials in a file `$HOME/.passwd-s3fs` and set owner-only
+   permissions:
+  ```
+  echo <ACCESS_KEY>:<SECRET_KEY> > $HOME/.passwd-s3fs
+  chmod 600 $HOME/.passwd-s3fs
+  ```
+
+2. Create a file system from an existing bucket:
+    - Replace `$SCW-BUCKET-NAME` with the name of your Object Storage bucket and `$FOLDER-TO-MOUNT` with the local folder to mount it
+    - Replace the `endpoint` parameter with the location of the your bucket (`fr-par` for Paris, `nl-ams` for Amsterdam or `pl-waw` for Warsaw)
+    - Replace `s3.fr-par.scw.cloud` with the address of the storage cluster of your bucket. It can either be `s3.nl-ams.scw.cloud` (Amsterdam, The Netherlands), `s3.fr-par.scw.cloud` (Paris, France) or `s3.pl-waw.scw.cloud` (Warsaw, Poland).
+    ```
+    s3fs $SCW-BUCKET-NAME $FOLDER-TO-MOUNT -o allow_other -o passwd_file=$HOME/.passwd-s3fs-o use_path_request_style -o endpoint=fr-par -o parallel_count=15 -o multipart_size=128 -o nocopyapi -o url=https://s3.fr-par.scw.cloud
+    ```
+    <Message type="important">
+
+    The flag `-o multipart_size=128` sets the chunk (file-part) size for multipart
+    uploads to 128MB. This value allows you to upload files up to a maximum file size
+    of 128GB. This value allows you to upload files up to a maximum file size of 128GB.
+    Lower values will give you better performances. You can set it to:
+
+      - A minimum chunk size of 5 MB, to increase performance (Maximum file size: 5GB)
+      - A maximum chunk size of 5000 MB, to increase the maximum file size (Maximum file size: 5TB)
+
+    </Message>
+
+3. Add the following line to `/etc/fstab` to mount the file system on boot:
+
+> **Note:** Remember to replace `s3.fr-par.scw.cloud` with the address corresponding to your buckets' geographical location.
+
+```
+s3fs#[bucket_name] /mount-point fuse _netdev,allow_other,use_path_request_style,url=https://s3.fr-par.scw.cloud/ 0 0
+
+```
+
+## Using Object Storage with s3fs
+
+The file system will appear in your OS like a local file system and you can access the files like as they are on your hard drive.
+
+Please note, that there are some limitations when using S3 as a file system:
+
+- Random writes or appends to files require rewriting the entire file
+- Metadata operations such as listing directories have poor performance due to network latency
+- Eventual consistency can temporarily yield stale data
+- No atomic renames of files or directories
+- No coordination between multiple clients mounting the same bucket
+- No hard links

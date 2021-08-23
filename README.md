@@ -26,7 +26,7 @@ The website's staging environment is accessible at: https://scaleway-docs.s3-web
 
 ## ✏️ **Contributing**
 
-[**Follow the link**](./docs/CONTRIBUTING.md) to get in touch about our contribution processes.
+[**Follow the link**](./docs/CONTRIBUTING.md) to learn more about our contribution processes.
 
 ### MDX blocks
 
@@ -42,7 +42,7 @@ If you use markdown files, you should read about what frontmatters are.
 
 ### Blocks details
 
-This section shows code details listed in a full page.
+This section shows code details listed on a full page.
 
 [See the full Components page](https://scaleway-docs.s3-website.fr-par.scw.cloud/components/) where our page components code is explained in detail.
 

@@ -1,6 +1,12 @@
-# Welcome to Scaleway Documentation Platform
+![](https://img.shields.io/badge/documentation-Scaleway-rebeccapurple)
+![Github All Contributors](https://img.shields.io/github/all-contributors/scaleway/docs-content)
+![GitHub commit activity](https://img.shields.io/github/commit-activity/w/scaleway/docs-content)
 
-## What is Scaleway Documentation Platform?
+# Welcome to the Scaleway Documentation Platform
+
+![](./docs/images/prof_mascotte@2x.png)
+
+## What is the Scaleway Documentation Platform?
 
 The goal of this platform is to provide you with information about all the resources in the Scaleway Ecosystem and the procedures you should follow to get the best experience from our products and services. You will find several types of content.
 
@@ -16,21 +22,26 @@ The goal of this platform is to provide you with information about all the resou
 
 **Reference documentation:** we provide pertinent details about a specific subject.
 
-
 The website's staging environment is accessible at: https://scaleway-docs.s3-website.fr-par.scw.cloud/
 
-## Who can contribute to the Documentation Content?
+## ✏️ **Contributing**
 
-Anyone who is a Scaleway employee can contribute to the documentation content. However, you will not have the right to push content straight to main. All PRs must be validated by at least two technical writers from the Product Documentation Team.
+[**Follow the link**](./docs/CONTRIBUTING.md) to get in touch about our contribution processes.
 
-## How to contribute?
+### MDX blocks
 
-Any PRs which do not comply with the rules below will be rejected.
+Blocks are useful to set rich content within your contributions.
 
-1. Read and follow [the writing guidelines](https://confluence.infra.online.net/display/MARKETTECHANIM/Documentation+Guidelines).
-2. Make sure you have identified the type of content that you want to write (eg: is it a how to, a reference content, a tutorial? If you are not sure, refer to the content type definition above).
-3. All PRs names must have an associated DOC (formerly MTA) ticket number associated. Please create first a DOC (formerly MTA) ticket.
-4. All PRs must have the documentation label associated.
-5. All PRs must be reviewed by at least one Technical Writer from the Product Documentation team.
-6. All PRs must be approved by at least two Technical Writers from the Product Documentation team before merging to main.
-7. When submitting your PR, make sure your final commit message includes `docs($PRODUCTNAME): $FIXEXPLANATION MTA-TICKETNUMBER`
+[See how MDX blocks works](./docs/CONTRIBUTING.md#mdx-blocks)
+
+### Frontmatters
+
+If you use markdown files, you should read about what frontmatters are.
+
+[See what you can do with frontmatters](./docs/CONTRIBUTING.md#frontmatters)
+
+### Blocks details
+
+This section shows code details listed in a full page.
+
+[See the full Components page](https://scaleway-docs.s3-website.fr-par.scw.cloud/components/) where our page components code is explained in detail.

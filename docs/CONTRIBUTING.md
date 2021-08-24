@@ -26,6 +26,41 @@ Any PRs which do not comply with the rules below will be rejected.
 
 ---
 
+## Commit conventions
+
+This project use [conventionalcommits](https://www.conventionalcommits.org/en/v1.0.0/) based on [Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines).
+
+Here is a commit template exemple:
+
+`type(module): description with some words PROJECT-XXX`
+
+Lowercase only, `(module)` is optional. Project number at the end is recommended.
+
+Here is the list of `type` to use (commons in bold)
+
+- `docs`
+  - _Do not use other than **project docs** itself concerns (like README file)_
+- `feat`
+  - _Add new materials (page, sections, …)_
+- `fix`
+  - _For instance, fix typos, images, …_
+- `refactor`
+  - _In rare cases, for instance if you have to change folders structures._
+- `revert`
+  - _Oops case, if you want to redo previous history state_
+- `style`
+  - _For simple format changes that are not content changes_
+
+### examples
+
+`feat(console): add vpc how-to page MTA-2342`
+
+`fix(iot): wrong image in quickstart`
+
+`style: add bold at scaleway name occurences MTA-1337`
+
+---
+
 ## Markdown
 
 Markdown is a lightweight markup language for creating formatted text using a plain-text editor.

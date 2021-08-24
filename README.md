@@ -45,3 +45,15 @@ If you use markdown files, you should read about what frontmatters are.
 This section shows code details listed in a full page.
 
 [See the full Components page](https://scaleway-docs.s3-website.fr-par.scw.cloud/components/) where our page components code is explained in detail.
+
+## License
+
+Under [CC-BY-NC-SA-4.0](https://fr.wikipedia.org/wiki/Licence_Creative_Commons).
+
+- CC: Creative Commons
+- BY: Attribution
+  - The licensor permits others to copy, distribute, display, and perform the work. In return, licenses must give the original author credit.
+- NC: Non Commercial
+  - The licensor permits others to copy, distribute, display, and perform the work. In return, licenses may not use the work for commercial purposes -- unless they get the licensor's permission.
+- SA: Share Alike
+  - The licensor permits others to distribute derivative works only under a license identical to the one that governs the licensor's work.

@@ -83,7 +83,7 @@ MDX components are useful to set rich content and interactions within your contr
 
 This section shows code details listed in a full page.
 
-🔎 [See the full Components page](https://scaleway-docs.s3-website.fr-par.scw.cloud/components/).
+🔎 [See the full Components page](https://scaleway.com/en/docs/components/).
 
 Feel free to explore this page in your markdown editor to see how the components were used, or in `.mdx` content files that already use MDX components.
 
@@ -125,8 +125,6 @@ Here starts the content…
 - `dates` are showed in pages under titles. `validation` must be a date later than the `posted`. Format should be `AAAA-MM-DD`
 - `steps` are used in JSON+LD script tag in html head. It respects the schema.org format and is used for SEO, as Google could show steps in search results. 
 
----
-
 ## Writing Guidelines
 
 ### Requirements
@@ -154,7 +152,7 @@ You can go up to 5 hierarchy levels (H1, H2, H3, H4, H5).
 
 - In the right menu, **only H1 and H2 are visible**.
 
-- **No titles should be orphaned**. For example, if started with H2, you should go down in sequence. So the next step should either be another H2 or a level lower (in this case, H3). 
+- **No titles should be orphaned**. For example, if you started with H2, you should go down in sequence. So the next step should either be another H2 or a level lower (in this case, H3). 
 ---
 
 See also: [Anchors and titles components](/components#h2-title)
@@ -169,7 +167,7 @@ At Scaleway we use US English.
 
 What should be capitalized: 
 
-- Product and feature names 
+- Product names 
 
 ### Emboldening
 
@@ -177,7 +175,7 @@ Bold text is used to represent where a user should click or highlight other text
 
 Example:
 
-**Click +Create an Instance to proceed.**
+Click **+Create an Instance to proceed.**
 
 ## Code Snippets
 
@@ -187,7 +185,7 @@ Use a code block for examples of:
 - scripts
 - outputs
 
-Use inline code snippets when you need to reference information in your text, such as:
+Use inline code when you need to reference information in your text, such as:
 
 - environment variables
 - e-mail addresses
@@ -195,9 +193,14 @@ Use inline code snippets when you need to reference information in your text, su
 
 ### Message boxes
 
+Message boxes help you highlight important or pertinent information.
+
 **Tip**:	An alternative way of doing the step, or links to additional information about the step.
+
 **Note**:	Information about the consequence(s) of a step.
+
 **Important**: Warning about a possible unwanted consequence (eg delete all data) or possible mistake that could be made during this step.
+
 **Requirements**:	A list of what the user must have already prepared before starting the step-by-step.
 
 See also: [Message box components](/components#messages)
@@ -228,41 +231,20 @@ If you need to use an example of IP addresses, some IP ranges are reserved for d
 
 2001:db8::/32
 
-## Technical Guidelines
+## Screenshot Guidelines
 
-### Indentation
+### Format
+Save screenshots in `.png` format.
 
-Indent new lines within a numbered step, as such:
+### Information to omit
+Omit any personal information (such as e-mail addresses, addresses, telephone numbers, the Scaleway resource ID, etc). Use the blur effect over the information you wish to conceal. 
 
-```md
-1. Click **Instances** in the **Compute** section of the side menu. The Instance creation page displays.
- 
-   <Lightbox src="scaleway-instance-creation-page.png" alt="" />
-    
-   <Message type="note">
-     If you have existing Instances in your account, you will see a list of
-     these instances instead of the Instance creation page, and a green **+**
-     button for creating new Instances.
-   </Message>
-2. Enter [...]
-```
+### Captions
+If the image contents are already being described in the documentation text, there is no need to include a caption. To increase accessibility, if new information is being presented in the image, include a description (`alt="caption"`).
 
-### Unordered Lists
-
-When including an unordered list within a numbered list, indent each bullet with 4 spaces or 2 tabs.
+### Image Names
+Start with “Scaleway” and make the name as explicit as possible, describing the screenshot. 
 
 Example:
 
-```md
-3. Complete the following steps in the wizard
-    - Choose an **Availability Zone**, which is the geographical region where your instance will be deployed
-    - Choose an **Image** to run on your instance. This can be an operating system, an InstantApp or a custom image.
-    - Choose an **Instance type**. Different instance types have different prices, processing power, memory, SSD disks and bandwidth.
-    - Add **Volumes**. This is an optional step. You can leave the default settings for storage, or choose to add more [block](link) or [local](link) storage to your instance.
-    - Enter a **Name** for your instance, or leave the randomly-generated name in place. Optionally, you can also add tags to help you organize your instances.
-    - Click **Advanced Options** if you wish to configure a Flexible IP, a local bootscript or a cloud-init configuration.
-    - Verify the **SSH Keys** that will be give you access to your Instance
-    - Verify the **Estimated Cost** of your instance, based on the specifications you chose.
- 
-4. Click **Create a new instance** to finish. The creation of your instance is started, and you are informed when the instance is ready.
-```
+`scaleway-top-right-menu.png` or `scaleway-leave-organization`

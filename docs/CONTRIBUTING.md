@@ -3,7 +3,7 @@ permalink: /CONTRIBUTING.md
 title: Contributing
 ---
 
-# Contribute with the Documentation Content
+# Contribute to the Documentation Content
 
 ## Who can contribute?
 
@@ -15,7 +15,7 @@ All rules below concern this repository.
 Any PRs which do not comply with the rules below will be rejected.
 
 1. Read and follow [the writing guidelines](#writing-guidelines).
-2. Make sure you have identified the [type of content](/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (eg: is it a how to, a reference content, a tutorial?).
+2. Make sure you have identified the [type of content](/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (eg: tutorial, API/CLI documentation, reference content or troubleshooting content?).
 3. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
     - `source`: Either `int` (for internal contributor) or `ext` (for external contributor) to Scaleway. If you are not a Scaleway staff member, please use `ext`.
     - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
@@ -71,13 +71,13 @@ Markdown is a lightweight markup language for creating formatted text using a pl
 
 Files with markdown content usually use the `.md` extension.
 
-As we need to use evolved dynamic and designed blocks, at the Scaleway Documentation platform, the choice was to use the extended markdown format, with a special `.mdx` extension.
+As we need to use evolved dynamic and designed blocks, for the Scaleway Documentation platform, the choice was to use the extended markdown format, with a special `.mdx` extension.
 
 With MDX files traditional markdown content can be used with React components.
 
 ### MDX components
 
-MDX components are useful to set rich content and interactions within your contributions.
+MDX components are useful for adding rich content and interactions within your contributions.
 
 #### Components 
 

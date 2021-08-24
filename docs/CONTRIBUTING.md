@@ -23,24 +23,23 @@ Any PRs which do not comply with the rules below will be rejected.
 
       So in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
 
-4. All commit names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION`.
+4. All commit names must comply with the [commit naming conventions](#commit-conventions) described below.
 5. All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
-6. All PRs must be reviewed by at least one Technical Writer from the Product Documentation team.
-7. All PRs must be approved by at least two Technical Writers from the Product Documentation team before merging to main.
+6. All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
 
 ---
 
 ## Commit conventions
 
-This project use [conventionalcommits](https://www.conventionalcommits.org/en/v1.0.0/) based on [Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines).
+This project uses [conventionalcommits](https://www.conventionalcommits.org/en/v1.0.0/) based on the [Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines).
 
-Here is a commit template exemple:
+Here is a commit template example:
 
 `type(module): description with some words PROJECT-XXX`
 
-Lowercase only, `(module)` is optional. Project number at the end is recommended.
+Lowercase only, `(module)` is optional. Adding the project number at the end is recommended.
 
-Here is the list of `type` to use (commons in bold)
+Here is the list of `type` to use (commons in bold):
 
 - `docs`
   - _Do not use other than **project docs** itself concerns (like README file)_

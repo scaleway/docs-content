@@ -28,7 +28,7 @@ The goal of this platform is to provide you with information about all the resou
 
 ### MDX blocks
 
-Blocks are useful to set rich content within your contributions.
+Blocks are useful for adding rich content to your contributions.
 
 [See how MDX blocks works](./docs/CONTRIBUTING.md#mdx-blocks)
 
@@ -42,7 +42,7 @@ If you use markdown files, you should read about what frontmatters are.
 
 This section shows code details listed on a full page.
 
-[See the full Components page](https://scaleway-docs.s3-website.fr-par.scw.cloud/components/) where our page components code is explained in detail.
+[See the full Components page](https://scaleway.com/en/docs/components/) where our page components code is explained in detail.
 
 ## License
 

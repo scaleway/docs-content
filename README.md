@@ -22,8 +22,6 @@ The goal of this platform is to provide you with information about all the resou
 
 **Reference documentation:** we provide pertinent details about a specific subject.
 
-The website's staging environment is accessible at: https://scaleway-docs.s3-website.fr-par.scw.cloud/
-
 ## ✏️ **Contributing**
 
 [**Follow the link**](./docs/CONTRIBUTING.md) to learn more about our contribution processes.

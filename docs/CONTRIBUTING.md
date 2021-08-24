@@ -112,9 +112,10 @@ steps:
     url: https://www.scaleway.com/en/docs/compute/bare-metal-cloud/api-cli/bare-metal-with-cli/#-Installing-an-OS/
   - step: Using Other CLI Commands
     url: https://www.scaleway.com/en/docs/compute/bare-metal-cloud/api-cli/bare-metal-with-cli/#-Using-Other-CLI-Commands
----
 
+---
 Here starts the content…
+
 ```
 
 - `title` is used as H1 in pages, in the html head element as the browser tab title and for SEO.
@@ -128,3 +129,140 @@ Here starts the content…
 
 ## Writing Guidelines
 
+### Requirements
+
+In this section, point out what the user must have already prepared before starting the step-by-step. Include links to other documentation pages.
+
+Example:
+
+---
+**Requirements**
+
+  - You have a Scaleway Account
+  - You have configured your SSH key
+
+---
+
+See also: [Message boxes typographical conventions](#message-boxes)
+
+### Titles/Anchors
+
+You can go up to 5 hierarchy levels (H1, H2, H3, H4, H5).
+
+---
+**Important**
+
+- In the right menu, **only H1 and H2 are visible**.
+
+- **No titles should be orphaned**. For example, if started with H2, you should go down in sequence. So the next step should either be another H2 or a level lower (in this case, H3). 
+---
+
+See also: [Anchors and titles components](/components#h2-title)
+
+## Typographical Conventions
+
+### Spelling
+
+At Scaleway we use US English. 
+
+### Capitalization
+
+What should be capitalized: 
+
+- Product and feature names 
+
+### Emboldening
+
+Bold text is used to represent where a user should click or highlight other text relevant to the UI. 
+
+Example:
+
+**Click +Create an Instance to proceed.**
+
+## Code Snippets
+
+Use a code block for examples of:
+
+- commands
+- scripts
+- outputs
+
+Use inline code snippets when you need to reference information in your text, such as:
+
+- environment variables
+- e-mail addresses
+- referencing parts of the code block in the text
+
+### Message boxes
+
+**Tip**:	An alternative way of doing the step, or links to additional information about the step.
+**Note**:	Information about the consequence(s) of a step.
+**Important**: Warning about a possible unwanted consequence (eg delete all data) or possible mistake that could be made during this step.
+**Requirements**:	A list of what the user must have already prepared before starting the step-by-step.
+
+See also: [Message box components](/components#messages)
+
+### Environment Variables
+
+When referring to API calls or CLI commands, follow the environment variable conventions listed on [this page](https://github.com/scaleway/scaleway-sdk-go/tree/master/scw#environment-variables). Use the same format for other variables. 
+
+Example:
+
+```
+$EMAIL_ADDRESS
+```
+
+If you need to use an example of IP addresses, some IP ranges are reserved for documentation:
+
+**IPv4**
+
+192.0.2.0/24
+
+198.51.100.0/24	
+
+203.0.113.0/24	
+
+233.252.0.0/24	
+
+**IPv6**
+
+2001:db8::/32
+
+## Technical Guidelines
+
+### Indentation
+
+Indent new lines within a numbered step, as such:
+
+```md
+1. Click **Instances** in the **Compute** section of the side menu. The Instance creation page displays.
+ 
+   <Lightbox src="scaleway-instance-creation-page.png" alt="" />
+    
+   <Message type="note">
+     If you have existing Instances in your account, you will see a list of
+     these instances instead of the Instance creation page, and a green **+**
+     button for creating new Instances.
+   </Message>
+2. Enter [...]
+```
+
+### Unordered Lists
+
+When including an unordered list within a numbered list, indent each bullet with 4 spaces or 2 tabs.
+
+Example:
+
+```md
+3. Complete the following steps in the wizard
+    - Choose an **Availability Zone**, which is the geographical region where your instance will be deployed
+    - Choose an **Image** to run on your instance. This can be an operating system, an InstantApp or a custom image.
+    - Choose an **Instance type**. Different instance types have different prices, processing power, memory, SSD disks and bandwidth.
+    - Add **Volumes**. This is an optional step. You can leave the default settings for storage, or choose to add more [block](link) or [local](link) storage to your instance.
+    - Enter a **Name** for your instance, or leave the randomly-generated name in place. Optionally, you can also add tags to help you organize your instances.
+    - Click **Advanced Options** if you wish to configure a Flexible IP, a local bootscript or a cloud-init configuration.
+    - Verify the **SSH Keys** that will be give you access to your Instance
+    - Verify the **Estimated Cost** of your instance, based on the specifications you chose.
+ 
+4. Click **Create a new instance** to finish. The creation of your instance is started, and you are informed when the instance is ready.
+```

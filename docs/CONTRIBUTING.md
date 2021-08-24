@@ -7,36 +7,39 @@ title: Contributing
 
 ## Who can contribute?
 
-Anyone who is a Scaleway employee can contribute to the documentation content.  
-However, you will not have the right to push content straight to main.  
-All PRs must be validated by at least two technical writers from the Product Documentation Team.
+Anyone who has a GitHub account can contribute to the documentation content.
 
 ## How to contribute?
 
-All rules below concern this repo.  
+All rules below concern this repository.
 Any PRs which do not comply with the rules below will be rejected.
 
-1. Read and follow [the writing guidelines](https://confluence.infra.online.net/display/MARKETTECHANIM/Documentation+Guidelines).
-2. Make sure you have identified the type of content that you want to write (eg: is it a how to, a reference content, a tutorial? If you are not sure, refer to the content type definition above).
-3. All PRs names must have an associated DOC (formerly MTA) ticket number associated. Please create first a DOC (formerly MTA) ticket.
-4. All PRs must have the documentation label associated.
-5. All PRs must be reviewed by at least one Technical Writer from the Product Documentation team.
-6. All PRs must be approved by at least two Technical Writers from the Product Documentation team before merging to main.
-7. When submitting your PR, make sure your final commit message includes `docs($PRODUCTNAME): $FIXEXPLANATION MTA-TICKETNUMBER`
+1. Read and follow [the writing guidelines](#writing-guidelines).
+2. Make sure you have identified the [type of content](/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (eg: tutorial, API/CLI documentation, reference content or troubleshooting content?).
+3. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
+    - `source`: Either `int` (for internal contributor) or `ext` (for external contributor) to Scaleway. If you are not a Scaleway staff member, please use `ext`.
+    - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
+    - `product`: the name of the product that corresponds to the documentation page you will edit. 
+
+      So in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
+
+4. All commit names must comply with the [commit naming conventions](#commit-conventions) described below.
+5. All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
+6. All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
 
 ---
 
 ## Commit conventions
 
-This project use [conventionalcommits](https://www.conventionalcommits.org/en/v1.0.0/) based on [Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines).
+This project uses [conventionalcommits](https://www.conventionalcommits.org/en/v1.0.0/) based on the [Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines).
 
-Here is a commit template exemple:
+Here is a commit template example:
 
 `type(module): description with some words PROJECT-XXX`
 
-Lowercase only, `(module)` is optional. Project number at the end is recommended.
+Lowercase only, `(module)` is optional. Adding the project number at the end is recommended.
 
-Here is the list of `type` to use (commons in bold)
+Here is the list of `type` to use (commons in bold):
 
 - `docs`
   - _Do not use other than **project docs** itself concerns (like README file)_
@@ -67,33 +70,33 @@ Markdown is a lightweight markup language for creating formatted text using a pl
 
 Files with markdown content usually use the `.md` extension.
 
-As we need to use evolved dynamic and designed blocks, the choice was to use the extended markdown format , with special `.mdx` extension.
+As we need to use evolved dynamic and designed blocks, for the Scaleway Documentation platform, the choice was to use the extended markdown format, with a special `.mdx` extension.
 
-Thoses MDX files could be used with our React components, mixed with traditional markdown content.
+With MDX files traditional markdown content can be used with React components.
 
-## MDX components
+### MDX components
 
-MDX components are usefull to set rich content and interactions within your contributions.
+MDX components are useful for adding rich content and interactions within your contributions.
 
-### Components details
+#### Components 
 
-This section shows code details all listed in a full page.
+This section shows code details listed in a full page.
 
-🔎 [See the full Components page](https://scaleway-docs.s3-website.fr-par.scw.cloud/components/) with code details explained.
+🔎 [See the full Components page](https://scaleway.com/en/docs/components/).
 
-Feel free to explore this page in your markdown editor to see how the components were used, or in mdx content files that already use MDX components.
+Feel free to explore this page in your markdown editor to see how the components were used, or in `.mdx` content files that already use MDX components.
 
-## Frontmatters
+### Frontmatter
 
-Any Markdown file that contains a YAML front matter block will be processed by Gatsby as a special file.  
-The front matter must be the first thing in the file and must take the form of valid YAML set between triple-dashed lines.
+Any Markdown file that contains a YAML frontmatter block will be processed by Gatsby as a special file.  
+The front matter must be the first thing in the file and must take the form of a valid YAML set between triple-dashed lines.
 
 Here is a common example used in our `.mdx` files:
 
 ```markdown
 ---
-title: How to close an account
-description: This page explains how to close an account
+title: How to create a Bare Metal server
+description: This page explains how to create a Bare Metal server
 image: /images/scaleway-account.png
 tags: compute baremetal bare metal cloud server dedicated
 dates:
@@ -108,157 +111,139 @@ steps:
     url: https://www.scaleway.com/en/docs/compute/bare-metal-cloud/api-cli/bare-metal-with-cli/#-Installing-an-OS/
   - step: Using Other CLI Commands
     url: https://www.scaleway.com/en/docs/compute/bare-metal-cloud/api-cli/bare-metal-with-cli/#-Using-Other-CLI-Commands
----
 
+---
 Here starts the content…
+
 ```
 
-- `title` is used as H1 in pages, in html head for browser tab title and for SEO.
-- `description` is used in pages and in html head for SEO.
+- `title` is used as H1 in pages, in the html head element as the browser tab title and for SEO.
+- `description` is used in pages and in the head element for SEO.
 - `image` is used for Hero section image in tutorials pages. Path could be relative to file.
-- `tags` are used in within titles in search result lists or pages top.
+- `tags` are used to help populate search result lists or pages top.
 - `dates` are showed in pages under titles. `validation` must be a date later than the `posted`. Format should be `AAAA-MM-DD`
-- `steps` are used in JSON+LD script tag in html head. It respect schema.org format and it used for SEO, as Google could show steps in search results.
+- `steps` are used in JSON+LD script tag in html head. It respects the schema.org format and is used for SEO, as Google could show steps in search results. 
+
+## Writing Guidelines
+
+### Requirements
+
+In this section, point out what the user must have already prepared before starting the step-by-step. Include links to other documentation pages.
+
+Example:
+
+---
+**Requirements**
+
+  - You have a Scaleway Account
+  - You have configured your SSH key
 
 ---
 
-## Special blocks
+See also: [Message boxes typographical conventions](#message-boxes)
 
-There are some blocks that **need to use external files** to work with.
+### Titles/Anchors
 
-**Take care while editing thoses files !** Follow the rules below.
-
-### ⚙️ Using Header
-
-Header is where top header menu can be edited.
-
-This is a simple `.mdx` file here: `blocks/header.mdx`
-
-- Do not remove frontmatter `blocks: header`
-- Edit this file with MDX components `Link` and `GithubLink`.
-
-For instance:
-
-```markdown
----
-blocks: header
----
-
-<Link to="/">Doc Home</Link>
-<Link to="/tutorials/">Tutorials</Link>
-<Link to="/api/">API References</Link>
-<Link to="/changelog/">Changelog</Link>
-<Link to="/blog/">Blog</Link>
-<GithubLink to="/github/">Github</GithubLink>
-```
+You can go up to 5 hierarchy levels (H1, H2, H3, H4, H5).
 
 ---
+**Important**
 
-### ⚙️ Using Sidebars
+- In the right menu, **only H1 and H2 are visible**.
 
-Sidebars are located in the **left column** in the layout of a page.
-
-Components are in `Sidebars/`
-
-- `Navbar` is navigation for all pages except tutorials layout.
-  - It uses `menu/navigation.json`
-- `Filtersbar` is used to filter using Algolia on tutorials page instead of Navbar.
-  - It uses `menu/filters.json` to get its content
-
-These files contain common keys:
-
-- `items`: A list of entries. Each `items` entry has a `label`.
-- `label`: Displayed to front users in human language.
-- `icon`: Displayed to front users for a "Category" (see icons list below).
-
-Some keys are dedicated to `navigation` or `filters`
-
-- navigation
-  - `slug`: Always with a `label`, this is the name in the URL
-- filters
-  - `category`: Facets for Algolia search and results, it can be a product, a user type (like beginner, advanced).
-  - `separator`: Used to set distinct blocks in left column. It put a line of separation above it's own list.
-
-#### Icons
-
-Specific icons are used for products.
-
-![Example icons](./images/icons-product-example-01.png)
-![Example icons](./images/icons-product-example-02.png)
-
-If you need to add an icon, follow this naming convention: `lowercase-kebab-case.inline.svg`  
-In this case, `lowercase-kebab-case` will be the name used as `icon` key in `.json` files.
-
-- ai
-- compute
-- console
-- datacenters
-- dedibox
-- dedirack
-- domain
-- iot
-- network
-- storage
-
+- **No titles should be orphaned**. For example, if you started with H2, you should go down in sequence. So the next step should either be another H2 or a level lower (in this case, H3). 
 ---
 
-### ⚙️ Using CTA
+See also: [Anchors and titles components](/components#h2-title)
 
-"CTA" is the block used to communicate special marketing offers, like vounchers.
+## Typographical Conventions
 
-![](./images/cta.png)
+### Spelling
 
-CTA files are located in `blocks/cta/` folder.
+At Scaleway we use US English. 
 
-#### MDX file
+### Capitalization
 
-- In `index.mdx` frontmatter always set `blocks` var with `cta` value
-- Always use H2 markdown style (i.e. `##`)
+What should be capitalized: 
+
+- Product names 
+
+### Emboldening
+
+Bold text is used to represent where a user should click or highlight other text relevant to the UI. 
+
+Example:
+
+Click **+Create an Instance to proceed.**
+
+## Code Snippets
+
+Use a code block for examples of:
+
+- commands
+- scripts
+- outputs
+
+Use inline code when you need to reference information in your text, such as:
+
+- environment variables
+- e-mail addresses
+- referencing parts of the code block in the text
+
+### Message boxes
+
+Message boxes help you highlight important or pertinent information.
+
+**Tip**:	An alternative way of doing the step, or links to additional information about the step.
+
+**Note**:	Information about the consequence(s) of a step.
+
+**Important**: Warning about a possible unwanted consequence (eg delete all data) or possible mistake that could be made during this step.
+
+**Requirements**:	A list of what the user must have already prepared before starting the step-by-step.
+
+See also: [Message box components](/components#messages)
+
+### Environment Variables
+
+When referring to API calls or CLI commands, follow the environment variable conventions listed on [this page](https://github.com/scaleway/scaleway-sdk-go/tree/master/scw#environment-variables). Use the same format for other variables. 
 
 Example:
 
 ```
----
-blocks: cta
----
-
-![][try-tutorial-vouncher.png]
-
-## Try this tutorial on Scaleway Console
-
-With this free 10€ voucher!
-
-[Sign up](https://console.scaleway.com)
+$EMAIL_ADDRESS
 ```
 
-#### Image
+If you need to use an example of IP addresses, some IP ranges are reserved for documentation:
 
-The CTA image accept one unique image.
+**IPv4**
 
-- Place the only image in `blocks/cta/`, the same folder than `index.mdx`
-- The image name is not important, you can choose it
+192.0.2.0/24
 
----
+198.51.100.0/24	
 
-### ⚙️ Using Feedback
+203.0.113.0/24	
 
-"Feedback" is a popin that allows users to give us feedback.
+233.252.0.0/24	
 
-![](./images/feedback.png)
+**IPv6**
 
-#### Typeform urls
+2001:db8::/32
 
-1. Go to `blocks/feedback.json`
-2. Edit urls for `documentation` and `product`
-3. URLs looks like this: _https://example.typeform.com/to/vxE08L_
+## Screenshot Guidelines
 
-NOTE:
+### Format
+Save screenshots in `.png` format.
 
-- "This Page" button sent a feedback for the current page
-- The Typeform hidden field param MUST be `this_page`
-- This param is set and used by admin/creator of related form
-- While the param is correctly set on Typeform admin side, there is nothing more to do for redactors
+### Information to omit
+Omit any personal information (such as e-mail addresses, addresses, telephone numbers, the Scaleway resource ID, etc). Use the blur effect over the information you wish to conceal. 
 
-See [this page about Typeform hidden field](https://help.typeform.com/hc/en-us/articles/360029571951)
+### Captions
+If the image contents are already being described in the documentation text, there is no need to include a caption. To increase accessibility, if new information is being presented in the image, include a description (`alt="caption"`).
 
----
+### Image Names
+Start with “Scaleway” and make the name as explicit as possible, describing the screenshot. 
+
+Example:
+
+`scaleway-top-right-menu.png` or `scaleway-leave-organization`

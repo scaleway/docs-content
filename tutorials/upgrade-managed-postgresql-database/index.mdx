@@ -1,0 +1,182 @@
+---
+title: Upgrading your Managed Database for PostgreSQL to the latest version
+description: This page shows how to upgrade your Managed Database for PostgreSQL to the latest version 
+tags: storage, postgresql, database
+excerpt: |
+  PostgreSQL is a powerful, open-source object-relational database system with more than 30 years of active development. As major PostgreSQL releases regularly add new features, the layout of the system tables may change. However the internal data storage format itself rarely changes. This allows you to upgrade a PostgreSQL database system without data loss using the backup and restore functions of the Database API.
+categories:
+  - storage
+  - database
+image: /assets/images/docs/scaleway.png
+permalink: docs/how-to-upgrade-managed-database-for-postgresql/
+keywords: cloud tutorials, cloud documentations, cloud instance, cloud hosting, server, storage, database, postgresql, sql, database engine, postgre
+---
+
+<Message type="important">
+
+PostgreSQL version 9.6 reaches its End of Life (EoL) on November 11, 2021. It is **recommended** to upgrade your PostgreSQL database engine to the latest available version before this date.
+
+</Message>
+
+[PostgreSQL](https://www.postgresql.org/) is a powerful, open-source object-relational database system with more than 30 years of active development. As major PostgreSQL releases regularly add new features, the layout of the system tables may change. However, the internal data storage format itself rarely changes. This allows you to upgrade a PostgreSQL database system without data loss using the backup and restore functions of the Database API.
+
+In this tutorial, you will learn how to migrate your PostgreSQL databases from version 9.6 to 13.
+
+<Message type="requirement">
+
+- You have an account and are logged into [console.scaleway.com](https://console.scaleway.com)
+- You have generated your [API key](https://www.scaleway.com/en/docs/generate-api-keys/#-How-to-generate-an-API-Key)
+- You have a PostgreSQL database running on version 9.6
+- You have installed `curl` on your local computer
+
+</Message>
+
+## Creating a PostgreSQL 13 Instance
+
+<Message type="note">
+
+This tutorial works with all versions of PostgreSQL. If you prefer another version than PostgreSQL 13, select your preferred version during the Instance creation.
+
+</Message>
+
+1. Open the [Scaleway Console](https://console.scaleway.com) in a web browser and click **Database** in the **Storage** section of the side menu. The list of your databases displays. 
+
+2. Click **+ Create an Instance**. The [Instance creation wizard](https://console.scaleway.com/rdb/instances/create) displays.
+
+3. Select **PostgreSQL-13** from the dropdown list and fill in the [required information](https://www.scaleway.com/en/docs/database-instance/#-Creating-a-Database-Instance) for your new database instance. Then click **Create an Instance**. Your database is created and you are redirected to the database dashboard.
+
+    <Message type="note">
+
+    Ensure your new Database Instance is located in the same geographical region as your old one.
+
+    </Message> 
+
+4. Click the **Users** tab and replicate the users of your existing Database Instance.
+
+## Backing up your existing database using the Scaleway API
+
+<Message type="note">
+
+You must have [installed `curl`](https://curl.se/) on your local computer, and [generated your API key](https://www.scaleway.com/en/docs/generate-api-keys/#-How-to-generate-an-API-Key) before proceeding with the following steps. 
+
+</Message>
+
+1. Retrieve the database ID of your **old** Database Instance. You can find it on the **Database Instance Information** page of your Instance: 
+
+    <Lightbox src="scaleway-database-information.png" alt="" />
+
+2. Make a backup of your logical database(s) using the API: 
+
+    ```sh
+    curl -X POST -H "Content-Type: application/json" \
+    -H "X-Auth-Token: $SECRET_KEY" https://api.scaleway.com/rdb/v1/<region>/fr-par/backups -d '{
+    "instance_id": "<database_instance_id>",
+    "database_name": "<my_database>",
+    "name": "<backup_name>",
+    "expires_at": "<expiry_date>"
+    }'
+    ```
+
+3. Replace the following information in the command above: 
+
+    * `$SECRET_KEY`: Your Scaleway API [secret key](https://www.scaleway.com/en/docs/generate-api-keys/#-How-to-generate-an-API-Key)
+    * `<region>`: The region of your Database Instance. It can either be `fr-par`, `nl-ams`, or `pl-waw`.
+    * `<database_instance_id>`: The ID of your **old** Database Instance, for example: `ad085d32-16e0-4ce6-862c-8e70c56b9ee7`.
+    * `<my_database>`: The name of your PostgreSQL database, for example `customer_data`.
+    * `<backup_name>`: A common name for your database backup, for example `customer_data_backup`.
+    * `<expiry_date>`: The expiration date for your backup in [ISO8601](https://www.iso.org/iso-8601-date-and-time-format.html) format, for example: `2021-06-26T13:00:00Z`.
+
+    You will receive a [JSON formatted](https://www.json.org/json-en.html) output with information about the backup: 
+
+    ```json
+    {
+        "created_at": "2021-06-24T12:07:17.368668Z",
+        "database_name": "customer_data",
+        "download_url": null,
+        "download_url_expires_at": null,
+        "expires_at": "2021-06-26T13:00:00Z",
+        "id": "7feaab67-0f22-4170-96cc-6fbb11c57256",
+        "instance_id": "ad085d32-16e0-4ce6-862c-8e70c56b9ee7",
+        "instance_name": "rdb-nostalgic-dubinsky",
+        "name": "customer_data_backup",
+        "region": "fr-par",
+        "size": null,
+        "status": "creating",
+        "updated_at": null
+    }
+    ```
+    <Message type="note">
+
+    If you want to migrate several logical databases, repeat the command above for each of them. 
+
+    </Message> 
+
+## Restoring your backup on your new Database Instance
+
+<Message type="important">
+
+Ensure that you have replicated your database users and permissions on your new Instance before continuing with the following steps. 
+
+</Message>
+
+1. Retrieve the database ID of your **new** Database Instance. You can find it on the **Database Instance Information** page of your Instance.
+
+2. Restore the backup of your logical database(s) using the API: 
+
+    ```sh
+    curl -X POST -H "Content-Type: application/json" \
+    -H "X-Auth-Token: $SECRET_KEY" https://api.scaleway.com/rdb/v1/regions/<region>/backups/<backup_id>/restore -d '{
+    "database_name": "<my_database>",
+    "instance_id": "<new_database_instance_id>"
+    }'
+    ```
+    Replace the following information in the command above: 
+
+    * `$SECRET_KEY`: Your Scaleway API [secret key](https://www.scaleway.com/en/docs/generate-api-keys/#-How-to-generate-an-API-Key)
+    * `<region>`: The region of your Database Instance. It can either be `fr-par`, `nl-ams`, or `pl-waw`.
+    * `<backup_id>`: The ID of your database backup, for example: `7feaab67-0f22-4170-96cc-6fbb11c57256`.
+    * `<my_database>`: The name of your PostgreSQL database, for example: `customer_data`.
+    * `<database_instance_id>`: The ID of your **new** Database Instance, for example: `d401ff10-350d-4707-9571-c861677f0031`.
+
+    You will receive a [JSON formatted](https://www.json.org/json-en.html) output with information about the backup. You notice the **status** as `restoring`.: 
+
+    ```json
+    {
+        "created_at": "2021-06-24T12:07:17.368668Z",
+        "database_name": "dvdrental",
+        "download_url": "null",
+        "expires_at": "2021-06-26T13:00:00Z",
+        "id": "7feaab67-0f22-4170-96cc-6fbb11c57256",
+        "instance_id": "ad085d32-16e0-4ce6-862c-8e70c56b9ee7",
+        "instance_name": "rdb-nostalgic-dubinsky",
+        "name": "customer_data_backup",
+        "region": "fr-par",
+        "size": 661389,
+        "status": "restoring",
+        "updated_at": "2021-06-24T12:07:21.775783Z"
+    }
+    ```
+
+    If you want to restore several logical databases, repeat the command above for each of them.
+
+    <Message type="note">
+
+    Depending on the size of your backup, the restoring it might take a moment. 
+
+    </Message>
+
+3. The database appears in the **Database** tab of your new Database Instance, once the backup has been imported: 
+
+    <Lightbox src="scaleway-database-restored.png" alt="" />
+
+    <Message type="tip">
+
+    Optionally, you can verify the status of your database with a tool like [pgAdmin 4](https://www.scaleway.com/en/docs/manage-database-instances-with-pgadmin-4/)
+
+    </Message>
+
+4. Update your applications with the endpoint (IP address and port) of the new Database Instance.
+
+5. Once the migration is complete, [delete](https://www.scaleway.com/en/docs/database-instance/#-Deleting-the-Database-Instance) the old Database Instance from your account. 
+
+You now have successfully migrated your managed PostgreSQL databases to the latest version of the database engine. For more information about all new features and improvements in the latest version refer to the [PostgreSQL release notes](https://www.postgresql.org/docs/release/) and the [official documentation](https://www.postgresql.org/docs/). To learn more about Scaleway's powerful REST-API, refer to our [developers' documentation](https://developers.scaleway.com/en/products/rdb/api/).

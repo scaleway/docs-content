@@ -190,7 +190,7 @@ Ensure that you have replicated your database users and permissions on your new 
 
 ## Automatic migration via a bash script using the Scaleway CLI v2
 
-This solution lets you migrate your database(s) automatically, with a bash script using the Scaleway CLI v2. The script will walk you through the migration process.
+This solution enables you to migrate your database(s) automatically, with a bash script using the Scaleway CLI v2. The script will walk you through the migration process.
 
 <Message type="requirement">
 
@@ -203,199 +203,225 @@ This solution lets you migrate your database(s) automatically, with a bash scrip
 1. Copy and paste the following script into a text file, and save it as `db_mig_script.sh`
 
     ```
-    #!/bin/bash -l
+        #!/bin/bash -l
 
-    colred='\033[0;31m' # Red
-    colgrn='\033[0;32m' # Green
-    colylw='\033[0;33m' # Yellow
-    colblu='\033[0;34m' # Blue
-    colrst='\033[0m'    # Text Reset
+        colred='\033[0;31m' # Red
+        colgrn='\033[0;32m' # Green
+        colylw='\033[0;33m' # Yellow
+        colblu='\033[0;34m' # Blue
+        colrst='\033[0m'    # Text Reset
 
-    verbosity=5 # default to show info
-    silent_lvl=0
-    crt_lvl=1
-    err_lvl=2
-    wrn_lvl=3
-    inf_lvl=4
-    dbg_lvl=5
+        verbosity=5 # default to show info
+        silent_lvl=0
+        crt_lvl=1
+        err_lvl=2
+        wrn_lvl=3
+        inf_lvl=4
+        dbg_lvl=5
 
-    log_notify() { log $silent_lvl "NOTE: $1"; } # Always prints
-    log_critical() { log $crt_lvl "${colred}CRITICAL:${colrst} ---  $1"; }
-    log_error() { log $err_lvl "${colred}ERROR${colrst} --- $1"; }
-    log_warn() { log $wrn_lvl "${colylw}WARNING${colrst} - $1"; }
-    log_info() { log $inf_lvl "${colgrn}INFO${colrst} ---- $1"; }
-    log_debug() { log $dbg_lvl "${colblu}DEBUG${colrst} --- $1"; }
-    log() {
-        if [ $verbosity -ge "$1" ]; then
-            datestring=$(date +'%Y-%m-%d %H:%M:%S')
-            echo -e "$datestring - $2"
-        fi
-    }
+        log_notify() { log $silent_lvl "NOTE: $1"; } # Always prints
+        log_critical() { log $crt_lvl "${colred}CRITICAL:${colrst} ---  $1"; }
+        log_error() { log $err_lvl "${colred}ERROR${colrst} --- $1"; }
+        log_warn() { log $wrn_lvl "${colylw}WARNING${colrst} - $1"; }
+        log_info() { log $inf_lvl "${colgrn}INFO${colrst} ---- $1"; }
+        log_debug() { log $dbg_lvl "${colblu}DEBUG${colrst} --- $1"; }
+        log() {
+            if [ $verbosity -ge "$1" ]; then
+                datestring=$(date +'%Y-%m-%d %H:%M:%S')
+                echo -e "$datestring - $2"
+            fi
+        }
 
-    # ----------------------------------------------------------------------------------------------------------------------------------------------
+        # ----------------------------------------------------------------------------------------------------------------------------------------------
 
-    # This script is designed to migrate a Scaleway RDB instance to a new Postgres major version
-    # It requires Scaleway CLI v2 as well as Postgres binaries
+        # This script is designed to migrate a Scaleway RDB instance to a new PostgreSQL major version
+        # It requires Scaleway CLI v2 as well as PostgreSQL binaries
 
-    MIGRATION_USER_PASSWORD=$(openssl rand -base64 14)
-    MIGRATION_USER="rdb_migration"
-    REGION="fr-par"
-    CLI_COMMAND="scw rdb"
+        MIGRATION_USER_PASSWORD=$(openssl rand -base64 14)
+        MIGRATION_USER="rdb_migration"
+        REGION="fr-par"
+        CLI_COMMAND="scw rdb"
 
-    # Wrapper to call rdb cli with json output including error
-    run_rdb_cli() {
-        $CLI_COMMAND "$@" region=$REGION -o json 2>&1
-    }
+        # Wrapper to call rdb cli with json output including error
+        run_rdb_cli() {
+            $CLI_COMMAND "$@" region=$REGION -o json 2>&1
+        }
 
-    # Get the instance major version
-    instance_major_verion () {
-        run_rdb_cli instance get "$1" | jq -r .engine | awk -F'-' '{print $2}' | awk -F'.' '{print $1}'
-    }
+        # Get the instance major version
+        instance_major_verion () {
+            run_rdb_cli instance get "$1" | jq -r .engine | awk -F'-' '{print $2}' | awk -F'.' '{print $1}'
+        }
 
-    # Create a new migration user
-    create_migration_user () {
-        run_rdb_cli user create name="$MIGRATION_USER" password="$MIGRATION_USER_PASSWORD" instance-id="$1"
-    }
+        # Create a new migration user
+        create_migration_user () {
+            run_rdb_cli user create name="$MIGRATION_USER" password="$MIGRATION_USER_PASSWORD" instance-id="$1"
+        }
 
-    # Build and return PostgreSQL constring
-    get_conn_string () {
-        endpoint=$(run_rdb_cli instance get "$1" | jq -r '.endpoint')
-        port=$(echo "$endpoint" | jq .port)
-        ip=$(echo "$endpoint" | jq -r .ip)
-        echo "-h $ip --port $port -U $MIGRATION_USER"
-    }
+        # Build and return PostgreSQL constring
+        get_conn_string () {
+            endpoint=$(run_rdb_cli instance get "$1" | jq -r '.endpoint')
+            port=$(echo "$endpoint" | jq .port)
+            ip=$(echo "$endpoint" | jq -r .ip)
+            echo "-h $ip --port $port -U $MIGRATION_USER"
+        }
 
-    # Helper to validate or exit on user input
-    validate_action () {
-        while true; do
-            read -rp "Do you want to continue? [y/n] " yn
-            case $yn in
-                [Yy]* ) break;;
-                [Nn]* ) exit;;
-                * ) echo "Please answer yes or no.";;
-            esac
-        done
-    }
+        # Helper to validate or exit on user input
+        validate_action () {
+            while true; do
+                read -rp "Do you want to continue? [y/n] " yn
+                case $yn in
+                    [Yy]* ) break;;
+                    [Nn]* ) exit;;
+                    * ) echo "Please answer yes or no.";;
+                esac
+            done
+        }
 
-    # Helper to get the Scaleway region to use
-    get_region () {
-        echo ""
-        while true; do
-            read -rp "Specify your Scaleway Zone. Default fr-par [fr-par/nl-ams/pl-waw] " region
-            case $region in
-                [fr-par|nl-ams|pl-waw|fr-srr]* ) REGION=$region; break;;
-                '') break;;
-                * ) echo "Please answer in [fr-par/nl-ams/pl-waw] ";;
-            esac
-        done
-    }
+        # Helper to get the Scaleway region to use
+        get_region () {
+            echo ""
+            while true; do
+                read -rp "Specify your Scaleway Zone. Default fr-par [fr-par/nl-ams/pl-waw] " region
+                echo "$region"
+                case $region in
+                    [fr-par|nl-ams|pl-waw]* ) REGION=$region; break;;
+                    '') break;;
+                    * ) echo "Please answer in [fr-par/nl-ams/pl-waw] ";;
+                esac
+            done
+        }
 
-    # Check if instance_id exists and is reacheable with current cli configuration
-    check_instance () {
-        if [ "$1" = "" ]; then
-            log_error "You must specify an instance_id"
-            exit 1;
-        fi
-        res=$(run_rdb_cli instance get "$1")
-        if [ "$( jq 'has("message")' <<< "$res" )" == "true" ]; then
-            err=$(jq -r .message <<< "$res")
-            log_error "Error while getting database $1: $err"
-            exit 1;
-        fi
-    }
-
-    echo -e "Welcome to Scaleway RDB PostgreSQL Migration tool\nThis tool is designed to migrate your managed databases from one major PostgreSQL version to another\n"
-    echo -e "Please make sure, you got Scaleway V2 CLI (https://github.com/scaleway/scaleway-cli) as well as PostgreSQL binaries\n"
-
-    get_region
-    log_info "Selected $REGION region"
-
-    # List RDB instances in the selected region
-    echo "$CLI_COMMAND instance list region=$REGION"
-    $CLI_COMMAND instance list region="$REGION"
-    read -rp "Which is the source database instance? " old_instance
-    check_instance "$old_instance"
-    read -rp "Which is the destination database instance? " new_instance
-    check_instance "$new_instance"
-
-    # Check instance versions
-    if [ "$(instance_major_verion "$old_instance")" -ge "$(instance_major_verion "$new_instance")" ]; then
-        log_error "New instance major version must be superior to the old one";
-        exit 1
-    fi
-
-    # Get the source logical databases
-    instance_dbs=$(run_rdb_cli database list instance-id="$old_instance")
-    managed_dbs=$(jq -c '.[] | select( .managed == true )' <<< "$instance_dbs" | jq -r .name)
-    not_managed_dbs=$(jq -c '.[] | select( .managed == false )' <<< "$instance_dbs" | jq -r .name)
-
-    if [ -n "$managed_dbs" ]; then
-        log_info "This script is able to migrate following databases:"
-        for db in $managed_dbs; do
-            echo "- $db"
-        done;
-    fi
-
-    if [ -n "$not_managed_dbs" ]; then
-        log_warn "The following databases are not managed by RDB and won't be migrated:"
-        for db in $not_managed_dbs; do
-            echo "- $db"
-        done;
-        validate_action
-    fi
-
-    # Create a migration user to read and write data on both instances
-    log_info "Create migration users"
-    for instance in $old_instance $new_instance; do
-        log_info "Create migration user on instance $instance";
-        res=$(create_migration_user "$instance")
-
-        # Error management
-        if [ "$( jq 'has("hint")' <<< "$res" )" == "true" ]; then
-            hint=$(jq -r .hint <<< "$res")
-            if [ ! "$hint" = "User already exists" ]; then
-                log_error "Unable to create user $MIGRATION_USER on $instance instance: $hint"
+        # Check if instance_id exists and is reacheable with current cli configuration
+        check_instance () {
+            if [ "$1" = "" ]; then
+                log_error "You must specify an instance_id"
                 exit 1;
-            else
-                log_warn "User $USER_MIGRATION already exist on instance $instance. Update its password?"
-                validate_action
-                run_rdb_cli user update instance-id="$instance" name=$MIGRATION_USER password="$MIGRATION_USER_PASSWORD" is-admin=true > /dev/null;
-            fi;
-        fi;
-    done
+            fi
+            res=$(run_rdb_cli instance get "$1")
+            if [ "$( jq 'has("message")' <<< "$res" )" == "true" ]; then
+                err=$(jq -r .message <<< "$res")
+                log_error "Error while getting database $1: $err"
+                exit 1;
+            fi
+        }
 
-    # Dump and restore the databases
-    log_info "Migrate databases"
-    for db in $managed_dbs; do
-        if [ "$db" != "rdb" ]; then
+        echo -e "Welcome to Scaleway RDB PostgreSQL Migration tool\nThis tool is designed to migrate your managed databases from one major PostgreSQL version to another\n"
+        echo -e "Please make sure, you got Scaleway V2 CLI (https://github.com/scaleway/scaleway-cli) as well as PostgreSQL binaries\n"
 
-            log_info "Create $db on instance $new_instance"
-            res=$(run_rdb_cli database create instance-id="$new_instance" name="$db")
+        scw version > /dev/null
+        if [ $? -ne 0 ]; then
+            log_error "The Scaleway CLI must be installed see https://github.com/scaleway/scaleway-cli"
+            exit 1
+        fi
+
+        jq --version > /dev/null
+        if [ $? -ne 0 ]; then
+            log_error "jq tool must be installed"
+            exit 1
+        fi
+
+        get_region
+        log_info "Selected $REGION region"
+
+        # List RDB instances in the selected region
+        echo "$CLI_COMMAND instance list region=$REGION"
+        $CLI_COMMAND instance list region="$REGION"
+        read -rp "Which is the source database instance? " old_instance
+        check_instance "$old_instance"
+        read -rp "Which is the destination database instance? " new_instance
+        check_instance "$new_instance"
+
+        # Check instance versions
+        old_major_version=$(instance_major_verion "$old_instance")
+        new_major_version=$(instance_major_verion "$new_instance")
+        if [ "$old_major_version" -ge "$new_major_version" ]; then
+            log_error "New instance major version must be superior to the old one";
+            exit 1
+        fi
+
+        binaries_version=$(pg_restore --version | awk '{print $3}' | awk -F'.' '{print $1}')
+        if [ $? -ne 0 ]; then
+            "You need to install the PostgreSQL binaries"
+            exit 1
+        fi
+        if [ "$binaries_version" != "$new_major_version" ]; then
+            log_info "PostgreSQL binaries installed $binaries_version"
+            log_error "You need to install $new_major_version PostgreSQL binaries version";
+            exit 1
+        fi
+
+        # Get the source logical databases
+        instance_dbs=$(run_rdb_cli database list instance-id="$old_instance")
+        managed_dbs=$(jq -c '.[] | select( .managed == true )' <<< "$instance_dbs" | jq -r .name)
+        not_managed_dbs=$(jq -c '.[] | select( .managed == false )' <<< "$instance_dbs" | jq -r .name)
+
+        if [ -n "$managed_dbs" ]; then
+            log_info "This script is able to migrate following databases:"
+            for db in $managed_dbs; do
+                echo "- $db"
+            done;
+        fi
+
+        if [ -n "$not_managed_dbs" ]; then
+            log_warn "The following databases are not managed by RDB and won't be migrated:"
+            for db in $not_managed_dbs; do
+                echo "- $db"
+            done;
+            validate_action
+        fi
+
+        # Create a migration user to read and write data on both instances
+        log_info "Create migration users"
+        for instance in $old_instance $new_instance; do
+            log_info "Create migration user on instance $instance";
+            res=$(create_migration_user "$instance")
 
             # Error management
             if [ "$( jq 'has("hint")' <<< "$res" )" == "true" ]; then
                 hint=$(jq -r .hint <<< "$res")
-                if [ ! "$hint" = "Database already exists" ]; then
-                    log_error "Unable to create database $db on new instance: $hint"
+                if [ ! "$hint" = "User already exists" ]; then
+                    log_error "Unable to create user $MIGRATION_USER on $instance instance: $hint"
                     exit 1;
                 else
-                    log_warn "Database $db already exists, it won't be recreated"
+                    log_warn "User $USER_MIGRATION already exist on instance $instance. Update its password?"
+                    validate_action
+                    run_rdb_cli user update instance-id="$instance" name=$MIGRATION_USER password="$MIGRATION_USER_PASSWORD" is-admin=true > /dev/null;
                 fi;
             fi;
-        fi;
+        done
 
-        log_info "Set ALL privilege on $db to $MIGRATION_USER"
-        run_rdb_cli privilege set instance-id="$new_instance" database-name="$db" user-name=$MIGRATION_USER permission=all > /dev/null
+        # Dump and restore the databases
+        log_info "Migrate databases"
+        for db in $managed_dbs; do
+            if [ "$db" != "rdb" ]; then
 
-        # Dump and restore the database from old_instance to new instance
-        old_instance_connstring=$(get_conn_string "$old_instance")
-        new_instance_connstring=$(get_conn_string "$new_instance")
+                log_info "Create $db on instance $new_instance"
+                res=$(run_rdb_cli database create instance-id="$new_instance" name="$db")
 
-        log_info "Dump and restore database $db"
-        log_debug "pg_dump $old_instance_connstring -Fc --create $db | pg_restore $new_instance_connstring --dbname $db --no-privileges --no-owner"
-        PGPASSWORD=$MIGRATION_USER_PASSWORD pg_dump $old_instance_connstring -Fc --create "$db" | PGPASSWORD=$MIGRATION_USER_PASSWORD  pg_restore $new_instance_connstring --dbname "$db" --no-privileges --no-owner
-        log_info "Database $db migrated to $new_instance"
-    done;
+                # Error management
+                if [ "$( jq 'has("hint")' <<< "$res" )" == "true" ]; then
+                    hint=$(jq -r .hint <<< "$res")
+                    if [ ! "$hint" = "Database already exists" ]; then
+                        log_error "Unable to create database $db on new instance: $hint"
+                        exit 1;
+                    else
+                        log_warn "Database $db already exists, it won't be recreated"
+                    fi;
+                fi;
+            fi;
+
+            log_info "Set ALL privilege on $db to $MIGRATION_USER"
+            run_rdb_cli privilege set instance-id="$new_instance" database-name="$db" user-name=$MIGRATION_USER permission=all > /dev/null
+
+            # Dump and restore the database from old_instance to new instance
+            old_instance_connstring=$(get_conn_string "$old_instance")
+            new_instance_connstring=$(get_conn_string "$new_instance")
+
+            log_info "Dump and restore database $db"
+            log_debug "pg_dump $old_instance_connstring -Fc --create $db | pg_restore $new_instance_connstring --dbname $db --no-privileges --no-owner"
+            PGPASSWORD=$MIGRATION_USER_PASSWORD pg_dump $old_instance_connstring -Fc --create "$db" | PGPASSWORD=$MIGRATION_USER_PASSWORD  pg_restore $new_instance_connstring --dbname "$db" --no-privileges --no-owner
+            log_info "Database $db migrated to $new_instance"
+        done;
     ```
 
 2. Make the script executable using the chmod command:
@@ -406,7 +432,7 @@ This solution lets you migrate your database(s) automatically, with a bash scrip
 
 3. Run the script from your terminal by typing `./db_mig_script.sh`
 
-    The script will walk you through the migration process, asking you to complete the necessary information for your migration as required.
+    The script will guide you through the migration process, asking you to complete the necessary information for your migration as required.
 
 
-You now have successfully migrated your managed PostgreSQL databases to the latest version of the database engine. For more information about all new features and improvements in the latest version refer to the [PostgreSQL release notes](https://www.postgresql.org/docs/release/) and the [official documentation](https://www.postgresql.org/docs/). To learn more about Scaleway's powerful REST-API, refer to our [developers' documentation](https://developers.scaleway.com/en/products/rdb/api/).
+You now have successfully migrated your managed PostgreSQL database(s) to the version 13 of the database engine. For more information about all new features and improvements in this version refer to the [PostgreSQL release notes](https://www.postgresql.org/docs/release/) and the [official documentation](https://www.postgresql.org/docs/). To learn more about Scaleway's powerful REST-API, refer to our [developers' documentation](https://developers.scaleway.com/en/products/rdb/api/).

@@ -34,7 +34,7 @@ Any PRs which do not comply with the rules below will be rejected.
 
 You have to clone the project locally to work on it.
 
-### Prerequisite
+### Requirements
 
 Work on docs-content assumes that you have knowledge in the following techniques:
 

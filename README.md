@@ -26,6 +26,12 @@ The goal of this platform is to provide you with information about all the resou
 
 [**Follow the link**](./docs/CONTRIBUTING.md) to learn more about our contribution processes.
 
+### Clone project
+
+Please [follow this guide](./docs/CONTRIBUTING.md#use-repository-locally) to clone the project efficiently.
+
+Do not forget to run `yarn` after cloning!
+
 ### MDX blocks
 
 Blocks are useful for adding rich content to your contributions.

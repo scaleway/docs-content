@@ -99,7 +99,6 @@ You provide a list of IPs with their corresponding “weights”. These weights 
 <Lightbox src="assets/scaleway-dns-weighted.png" alt="" />
 
 
-
 ### Geo IP Records
 
 The Geo IP feature provides DNS resolution, based on the user's geographical location. You can define a default IP which resolves if no Geo IP rule matches, and specify IPs for each geographical zone.
@@ -115,20 +114,40 @@ The Geo IP feature provides DNS resolution, based on the user's geographical loc
 
 ### Healthcheck records
 
-The DNS service checks a given URL on a given IP list by using an HTTP `GET` command and validates all responses received against a predefined string to match. It resolves the request to one of the IPs by excluding those not responding to the given string.
-You can define a list of IPs reachable via a common URL. These IPs are tested regularly by running an HTTP GET command on the defined URL. The IP is considered healthy if a given string is included in the response. If the string is not included in the response, the IP failed the health check test and will not be returned to DNS requests. 
+The DNS service performs healthchecks as follows:
 
-Responses containing healthy IPs may either be random (a random IP is returned upon each DNS request) or hashed (a unique IP of the pool of healthy IPs is returned to the same caller IP). If none of the addresses in the IP list passes the health check test, a fallback IP will be returned as a response. 
+  - You define a list of IPs (a pool) reachable via a single URL.
+  - The servers in the IP pool are contacted by their IP, and a HTTP GET request is sent to each, with the URL as a parameter .
+  - Each IP passes the healthcheck if it sends a response which includes a predefined string.
 
-The following values should be provided to use healthcheck records:
+Having established the 'healthy' IPs, the DNS service responds to requests using one of the following strategies:
 
-*	**Fallback IP**: The fallback IP address to return in case all healtchecks fail.
-* **URL**: A (common) URL to use in GET (e.g. `http://example.com/healthcheck`).
-* **Data**: The string to look for in the GET result (e.g. `IamHealthy`).
-* **Response strategy**: The strategy to use. It can either be **random** or **hashed**.
-    * **Random**: A random IP from the pool of IPs having passed the healtcheck test is returned upon each request.
-    * **Hashed**: Always the same (random) IP, from the pool of IPs having passed the healthcheck test, is returned to same caller IP.
-* **IPs**: A list of IPs to test during the check (e.g. `1.2.3.4`, `2.3.4.5`, ...).
+  - Random: It sends a random healthy IP.
+  - Hashed: It uses the caller's IP address to send a specific random healthy IP, which will always be returned for this caller IP.
+
+If none of the addresses in the IP list has passed the health check, it sends a fallback IP.
+
+<Message type="note">
+
+  The following table shows more explicitly how the results of the IP healthcheck determine the single IP address that the DNS service will send:
+
+  | IP list healthcheck | Fallback IP check |                  Response                 |
+  |:-------------------:|:-----------------:|:-----------------------------------------:|
+  | all or some IPs OK  | n/a               | A healthy IP from the list                |
+  | no IPs OK           | OK                | The fallback IP                           |
+  | no IPs OK           | not OK            | An IP from the IP list OR the fallback IP |
+
+</Message>
+
+The following values should be provided to use the DNS healthcheck service:
+
+  - Fallback IP: The fallback IP address to return if all health checks fail.
+  - URL: A (common) URL to use in GET (e.g. http://example.com/healthcheck).
+  - Data: The string to look for in the GET result (e.g. IamHealthy).
+  - Response strategy: The strategy to use. It can either be random or hashed.
+    - Random: A random IP from the pool of healthy IPs is returned upon each request.
+    - Hashed: The same (random) IP, from the pool of healthy IPs is always returned to same caller IP.
+  - IPs: A list of IPs to test during the check (e.g. 1.2.3.4, 2.3.4.5, ...).
 
 **Example**
 : A website relies on different servers and maintenance is planned on one of them. To plan the maintenance, an endpoint is configured to fail over one hour before and during the planned period so requests will not be forwarded to the impacted server.

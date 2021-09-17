@@ -1,0 +1,254 @@
+---
+title: How to connect IoT Cloud Twins to Grafana Cloud
+description: This tutorial will show how to connect Cloud Twins to a graphite instance on Grafana Cloud.
+totalTime: PT15M
+steps:
+  - step: TODO
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/iot/iot-hub/how-to/connect-twins-to-grafana-cloud/
+image: /assets/images/docs/scaleway.png
+keywords: iot, smart, connected, embedded, devices, hubs, mqtt, twins, document store, document, cache, data, graphite, grafana
+---
+
+<Message type="note">
+
+The twins feature is currently in **beta** status.
+
+</Message>
+
+This tutorial will show how to connect Cloud Twins to a graphite instance on Grafana Cloud.
+
+<Message type="requirement">
+
+- You have an account and are logged into [console.scaleway.com](https://console.scaleway.com)
+- You have installed [curl](https://curl.se/) and `jq` (json parsing tool) on your local computer
+- You have [created an IoT Hub](/iot/iot-hub/how-to/create-hub)
+- You have [added a device](/iot/iot-hub/how-to/add-device)
+- You have [created a Grafana Cloud account](https://grafana.com/products/cloud/)
+
+Make sure the Device allows insecure connections so we can use the webclient.
+
+</Message>
+
+<Message type="note">
+
+In production, you should `Deny Insecure` connections to have the highest level of security.
+
+</Message>
+
+Set the following variables from a terminal on your local computer:
+
+```bash
+IOT_API="https://api.scaleway.com/iot/v1/regions/fr-par"
+SCW_SECRET_KEY="<your scaleway API secret key here>"
+SCW_PROJECT="<your project ID here>"
+HUB_ID="<the hub_id of the hub you created>"
+DEVICE_ID="<the device_id of the device you added>"
+```
+
+## Connect your hub to Grafana Cloud
+
+1. Go to https://grafana.com/orgs/user-identifier/api-keys
+
+    where `user-identifier` is your username.
+
+2. Generate a MetricsPublisher key, store the returned token (`GRAPHITE_TOKEN`)
+
+	<Message type="tip">
+
+	See [Create a Grafana Cloud API key](https://grafana.com/docs/grafana-cloud/reference/create-api-key/) for details.
+
+	</Message>
+
+3. Go to your Grafana instance: https://user-identifier.grafana.net/
+
+4. Go to the graphite configuration panel:
+	- In the menu, select Configuration, Data sources (A)
+	- Then on the list select Graphite (B)
+
+	<Lightbox src="assets/grafanacloud-configuration-datasource-menu-graphite.png" alt="" />
+
+5. From the graphite configuration panel get the following informations:
+	- In the `HTTP` box, find the `URL` value and note the host part (`GRAPHITE_HOST`, `graphite-us-central1.grafana.net` in the example) (A)
+	- In the `Auth` box, find the `Basic Auth Details` and note the user (a number as your `GRAPHITE_USERID`) (B)
+
+	<Lightbox src="assets/grafanacloud-datasource-graphite-settings.png" alt="" />
+
+6. The push uri is constructed as follows:
+	```
+	https://GRAPHITE_USERID:GRAPHITE_TOKEN@GRAPHITE_HOST/metrics
+	```
+
+	So it should look like:
+	```
+	https://12345:SecReTApiKEyVaLuE@graphite-us-central1.grafana.net/metrics
+	```
+
+7. Set the graphite push uri in your hub's configuration:
+
+	<Message type="note">
+
+	This beta feature is not available in the console, please use the API.
+
+	</Message>
+
+	```bash
+	curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -X PATCH $IOT_API/hubs/$HUB_ID -d '{
+		"twins_graphite_config": {
+			"push_uri": "https://'$GRAPHITE_USERID':'$GRAPHITE_TOKEN'@'$GRAPHITE_HOST'/metrics"
+			}
+		}'
+	```
+
+	The hub is now connected to grafana cloud, next step configure the twins.
+
+## Twin
+
+### Document format
+
+Let's take this example format for the `current` document:
+
+```json
+{
+    "state": {
+        "enable": true,
+        "value": 12.5,
+        "text": "ignored"
+    },
+    "data": {
+        "value": 7.5,
+        "in error": false
+    }
+}
+```
+
+### Configuration document
+
+Let's consider we want to trace:
+- any write on the `state` (even when setting the same value twice)
+- changes on the `data` part of the document
+- we add a tag to those value in order to recover them easily in grafana.
+
+The `_config` document will be:
+```json
+{
+    "documents": {
+        "current": {
+            "state": {"_tsdb_trigger": "on-update"},
+            "data": {"_tsdb_trigger": "on-change"},
+            "_tags": {
+                "source": "graphite-tutorial"
+            }
+        }
+    }
+}
+```
+
+1. Set it using the API:
+	```bash
+	curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -X PUT $IOT_API/twins/$DEVICE_ID/documents/_config -d '{
+	  "data": {
+	    "documents": {
+	      "current": {
+		"state": {"_tsdb_trigger": "on-update"},
+		"data": {"_tsdb_trigger": "on-change"},
+		"_tags": {
+		  "source": "graphite-tutorial"
+		}
+	      }
+	    }
+	  }
+	}' | jq
+	```
+
+### Simulate some events
+1. Create the document
+	```bash
+	curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -X PUT $IOT_API/twins/$DEVICE_ID/documents/current -d '{
+	  "data": {
+	    "state": {
+	      "enable": false,
+	      "text": "ignored"
+	    }
+	  }
+	}' | jq
+	```
+
+2. Change it
+	```bash
+	curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -X PUT $IOT_API/twins/$DEVICE_ID/documents/current -d '{
+	  "data": {
+	    "state": {
+	      "enable": true,
+	      "value": 12.5,
+	      "text": "ignored"
+	    },
+	    "data": {
+	      "value": 7.5,
+	      "in error": false
+	    }
+	  }
+	}' | jq
+	```
+
+3. Update only the `data` section using patch
+	```bash
+	curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -X PATCH $IOT_API/twins/$DEVICE_ID/documents/current -d '{
+	  "data": {
+	    "data": {
+	      "value": 12.5
+	    }
+	  }
+	}' | jq
+	```
+
+4. Set the whole document again, without changing anything
+	```bash
+	curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -X PUT $IOT_API/twins/$DEVICE_ID/documents/current -d '{
+	  "data": {
+	    "state": {
+	      "enable": true,
+	      "value": 12.5,
+	      "text": "ignored"
+	    },
+	    "data": {
+	      "value": 12.5,
+	      "in error": false
+	    }
+	  }
+	}' | jq
+	```
+
+### Show the event in grafana
+
+1. Go to your grafana instance explore panel
+	- select Explore (A)
+	- ensure the graphite source is selected (B)
+	- click on the pen to switch to the query editor (C)
+	<Lightbox src="assets/grafanacloud-explore.png" alt="" />
+
+2. See your data
+	- enter the query (A)
+	```
+	groupByTags(seriesByTag('source=graphite-tutorial'), 'last', 'json_path', 'name')
+	```
+	- adjust the time range if needed (B)
+	- see your data (C)
+	<Lightbox src="assets/grafanacloud-explore-data.png" alt="" />
+
+3. If you prefer lines instead of dots, you can use the `keepLastValue` graphite function.
+	Replace the query with:
+	```
+	groupByTags(keepLastValue(seriesByTag('source=graphite-tutorial'), inf), 'last', 'json_path', 'name')
+	```
+
+<Message type="tip">
+
+You can create a dashboard in grafana and use similar queries in your panel.
+
+</Message>
+
+<Navigation title="See Also">
+  <PreviousButton to="/iot/iot-hub/how-to/use-twins/">How to use Cloud Twins</PreviousButton>
+  <NextButton to="/iot/iot-hub/how-to/create-kickstart/">How to create a Kickstart</NextButton>
+</Navigation>

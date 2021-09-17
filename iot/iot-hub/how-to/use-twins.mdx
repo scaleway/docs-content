@@ -1,0 +1,269 @@
+---
+title: How to use IoT Cloud Twins
+description: This tutorial will show how to use the Cloud Twins through both REST and inband MQTT API.
+totalTime: PT15M
+steps:
+  - step: TODO
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/iot/iot-hub/how-to/use-twins/
+image: /assets/images/docs/scaleway.png
+keywords: iot, smart, connected, embedded, devices, hubs, mqtt, twins, document store, document, cache, data
+---
+
+<Message type="note">
+
+The twins feature is currently in **beta** status.
+
+</Message>
+
+This tutorial will show how to use the Cloud Twins through both REST and inband MQTT API.
+
+To understand what IoT Cloud Twins are, please head to: [IoT Hub Cloud Twins](/iot/iot-hub/reference-content/twins/)
+
+## Internet Alarm Control Panel
+
+Let’s use this minimalistic example: you have an internet-enabled alarm control panel with a door sensor and a siren. Here are a few things to handle properly:
+- The siren will sound when the door is opened only if the system is armed.
+- In case the power is cut and restored, the system should be armed/disarmed as previously set.
+- The app on your smartphone should be able to display if your door is opened. If your alarm system is not reachable, the app should display the last known state and the last time this state was updated.
+
+The control panel will be one device and use the inband MQTT API to comunicate with its twin.
+
+The smartphone application will use the REST API to access directly the control panel twin.
+
+### Twin Documents
+
+The twin will represent the panel current and desired states with two documents.
+
+The `desired` document represent the wanted state as controlled from the application to arm/disarm the alarm.
+It's written by the application and read by the device and has the following content:
+
+```json
+{
+    "alarm_armed": true
+}
+```
+
+The `current` document represent the actual state of the alarm panel including its door sensor an siren.
+It's written by the device and read by the application and has the following content:
+
+```json
+{
+    "last_update":   "<time>",
+    "alarm_armed":   false,
+    "siren_ringing": false,
+    "door_open":     true
+}
+```
+
+As each document has a single writer, we don't need to handle any concurrency and can send documents without version information.
+
+### Create the resources
+
+<Message type="requirement">
+
+- You have an account and are logged into [console.scaleway.com](https://console.scaleway.com)
+- You have installed [curl](https://curl.se/) and `jq` (json parsing tool) on your local computer
+- You have [created an IoT Hub](/iot/iot-hub/how-to/create-hub)
+- You have [added a device](/iot/iot-hub/how-to/add-device)
+
+Make sure the Device allows insecure connections so we can use the webclient.
+
+</Message>
+
+<Message type="note">
+
+In production, you should `Deny Insecure` connections to have the highest level of security.
+
+</Message>
+
+Set the following variables from a terminal on your local computer:
+
+```bash
+IOT_API="https://api.scaleway.com/iot/v1/regions/fr-par"
+SCW_SECRET_KEY="<your scaleway token secret here>"
+SCW_PROJECT="<your project ID here>"
+PANEL_DEVICE_ID="<the device_id of the device you created>"
+```
+
+### Device behavior
+
+To receive response to its inband API call, the device will subscribe to the response topics: `$SCW/twins/me/#`
+
+Its tasks will be to:
+1. Send the request to read the `desired` document: publish `$SCW/twins/me/desired/get`
+2. When the response arises on `$SCW/twins/me/desired/get/response/success` store the new state internally.
+3. Read the door sensor and store it internally.
+4. Compute the siren state depending on the internal state, store the new `siren_ringing` state internally.
+5. Update the update time internally.
+6. Publish the internal state to the `current` document: `$SCW/twins/me/current/put` with the document as payload, for example:
+	```json
+	{
+	  "data":{
+	    "last_update":   "<time>",
+	    "alarm_armed":   false,
+	    "siren_ringing": false,
+	    "door_open":     true
+	  }
+	}
+	```
+7. Wait a little and repeat.
+
+<Message type="note">
+
+This is a minimalistic description, some steps could be done asynchronously and we are missing any error handling.
+
+</Message>
+
+<Message type="tip">
+
+To manually test this you can use our [webclient](webclient.iot.fr-par.scw.cloud/?host=websocket.iot.fr-par.scw.cloud), use the link on your device page, it will connect you directly (The device must accept insecure connections to use the webclient).
+
+</Message>
+
+### Application behavior
+
+The application will use the REST API.
+
+1. It will read the `current` document and use it to display it's user interface.
+	```bash
+	curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" $IOT_API/twins/$PANEL_DEVICE_ID/documents/current | jq
+	```
+
+2. When the user toggles the `Armed` button, it will send the new `desired` document.
+	```bash
+	curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -X PUT $IOT_API/twins/$PANEL_DEVICE_ID/documents/desired -d '{
+	  "data": {
+	    "alarm_armed": true
+	  }
+	}' | jq
+	```
+
+## Partial Update
+
+Instead of pushing the full document each time, you might want to update only the part that changed.
+This is particularly useful if your document is large.
+
+In that case you will use the `patch` command.
+
+Continuing the previous example, if you want to only update the `last_update` time and `door_open` state you will publish on the topic: `$SCW/twins/me/current/patch` with the following patch document as payload:
+```json
+{
+  "data":{
+    "last_update":   "<new_time>",
+    "door_open":     false
+  }
+}
+```
+
+## Concurrency
+
+Now let's consider the case of a single document accessed by several actors.
+We add the constraint that one actor must not discard data added by another.
+
+The first solution is to use different keys and the `patch` method (see above).
+
+The second solution is to use optimistic locking through version numbers:
+
+When doing a modification (`put` or `patch`) the actor will send the current version along with the new data.
+
+- If the version matches the one in the twin, the change is applied.
+- If it does not match, an error is returned, the actor can the fetch the document (`get`), compute the modification again and send it.
+
+### Concurrency with REST API
+
+1. Create a document (it will have version 1):
+	```bash
+	curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -X PUT $IOT_API/twins/$PANEL_DEVICE_ID/documents/concurency -d '{
+	  "data": {
+	    "test_value": "initial"
+	  }
+	}' | jq
+	```
+
+2. Now the first actor updates the version 1 of the document:
+	```bash
+	curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -X PUT $IOT_API/twins/$PANEL_DEVICE_ID/documents/concurency -d '{
+	  "version": 1,
+	  "data": {
+	    "test_value": "first actor"
+	  }
+	}' | jq
+	```
+	The output should display version 2:
+	```json
+	{
+	  "twin_id": "<your id>",
+	  "document_name": "concurency",
+	  "version": 2,
+	  "data": {
+	    "test_value": "first actor"
+	  }
+	}
+	```
+
+3. Let's say that the second actor is running 'almost' simultaneously and didn't have time to read version 2, so it will try to update version 1 again:
+	```bash
+	curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -X PUT $IOT_API/twins/$PANEL_DEVICE_ID/documents/concurency -d '{
+	  "version": 1,
+	  "data": {
+	    "test_value": "second actor"
+	  }
+	}' | jq
+	```
+	The output is an invalid version argument.
+
+<Message type="tip">
+
+As the patch format does not handle arrays, this can be used to update arrays concurrently.
+
+</Message>
+
+### Concurrency with inband MQTT API
+
+This can also be triggered with the inband MQTT API.
+<Message type="note">
+
+This is continues the previous section, please run at least step 1 and 2 from above.
+
+</Message>
+
+1. Open the webclient again.
+
+2. Subscribe to the `$SCW/twins/me/#` topic.
+
+3. Publish on topic: `$SCW/twins/me/concurency/put` the following payload:
+	```json
+	{
+	  "version": 1,
+	  "data": {
+	    "test_value": "MQTT actor"
+	  }
+	}
+	```
+	Again the response is an error on the version.
+	```json
+	{
+	  "error": "document version mismatch",
+	  "twin_id": "<your twin id>",
+	  "document_name": "concurency",
+	  "expected_version": 1,
+	  "actual_version": 2
+	}
+	```
+
+4. Publish with the right version will pass: on topic: `$SCW/twins/me/concurency/put` the following payload:
+	```json
+	{
+	  "version": 2,
+	  "data": {
+	    "test_value": "MQTT actor"
+	  }
+	}
+	```
+	The response is the new document updated to version 3.
+
+<Navigation title="See Also">
+  <PreviousButton to="/iot/iot-hub/how-to/change-plan/">How to change the product plan</PreviousButton>
+  <NextButton to="/iot/iot-hub/how-to/connect-twins-to-grafana-cloud/">How to connect IoT Cloud Twins to Grafana Cloud</NextButton>
+</Navigation>

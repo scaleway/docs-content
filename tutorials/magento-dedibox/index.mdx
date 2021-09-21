@@ -46,6 +46,8 @@ In this tutorial you will learn how to install the Open Source version of Magent
   - You have configured a domain name to point toward the IP address of your Instance ([A or AAAA record](/network/dns-cloud/concepts#resource-records))
 </Message>
 
+## Preparing the Instance
+
 1. Update the apt package manager and upgrade the software installed on the server to ensure your system is up to date.
 
   ```
@@ -77,8 +79,8 @@ In this tutorial you will learn how to install the Open Source version of Magent
 
   ```
   apt install php7.4 libapache2-mod-php7.4 php7.4-common php7.4-gmp php7.4-curl php7.4-soap php7.4-bcmath php7.4-intl php7.4-mbstring php7.4-xmlrpc php7.4-mysql php7.4-gd php7.4-xml php7.4-cli php7.4-zip
-
   ```
+
 6. Then, authorize the `PHP` and `rewrite` apache modules.
 
   ```
@@ -87,9 +89,131 @@ In this tutorial you will learn how to install the Open Source version of Magent
   ```
 7. Restart apache2.
 
-```
-service apache2 restart
-```
+  ```
+  service apache2 restart
+  ```
+8. Install composer.
+  ```
+  sudo apt install composer
+  ```
+  When the installation is complete, you should see a warning message:
+  ```
+  Do not run Composer as root/super user! See https://getcomposer.org/root for details
+  ``` 
+### Creating an SSH user
+
+To avoid running Composer as root, we will create a sudo user and grant it root permissions.
+
+1. Create a new user. Replace `username` with the name of your choice. Enter a password for the user when prompted.
+  ```
+  sudo adduser username
+  ```
+
+2. Add the user to the sudo group.
+  ```
+  usermod -aG sudo username
+  ```
+3. Run the following command to open the `/etc/sudoers` file:
+  ```
+  visudo
+  ```
+4. Add the following permissions in the last line:
+  ```
+  username  ALL=(ALL) NOPASSWD:ALL
+  ```
+5. Save and close.
+
+## Installing Magento
+
+<Message type="note">
+
+  A free Magento account is required to download Magento Open Source. You can generate Magento [Access Key](https://marketplace.magento.com/customer/accessKeys/) before downloading the application.
+
+</Message>
+
+1. Log in to your sudo user.
+  ```
+  su - username
+  ```
+2. Check into the directory you want to install Magento in.
+  ```
+  cd /home/username
+  ```
+3. Use composer to install the tool.
+  ``` 
+  sudo composer create-project --repository=https://repo.magento.com/ magento/project-community-edition magento2
+  ```
+
+## Configuring Apache
+
+1. Log back into the root user by running:
+  ```
+  exit;
+  ```
+2. Open the following file with the text editor of your choice:
+  ```
+  nano /etc/apache2/sites-enabled/000-default.conf
+  ```
+3. Edit and save the file according to the example below. Replace `/home/username/magento2` with the path to the directory where Magento is installed, and `example.com` with your domain name.
+
+  ```
+  ServerAdmin webmaster@localhost
+  DocumentRoot /home/username/magento2
+  ServerName example.com
+  ServerAlias www.example.com
+  ``` 
+4. Open the `envvars` file with a text editor of your choice.
+
+  ```
+  nano /etc/apache2/envvars
+  ```
+5. Replace `www-data` with your SSH username in the following lines.
+  ```
+  export APACHE_RUN_USER=www-data
+  export APACHE_RUN_GROUP=www-data
+  ```
+  Then, save and exit.
+6. Open and edit the `apache2.conf` file.
+  ```
+  nano /etc/apache2/apache2.conf
+  ```
+7. Edit the `<Directory /var/www/>` code block according to the example below. Replace `username` with your SSH username. Then, save and exit.
+  ```
+  <Directory /home/username/magento2/>
+          Options FollowSymLinks
+          AllowOverride All
+          Require all granted
+  </Directory>
+  ``` 
+## Setting up PHP
+
+As Magento has specific requirements for PHP, it is recommended to modify the PHP configuration file. 
+
+1. Open the file in a text editor.
+
+  ```
+  nano /etc/php/7.4/apache2/php.ini
+  ```
+
+2. Modify parameters as indicated below, save and exit.
+
+  ```sh no-copy
+  file_uploads = On
+  allow_url_fopen = On
+  short_open_tag = On
+  memory_limit = 4096M
+  cgi.fix_pathinfo = 0
+  opcache.save_comments = 1
+  upload_max_filesize = 150M
+  max_execution_time = 1800
+  realpath_cache_size=10M
+  realpath_cache_ttl=7200
+  date.timezone = Europe/Paris
+  ```
+3. Restart Apache.
+  ```
+  service apache2 restart 
+  ```
 
 ### Setting up MariaDB
 
@@ -147,37 +271,7 @@ service apache2 restart
   EXIT;
   ```
 
-### Setting up PHP
 
-As Magento has specific requirements for PHP, it is recommended to modify the PHP configuration file. 
-
-1. Open the file in a text editor, for example `nano`:
-
-  ```
-  nano /etc/php/7.4/apache2/php.ini
-  ```
-
-2. Modify parameters as indicated below:
-
-  ```sh no-copy
-  file_uploads = On
-  allow_url_fopen = On
-  short_open_tag = On
-  memory_limit = 4096M
-  cgi.fix_pathinfo = 0
-  opcache.save_comments = 1
-  upload_max_filesize = 150M
-  max_execution_time = 1800
-  realpath_cache_size=10M
-  realpath_cache_ttl=7200
-  date.timezone = Europe/Paris
-  ```
-
-3. Install `curl` and `git` which are required in a later step during the installation of Magento:
-
-```
-apt install -y curl git
-```
 
 ## Moving MySQL Databases to the /data partition
 

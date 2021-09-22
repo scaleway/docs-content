@@ -1,5 +1,4 @@
 ![](https://img.shields.io/badge/documentation-Scaleway-rebeccapurple)
-![Github All Contributors](https://img.shields.io/github/all-contributors/scaleway/docs-content)
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/scaleway/docs-content)
 
 # Welcome to the Scaleway Documentation Platform

@@ -1,0 +1,167 @@
+---
+title: How to upload your container using Serverless.com framework
+description: This page explains how to upload your container using Serverless.com framework.
+tags: advanced settings
+steps:
+  - step: TODO
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/compute/containers/how-to/upload-using-serverless-framework
+categories:
+  - compute
+image: /assets/images/docs/scaleway.png
+---
+
+This plugin allows [Serverless Framework](https://serverless.com/) users to deploy their functions and containers to Scaleway Containers with a simple serverless deploy.
+Serverless Framework will handle everything from the namespace creation to the container deployment by calling APIs endpoint under the hood.
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)  
+  - You have [configured your API keys](/console/my-project/how-to/generate-api-key/) for your **Project**
+  - You know your **Project ID**
+  - You have installed **node.js**
+  - You have installed **Serverless CLI** on your computer (`npm install serverless -g`)
+  - You have installe Docker CLI
+
+</Message>
+
+## Create a project folder
+Serverless Framework enables you to create a project using a specific template.
+
+1. Start by creating and changing into `~/my-srvless-projects`:
+
+```bash
+# mkdir ~/my-srvless-projects
+# cd ~/my-srvless-projects
+```
+
+2. Create a simple docker template by running: 
+
+```bash
+serverless create --template-url https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples/container-schedule --path myService
+```
+You can find other Scaleway templates on [our Github](https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples).
+
+### How to edit the serverless.yml file
+
+<Message type="note">
+
+`provider.name` and `plugins` MUST NOT be changed, they enable us to use the scaleway provider
+
+</Message>
+
+This file contains the configuration of one namespace containing one or more containers (in this example, only one) of the same runtime (here `python3`)
+The different parameters are:
+
+- `service`: your namespace name
+- `provider.env`: environment variables attached to your namespace are injected to all your namespace containers
+- `scwToken`: Scaleway **token** you got in prerequisites
+- `scwProject`: Scaleway **project id** you got in prerequisites
+- `package.patterns`: usually, you do not need to configure it. It enables to include or exclude directories from the deployment
+- `custom`: 
+  - `containers`: Configure of your containers. It is a yml dictionary, with the key being the containers name
+    - `directory` (Required): directory which contains your Dockerfile and scripts
+    - `env` (Optional): environment variables specifics for the current container
+    - `minScale` (Optional): how many container instances we keep running (default: 0)
+    - `maxScale` (Optional): maximum number of instances this container can scale to (default: 20)
+    - `memoryLimit`: ram allocated to the container instances. See the introduction for the list of supported values 
+    - `events` (Optional): List of events to trigger your containers (e.g, trigger a container based on a schedule with `CRONJobs`). See `events` section below
+
+## How to configure your Container 
+
+You must define your containers inside the `custom.containers` field in your serverless.yml manifest.
+Each container must specify the relative path of its application directory (containing the Dockerfile, and all files related to the application to deploy):
+
+```yml
+custom:
+  containers:
+    mycontainer:
+      directory: my-container-directory
+      # Environment only available in this container 
+      env:
+        MY_VARIABLE: "my-value"
+```
+
+Here is an example of the files you should have, the `directory` containing your Dockerfile and scripts is `my-container-directory`.
+
+```
+.
+├── my-container-directory
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── server.py
+│   └── (...)
+├── node_modules
+│   ├── serverless-scaleway-functions
+│   └── (...)
+├── package-lock.json
+├── package.json
+└── serverless.yml
+```
+
+Scaleway's platform will automatically inject a PORT environment variable on which your server should be listening for incoming traffic. By default, this PORT is 8080 and it can not be changed for now.
+
+
+## How to configure your events
+
+With `events`, you may link your containers with specific triggers, for now it is limited to `CRON Schedule (time-based)`.
+
+<Message type="note">
+
+We do not include HTTP triggers in our event types, as a HTTP endpoint is created for every container. Triggers are just a another way to trigger your Container, but you will always be able to execute your code via HTTP.
+
+</Message>
+
+Below is a list of supported triggers on Scaleway Serverless, and the configuration parameters required to deploy them:
+
+- **schedule**: Trigger your container based on CRON schedules
+  - `rate`: CRON Schedule (UNIX Format) on which your containers will be executed
+  - `input`: key-value mapping to define arguments that will be passed into your container's event object during execution.
+
+To link a Trigger to your container, you may define a key `events` in your container:
+
+```yml
+custom:
+  containers:
+    mycontainer:
+      directory: my-directory
+      # Events key
+      events:
+        - schedule:
+            rate: '1 * * * *'
+            input:
+              key: value
+              key2: value2
+```
+
+<Message type="tip">
+
+You may refer to the follow examples:
+- [Container with schedule trigger](https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples/container-schedule)
+
+</Message>
+
+## How to access to the Logs
+
+The `serverless logs` command lets you watch the logs of a specific container.
+Pass the container name you want to fetch the logs for with `--function`
+
+```bash
+serverless logs --function <container_name>`
+```
+
+## How to delete a project
+
+To remove a project, you may run the following command:
+
+```bash
+serverless remove
+```
+
+This will remove all your containers, as well as your Scaleway Containers namespace.
+
+<Message type="note">
+ 
+   Your Scaleway Container Registry namespace will not be removed, you will have to delete it manually either via Scaleway console, or Scaleway container registry's API.
+ 
+</Message>

@@ -1,0 +1,97 @@
+---
+title: Restricting access to a function
+description: This page explains how to restrict access to a function
+dates:
+  validation: 2021-10-06
+  posted: 2021-10-06
+---
+
+Making your container private allows you to restrict access to it which prevents unauthorized launch of the container. Contrary to private functions where the authorization process is built-in, it needs to be [configured inside the container](#validating-tokens-inside-your-container).
+
+<Message type="important">
+
+Be careful when you schedule automatic launching of private containers, as CRON jobs are not yet able to start private containers.
+
+</Message>
+
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+  - You have generated a Scaleway [API key](https://www.scaleway.com/en/docs/console/my-project/how-to/generate-api-key/)
+  - You have either `curl`, [Postman](https://www.postman.com/), [Talend API tester](https://chrome.google.com/webstore/detail/talend-api-tester-free-ed/aejoelaoggembcahagimdiliamlcdmfm) or any tool to send HTTP requests
+
+</Message>
+
+## Generating a JWT token
+
+Privacy can be ensured via **J**SON **W**eb **T**okens. A JWT Token can be retrieved from the API-endpoint `GET /issue-jwt`. Depending on the parameters, a JWT token can be valid for either a container or a namespace:
+
+* `/issue-jwt?namespace_id=1`: issues JWT valid for all functions inside namespace with ID 1.
+* `/issue-jwt?function_id=1`: issues JWT valid only for function with ID 1.
+
+<Message type="tip">
+
+You may optionally provide an expiration date (formatted `yyyy-mm-ddT00:00:00Z`) for the token. 
+For example: `/issue-jwt?expires_at=2022-01-02T00:00:00Z&namespace_id=1` will generate a token, valid for all functions and containers inside namespace with ID 1, and this token will be valid until January 2nd 2022.
+
+</Message>
+
+The token will have the following claims:
+
+```yaml
+{
+ "application_claim": [
+   {
+     "namespace_id": "string",
+     "container_id": "string" // optional: id of the container
+   }
+ ]
+}
+```
+
+<Message type="important">
+
+* Tokens are not stored by Scaleway and can not be retrieved if lost. However, new tokens can be generated.
+* Token revocation is not yet supported. The best way to reset tokens is to destroy and recreate the namespaces and all of their functions.
+
+</Message>
+
+### Using curl
+
+Use the following command to issue a JWT token for your namespace from the command line using cURL: 
+
+```sh
+curl --location --request GET 'https://api.scaleway.com/functions/v1beta1/regions/fr-par/issue-jwt?namespace_id={your_namespace_id}&expires_at=2022-06-22T00%3A00%3A00Z' --header 'X-Auth-Token: {your_scaleway_API_key'}
+```
+
+### Using an API Tester (Talend API Tester)
+
+The following steps are designed for [Talend API tester](https://chrome.google.com/webstore/detail/talend-api-tester-free-ed/aejoelaoggembcahagimdiliamlcdmfm). 
+
+1. Specify the `GET` method.
+2. Enter the API URL. 
+    * For namespaces:
+      ```
+      https://api.scaleway.com/functions/v1beta1/regions/fr-par/issue-jwt?namespace_id={your_namespace_id}&expires_at={expiration_date}
+      ```
+    * For Containers:
+      ```
+      https://api.scaleway.com/functions/v1beta1/regions/fr-par/issue-jwt?container_id={your_container_id}&expires_at={expiration_date}
+      ```
+3. Add a `X-Auth-Token` header with your Scaleway API key as value.
+4. Send the request.
+5. Copy the returned token.
+
+<Lightbox src="scaleway-talend-container.png" alt="" />
+
+## Validating tokens inside your container
+
+The Scaleway API will set the following environment variables, which you can use in your application to validate incoming requests. The token is provided by our APIs:
+
+* `SCW_PUBLIC`: true or false based on your privacy settings
+* `SCW_PUBLIC_KEY`: PEM-encoded public Key used to decrypt tokens
+* `SCW_NAMESPACE_ID`: Current namespace ID
+* `SCW_APPLICATION_ID`: Current Container ID
+
+As described above, tokens generated from the Scaleway API will contain either namespace ID  or application ID in its claims, so you may verify its validity (after decrypting the JWT with the inject `SCW_PUBLIC_KEY`).

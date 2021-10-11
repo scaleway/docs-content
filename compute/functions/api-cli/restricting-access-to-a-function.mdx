@@ -1,0 +1,96 @@
+---
+title: Restricting access to a function
+description: This page explains how to restrict access to a function
+dates:
+  validation: 2021-05-26
+  posted: 2021-05-26
+---
+
+This page shows you how to restrict access to your function by making it private. This prevents unauthorized launching of the function.
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+  - You have [created a function](/compute/functions/how-to/create-a-function/)
+  - You have generated a Scaleway [API key](https://www.scaleway.com/en/docs/console/my-project/how-to/generate-api-key/)
+  - You have either `curl`, [Postman](https://www.postman.com/), [Talend API tester](https://chrome.google.com/webstore/detail/talend-api-tester-free-ed/aejoelaoggembcahagimdiliamlcdmfm) or any tool to send HTTP requests
+
+</Message>
+
+## Generating a JWT token
+
+
+Privacy can be ensured via **J**SON **W**eb **T**okens. A JWT Token can be retrieved from the API-endpoint `GET /issue-jwt`. Depending on the parameters, a JWT token can be valid for either a function or a namespace:
+
+* `/issue-jwt?namespace_id=1`: issues JWT valid for all functions inside namespace with ID 1.
+* `/issue-jwt?function_id=1`: issues JWT valid only for function with ID 1.
+
+<Message type="tip">
+
+You may optionally provide an expiration date (formatted `yyyy-mm-ddT00:00:00Z`) for the token. 
+For example: `/issue-jwt?expires_at=2022-01-02T00:00:00Z&namespace_id=1` will generate a token, valid for all functions and containers inside namespace with ID 1, and this token will be valid until January 2nd 2022.
+
+</Message>
+
+The token will have the following claims:
+
+```yaml
+{
+ "application_claim": [
+   {
+     "namespace_id": "string",
+     "function_id": "string" // optional: id of function
+   }
+ ]
+}
+```
+
+<Message type="important">
+
+* Tokens are not stored by Scaleway and can not be retrieved if lost. However, new tokens can be generated.
+* Token revocation is not yet supported. The best way to reset tokens is to destroy and recreate the namespaces and all of their functions.
+
+</Message>
+
+### Using curl
+
+Use the following command to issue a JWT token for your namespace from the command line using cURL: 
+
+```sh
+curl --location --request GET 'https://api.scaleway.com/functions/v1beta1/regions/fr-par/issue-jwt?namespace_id={your namespace id}&expires_at=2022-06-22T00%3A00%3A00Z' --header 'X-Auth-Token: {your scaleway API key'}
+```
+
+### Using an API Tester (Talend API Tester)
+
+The following steps are designed for [Talend API tester](https://chrome.google.com/webstore/detail/talend-api-tester-free-ed/aejoelaoggembcahagimdiliamlcdmfm). 
+
+1. Specify the `GET` method.
+2. Enter the API URL. 
+    * For namespaces:
+      ```
+      https://api.scaleway.com/functions/v1beta1/regions/fr-par/issue-jwt?namespace_id={your namespace id}&expires_at={expiration date}
+      ```
+    * For Functions:
+      ```
+      https://api.scaleway.com/functions/v1beta1/regions/fr-par/issue-jwt?function_id={your function id}&expires_at={expiration date}
+      ```
+3. Add a `X-Auth-Token` header with your Scaleway API key as value.
+4. Send the request.
+5. Copy the response.
+
+<Lightbox src="scaleway-talend-function.png" alt="" />
+
+## Using your token
+
+A **private** function observes this behaviour:
+
+* If a call is made without the `SCW_FUNCTIONS_TOKEN` header, the call is rejected (status code 404)
+* If the `SCW_FUNCTIONS_TOKEN` header is provided, the token is validated using a public key attached to the namespace.
+
+The environment variables `SCW_PUBLIC`, `SCW_PUBLIC_KEY`, `SCW_NAMESPACE_ID`, `SCW_APPLICATION_ID` are provided by our APIs to validate incoming tokens.
+
+For example, to execute a private function by providing a JWT using curl, you may run the following command:
+
+```sh
+curl -H "SCW_FUNCTIONS_TOKEN: <generated-token>" <your-function-host>
+```

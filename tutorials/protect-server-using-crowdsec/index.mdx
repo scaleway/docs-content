@@ -1,0 +1,210 @@
+---
+title: Protecting a Dedibox server using CrowdSec
+description: This page shows how to protect a Dedibox server using CrowdSec
+tags: compute networking security fail2ban
+categories:
+  - compute
+  - dedicated-servers
+dates:
+  validation: 2021-10-11
+  posted: 2021-10-11
+---
+
+## Overview
+
+[CrowdSec](https://crowdsec.net/) is a french open-source software that detects malicious behaviors trying to connect themself from different ways (infrastrural, system, applicative). Such as Fail2Ban, CrowdSec reads logs from several sources (files, streams, ...) to parse and extract informations (IPs, time, environment, ...) before matching those to patterns called scenarios. Many well-known scenarios already exist and are maintained by CrowdSec and the community.
+
+Once a malicious behavior is detected, its IP is stored via the Local API (LAPI), and another software called `bouncer`, also deployed on your machine, restricts access to this IP on your resources by querying the LAPI every X seconds. Various bouncers exist as well, blocking IPs with a firewall (iptables, nftables), Cloudflare or Nginx.
+
+Another feature ables every user of CrowdSec to share their banned IPs to a Central API (CAPI) managed by the CrowdSec team. When an IP is detected as a dangerous IP, it is shared to the whole community and is banned by the bouncers. Note that you can deactivate this feature if you don't want to use it.
+
+
+<Lightbox src="scaleway-crowdsec-ecosystem.png" alt="" />
+
+In this tutorial, we will set up CrowdSec on a Dedibox and protect the SSH connection.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have a Dedibox server running Debian
+- You are [connected](/dedibox/dedicated-servers/how-to/connect-to-server/#how-to-connect-via-ssh) to the `root` user on your Dedibox using SSH
+- You have [Docker](https://www.docker.com/) installed on your Dedibox
+
+</Message>
+
+## Installing CrowdSec
+
+1. Update the `apt` package manager and install the dependencies:
+
+    ```
+    apt update
+    apt install \
+        apt-transport-https \
+        curl \
+        gnupg \
+        lsb-release
+    ```
+
+2. Add the CrowdSec [GPG](https://gnupg.org/) key:
+
+    ```
+    curl -L https://packagecloud.io/crowdsec/crowdsec/gpgkey | apt-key add -
+    ```
+
+3. Add the address of the CrowdSec repository:
+
+    ```
+    echo "deb https://packagecloud.io/crowdsec/crowdsec/debian/ $(lsb_release -cs) main" | tee /etc/apt/sources.list.d/crowdsec_crowdsec.list
+    ```
+
+4. Update the sources and install CrowdSec:
+
+    ```
+    apt update && apt install crowdsec
+    ```
+
+    CrowdSec is now installed on your Dedibox. As you saw when you installed it, some scenarios and parsers have been installed too. You can see them using `cscli`:
+
+    ```
+    cscli parsers list
+    -------------------------------------------------------------------------------------------------------------
+    NAME                            📦 STATUS   VERSION  LOCAL PATH
+    -------------------------------------------------------------------------------------------------------------
+    crowdsecurity/geoip-enrich      ✔️  enabled  0.2      /etc/crowdsec/parsers/s02-enrich/geoip-enrich.yaml
+    crowdsecurity/whitelists        ✔️  enabled  0.2      /etc/crowdsec/parsers/s02-enrich/whitelists.yaml
+    crowdsecurity/dateparse-enrich  ✔️  enabled  0.1      /etc/crowdsec/parsers/s02-enrich/dateparse-enrich.yaml
+    crowdsecurity/syslog-logs       ✔️  enabled  0.4      /etc/crowdsec/parsers/s00-raw/syslog-logs.yaml
+    crowdsecurity/sshd-logs         ✔️  enabled  0.9      /etc/crowdsec/parsers/s01-parse/sshd-logs.yaml
+    -------------------------------------------------------------------------------------------------------------
+    ```
+
+    Some of these parsers are used to enrich the data from the malicious behaviors, such as the localization or whitelisting. A real parser called `crowdsecurity/sshd-logs` allows us to parse the logs from SSHD. Let's see the scenarios:
+
+    ```
+    cscli scenarios list
+    ------------------------------------------------------------------------------------------
+    NAME                       📦 STATUS   VERSION  LOCAL PATH
+    ------------------------------------------------------------------------------------------
+    crowdsecurity/ssh-bf       ✔️  enabled  0.1      /etc/crowdsec/scenarios/ssh-bf.yaml
+    crowdsecurity/ssh-slow-bf  ✔️  enabled  0.2      /etc/crowdsec/scenarios/ssh-slow-bf.yaml
+    ------------------------------------------------------------------------------------------
+    ```
+
+    Two scenarios are installed by default too. They are made to use the data from the `sshd-logs` parser. In our current set up, we can detect easily someone who is trying to connect himself on your machine. We can test that by spamming a SSH connection from your local machine to your Dedibox, or using a software like `hydra`. The scenario is configured to ban after 5 iterations from a single IP, but feel free to edit it [following the documentation](https://doc.crowdsec.net/docs/scenarios/intro).
+
+    You can find your banned IP using `cscli`:
+
+    ```
+    cscli decisions list
+    +------+----------+----------------+----------------------+--------+---------+----------------+--------+--------------------+----------+
+    |  ID  |  SOURCE  |  SCOPE:VALUE   |        REASON        | ACTION | COUNTRY |       AS       | EVENTS |     EXPIRATION     | ALERT ID |
+    +------+----------+----------------+----------------------+--------+---------+----------------+--------+--------------------+----------+
+    | 4633 | crowdsec | Ip:XX.XXX.XX.X | crowdsecurity/ssh-bf | ban    | FR      |      XXXX      |      6 | 3h59m52.953123908s |       14 |
+    +------+----------+----------------+----------------------+--------+---------+----------------+--------+--------------------+----------+
+    ```
+
+    If you banned your local machine on your Dedibox, don't forget to unban it before continuing this tutorial:
+
+    ```
+    cscli decisions delete -i <your ip>
+    ```
+
+    <Message type="note">
+
+    At this moment, you can only detect the suspicious behaviors, but these IP are not banned. You have to install a `bouncer` on your Dedibox to achieve this.
+
+    </Message>
+
+## Installing a bouncer
+
+In this tutorial, we will use a bouncer that can manage `iptables` and `ipset`. Once an IP is detected by the CrowdSec Agent, the bouncer will add this IP in an `ipset` and his connection will be automatically dropped.
+
+1. Install the firewall bouncer:
+
+    ```
+    apt install crowdsec-firewall-bouncer-iptables
+    ```
+
+2. Check that your bouncer is correctly installed:
+
+    ```
+    cscli bouncers list
+    -------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    NAME                        IP ADDRESS  VALID  LAST API PULL         TYPE                       VERSION                                                           
+    -------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    FirewallBouncer-1633604730  127.0.0.1   ✔️      2021-10-07T11:07:32Z  crowdsec-firewall-bouncer  v0.0.16-debian-pragmatic-ea64223d4e41c28b5d6324e82ab07625874ce507 
+    -------------------------------------------------------------------------------------------------------------------------------------------------------------------
+    ```
+
+    Ban a random IP manually to test it: 
+
+    ```
+    cscli decisions add -i 1.2.3.4
+    ```
+
+    <Message type="tip">
+
+    It is not recommended to ban your local machine to avoid lonsing your SSH connection.
+
+    </Message>
+
+3. Run `ipset list`. You can see that the bouncer did his job and added a lot of IPs. These are the IP from the CAPI, automatically banned. Anyway, you can find your manual ban easily:
+
+    ```
+    ipset list | grep "1.2.3.4"
+    1.2.3.4 timeout 14387
+    ```
+
+    <Message type="note">
+
+    This ipset is in reality a hashtable, and thus, is adding only one rule in your iptables. You can see it using `iptables -L`.
+
+    </Message>
+
+## Monitoring CrowdSec
+
+You can set up a dashboard on your machine and thus get a visual on actions taken. However, this dashboard works only with the default database, `SQLite`. If you want to use `PostgreSQL` or `MySQL`, you won't be able to use the dashboard. You can start the dashboard container with:
+
+```
+cscli dashboard setup -l 0.0.0.0
+INFO[07-10-2021 11:24:00 AM] Pulling docker image metabase/metabase:v0.37.0.2
+...
+INFO[07-10-2021 11:24:01 AM] creating container 'crowdsec-metabase'
+INFO[07-10-2021 11:24:02 AM] waiting for metabase to be up (can take up to a minute)
+...........
+INFO[07-10-2021 11:24:45 AM] Metabase is ready
+
+    URL       : 'http://0.0.0.0:3000'
+    username  : 'crowdsec@crowdsec.net'
+    password  : 'random password'
+```
+
+<Message type="note">
+
+The flag `-l 0.0.0.0` is important to access from any machine to the dashboard.
+
+</Message>
+
+You can navigate to `http://<your-Dedibox-public-IP>:3000/` and log in with the credentials given. You can list all of the decisions and get graphs:
+
+<Lightbox src="scaleway-crowdsec-dashboard.png" alt="" />
+
+<Message type="tip">
+
+CrowdSec includes metrics that can be used by Prometheus. You can set up with Grafana and Prometheus [different dashboards](https://doc.crowdsec.net/docs/observability/prometheus).
+
+</Message>
+
+
+## Conclusion
+
+In this tutorial, we saw how to set up easily a protection against ssh brute force attacks. CrowdSec has a lot of different parsers and scenarios, available on the [CrowdSec Hub](https://hub.crowdsec.net/), and you can install them with `cscli`. You can also configure CrowdSec and customize it as you want. For more information, refer to [the official documentation](https://doc.crowdsec.net/).
+
+At last, we saw here how to protect only one machine, but you could protect machines as much as you want with a [centralized LAPI](https://crowdsec.net/multi-server-setup/) and all of your banned IP will be synchronized.
+
+## Ressources
+
++ [CrowdSec website](https://crowdsec.net/)
++ [CrowdSec documentation](https://doc.crowdsec.net/)
++ [CrowdSec hub](https://hub.crowdsec.net/)
++ [CrowdSec repository](https://github.com/crowdsecurity/crowdsec)

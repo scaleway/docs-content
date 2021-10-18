@@ -1,0 +1,157 @@
+---
+title: Run a Python Flask Server on a Serverless Container 
+description: This page shows how to run a Python Flask Server on a Serverless Container 
+categories:
+  - serverless
+  - containers
+tags: serverless containers nodejs express server
+dates:
+  validation: 2021-10-14
+  posted: 2021-10-14
+---
+
+[Flask](https://flask.palletsprojects.com/) is a Python framework that enables you to easily deploy simple web servers and APIs. In this tutorial, you will learn how to configure your Flask application to run on a Serverless Container.
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+  - You have a [Serverless Containers Namespace](/compute/containers/how-to/create-a-containers-namespace/)
+  - You have [Python 3](https://www.python.org/download/releases/3.0/) and [pip](https://pypi.org/project/pip/docker) installed on your computer (for local testing)
+  - You have [Docker](https://www.docker.com/) installed on your local computer (to build the container image)
+
+</Message>
+
+## Creating a Flask application
+
+We first need to create a simple Web Server with Python and the Flask framework.
+
+1. Create a new folder for the project:
+
+    ```
+    mkdir my_python_project
+    ```
+
+2. Use your favourite text editor to create a `requirements.txt`. In this tutorial, we use nano:
+
+    ```
+    nano requirements.txt
+    ```
+
+3. Enter the following text in the `requirements.txt` file to define the library you want to import. Then save and quit the text editor:
+
+    ```
+    Flask==1.0.2
+    ```
+
+4. Create a `server.py` text file, and add the following code to it. This creates a simple web app using Flask:
+
+    ```python
+    from flask import Flask
+    import os
+    import json
+
+    DEFAULT_PORT = "8080"
+    MESSAGE = "Hello, World from Scaleway Container !"
+
+    app = Flask(__name__)
+
+    @app.route("/")
+    def root():
+    return json.dumps({
+        "message": MESSAGE
+    })
+
+    if __name__ == "__main__":
+    # Scaleway's system will inject a PORT environment variable on which your application should start the server.
+    port_env =  os.getenv("PORT", DEFAULT_PORT)
+    port = int(port_env)
+    app.run(debug=True, host="0.0.0.0", port=port)
+    ```
+
+## Configuring your Docker image
+
+In order to Dockerize our simple web app, we will use the official Python 3 Alpine image which is the smallest source image.
+
+1. Create a Dockerfile using the following command:
+
+    ```
+    touch Dockerfile
+    ```
+
+    <Message type="tip">
+    
+    A Dockerfile is a document that contains all the commands a user could call from the command line to create the image.
+    
+    </Message>
+
+2. In the Dockerfile, add the following;
+
+    - Define the Python base image you want to use:
+    ```dockerfile
+    FROM python:3-alpine
+    ```
+
+    - Create a directory to store your application code:
+    ```dockerfile
+    # Create app directory
+    WORKDIR /usr/src/app
+    ```
+
+    - Install the required python libraries (defined in the requirements.txt file):
+    ```dockerfile
+    COPY requirements.txt .
+    RUN pip install -qr requirements.txt
+    ```
+
+    - Copy your application server code inside the Docker image:
+    ```dockerfile
+    COPY server.py .
+    ```
+
+    - Define the `PORT` environment variable and expose port 8080. This dictates the port the application will bind to:
+    ```dockerfile
+    ENV PORT 8080
+    EXPOSE 8080
+    ```
+
+    - Use `CMD` to run the python command that will start your application:
+    ```dockerfile
+    CMD [ "python3", "./server.py" ]
+    ```
+
+    Your final Dockerfile should look like this:
+    ```dockerfile
+    FROM python:3-alpine
+
+    # Create app directory
+    WORKDIR /usr/src/app
+
+    # Expose Ports
+    ENV PORT 8080
+    EXPOSE 8080
+
+    # Install libraries
+    COPY requirements.txt .
+    RUN pip install -qr requirements.txt
+    COPY server.py .
+
+    CMD ["python3", "./server.py"]
+    ```
+
+## Deploying the application on Serverless Containers
+
+1. Build your image using the following command: 
+
+    ```sh
+    docker build . -t <your application name>
+    ```
+
+2. [Push](https://www.scaleway.com/en/docs/compute/container-registry/how-to/push-images/) the created image into the [container registry](https://www.scaleway.com/en/docs/compute/container-registry/quickstart/) linked to your Containers namespace
+
+    <Message type="tip">
+
+    The registry name starts with `funcscw` + the namespace name.
+
+    </Message>
+
+3. [Deploy the image using the Scaleway console](https://www.scaleway.com/en/docs/compute/containers/how-to/deploy-a-container/).

@@ -55,3 +55,52 @@ The default behaviour of Docker when running a container using `docker run`, is 
 | `-p 192.168.1.100:8080:80`      | This flag maps TCP port 80 in the container to port 8080 on the Docker host for connections to host IP 192.168.1.100.                                      |
 | `-p 8080:80/udp`                | This flag maps UDP port 80 in the container to port 8080 on the Docker host.                                                                               |
 | `-p 8080:80/tcp -p 8080:80/udp` | This flag maps TCP port 80 in the container to TCP port 8080 on the Docker host, and map UDP port 80 in the container to UDP port 8080 on the Docker host. |
+
+
+## How to access the GPU from the inside of a Docker container
+
+You can access the GPU of your instance from the inside of a Docker container using the `nvidia-docker` tool. 
+GPUs can be specified to the Docker CLI using either the `--gpus` option (starting with Docker 19.03) or using the environment variable `NVIDIA_VISIBLE_DEVICES`, which controls which GPUs will be made accessible inside the container.
+
+The possible values of the NVIDIA_VISIBLE_DEVICES variable are:
+
+| Possible values                | Description                                                                                                   |
+|--------------------------------|---------------------------------------------------------------------------------------------------------------|
+| `0`,`1`,`2`, or `GPU-fef8089b` | a comma-separated list of GPU UUID(s) or index(es).                                                           |
+| `all`                          | all GPUs will be accessible, this is the default value in base CUDA container images.                         |
+| `none`                         | no GPU will be accessible, but driver capabilities will be enabled.                                           |
+| `void or empty or unset`       | nvidia-container-runtime will have the same behavior as runc (i.e. neither GPUs nor capabilities are exposed) |
+
+<Message type="note">
+
+When using the `--gpus` option to specify the GPUs, the device parameter should be used. This is shown in the examples below. The format of the device parameter should be encapsulated within single quotes, followed by double quotes for the devices you want enumerated to the container. For example: `'"device=2,3"'` will enumerate GPUs 2 and 3 to the container.
+
+When using the `NVIDIA_VISIBLE_DEVICES` variable, you may need to set `--runtime` to `nvidia`, unless already set as default.
+
+</Message>
+
+### Example commands 
+
+* Starting a GPU enabled CUDA container (using `--gpus`)
+  ```sh
+  docker run --rm --gpus all nvidia/cuda nvidia-smi
+  ```
+
+* Starting a GPU enabled container using `NVIDIA_VISIBLE_DEVICES` and specify the nvidia runtime
+  ```
+  docker run --rm --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all nvidia/cuda nvidia-smi
+  ```
+
+* Starting a GPU enabled [Tensorflow](https://www.tensorflow.org/) container with a Jupyter notebook using `NVIDIA_VISIBLE_DEVICES` and map the port `88888` to access the web GUI: 
+  ```
+  docker run --runtime=nvidia -e NVIDIA_VISIBLE_DEVICES=all -it --rm -p 8888:8888 tensorflow/tensorflow:latest-gpu-jupyter
+  ```
+
+* Query the GPU UUID using nvidia-smi and then specify that to the container
+  ```
+  nvidia-smi -i 3 --query-gpu=uuid --format=csv
+  uuid
+  GPU-18a3e86f-4c0e-cd9f-59c3-55488c4b0c24
+
+  docker run --gpus device=GPU-18a3e86f-4c0e-cd9f-59c3-55488c4b0c24 nvidia/cuda nvidia-smi
+  ```

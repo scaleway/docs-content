@@ -1,0 +1,218 @@
+---
+title: Transforming images in an S3 bucket using Serverless Functions and Node JS
+description: This page explains how to transform images in a S3 bucket using Serverless Functions and Node JS
+tags: serverless functions faas transforming s3 object storage object-storage
+categories:
+  - serverless
+  - functions 
+  - storage
+  - object-storage
+dates:
+  validation: 2021-10-26
+  posted: 2021-10-26
+---
+
+[Serverless Functions](/compute/functions/quickstart/) can help you schedule automated transformation of all `*.jpg` or `*.png` pictures stored in an [Object Storage](/storage/object/quickstart/) bucket.
+
+With this tutorial you learn how to transform images in a S3 bucket using Serverless Functions and NodeJS:
+
+<Lightbox src="scaleway-faas-image-transform.png" alt="" />
+
+This project contains two functions where:
+  * The first connects to the source Object Storage bucket, gets all image files from it, then calls the second function to resize each image.
+  * The second function gets a specific image (whose name is passed through an HTTP call), resizes it and pushes the resized image to a new bucket.
+
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+  - You have created a [Serverless Function namespace](/compute/functions/how-to/create-a-functions-namespace/)
+  - You have downloaded the corresponding [kubeconfig](/compute/kubernetes/how-to/edit-cluster/) file and [kubectl](/compute/kubernetes/how-to/connect-cluster-kubectl/) is configured and working
+  - You have created two [Object Storage buckets](/storage/object/how-to/create-a-bucket/) (one which contains the source pictures and the other for the destination pictures)
+  - You have generated your [Scaleway API keys](/docs/console/my-project/how-to/generate-api-key/)
+  - **(Optional)** You have installed the [Serverless Framework](https://serverless.com/) with Scaleway’s Serverless Plugin
+
+</Message>
+
+## Creating the BucketScan function
+
+1. Set the following environment variables:
+    * `SOURCE_BUCKET`: Key of your source bucket
+    * `S3_ENDPOINT_URL`: Scaleway’s Object Storage URL (`http://s3.{region}.scw.cloud`)
+    * `ACCESS_KEY_ID`: Your API key ID
+    * `ACCESS_KEY:` Your API key 
+    * `TRANSFORM_URL`: URL of the function used to transform the images
+
+2. Create the BucketScan function:
+
+    * Connect to Object Storage: 
+    ```js 
+    // Create S3 service object
+    const s3 = new AWS.S3({
+    endpoint: S3_ENDPOINT_URL,
+    credentials: {
+        accessKeyId: ID,
+        secretAccessKey: SECRET,
+    }
+    });
+    //Configure parameters for the listObjectsV2 method
+    const params = {
+    Bucket: SOURCE_BUCKET
+    };
+    ```
+    * Get all files from the source bucket:
+    ```js
+    s3.listObjectsV2(params, function (err, data) {
+     if (err) {
+       console.log(err, err.stack); // an error occurred
+     } else {
+       let counter = 0;
+       const contents = data.Contents;
+       const total = contents.length;
+    ```
+    * Asynchronously call the ImageTransform function after having filtered objects on all images:
+    ```js 
+     contents.forEach(function (content) {
+       // Infer the image type from the file suffix.
+       srcKey = content.Key;
+       const typeMatch = srcKey.match(/\.([^.]*)$/);
+       if (!typeMatch) {
+         console.log("Could not determine the image type.");
+       } else {
+         const imageType = typeMatch[1].toLowerCase();
+         // Check that the image type is supported
+         if (["jpeg", "jpg", "png"].includes(imageType) !== true) {
+           return console.log(`Unsupported image type: ${imageType}`);
+         } else {
+           try {
+             console.log(TRANSFORM_URL + "?key=" + srcKey);
+             https.get(TRANSFORM_URL + "?key=" + srcKey);
+             counter += 1;
+           } catch (error) {
+             console.log(error);
+           }
+         };
+       };
+     });
+    ```
+
+## Creating the ImageTransformation function
+
+The following steps are adapted from the [AWS lambda](https://docs.aws.amazon.com/lambda/latest/dg/with-s3-tutorial.html#with-s3-tutorial-create-function-code) tutorial.
+
+1. Install `sharp` using the fbs `linuxmusl` platform to ensure compatibility with Scaleway’s node runtime:
+    ```bash
+    npm install --platform=linuxmusl --arch=x64 sharp --ignore-script=false --save
+    ```
+
+2. Set the following environment variables: 
+    * `SOURCE_BUCKET`: Key of your source bucket
+    * `S3_ENDPOINT_URL`: Scaleway’s Object Storage URL (`http://s3.{region}.scw.cloud`)
+    * `ACCESS_KEY_ID`: Your API key ID
+    * `ACCESS_KEY`: Your API Key 
+    * `DESTINATION_BUCKET`: Key of the destination bucket
+    * `RESIZED_WIDTH`: Desired width of the resized image
+
+3. Create the ImageTransformation function:
+    * Connect to Object Storage: 
+    ```js
+    const s3 = new AWS.S3({
+    endpoint: S3_ENDPOINT_URL,
+    credentials: {
+        accessKeyId: ID,
+        secretAccessKey: SECRET,
+    }
+    });
+    ```
+    * Get image information from the request call, using the `event` object:
+    ```js 
+    exports.handle = async (event, context, callback) => {
+    // Read options from the event parameter.
+    console.log("Reading options from event");
+    // Object keys may have spaces or unicode non-ASCII characters.
+    const srcKey    = event.queryStringParameters.key;
+    ```
+    * Fetch the image from the source bucket:
+    ```js
+    try {
+    const params = {
+        Bucket: srcBucket,
+        Key: srcKey,
+    };
+    var origimage = await s3.getObject(params).promise();
+    } catch (error) {
+    console.log(error);
+    return;
+    }
+    ```
+    * Transform the image based on the information specified in the environment variable:
+    ```js 
+    try {
+    var buffer = await sharp(origimage.Body)
+        .resize({ width, withoutEnlargement: true })
+        .toBuffer();
+    } catch (error) {
+    console.log(error);
+    return;
+    }
+    ```
+    * Push the image to the destination bucket:
+    ```js 
+    try {
+        const destparams = {
+            Bucket: dstBucket,
+            Key: dstKey,
+            Body: buffer,
+            ContentType: "image"
+        };
+        const putResult = await s3.putObject(destparams).promise();
+    } catch (error) {
+        console.log(error);
+        return;
+    } 
+    ```
+
+## Pushing the two functions to Scaleway Serverless 
+
+Please refer to the Serverless Documentation to learn how to package and deploy your functions using [Serverless Framework](/compute/functions/api-cli/fun-uploading-with-serverless-framework/) or a [zip-file](/compute/functions/how-to/package-function-in-zip/).
+
+### Appendix
+
+Below you can find a `Serverless.yml` configuration file to use with the Serverless Framework: 
+
+```yaml
+service: fileupload
+configValidationMode: off
+
+provider:
+ name: scaleway
+ runtime: node14
+ # Global Environment variables - used in every function
+ env:
+   ACCESS_KEY: {Scaleway API key related to source and destination buckets}
+   ACCESS_KEY_ID: {Scaleway API key ID}
+   SOURCE_BUCKET: {source bucket key}
+   DESTINATION_BUCKET: {destination bucket key}
+   S3_ENDPOINT_URL: http://s3.fr-par.scw.cloud
+   TRANSFORM_URL: https://{your function}.functions.fnc.fr-par.scw.cloud
+ # the path to the credentials file needs to be absolute
+ scwToken: {Scaleway API token related to the Project ID}
+ scwProject: {Scaleway Project ID}
+
+plugins:
+ - serverless-scaleway-functions
+
+patterns:
+   - '!.gitignore'
+   - '!.git/**'
+
+functions:
+ imagetransform:
+   handler: ImageTransform.handle
+   memoryLimit: 1024
+   minScale: 1
+ bucketscan:
+   handler: BucketScan.handle
+   memoryLimit: 1024
+   minScale: 0
+```

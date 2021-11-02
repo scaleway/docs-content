@@ -1,0 +1,148 @@
+---
+title: How to periodically delete unused images in your Container Registry
+description: Learn how to periodically delete unused images in your Container Registry.
+categories:
+  - serverless FaaS
+  - containers
+tags: compute serverless FaaS containers container-registry Python Urllib
+dates:
+  validation: 2021-10-11
+  posted: 2021-10-11
+---
+
+## Overview 
+
+When overused, a Container Registry can become very dense, storing lots of unused images.
+This tutorial will show you how to periodically remove older images with a specific tag using Serverless Functions, Scaleway Console and Python’s Urllib.
+
+<Message type="requirement">
+
+ - You have an account and are logged into [the Scaleway console](https://console.scaleway.com) and have access to Registry and Functions
+ - You have created a [Serverless Functions Namespace](/compute/container-registry/how-to/create-namespace/)  
+ - You have generated [an API key](/console/my-project/how-to/generate-api-key)
+
+</Message>
+
+
+# Deleting unused images 
+
+
+1. Log into [the Scaleway console](https://console.scaleway.com).  
+
+2. Click **Functions** in the **Compute** section of the side menu. The Functions page displays.
+
+3. Click the Functions namespace you want to use to create your Function.
+
+4. Click **Create a Function**. The Function creation wizard displays.
+
+5. From the first drop-down menu, choose to use the online code editor to edit your code directly from your browser in the box provided.
+
+6. From the second drop-down menu, choose `python3` as your runtime. 
+
+7. Delete what automatically displays in the online code editor. 
+
+8. Type the following code into the online code editor: 
+
+    ```python
+    import urllib.request
+    import os
+    import json
+    from datetime import datetime, timedelta
+    #Configuration
+
+    region=os.environ['REGION']
+    auth_token=os.environ['X-AUTH-TOKEN']
+    tags_to_keep=int(os.environ['TAGS-TO-KEEP']) # you can also use information passed to the event object
+
+    user_agent = 'Mozilla/5.0 (Windows NT 6.1; Win64; x64)'
+    headers={'X-Auth-Token':auth_token, 'User-Agent': user_agent}
+
+    def handle(event, context):
+   images_list=[]
+   browse=True
+   i=1
+  
+   # Get the list of all images on all pages  
+   while browse:
+       url=f"https://api.scaleway.com/registry/v1/regions/{region}/images?page_size=100&order_by=created_at_asc&page="+str(i)
+       req = urllib.request.Request(url, headers=headers)
+       with urllib.request.urlopen(req) as response:
+           res = response.read()
+           img_list=eval(res)["images"]
+       i=i+1
+       if not img_list:
+           browse=False
+       else:
+           images_list.extend(img_list)
+   tags_to_delete=[]
+  
+   # Get all tags by image to delete
+  
+   for image in images_list:
+       url=f"https://api.scaleway.com/registry/v1/regions/{region}/images/{image['id']}/tags?page_size=100&order_by=created_at_desc"
+       req = urllib.request.Request(url, headers=headers)
+       with urllib.request.urlopen(req) as response:
+           res = response.read()
+           tags=eval(res)["tags"]
+       i=0
+       for tag in tags:
+           if i<tags_to_keep:
+               i=i+1
+           else:
+               tags_to_delete.append(tag)
+  
+   #Delete tags and return their status
+  
+   msg=[]
+   for tag in tags_to_delete:
+       tag_id=tag['id']
+       url_delete=f"https://api.scaleway.com/registry/v1/regions/{region}/tags/{tag_id}"
+       req = urllib.request.Request(url_delete, headers=headers,method="DELETE")
+       with urllib.request.urlopen(req) as response:
+           res = response.read()
+           msg.append(json.loads(res.decode("utf-8")))
+  
+   return {
+       "body": {
+           "message":msg
+       },
+       "statusCode": 200,
+   }
+   ```
+   
+9. Choose a **name** for your Function. The name must only contain alphanumeric characters.
+
+10. Choose the **resources** to be allocated to your Function at runtime. These define the performance characteristics of your Function.
+
+11. Set your **scaling** preferences, or leave them at default values. The Scaleway platform autoscales the number of available Instances of your Function to match the incoming load, depending on the settings you define here.
+
+12. Define the following **Environment variables**: 
+
+    | Key          | Value                                          |
+    |--------------|------------------------------------------------|
+    | REGION       | The Region in which your Registry is located.  |
+    | X-AUTH-TOKEN | Your API key                                   |
+    | TAGS-TO-KEEP | The number of Image tags you want to keep      |
+
+13. Set the privacy policy to **Private**.
+
+14. Click **Advanced options**.
+
+15. Add a **Trigger** to specify the frequency you want to execute the Function at. 
+
+    <Message type="note">
+
+     For example 0 2 * * * will make the function run every day at 2 am
+
+    </Message>
+
+16. Click **Deploy a function**. 
+
+<Message type="note">
+
+ You can run your Function by reaching its endpoint. Click the **Function Settings** tab to do so. 
+
+</Message>
+
+
+

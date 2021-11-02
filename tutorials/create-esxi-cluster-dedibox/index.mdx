@@ -6,7 +6,7 @@ categories:
   - dedicated-servers
   - dedibox
 dates:
-  validation: 2021-10-28
+  validation: 2021-11-02
   posted: 2020-12-28
 ---
 
@@ -117,39 +117,40 @@ Configure the RPN interface on both servers once the installation of both machin
 
 6. Connect to your server using SSH. The SSH credentials are identical to those for the web interface.
 
-7. Open the ESXi configuration file in a text editor:
-
+7. Locate the MAC Address of the network card connected to the RPN (MTU 9000):
   ```
-  vi /etc/vmware/esx.conf
-  ```
-
-8. Find the identifier of the child in the RPN portgroup (in this example: `0001`):
-
-  ```
-  /net/vmkernelnic/child[0001]/portgroup = "RPN"
+  esxcfg-nics -l
   ```
 
-9. Locate the MAC address of the network card connected to the RPN (in this example: `XX:YY:ZZ:AA:BB:CC`):
+8. Export the current VMkernel NIC configuration:
+  ```
+  configstorecli config current get -c esx -g network -k vmknics > vmknics.json
+  ```
+7. Open the VMkernel NIC configuration file in a text editor:
 
   ```
-  /net/pnic/child[0004]/mac = "XX:YY:ZZ:AA:BB:CC”
+  vi vmknics.json
   ```
 
-10. Replace the MAC of the VMKernel RPN (see the number of the child) with the MAC of the network card connected to the RPN:
+8. Replace the MAC-address of your RPN VMkernel NIC with your [Virtual MAC](/dedibox-network/ip-failover/how-to/create-virtual-mac).
+
+  <Lightbox src="scaleway-esxi-rpn.png" />
+
+9. Import the new configuration:
 
   ```
-  /net/vmkernelnic/child[0001]/mac = "XX:YY:ZZ:AA:BB:CC”
+  configstorecli config current set -c esx -g network -k vmknics -i vmknics.json --overwrite
   ```
 
-11. Reboot the machine to activate the new configuration.
+10. Reboot the machine to activate the new configuration.
 
-12. Enter the ESXi web interface and click **Networking** > **Virtual Switches** > **RPN Swich** and check the IP address of the VMkernel NIC. It now has the RPN IP auto assigned to the interface via DHCP:
+11. Enter the ESXi web interface and click **Networking** > **Virtual Switches** > **RPN Swich** and check the IP address of the VMkernel NIC. It now has the RPN IP auto assigned to the interface via DHCP:
 
   <Lightbox src="scaleway-rpn_switch_connected.png" width="800" alt="" />
 
-13. Reactivte the SSH service and connect to the machine via SSH.
+12. Reactivte the SSH service and connect to the machine via SSH.
 
-14. Run the following command to add the RPN route:
+13. Run the following command to add the RPN route:
 
   ```
   esxcfg-route -a 10.88.0.0/13 [YOUR_RPN_GATEWAY_IP]
@@ -161,13 +162,13 @@ Configure the RPN interface on both servers once the installation of both machin
 
   </Message>
 
-15. Ping the RPN-SAN to check if the RPN connection is working properly:
+14. Ping the RPN-SAN to check if the RPN connection is working properly:
 
   ```
   ping san-1.rpn.online.net
   ```
 
-16. Open the file `/etc/rc.local.d/local.sh` in a text editor and add the following lines to it to configure the RPN route automatically during boot:
+15. Open the file `/etc/rc.local.d/local.sh` in a text editor and add the following lines to it to configure the RPN route automatically during boot:
 
   ```
   esxcfg-route -a 10.88.0.0/13 [YOUR_RPN_GATEWAY_IP]

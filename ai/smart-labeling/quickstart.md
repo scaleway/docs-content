@@ -1,0 +1,93 @@
+---
+title: Smart Labeling Quickstart
+description: This page shows you how to get started with Scaleway Elements Bare Metal Servers.
+dates:
+  validation: 2021-11-04
+  posted: 2021-11-04
+---
+
+Scaleway [Smart Labeling)(ADD_LINK) is a plattform that allows you to annnotate images or videos (whether by yourself or via a team of annotators). The annotation interface that Smart Labeling is currently using is CVAT: the [open-source Computer Vision Annotation Tool](https://github.com/openvinotoolkit/cvat) developed by Intel. Smart Labeling facilitates using CVAT in the cloud-native manner, with labeling software running on-demand, annotations safely persisted in an automatically backed up database, and datasets stored in cost-efficient S3 buckets.
+
+Our solution comes with everything needed to start annotating: whether on your own or with the help of others (referred to as annotators). Annotators do not need to create Scaleway accounts, thy can log in directly to the CVAT annotation interface, whose login page is publicly accessible.
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com) 
+  - You have [created an Object Storage bucket](/storage/object/quickstart/)
+
+</Message>
+
+<Message type="note">
+
+Currently, Smart Labeling only supports the annotation of image and video file formats. If you have other files stored in the linked buckets, you will not be able to view them in the annotation interface, but their presence will not impact the application.
+
+</Message>
+
+## How to create a Smart Labeling workspace
+
+1. Click **Smart Labeling** in the **AI** section of the side menu. The Smart Labeling splash screen displays:
+
+<Lightbox src="scaleway-smart-labeling-splash.png" />
+
+2. Click **Create a labeling workspace**. The workspace creation wizard displays.
+
+3. Enter the required information for your labeling worksapce:
+    * Enter a Name and a description for the workspace.
+    * Select the Object Storage bucket you want to use with your workspace.
+    * Enter a username for the admin user.
+    * Enter the email address of the admin user. 
+    * Enter a secret password for the admin user.
+
+4. Confirm by clicking **Create a labeling workspace**. Your workspace will be created.
+
+Once ready the workspace displaces in the list of your Smart Labeling workspaces.
+
+## How to access your workspace
+
+1. Click **Smart Labeling** in the **AI** section of the side menu. The list of your workspaces displays:
+
+<Lightbox src="scaleway-smart-labeling-list.png" />
+
+2. The information of your workspace displays:
+
+<Lightbox src="scaleway-smart-labeling-worksapce.png" />
+
+<Message type="tip">
+
+Note that what CVAT refers to as the **superuser**, who has full access to the administration panel of the annotation server, is the same person as the admin user of the Labeling Workspace. You can use these credentials to login.
+
+</Message>
+
+### How to access the annotation server
+
+From your Smart Labeling workspace, click **Go to my annotation server** in the workspace overview. The CVAT interface dispalys. 
+
+<Message type="note">
+
+Alternatively you can use the **Annotation server URL** to access the server. You can find it in the workspace information block. This URL will take you (or the annotator) to the CVAT annotation interface. 
+
+</Message>
+
+1. Enter the credentials for the admin user of the Smart Labeling workspace and click **Login**. The CVAT dashboard displays:
+
+<Lightbox src="scaleway-smart-labeling-dashboard.png" />
+
+2. Ceate Tasks to annotate datasets of your choice with [image-level tags, as well as points, bounding boxes, polygons, and 3D boxes](https://openvinotoolkit.github.io/cvat/docs/manual/basics/types-of-shapes/).
+
+<Message type="important">
+
+Annotatotors can create users and login to the annotation server directly from this interface. 
+
+</Message>
+
+### How to assign tasks to annotators
+
+Although each annotator can immediately use the account to log into the annotation server, they will not have access to the annotation tasks you have created, unless you assign the task to them, or you change their permissions by going into the administration panel of the CVAT server.
+
+1. Click on your username in the upper right corner and click **Admin page** in the drop-down menu.
+
+2. Select the tasks and roles you want to add to each user and validate (TO ADD MORE CONTENT HERE)
+
+<Message type="tip">
+
+If you want to learn more about CVAT user groups and permissions, check out their [documentation](https://openvinotoolkit.github.io/cvat/docs/manual/basics/authorization/). 

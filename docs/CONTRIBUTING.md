@@ -22,7 +22,7 @@ Any PRs which do not comply with the rules below will be rejected.
    - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
    - `product`: the name of the product that corresponds to the documentation page you will edit.
 
-     So in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
+     So in the branch `ext-add-Instances`, an external contributor will add information to a documentation page of the Instances product category.
 
 4. All commit names must comply with the [commit naming conventions](#commit-conventions) described below.
 5. All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.

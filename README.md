@@ -41,7 +41,7 @@ Blocks are useful for adding rich content to your contributions.
 
 If you use markdown files, you should read about what frontmatters are.
 
-[See what you can do with frontmatters](./docs/CONTRIBUTING.md#frontmatters)
+[See what you can do with frontmatters](./docs/CONTRIBUTING.md#frontmatter)
 
 ### Blocks details
 

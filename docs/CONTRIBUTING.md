@@ -132,12 +132,16 @@ dates:
   posted: 2020-03-12
 steps:
   - step: Configuring the CLI
+    type: HowToStep
     url: https://www.scaleway.com/en/docs/compute/bare-metal-cloud/api-cli/bare-metal-with-cli/#-Configuring-the-CLI
   - step: Creating a Bare Metal Server
+    type: HowToStep
     url: https://www.scaleway.com/en/docs/compute/bare-metal-cloud/api-cli/bare-metal-with-cli/#-Creating-a-Bare-Metal-Server
   - step: Installing an OS
+    type: HowToStep
     url: https://www.scaleway.com/en/docs/compute/bare-metal-cloud/api-cli/bare-metal-with-cli/#-Installing-an-OS/
   - step: Using Other CLI Commands
+    type: HowToStep
     url: https://www.scaleway.com/en/docs/compute/bare-metal-cloud/api-cli/bare-metal-with-cli/#-Using-Other-CLI-Commands
 ---
 
@@ -149,7 +153,7 @@ Here starts the content…
 - `image` is used for Hero section image in tutorials pages. Path could be relative to file.
 - `tags` are used to help populate search result lists or pages top.
 - `dates` are showed in pages under titles. `validation` must be a date later than the `posted`. Format should be `AAAA-MM-DD`
-- `steps` are used in JSON+LD script tag in html head. It respects the schema.org format and is used for SEO, as Google could show steps in search results.
+- `steps` (optionnal) are used in LD+JSON script tag in html head. It respects the schema.org format and is used for SEO, as Google could show steps in search results.
 
 ## Writing Guidelines
 

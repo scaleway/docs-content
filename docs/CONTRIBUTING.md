@@ -123,8 +123,12 @@ Here is a common example used in our `.mdx` files:
 
 ```markdown
 ---
-title: How to create a Bare Metal server
-description: This page explains how to create a Bare Metal server
+meta:
+  title: How to create a Bare Metal server
+  description: This page explains how to create a Bare Metal server
+content:
+  h1: How to create a Bare Metal server
+  paragraph: This page explains how to create a Bare Metal server
 image: /images/scaleway-account.png
 tags: compute baremetal bare metal cloud server dedicated
 dates:
@@ -154,6 +158,27 @@ Here starts the content…
 - `tags` are used to help populate search result lists or pages top.
 - `dates` are showed in pages under titles. `validation` must be a date later than the `posted`. Format should be `AAAA-MM-DD`
 - `steps` (optionnal) are used in LD+JSON script tag in html head. It respects the schema.org format and is used for SEO, as Google could show steps in search results.
+
+### Meta data
+
+Each frontmatter block should have two part : meta & content
+
+- The meta part is used for SEO title and description, it don't appear inside the website
+- The content part is used for title and description inside website pages
+  By default, there are the same but for SEO reason you could update it
+
+Example:
+
+```
+---
+meta:
+  title: VMWare with RPN-SAN
+  description: This block is about VMWare with RPN-SAN
+content:
+  h1: How to create a VMWare
+  paragraph: This block is about VMWare
+---
+```
 
 ## Writing Guidelines
 

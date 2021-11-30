@@ -57,7 +57,13 @@ git clone git@github.com:[your-docs-content-fork]/docs-content.git | bash -s -- 
 2. Ensure `yarn` has been run, if not run `yarn install`.
 3. Edit files.
 
-## Commit conventions
+## Git commit
+
+Helpfull pre-commit commands:
+
+- `yarn check-slugs` Output slugs that are not kebab-case well formatted.
+
+### Commit conventions
 
 This project uses [conventionalcommits](https://www.conventionalcommits.org/en/v1.0.0/) based on the [Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines).
 
@@ -82,7 +88,7 @@ Here is the list of `type` to use (commons in bold):
 - `style`
   - _For simple format changes that are not content changes_
 
-### examples
+#### examples
 
 `feat(console): add vpc how-to page MTA-2342`
 

@@ -20,7 +20,7 @@ categories:
   - storage
   - object-storage
 dates:
-  validation: 2021-05-10
+  validation: 2021-11-30
   posted: 2020-06-04
 ---
 
@@ -81,85 +81,87 @@ In this case, an object will be stored temporarily in the cache of Nginx. The cl
   
   </Message>
 
-      user www-data;
-      worker_processes auto;
-      pid /run/nginx.pid;
-      include /etc/nginx/modules-enabled/*.conf;
+  ```
+  user www-data;
+  worker_processes auto;
+  pid /run/nginx.pid;
+  include /etc/nginx/modules-enabled/*.conf;
 
-      events {
-        worker_connections  768;
+  events {
+    worker_connections  768;
+  }
+
+  http {
+    default_type       text/html;
+    #access_log         /;
+    sendfile           on;
+    keepalive_timeout  65;
+
+    proxy_cache_path   /tmp/ levels=1:2 keys_zone=s3_cache:10m max_size=500m
+                      inactive=60m use_temp_path=off;
+
+    server {
+      listen 80;
+
+      # Configure your domain name here:
+      server_name  s3proxy.mydomain.eu;
+      access_log   /var/log/s3proxy.access.log  combined;
+
+      # Configure your Object Storage bucket URL here:
+      set $bucket "myobjectstoragebucket.s3.fr-par.scw.cloud";
+
+      # This configuration provides direct access to the Object Storage bucket:
+      location /s3/  {
+        rewrite ^/s3/(.*) /$1 break;
+        resolver 1.1.1.1;
+        proxy_http_version     1.1;
+        proxy_redirect off;
+        proxy_set_header       Connection "";
+        proxy_set_header       Authorization '';
+        proxy_set_header       Host $bucket;
+        proxy_set_header       X-Real-IP $remote_addr;
+        proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_hide_header      x-amz-id-2;
+        proxy_hide_header      x-amz-request-id;
+        proxy_hide_header      x-amz-meta-server-side-encryption;
+        proxy_hide_header      x-amz-server-side-encryption;
+        proxy_hide_header      Set-Cookie;
+        proxy_ignore_headers   Set-Cookie;
+        proxy_intercept_errors on;
+        add_header             Cache-Control max-age=31536000;
+        proxy_pass             http://$bucket;
       }
 
-      http {
-        default_type       text/html;
-        #access_log         /;
-        sendfile           on;
-        keepalive_timeout  65;
-
-        proxy_cache_path   /tmp/ levels=1:2 keys_zone=s3_cache:10m max_size=500m
-                          inactive=60m use_temp_path=off;
-
-        server {
-          listen 80;
-
-          # Configure your domain name here:
-          server_name  s3proxy.mydomain.eu;
-          access_log   /var/log/s3proxy.access.log  combined;
-
-          # Configure your Object Storage bucket URL here:
-          set $bucket "myobjectstoragebucket.s3.fr-par.scw.cloud";
-
-          # This configuration provides direct access to the Object Storage bucket:
-          location /s3/ {
-            resolver 62.210.16.6;
-            proxy_http_version     1.1;
-            proxy_redirect off;
-            proxy_set_header       Connection "";
-            proxy_set_header       Authorization '';
-            proxy_set_header       Host $bucket;
-            proxy_set_header       X-Real-IP $remote_addr;
-            proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_hide_header      x-amz-id-2;
-            proxy_hide_header      x-amz-request-id;
-            proxy_hide_header      x-amz-meta-server-side-encryption;
-            proxy_hide_header      x-amz-server-side-encryption;
-            proxy_hide_header      Set-Cookie;
-            proxy_ignore_headers   Set-Cookie;
-            proxy_intercept_errors on;
-            add_header             Cache-Control max-age=31536000;
-            proxy_pass             https://$bucket/;
-          }
-
-          # This configuration uses a 60 minute cache for files requested:
-          location /s3_cached/ {
-            resolver 62.210.16.6;
-            proxy_cache            s3_cache;
-            proxy_http_version     1.1;
-            proxy_redirect off;
-            proxy_set_header       Connection "";
-            proxy_set_header       Authorization '';
-            proxy_set_header       Host $bucket;
-            proxy_set_header       X-Real-IP $remote_addr;
-            proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
-            proxy_hide_header      x-amz-id-2;
-            proxy_hide_header      x-amz-request-id;
-            proxy_hide_header      x-amz-meta-server-side-encryption;
-            proxy_hide_header      x-amz-server-side-encryption;
-            proxy_hide_header      Set-Cookie;
-            proxy_ignore_headers   Set-Cookie;
-            proxy_cache_revalidate on;
-            proxy_intercept_errors on;
-            proxy_cache_use_stale  error timeout updating http_500 http_502 http_503 http_504;
-            proxy_cache_lock       on;
-            proxy_cache_valid      200 304 60m;
-            add_header             Cache-Control max-age=31536000;
-            add_header             X-Cache-Status $upstream_cache_status;
-            proxy_pass             https://$bucket/;
-          }
-
-        }
+      # This configuration uses a 60 minute cache for files requested:
+      location /s3_cached/ {
+        resolver 62.210.16.6;
+        proxy_cache            s3_cache;
+        proxy_http_version     1.1;
+        proxy_redirect off;
+        proxy_set_header       Connection "";
+        proxy_set_header       Authorization '';
+        proxy_set_header       Host $bucket;
+        proxy_set_header       X-Real-IP $remote_addr;
+        proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_hide_header      x-amz-id-2;
+        proxy_hide_header      x-amz-request-id;
+        proxy_hide_header      x-amz-meta-server-side-encryption;
+        proxy_hide_header      x-amz-server-side-encryption;
+        proxy_hide_header      Set-Cookie;
+        proxy_ignore_headers   Set-Cookie;
+        proxy_cache_revalidate on;
+        proxy_intercept_errors on;
+        proxy_cache_use_stale  error timeout updating http_500 http_502 http_503 http_504;
+        proxy_cache_lock       on;
+        proxy_cache_valid      200 304 60m;
+        add_header             Cache-Control max-age=31536000;
+        add_header             X-Cache-Status $upstream_cache_status;
+        proxy_pass             https://$bucket/;
       }
 
+    }
+  } 
+  ```
   Save the file and exit `nano` once it is edited.
 
 3. Make sure that there are no typos in the Nginx configuration file by syntax checking it using the following command:
@@ -194,15 +196,16 @@ Connections to your S3 proxy are currently available in plain, unencrypted HTTP 
 
   <Message type="note">
 
-  Replace `yourdomain.name` with the domain name of your Instance.
+  Replace `<yourdomain.name>` with the domain name of your Instance.
   
   </Message>
-  ```
-  certbot --nginx -d yourdomain.name
-  ```
-  When running Certbot for the first time, you will be asked to enter your email address. Confirm it by pressing `Enter` on your keyboard.
 
-4. Once confirmed Certbot will run a challenge and request the certificate. When asked to redirect all traffic to HTTPS, press `2`, then `Enter` on your keyboard:
+  ```
+  certbot --nginx -d <yourdomain.name>
+  ```
+  When running Certbot for the first time, you will be asked to enter your email address. Confirm it by pressing `Enter` on your keyboard. Once confirmed Certbot will run a challenge and request the certificate.  
+  
+4. Press `2`, then `Enter` on your keyboard when asked to redirect all traffic to HTTPS.
     ```
     Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
     - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -214,7 +217,7 @@ Connections to your S3 proxy are currently available in plain, unencrypted HTTP 
     Select the appropriate number [1-2] then [enter] (press 'c' to cancel):
     ```
 
-    Certbot will now reconfigure Nginx and once you see the following message your certificate is successfully installed:
+  Certbot will now reconfigure Nginx and once you see the following message your certificate is successfully installed:
 
     ```
     IMPORTANT NOTES:

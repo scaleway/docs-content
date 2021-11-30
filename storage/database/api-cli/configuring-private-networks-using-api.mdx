@@ -1,0 +1,162 @@
+---
+meta:
+  title: Configuring Private Networks on Database Instances using the API
+  description: This page explains how to configure Private Networks on Database Instances using the API
+content:
+  h1: Configuring Private Networks on Database Instances using the API
+  paragraph: This page explains how to configure Private Networks on Database Instances using the API
+dates:
+  validation: 2021-11-16
+  posted: 2020-11-16
+---
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+- You have a [Managed Database](/storage/database/concepts/#managed-database/)
+- You have [generated an API key](/console/my-project/how-to/generate-api-key/)
+
+</Message>
+
+With [Private Networks](/network/vpc/quickstart/), you can configure your own Layer-2 network with IPv4 adresses. This feature allows you to enhance the security of your architecture, by isolating it from the Internet. 
+Scaleway Database Instances now support Private Networks as a Beta feature. Scaleway Database Instances now support Private Networks as a Beta feature. Learn how to configure the Private Network feature on a Scaleway Database Instance through the API or the [Scaleway Console](https://console.scaleway.com). 
+
+## Creating a new Private Network for the Database Instance
+
+1. Click **Private Networks** in the **VPC** section of the side menu.
+2. Click the **Create a Private Network button**. The creation wizard displays.
+3. Complete the following steps in the wizard:
+  * Enter a **Name** for your Private Network, or leave the randomly-generated name in place. Optionally, you can also add tags to help you organize your Private Networks.
+  * Choose an **Availability Zone**, which is the geographical region where your Private Network will be deployed. 
+  <Message type="important">
+  
+  Make sure that your Database Instances are geolocated in the same Availability Zone as your Instances, to be able to add them to the Private Network.
+
+  </Message>
+4. Click **Create a Private Network** to create your Private Network. You will be redirected to the Private Networks dashboard, where your new Private Network will be displayed in the list.
+5. Copy the ID of the Private Network, as you need it in the next steps:
+  <Lightbox src="scaleway-pn-dbaas-01.png" alt="" />
+
+## Creating a new Database Instance with a Private Network endpoint
+
+1. Run the commands below using a terminal to create a new Database Instance with a Private Network endpoint. Make sure you replace the variables with the appropriate data.
+  ```bash
+  export SCW_TOKEN="<SCALEWAY_SECRET_KEY>"
+  export SCW_PROJECT_ID="<SCALEWAY_PROJECT_ID>"
+  export REGION="fr-par"
+  export NODE_TYPE="<RDB_NODE_TYPE>"
+  export PN_ID="<PRIVATE_NETWORK_ID>"
+  export PN_VIP="<PRIVATE_NETWORK_VIP_CIDR>"
+  
+  curl --request POST \
+  --url https://api.scaleway.com/rdb/v1/regions/$REGION/instances \
+  --header 'Content-Type: application/json' \
+  --header "X-Auth-Token: $SCW_TOKEN" \
+  --data "{
+      \"name\": \"rdb-pn\",
+      \"engine\": \"PostgreSQL-13\",
+      \"project_id\": \"$SCW_PROJECT_ID\",
+      \"is_ha_cluster\": true,
+      \"node_type\": \"$NODE_TYPE\",
+      \"tags\": [\"rdb_pn\"],
+      \"disable_backup\": false,
+      \"init_endpoints\": [
+        {
+          \"private_network\": {
+            \"service_ip\": \"$PN_VIP\",
+            \"private_network_id\": \"$PN_ID\"
+          }
+        }
+      ]
+  }"
+  ```
+
+2. Retrieve the ID of your newly created Database Instance from the Scaleway console. You can find it on the Database Instance information page:
+  <Lightbox src="scaleway-pn-dbaas-02.png" alt="" />
+
+3. Run the commands below using a terminal to connect the Database Instance to the Private Network. Make sure you replace the variables with the appropriate data.
+  ```bash 
+  export SCW_TOKEN="<SCALEWAY_SECRET_KEY>"
+  export RDB_INSTANCE="<RDB_INSTANCE_ID>"
+  export REGION="fr-par"
+  export PN_ID="<PRIVATE_NETWORK_ID>"
+  export PN_VIP="<PRIVATE_NETWORK_VIP_CIDR>"
+  
+  
+  curl --request POST \
+  --url https://api.scaleway.com/rdb/v1/regions/$REGION/instances/$RDB_INSTANCE/endpoints \
+  --header 'Content-Type: application/json' \
+  --header "X-Auth-Token: $SCW_TOKEN" \
+  --data "{
+    \"endpoint_spec\": {
+      \"private_network\": {
+        \"service_ip\": \"$PN_VIP\",
+        \"private_network_id\": \"$PN_ID\"
+      }
+    }
+  }"
+  ```
+
+<Message type="tip">
+
+Private Networks are also available on [Instances](https://www.scaleway.com/en/virtual-instances/). Refer to the page on [how to use Private Networks ](/compute/instances/how-to/use-private-networks/) to attach an Instance to a Private Network and configure a persistent IP address on it.
+
+</Message>
+
+## Deleting a Private Network endpoint
+
+Once the Private Network endpoint is connected to your Database Instance, you can retrieve more information using the [GET endpoint](https://developers.scaleway.com/en/products/rdb/api/#get-e2ee4c) API call.
+
+<Message type="tip">
+
+You can use the `jq` tool to filter the output or search for `endpoints` section as shown below.
+
+</Message>
+
+1. Run the commands below using a terminal to retrieve information about the endpoints.
+  ```bash
+  export SCW_TOKEN="<SCALEWAY_SECRET_KEY>"
+  export RDB_INSTANCE="<RDB_INSTANCE_ID>"
+  export REGION="fr-par"
+  
+  curl --request GET \
+  --url https://api.scaleway.com/rdb/v1/regions/$REGION/instances/$RDB_INSTANCE \
+  --header 'Content-Type: application/json' \
+  --header "X-Auth-Token: $SCW_TOKEN"  | jq '.endpoints'
+  ```
+
+2. Copy the endpoint ID you want to remove.
+  ```bash
+  endpoints: [
+      {
+        "ip": "192.168.0.40",
+        "port": 3306,
+        "name": null,
+        "id": "de89f8f7-148d-4b0a-82b5-94690bf7733f", <----------------------- This is the PN Endpoint ID
+        "private_network": {
+          "service_ip": "192.168.0.40/24",
+          "private_network_id": "7967de7a-3891-4803-9382-fa3456b567a4"
+        }
+      },
+      {
+        "ip": "51.159.74.177",
+        "port": 57855,
+        "name": null,
+        "id": "2afd91bd-c91f-473d-8a40-ae22e7015703"
+      }
+  ]
+  ```
+
+3. Delete the endpoint.
+  ```bash
+  export SCW_TOKEN="<SCALEWAY_SECRET_KEY>"
+  export ENDPOINT_ID="<RDB_ENDPOINT_ID>"
+  export REGION="fr-par"
+  
+  curl --request DELETE \
+  --url https://api.scaleway.com/rdb/v1/regions/$REGION/endpoints/$ENDPOINT_ID \
+  --header 'Content-Type: application/json' \
+  --header "X-Auth-Token: $SCW_TOKEN"
+  ```
+  The endpoint is now deleted.
+

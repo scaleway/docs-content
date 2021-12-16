@@ -15,7 +15,7 @@ All rules below concern this repository.
 Any PRs which do not comply with the rules below will be rejected.
 
 1. Read and follow [the writing guidelines](#writing-guidelines).
-2. Make sure you have identified the [type of content](/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (eg: tutorial, API/CLI documentation, reference content or troubleshooting content?).
+2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (eg: tutorial, API/CLI documentation, reference content or troubleshooting content?).
 3. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
 
    - `source`: Either `int` (for internal contributor) or `ext` (for external contributor) to Scaleway. If you are not a Scaleway staff member, please use `ext`.

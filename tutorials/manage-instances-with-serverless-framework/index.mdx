@@ -1,0 +1,147 @@
+---
+meta:
+  title: Managing compute Instances with the serverless framework
+  description: Discover how to manage your Scaleway Instances with the serverless framework and python
+content:
+  h1:  Managing compute Instances with the serverless framework
+  paragraph: Discover how to manage your Scaleway Instances with the serverless framework and python
+tags: serverless instances python
+categories:
+  - compute
+  - serverless
+dates:
+  validation: 2021-12-21
+  posted: 2021-12-21
+---
+
+In this tutorial you will discover some examples of Instances automation using Python and the serverless framework:
+
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+  - You have [generated an API key](/console/my-project/how-to/generate-api-key/)
+  - You have Python pip installed on your machine
+
+</Message>
+
+## Automatically backup your Instance 
+
+For this example we will use the Scaleway SDK and the serverless framework, for more information please refer to Python SDK Documentation and the [how-to on serverless framework](/compute/functions/api-cli/fun-uploading-with-serverless-framework/)
+
+1. Create a project using the serverless framework (in a terminal):
+    ```
+    serverless create --template-url https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples/python3 --path myService
+    ```
+
+2. Install the Scaleway SDK using `pip`:
+    ```
+    pip install scaleway-sdk --target ./package
+    ```
+3. Edit the fily `handler.py` in a text editor. Then save the file and exit the editor. 
+    ```py
+    from scaleway.apis import ComputeAPI
+    from datetime import date
+    import os
+
+    api = ComputeAPI(auth_token=os.environ['API_KEY'])
+    snapshot_name=os.environ['SNAPSHOT_NAME']
+    volume_id=os.environ['VOLUME_ID']
+    project_id=os.environ['PROJECT_ID']
+
+    def handle(event, context):
+    snapshot_date = date.today().strftime("%Y%m%d%h%m")
+
+    
+    res=api.query().snapshots.post({"name": snapshot_date+"_"+snapshot_name,"volume_id": volume_id,"project": project_id})
+    
+    return {
+        "body": res,
+        "statusCode": 200,
+    }
+    ```
+4. Edit your YAML file and add the environmental variable and the backup frequency.
+    ```yaml
+    functions:
+    instancebackup:
+    handler: handler.handle
+    minScale: 0
+    events:
+    - schedule:
+        # Specify your frequency using CRON Job(UNIX Format)
+        rate: '1 * * * *'
+
+    # Local environment variables - used only in given function
+    env:
+        API_KEY: {Your API KEY} 
+        PROJECT_ID: {Your project Id}
+        SNAPSHOT_NAME: {Name of the snapshot}
+        VOLUME_ID: {Volume to be backup}
+    ```
+
+5. Deploy using `serverless deploy`.
+
+## Automatically shut down / start instances
+
+For this example we will use the native python library `urllib`, which enables us to write the code down directly into the Scaleway console.
+All information about the Instance API can be found in the [developers documentation](https://developers.scaleway.com/en/products/instance/api/#get-2c1c6f)
+
+<Message type="note">
+
+You require your [Instance information] for the following steps.
+
+</Message>
+
+1. [Create a function](/compute/functions/how-to/create-a-function/) from the Scaleway console.
+2. Edit the file `handler.py` as follows:
+    ```py
+    import os
+    from urllib import request,parse,error
+    import json
+
+    auth_token=os.environ['X-AUTH-TOKEN']
+
+    def handle(event, context):
+        ## get information from cron
+        event_body=eval(event["body"])
+        zone=event_body["zone"]
+        server_id=event_body["server_id"]
+        action=event_body["action"] #action should be "poweron" or "poweroff"
+        
+        #create request
+        url=f"https://api.scaleway.com/instance/v1/zones/{zone}/servers/{server_id}/action"
+        data=json.dumps({"action":action}).encode('ascii')
+        req = request.Request(url, data=data,  method="POST")
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('X-Auth-Token',auth_token)
+        
+        #Sending request to Instance API
+        try: 
+            res=request.urlopen(req).read().decode()
+        except error.HTTPError as e:
+            res=e.read().decode()
+            
+        return {
+            "body": json.loads(res),
+            "statusCode": 200,
+        }
+    ```
+
+3. Add the environment variable `X-AUTH-TOKEN`.
+4. Create cron jobs dedicated to start or stop your instance in the **Advanced Section**
+    * To **stop** an Instance:
+    ```yaml
+    {
+      "zone":"{ZONE}",
+      "server_id":"{XXXXXXX-XXXX-XXX-XXXX-XXXXXXX}",
+      "action":"poweroff"
+    }
+    ```
+    * To **start** an instance:
+    ```yaml
+    {
+      "zone":"{ZONE}",
+      "server_id":"{XXXXXXX-XXXX-XXX-XXXX-XXXXXXX}",
+      "action":"poweron"
+    }
+    ```

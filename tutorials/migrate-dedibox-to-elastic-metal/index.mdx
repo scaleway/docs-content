@@ -88,10 +88,17 @@ In the command above we download Duplicity version `0.8.21`. You may check the [
     sub   rsa3072 2022-01-25 [E]
     ```
 
-3. Export the keys so you can decrypt your files on the Elastic Metal server. Also having the GPG private and public keys stored somewhere else will come in handy in case you lose access to your machine. Export the GPG keys with:
+ ### Transferring the PGP key to the Elastic Metal server 
+
+1. Export the keys so you can decrypt your files on the Elastic Metal server. Also having the GPG private and public keys stored somewhere else will come in handy in case you lose access to your machine. Export the GPG keys with:
     ```
     gpg --export-secret-key keyname > ~/my-key.asc
     ```
+
+2. Transfer the key to the Elastic Metal server using `rsync`. 
+  ```
+  scp /root/my-key.asc root@<elastic-metal>:/root/
+  ```
 
 ### Backing up your Dedibox
 
@@ -131,6 +138,7 @@ In the command above we download Duplicity version `0.8.21`. You may check the [
     }
     export -f log
     ```
+
 3. Copy the following script to `scw-backup.sh`:
     ```sh
     #!/bin/bash
@@ -163,16 +171,87 @@ In the command above we download Duplicity version `0.8.21`. You may check the [
     cat /var/log/duplicity/logfile-recent.log
     ```
 
-### Restoring data on your Elastic Metal server 
 
 
 
-```sh
-apt update && apt upgrade
-apt install -y python3-boto python3-pip gettext librsync-dev
-wget https://launchpad.net/duplicity/0.8-series/0.8.21/+download/duplicity-0.8.21.tar.gz
-tar xaf duplicity-0.8.*.tar.gz
-cd duplicity-0.8.*/
-pip3 install -r requirements.txt
-python3 setup.py install
-```
+## Restoring data on your Elastic Metal server 
+
+1. Install the required prerequisites and duplicity on the Elastic Metal server:
+
+  ```sh
+  apt update && apt upgrade
+  apt install -y python3-boto python3-pip gettext librsync-dev
+  wget https://launchpad.net/duplicity/0.8-series/0.8.21/+download/duplicity-0.8.21.tar.gz
+  tar xaf duplicity-0.8.*.tar.gz
+  cd duplicity-0.8.*/
+  pip3 install -r requirements.txt
+  python3 setup.py install
+  ```
+
+2. Import the GPG key on the Elastic Metal server: 
+
+  ```
+  gpg --import my-key.asc
+  ```
+3. Create the required folders and a configuration file for Duplicity:
+
+    ```
+    touch scw-restore.sh .scw-configrc
+    chmod 700 scw-restore.sh
+    chmod 600 .scw-configrc
+
+    mkdir -p /var/log/duplicity
+    touch /var/log/duplicity/logfile{.log,-recent.log}
+    ```
+
+4. Add the following lines to `.scw-configrc`:
+    ```sh
+    # Scaleway credentials keys
+    export AWS_ACCESS_KEY_ID="<SCALEWAY ACCESS KEY>"
+    export AWS_SECRET_ACCESS_KEY="<SCALEWAY SECRET ACCESS KEY>"
+    export SCW_BUCKET="s3://s3.fr-par.scw.cloud/<NAME OF YOUR BUCKET>"
+
+    # GPG Key information
+    export PASSPHRASE="<YOUR GPG KEY PASSPHRASE>"
+    export GPG_FINGERPRINT="<YOUR GPG KEY FINGERPRINT>"
+
+    # Folder to backup
+    export SOURCE="<PATH TO FOLDER TO BACKUP>"
+
+    # Log files
+    export LOGFILE_RECENT="/var/log/duplicity/logfile-recent.log"
+    export LOGFILE="/var/log/duplicity/logfile.log"
+
+    log () {
+      date=`date +%Y-%m-%d`
+      hour=`date +%H:%M:%S`
+      echo "$date $hour $*" >> ${LOGFILE_RECENT}
+    }
+    export -f log
+    ```
+
+4. Edit the file `scw-restore.sh`, and add the following:
+  ```sh
+  #!/bin/bash
+  source .scw-configrc
+
+  echo -e "Downloading full backup to:" $1
+
+  duplicity \
+    --time 0D \
+    ${SCW_BUCKET} $1
+  ```
+
+5. Download the data from your bucket to the Elastic Metal server:
+
+  ```
+  ./scw-restore.sh 0D /tmp/backup-recovery/
+  ```
+
+Once downloaded you can move the data to it's final destination on your new machine. 
+
+<Message type="tip">
+
+You can use duplicity also for regular and incremental backups of your data on the Object Storage platform. Follow our tutorial [How to backup your dedicated server on Object Storage with Duplicity](/tutorials/backup-dedicated-server-s3-duplicity/) for more information.
+
+</Message>

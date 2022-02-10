@@ -1,0 +1,110 @@
+---
+meta:
+  title:  How to deal with load overflow between a proxmox cluster and virtual machines on an Elastic Metal Server over Scaleway Private Networks
+  description:  This tutorial shows how to deal with load overflow between a proxmox cluster and virtual machines on an Elastic Metal Server over Scaleway Private Networks
+content:
+  h1:  How to deal with load overflow between a proxmox cluster and virtual machines on an Elastic Metal Server over Scaleway Private Networks?
+  paragraph: This tutorial shows how to deal with load overflow between a proxmox cluster and virtual machines on an Elastic Metal Server over Scaleway Private Networks
+tags: load-balancer private-network public-gateway proxmox virtual-machine
+categories:
+  - compute
+dates:
+  validation: 2021-11-22
+  posted: 2019-05-20
+---
+
+## Overview
+
+The [Private Network](/network/vpc/quickstart/) feature enables you to build a virtual L2 network between your cloud resources. The service is compatible with a wide range of resources including: 
+* [Instances](/compute/instances/quickstart/)
+* [Elastic Metal servers](/compute/elastic-metal/quickstart/)
+* [Managed Database](/storage/database/quickstart/)
+* [Load Balancers](/en/docs/network/load-balancer/quickstart/)
+* [Public Gateways](/network/vpc/concepts/#public-gateway), enabling IP autoconfiguration of your Private Networks and their communication with the Internet.
+
+In this tutorial we are going to create a [Proxmox VE](https://www.proxmox.com/en/proxmox-ve) cluster. We want to be able to create several VMs on each Elastic Metal server, which will communicate over a Private Network. For this, a bridge is required. Bridges are like physical network switches implemented in software. We will create a bridge on each Elastic Metal server using the Proxmox interface. Once the bridge is created, we create a cluster and configure it to use the Private Network bridge as the cluster network. Each Elastic Metal server then joins this cluster. Next, we can create virtual machines on both servers of the cluster, which will communicate using the Private Network. Finally we can add and configure a Load Balancer to distribute traffic between all the VMs on the cluster. 
+
+<Message type="requirement">
+
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+  - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key)
+  - You have [two Elastic Metal servers](/compute/instances/how-to/create-an-instance) that run on Proxmox
+  - You have [created a Private Network](/network/vpc/how-to/use-private-networks/) and added your resources to it
+  - You have [created a Public Gateway](/network/vpc/how-to/create-a-public-gateway/) with DHCP enabled
+  - You have a domain or subdomain pointed to your Instance
+
+</Message>
+
+## Preparing Proxmox
+
+1. Log into the Proxmox web interface and select your server in the datacenter view. Then click **Network** in the menu.
+
+2. Click **Create** > **Linux Bridge**. The configuration wizard displays. Enter a private IP for your Elastic Metal server in CIDR format. The **Bridge port** is the name of your primary network interface, followed by a dot and your VLAN-ID. Tick the boxes **Autostart** and **VLAN aware**, then click **Create** to create the bridge.
+
+    <Lightbox src="scaleway-px-create-linux-bridge.png" alt="" />
+
+3. Click **Apply configuration** to activate the new configuration.
+
+4. Go to the **Datacenter** view and click **Create Cluster**. 
+
+5. Enter a name for the cluster and select your Private Network bridge `vmbr1` as cluster network. Then click **Create** to launch cluster creation. 
+
+6. Select the cluster in the cluster list and click **Join Information**. The cluster join information displays.
+
+7. Click **Copy Information** to copy the cluster join information into the clipboard. 
+
+8. Go to the Proxmox interface of your second Elastic Metal server and click **Cluster** to enter the cluster configuration from the Datacenter view of the machine. 
+
+9. Click **Join Cluster** and paste the cluster join information in the form. 
+
+10. Enter your first Elastic Metal server's `root` password and click **Join** to link the machine to the cluster. 
+
+The second node appears now in the cluster in the Datacenter view of Proxmox. You can manage both machines using a single interface. Communication between members of the cluster is entirely via your Private Network, ensuring the highest level of security and the lowest latency. 
+
+## Creating Virtual Machines
+
+Proxmox is capable of managing Linux Kernel Virtual Machines (KVM) as well as LXC containers. KVM provides full virtualization for complete Windows and Linux images whilst LXC containers are lightweight and perfect to run conflict-free Linux applications. 
+Follow this guide for information how to [configure virtual machines and LXC containers on Proxmox](https://www.scaleway.com/en/docs/tutorials/configure-failover-proxmox/).
+
+Create or clone your virtual machines on both servers of the cluster to distribute the load between them using a Load Balancer. Your virtual machines can use the Public Gateway and dynamic NAT to communicate with the Internet for downloads and updates. If you want to expose certain ports of your VMs directly, configure [static NAT rules](/network/vpc/how-to/configure-a-public-gateway/#how-to-review-and-configure-nat)) for them. 
+
+
+<Message type="tip">
+
+  Make sure to select the bridge `vmbr1`, automatic MAC address generation and select DHCP for LXC network configuration.
+
+  <Lightbox src="scaleway-px-create-vm.png" alt="" />
+
+  The DCHP server in your Private Network will automatically assign a random IP address to your container or VM. If required, you can configure [static NAT](/network/vpc/how-to/configure-a-public-gateway/#how-to-review-and-configure-dhcp) to assign a static IP address to it.
+
+</Message>
+
+## Configuring the Load Balancer
+
+1. Go to the [Load Balancers](https://console.scaleway.com/load-balancer/lbs/) section in the Scaleway console and select the Load Balancer you want configure.
+
+2. Click the **Frontends** tab, then **+ Add Frontend**. The frontend configuration wizard displays.
+
+3. Enter the following information: 
+
+  <Lightbox src="scaleway-px-create-frontend.png" alt="" />
+
+  For the frontend:
+  * A name
+  * The frontend port
+  * (Optionally) The SSL certificate to use for the frontend
+
+  For the backend:
+  * A name
+  * The backend protocol 
+  * The backend port 
+  * (Optionally) The proxy protocol to use
+  * The healh check information
+  * The IP addreses of your VM's inside the Private Network
+
+  <Message type="tip">
+
+  For more information about the front and backend configuration, refer to the [Load Balancers documentation](/network/load-balancer/how-to/manage-frontends-and-backends/).
+
+  </Message>
+

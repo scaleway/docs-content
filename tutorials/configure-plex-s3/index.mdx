@@ -20,12 +20,13 @@ dates:
 [Plex](https://www.plex.tv) is client-server media player system comprising two main components:
 
 - The **Plex Server** application, that is available for Windows, macOS, Linux and even including some NAS devices.
-- **Plex clients** that can be either a web based interface, an application on smart TVs, streaming boxes or other third party applications.
+- **Plex clients** that can be either a web-based interface, an application on smart TVs, streaming boxes or other third-party applications.
 
 <Message type="requirement">
 
 - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
 - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have a [Scaleway Elements Instance](/compute/instances/how-to/create-an-instance/) running Ubuntu Focal Fossa (20.04 LTS)
 - You have created an [Object Storage bucket](/storage/object/how-to/create-a-bucket/)
 - You have sudo privileges or access to the root user.
 
@@ -33,12 +34,17 @@ dates:
 
 ## Installing the required software
 
-1. Update the apt package manager and the software already installed on the system:
+1. Connect to your instance using SSH.
   ```
-  apt update && apt-upgrade -y
+  ssh root@<your-instance-IP>
   ```
 
-2. Add the Plex repository:
+2. Update the apt package manager and the software already installed on the system:
+  ```
+  apt update && apt upgrade -y
+  ```
+
+3. Add the Plex repository:
 
   Add Plex’s GPG key to the apt sources keychain and create a new file containing an entry to the Plex repository by running the following commands:
   ```
@@ -46,32 +52,45 @@ dates:
   echo deb https://downloads.plex.tv/repo/deb public main | tee /etc/apt/sources.list.d/plexmediaserver.list
   ```
 
-3. Install Plex and s3fs:
+4. Install Plex and s3fs:
 
   Now, as the Plex repository is enabled, update the apt package list and install the latest version of Plex and s3fs, which is needed to mount the Object Storage bucket.
   ```
-  apt update && apt install -y plexmediaserver s3fs
+  apt update 
+  apt install -y plexmediaserver s3fs
   ```
 
 ### Configuring s3fs
 
-1. Create the folder into which the bucket will be mounted:
+1. Create the folder on which you will mount the bucket.
   ```
   mkdir -p /mnt/media
   ```
 
-2. Enter your S3 credentials in the password file and set owner-only permissions on it:
+2. Enter your API keys in the password file and set owner-only permissions.
   ```
-  echo <ACCESS_KEY>:<SECRET_KEY> >  ~/.passwd-s3fs
+  echo $ACCESS_KEY:$SECRET_KEY >  ~/.passwd-s3fs
   chmod 600  ~/.passwd-s3fs
   ```
 
-3. Modify `/etc/fuse.conf` to allow other users access, by uncommenting `user_allow_other`.
+3. Uncomment `user_allow_other` in the `/etc/fuse.conf` file to allow other users to access the server. You can use a text editor of your choice. In this tutorial we use `nano`.
 
-4. Mount the bucket in the local filesystem:
+  ```
+  $ nano /etc/fuse.conf
+    [...]
+    user_allow_other
+  ```
+
+4. Mount the bucket in the local filesystem.
   ```
   s3fs plexmediaserver /mnt/media -o allow_other -o umask=0002 -o passwd_file=${HOME}/.passwd-s3fs -o url=https://s3.nl-ams.scw.cloud
   ```
+  <Message type="note">
+
+  Replace `nl-ams` with the region of your bucket if necessary.
+
+  </Message>
+
 
 5. (Optional) To mount the bucket automatically during boot, create a [systemd](/tutorials/systemd-essentials/) script, called `/etc/systemd/user/s3fs.service`:
   ```

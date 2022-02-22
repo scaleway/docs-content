@@ -6,19 +6,35 @@ content:
   h1: How to use Apache NiFi to migrate Object Storage data
   paragraph: How to install and setup Apache NiFi to migrate data between clouds
 tags: Object-Storage Apache NiFi data-migration Terraform
+steps:
+  - step: Configuring Terraform
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/use-apache-nifi-migrate-data/#Configuring-Terraform
+  - step: Running Terraform
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/use-apache-nifi-migrate-data/#Running-Terraform
+  - step: Configuring Apache NiFi
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/use-apache-nifi-migrate-data/#Configuring-Apache-NiFi
+  - step: Synchronizing One Bucket to Another
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/use-apache-nifi-migrate-data/#Synchronizing-one-bucket-to-another
+  - step: Combining Several Data Sources
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/use-apache-nifi-migrate-data/#Combining-several-data-sources
 categories:
   - storage
   - object-storage
 dates:
-  validation: 2022-02-17
+  validation: 2021-05-10
   posted: 2019-09-26
 ---
 
 ## Apache NiFi - Overview
 
-[Apache NiFi](https://nifi.apache.org/) is a system to process and distribute data between different machines. It can carry out managed data transfers between different source and destination systems. The tool provides a web interface to facilitate the design, management, and control of data transfers.
+[Apache NiFi](https://nifi.apache.org/) is a system to process and distribute data between different machines. It can transfer data and manages the transfer between different sources and destination systems. The tool provides a web interface to facilitate the design, management, and control of data transfers.
 
-In this tutorial, we use Terraform to provision an Instance with appropriate [security group](/compute/instances/concepts/#security-group) settings, and with Apache Nifi installed. We then configure Apache NiFi to carry out the required data workflows.
+We are going to use Terraform to provision the machines and then configure Apache NiFi to do the data workflows we want.
 
 <Message type="requirement">
 
@@ -28,11 +44,11 @@ In this tutorial, we use Terraform to provision an Instance with appropriate [se
 
 ## Configuring Terraform
 
-Install Terraform and export the variables that are necessary to run it:
+You should install Terraform and export several variables that are necessary to run Terraform.
 
 1. Download the terraform binary from the official page [terraform.io](https://www.terraform.io/downloads.html). Once downloaded, copy it in your binary path.
 
-2. Set the following variables to be able to provision an Instance with Terraform.
+2. Set the following variables to be able to start an instance from Terraform.
   ```
   export SCW_ACCESS_KEY="<ACCESS_KEY>"
   export SCW_SECRET_KEY="<SECRET_KEY>"
@@ -47,33 +63,16 @@ Install Terraform and export the variables that are necessary to run it:
 
 ## Running Terraform
 
-1. Open a text editor and copy and paste the following code, editing it according to your needs. Save it as a Terraform plan, with the `.tf` extension. For example, call your file: `scaleway.tf`:
-
-    <Message type="important">
-
-    Replace `<MY_PUBLIC_IP>` with your public ip which can be found [here](https://whatismyipaddress.com), and `<APACHE_MIRROR>` by one of the URLs listed [here](https://www.apache.org/dyn/closer.lua?path=/nifi/1.15.3/nifi-1.15.3-bin.tar.gz).
-
-    </Message>
-
+1. Open a text editor and edit the following plan to your needs. A plan is a file with a `*.tf` extension. For example: `scaleway.tf`:
   ```
-  terraform {
-    required_providers {
-      scaleway = {
-        source = "scaleway/scaleway"
-      }
-    }
-    required_version = ">= 0.13"
-  }
-
   provider "scaleway" {
     zone = "fr-par-1"
   }
 
-  # create Instance IP
   resource scaleway_instance_ip "nifi" {
+    server_id = scaleway_instance_server.nifi.id
   }
 
-  # create security group
   resource "scaleway_instance_security_group" "nifi" {
     name = "sg-nifi"
 
@@ -94,52 +93,50 @@ Install Terraform and export the variables that are necessary to run it:
 
   }
 
-  # create Instance, give it the previously-created IP and put it in the previously-created security group
   resource "scaleway_instance_server" "nifi" {
     name  = "nifi"
     type  = "DEV1-L"
-    image = "ubuntu-focal"
+    image = "ubuntu-bionic"
     tags  = [ "nifi" ]
-    ip_id = scaleway_instance_ip.nifi.id
 
     security_group_id =  scaleway_instance_security_group.nifi.id
 
     connection {
-      host         = scaleway_instance_ip.nifi.address
+      host         = self.public_ip
       user         = "root"
     }
 
-    # define commands to carry out on the Instance once it is created
     provisioner "remote-exec" {
       inline = [
         "apt-get update",
-        "DEBIAN_FRONTEND=noninteractive apt-get install -yq python openjdk-11-jre-headless",
-        "export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64"
+        "DEBIAN_FRONTEND=noninteractive apt-get install -yq python openjdk-8-jre-headless",
         "mkdir -p /opt/",
         "wget -O /opt/nifi.tar.gz <APACHE_MIRROR>",
         "tar xzf /opt/nifi.tar.gz -C /opt/",
-        "/opt/nifi-1.15.3/bin/nifi.sh start",
+        "/opt/nifi-1.9.2/bin/nifi.sh start",
       ]
     }
 
   }
   ```
 
-2. Run the following commands:
+    <Message type="important">
+
+    Replace `<MY_PUBLIC_IP>` by your public ip which can be found [here](https://whatismyipaddress.com), also `<APACHE_MIRROR>` by one of the URLs listed [here](https://www.apache.org/dyn/closer.lua?path=/nifi/1.9.2/nifi-1.9.2-bin.tar.gz).
+
+    </Message>
+
+2. Then run the following commands:
   ```
   terraform init
   terraform apply
   ```
 
-  Terraform initialises, and applies the configuration to create the Instance and install Apache Nifi on it.
+  It will generate a large output. Check out if any errors are displayed. If everything went well, proceed to the next step.
 
 ## Configuring Apache NiFi
 
-1. Find the public IP of the Instance created by Terraform, using one of the following methods:
-  - Navigate to the [Instances](https://console.scaleway.com/instance/servers) page of the Scaleway console, find your `nifi` Instance and copy the IP address from the Overview page. 
-  - Run the command `terraform show | grep address` from your local machine. 
-  
-2. Open your browser by typing the following URL: `http://<INSTANCE_PUBLIC_IP>:8080/nifi/` (Important: NiFi may need some time to start. If the page does not load, wait a few minutes before you retry). You will be greeted by NiFi's interface.
+1. Open the interface from your browser by getting the public IP of your instance by either getting it in the web console or running the following command `terraform show | grep address`. Open your browser by typing the following URL: `http://<INSTANCE_PUBLIC_IP>:8080/nifi/` (Important: NiFi may need some time to start. If the page does not load, wait a few minutes before you retry). You will be greeted by NiFi's interface.
 <Lightbox src="scaleway-empty.png" alt="" />
 
 2. Once the interface displays proceed to the next step which is creating data flows using processors.

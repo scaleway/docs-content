@@ -1,0 +1,141 @@
+---
+meta:
+  title: Configure IPv6 on virtual machines with ESXi
+  description: This page explains how to configure IPv6 on virtual machines with ESXi
+content:
+  h1: Configure IPv6 on virtual machines with ESXi
+  paragraph: This page explains how to configure IPv6 on virtual machines with ESXi
+tags: compute dedibox esxi vm virtual-machine ubuntu
+categories:
+  - compute
+  - dedibox
+dates:
+  validation: 2022-02-24
+  posted: 2022-02-24
+---
+
+This tutorial explains how to configure IPv6 on virtual machines on ESXi Hypervizors.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+- You have [configured your SSH Key](console/my-project/how-to/generate-api-key/)
+- You have a [Dedibox](https://www.scaleway.com/en/dedibox/) running ESXi 6.5 or later
+- You have [enabled SLAAC](/dedibox-network/ipv6/how-to/enable-ipv6-slaac/) for your Dedibox
+- You have [requested a IPv6 prefix](/dedibox-network/ipv6/how-to/request-prefix)
+- You have a [Managed Database for PostgreSQL](https://www.scaleway.com/en/database/)
+- You have installed a virtual machine running Ubuntu 20.04 or later and [configured a failover IPv4](/dedibox-network/ip-failover/how-to/configure-network-virtual-machine/#ubuntu) on it
+
+</Message>
+
+
+1. Log into your virtual machine using [SSH](/dedibox/dedicated-servers/how-to/connect-to-server#how-to-connect-via-ssh).
+
+2. Run the command `ip a` to display your current network configuration. The command returns an output as follows:
+    ```
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    inet 127.0.0.1/8 scope host lo
+       valid_lft forever preferred_lft forever
+    inet6 ::1/128 scope host
+       valid_lft forever preferred_lft forever
+    2: ens160: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 00:50:56:01:fa:b9 brd ff:ff:ff:ff:ff:ff
+    altname enp3s0
+    inet your.fail.over.ip/32 scope global ens160
+       valid_lft forever preferred_lft forever
+    inet6 fe80::250:56ff:fe01:fab9/64 scope link
+       valid_lft forever preferred_lft forever
+    ```
+    Take note of the following information from the output above:
+    * The name of the network interface (here `ens160`)
+    * The local IPv6 of your VM (here `fe80::250:56ff:fe01:fab9/64`)
+
+3. Open the file `/etc/dhcp/dhclient6.conf` in a text editor and edit it as shown below. Then save the file and quit the text editor.
+    ```
+    interface "ens160" {
+        send dhcp6.client-id DUID;
+    }
+    ```
+    <Message type="important">
+
+    Edit the name of the Internet interface to the one of your VM and replace `DUID` with the [DUID of your prefix](/dedibox-network/ipv6/how-to/request-prefix/).
+
+    </Message>
+
+4. Open the file `/etc/systemd/system/dhclient.service` in a text editor and edit it as shown below. Then save and exit the editor.
+    ```
+    [Unit]
+    Description=dhclient for sending DUID IPv6
+    After=network-online.target
+    Wants=network-online.target
+
+    [Service]
+    Restart=always
+    RestartSec=10
+    Type=forking
+    ExecStart=/sbin/dhclient -cf /etc/dhcp/dhclient6.conf -6 -P -v eno1
+    ExecStop=/sbin/dhclient -x -pf /var/run/dhclient6.pid
+
+    [Install]
+    WantedBy=network.target
+    ```
+5. Enable the service to start automatically after each reboot of the machine. Then start the service manually for the first time.
+    ```
+    systemctl enable dhclient.service
+    systemctl start dhclient.service
+    ```
+
+6. Verify that the service is running by running the following command:
+    ```
+    systemctl status dhclient.service
+    ```
+    The command above returns an output as follows:
+    ```
+        ● dhclient.service - dhclient for sending DUID IPv6
+        Loaded: loaded (/etc/systemd/system/dhclient.service; enabled; vendor pres>
+        Active: active (running) since Thu 2022-02-24 12:18:03 UTC; 27min ago
+      Main PID: 5342 (dhclient)
+        Tasks: 4 (limit: 4627)
+        Memory: 1.6M
+        CPU: 23ms
+        CGroup: /system.slice/dhclient.service
+                └─5342 /sbin/dhclient -cf /etc/dhcp/dhclient6.conf -6 -P -v ens160
+    ```
+
+7. Edit your [Netplan](https://netplan.io/) configuration file (probably located at `/etc/netplan/01-netcfg.yaml`) and edit it as follows:
+    ```
+    network:
+    version: 2
+    renderer: networkd
+    ethernets:
+        ens160:
+        dhcp4: false
+        dhcp6: false
+        addresses:
+        - FAILOVER_IP/32
+        - IP_FROM_YOUR_PREFIX/SUBNET
+        gateway4: 62.210.0.1
+        gateway6: LOCAL_IPv6
+        nameservers:
+            addresses: [62.210.16.6, 62.210.16.7]
+        routes:
+        - to: 0.0.0.0/0
+            via: 62.210.0.1
+            on-link: true
+        - to: "::/0"
+            via: "LOCAL_IPv6"
+            on-link: true
+    ```
+    <Message 
+8. Apply the new network configuration with the following command:
+    ```
+    netplan apply 
+    ```
+
+9. You now have configured the IP address, but it the IPv6 connectivity is not working yet. Find the gateway for your prefix by running the following command:
+```
+
+         2001:bc8:3000:1fe:: /64	
+
+         duid 00:03:00:01:1c:0f:c0:5b:15:2a	

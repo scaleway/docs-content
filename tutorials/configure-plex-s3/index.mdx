@@ -1,71 +1,50 @@
 ---
 meta:
   title: Configure Plex Media Server with Object Storage
-  description: This page shows how to configure a Configure Plex Media Server with Object Storage
+  description: This page shows how to set up an s3 media server with Plex and Object Storage
 content:
   h1: Configure Plex Media Server with Object Storage
-  paragraph: This page shows how to configure a Configure Plex Media Server with Object Storage
-tags: storage compute Plex-Media-Server media-streaming object-storage s3fs
-steps:
-  - step: Creating a bucket
-    type: HowToStep
-    url: https://www.scaleway.com/en/docs/tutorials/configure-plex-s3/#Creating-a-Bucket
-  - step: Installing the required software
-    type: HowToStep
-    url: https://www.scaleway.com/en/docs/tutorials/configure-plex-s3/#Installing-the-Required-Software
-  - step: Configuring s3fs
-    type: HowToStep
-    url: https://www.scaleway.com/en/docs/tutorials/configure-plex-s3/#Configuring-s3fs
-  - step: Configuring Plex
-    type: HowToStep
-    url: https://www.scaleway.com/en/docs/tutorials/configure-plex-s3/#Configuring-Plex
+  paragraph: This page shows how to configure Plex media server with Object Storage
+tags: storage compute Plex-Media-Server media-streaming object-storage s3fs plex-cloud lucidlink s3 media server
 categories:
   - storage
   - compute
   - object-storage
 dates:
-  validation: 2021-05-10
+  validation: 2022-02-22
   posted: 2018-09-24
 ---
 
 ## Plex - Overview
 
-[Plex](https://www.plex.tv) is client-server media player system comprising two main components:
+[Plex](https://www.plex.tv) is client/server media player system comprising two main components:
 
 - The **Plex Server** application, that is available for Windows, macOS, Linux and even including some NAS devices.
-- **Plex clients** that can be either a web based interface, an application on smart TVs, streaming boxes or other third party applications.
+- **Plex clients** that can be either a web-based interface, an application on smart TVs, streaming boxes or other third-party applications.
 
 <Message type="requirement">
 
 - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
 - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
-- You have an [Object Storage](https://www.scaleway.com/en/object-storage/) bucket
+- You have a [Scaleway Elements Instance](/compute/instances/how-to/create-an-instance/) running Ubuntu Focal Fossa (20.04 LTS)
+- You have created an [Object Storage bucket](/storage/object/how-to/create-a-bucket/)
 - You have sudo privileges or access to the root user.
-
-</Message>
-
-## Creating a bucket
-
-1. Log in to the [Scaleway Console](https://console.scaleway.com)
-
-2. Click **Storage** from the left side menu. The Storage page lists all your buckets. The list will be empty if you have not created any bucket yet.
-
-3. Click **Create a Bucket** to create a bucket that will store your objects
-
-<Message type="note">
-
-In this example, the bucket is named `plexmediaserver`. Bucket names are unique and can only exist once.
 
 </Message>
 
 ## Installing the required software
 
-1. Update the apt package manager and the software already installed on the system:
+1. Connect to your Instance using SSH.
   ```
-  apt update && apt-upgrade -y
+  ssh root@<your-instance-IP>
   ```
 
-2. Add the Plex repository:
+2. Update the apt package manager and the software already installed on the system:
+  ```
+  apt update && apt upgrade -y
+  ```
+
+3. Add the Plex repository:
 
   Add Plex’s GPG key to the apt sources keychain and create a new file containing an entry to the Plex repository by running the following commands:
   ```
@@ -73,32 +52,44 @@ In this example, the bucket is named `plexmediaserver`. Bucket names are unique 
   echo deb https://downloads.plex.tv/repo/deb public main | tee /etc/apt/sources.list.d/plexmediaserver.list
   ```
 
-3. Install Plex and s3fs:
+4. Install Plex and s3fs:
 
   Now, as the Plex repository is enabled, update the apt package list and install the latest version of Plex and s3fs, which is needed to mount the Object Storage bucket.
   ```
-  apt update && apt install -y plexmediaserver s3fs
+  apt update 
+  apt install -y plexmediaserver s3fs
   ```
 
 ### Configuring s3fs
 
-1. Create the folder into which the bucket will be mounted:
+1. Create the folder on which you will mount the bucket.
   ```
   mkdir -p /mnt/media
   ```
 
-2. Enter your S3 credentials in the password file and set owner-only permissions on it:
+2. Enter your API keys in the password file and set owner-only permissions.
   ```
-  echo <ACCESS_KEY>:<SECRET_KEY> >  ~/.passwd-s3fs
+  echo $ACCESS_KEY:$SECRET_KEY >  ~/.passwd-s3fs
   chmod 600  ~/.passwd-s3fs
   ```
 
-3. Modify `/etc/fuse.conf` to allow other users access, by uncommenting `user_allow_other`.
+3. Uncomment `user_allow_other` in the `/etc/fuse.conf` file to allow other users to access the server. You can use a text editor of your choice. In this tutorial we use `nano`.
 
-4. Mount the bucket in the local filesystem:
+  ```
+  $ nano /etc/fuse.conf
+    [...]
+    user_allow_other
+  ```
+
+4. Mount the bucket in the local filesystem.
   ```
   s3fs plexmediaserver /mnt/media -o allow_other -o umask=0002 -o passwd_file=${HOME}/.passwd-s3fs -o url=https://s3.nl-ams.scw.cloud
   ```
+  <Message type="note">
+
+  Replace `nl-ams` with the region of your bucket if necessary.
+
+  </Message>
 
 5. (Optional) To mount the bucket automatically during boot, create a [systemd](/tutorials/systemd-essentials/) script, called `/etc/systemd/user/s3fs.service`:
   ```
@@ -149,7 +140,7 @@ In this example, the bucket is named `plexmediaserver`. Bucket names are unique 
 
     If the status is `active (running)` everything is fine.
 
-2. The initial setup of Plex has to be done via an SSH tunnel, as the configuration is only allowed from localhost:
+2. Set Plex up via an SSH tunnel.
 
     - On Linux or MacOS computers, you can create the tunnel with the following command:
     ```
@@ -158,13 +149,13 @@ In this example, the bucket is named `plexmediaserver`. Bucket names are unique 
 
     - On Windows computers, you can create the tunnel by using [PuttY](https://www.chiark.greenend.org.uk/~sgtatham/putty/):
 
-      - Open PuTTY, enter your server IP address in the hostname and SSH port. Or, if you already have your server session setup and saved, just load the existing session.
+      - Open PuTTY, enter your server IP address in the hostname and SSH port. Or, if you already have your server session set up and saved, just load the existing session.
       - Go to **Connection** > **SSH** > **Tunnels**.
       - Fill in **Source port** as **8888** and **Destination** as **localhost:32400**.
       - Click the **Add** button.
       - Navigate back to the session homepage now and click the **Save** button, then **Open** to connect to the server.
 
-    Open a web browser on your local computer and navigate to `http://localhost:8888/web`. You will be presented with the following login screen:
+    Open a web browser on your local computer and navigate to `http://localhost:8888/web`. The Plex login screen displays:
     <Lightbox src="scaleway-plex-login.png" alt="" />
 
     <Message type="note">
@@ -173,18 +164,25 @@ In this example, the bucket is named `plexmediaserver`. Bucket names are unique 
 
     </Message>
 
-3. Once you are logged in, you will be automatically redirected to the setup of the server:
-<Lightbox src="scaleway-plex-server-setup.png" alt="" />
+  Once you are logged in, you will be automatically redirected to the setup of the server:
+  
+  <Lightbox src="scaleway-plex-server-setup.png" alt="" />
 
-  Enter the required parameters and click **Next** to complete the setup.
+3. Enter the required parameters and click **Next** to complete the setup.
 
   <Message type="note">
 
-  Make sure the Checkbox `Allow me to access my media outside my home` is ticked to access your media files from everywhere.
+  Make sure the Checkbox `Allow me to access my media outside my home` is ticked so you can access your media files from any device.
 
   </Message>
 
-4. Create a new Media Gallery by clicking on `+` in the menu on the left. When asked for the media folder, select `/mnt/media`:
+4. Click **Add a library** to create a new media gallery.  
+
+5. Select the type of library you wish to create and click **Next**
+
+6. Click **Browse and select a multimedia folder** to do so.
+
+7. Select `/mnt/media` as the media folder.
   <Lightbox src="scaleway-plex-add-folder.png" alt="" />
 
   <Message type="tip">
@@ -192,3 +190,4 @@ In this example, the bucket is named `plexmediaserver`. Bucket names are unique 
   You can upload additional content to your server with any S3 compatible tool, like [Cyberduck](/tutorials/store-s3-cyberduck/).
 
   </Message>
+8. Click **Next** and then **Finish** to conclude the set up.

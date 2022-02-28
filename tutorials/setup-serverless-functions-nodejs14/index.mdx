@@ -1,0 +1,216 @@
+---
+meta:
+title: Setting up and deploy for a NodeJS Function
+description: This page explains how to setup a local dev environment and deploy your NodeJS Serverless Functions with a mySQL DB connection
+content:
+h1: Setting up a dev environments for your NodeJS Function
+paragraph: This page explains how to setup a NodeJS dev environment and how to deploy your Serverless Functions
+categories:
+  - functions
+tags: functions nodejs serverless mysql Faas
+dates:
+posted: 2022-02-22
+steps:
+- step: Setting up your local dev environment
+url: https://www.scaleway.com/en/docs/tutorials/setup-serverless-functions-nodejs#setup
+- step: Creating your first Serverless Function
+url: https://www.scaleway.com/en/docs/tutorials/setup-serverless-functions-nodejs#first-function
+- step: Test your code locally
+url: https://www.scaleway.com/en/docs/tutorials/setup-serverless-functions-nodejs#test-locally
+- step: Deploying your functions to Scaleway
+url: https://www.scaleway.com/en/docs/tutorials/setup-serverless-functions-nodejs#deploy
+---
+## Overview
+
+In this tutorial, you will learn how to setup your local dev environment, create your first Serverless Function that will query a mySQL DB, test it locally and finally deploy it.
+
+To achieve this, we use a [Serverless Function](https://www.scaleway.com/en/serverless-functions/) and the following elements:
+- The [Serverless.com framework](https://www.scaleway.com/en/docs/compute/functions/api-cli/fun-uploading-with-serverless-framework/)
+- The [Boilerplate in NodeJS](https://github.com/Sebastien-Meiffren/scaleway-serveless-nodejs)
+
+<Message type="requirement">
+
+    - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com)
+    - You have created a [Serverless Functions namespace](/compute/functions/how-to/create-a-functions-namespace/)
+    - You have NodeJS14 installed on your local computer
+    - You have a mySQL DB available somewhere to query it
+    - You have installed the [Serverless.com cli](https://www.scaleway.com/en/docs/compute/functions/api-cli/fun-uploading-with-serverless-framework/)
+    - You have cloned the [Boilerplate in NodeJS](https://github.com/Sebastien-Meiffren/scaleway-serveless-nodejs)
+
+</Message>
+
+## Setup
+
+1. Clone the boilerplate
+
+```bash
+git clone git@github.com:Sebastien-Meiffren/scaleway-serveless-nodejs.git
+cd scaleway-serveless-nodejs
+```
+
+2. Install all needed packages
+
+```bash
+npm install
+```
+
+3. Make sure that everything is OK
+
+```bash
+npm run build && npm run start
+curl 'http://localhost:8081?handlerName=foohandle&handlerPath=../handlers/src/foo'
+```
+
+You should see ``OK`` displayed in your console.
+
+<Message type="warning">
+    Once a function has been executed, it will always be used by the instance UNTIL you stop and start the process.
+</Message>
+
+
+## First function
+
+<Message type="requirement">
+    You are located at the root directory of the boilerplate
+</Message>
+
+1. To query a mySQL DB, we need the ``mysql2`` package from NPM.
+
+```bash
+npm install mysql2
+```
+
+4. Create the file that will contain your Serverless Function. We will call it ``insertdb.js``
+
+```bash
+cd handlers
+touch insertdb.js
+```
+
+```javascript
+const https = require('https');
+module.exports.insertDb = async function(event, context, callback) {
+    if(event.httpMethod === "POST") {
+        try {
+            // need to whitelist the IP
+            let connection = await require('mysql2/promise').createConnection({
+                host: process.env.DB_URL,
+                user: process.env.DB_USER,
+                password: process.env.DB_PASS,
+                database: process.env.DB_NAME,
+                port: process.env.DB_PORT
+            });
+
+            const data = new URLSearchParams(event.body);
+            const date = new Date();
+
+            await connection.query("INSERT INTO `user` (`id`, `name`, `email`, `date`) VALUES (null, ?, ?, ?)", [data.get("name"), data.get("email"), date], function (error, results, fields) {
+                if (error) throw error;
+            })
+
+            connection.end()
+            return {
+                body: JSON.stringify({status: "OK"}),
+                statusCode: 200
+            }
+        } catch(e) {
+            console.log("ERROR", e)
+            return {
+                statusCode: 500,
+                body: e.name + " - " + e.message
+            }
+        }
+    } else {
+        return {
+            statusCode: 500
+        }
+    }
+}
+```
+
+## Test locally
+
+<Message type="requirement">
+    You are located at the root directory of the boilerplate
+</Message>
+
+
+1. Edit your package.json to add your environment variables, at the ``start`` script
+
+```
+"start": "NODE_ENV=production DB_URL= DB_USER= DB_PASS= DB_NAME= DB_PORT=3306 node ./dist/index.js"
+```
+
+2. Start your process
+
+```bash
+npm start
+```
+
+3. Call your function
+
+```bash
+curl -X POST 'http://localhost:8081?handlerName=insertDb&handlerPath=../handlers/src/insertdb&name=test&email=test@test.com'
+```
+
+You should see ``{status: "OK"}`` displaied in your console
+
+
+## Deploy
+
+<Message type="requirement">
+    You are located at the root directory of the boilerplate
+</Message>
+
+1. Configure your `handlers\serverless.conf` conf file by replacing the missing values (NAMESPACE_NAME_IN_SCALEWAY + TOKEN_FROM_YOUR_API + ID_OF_YOUR_PROJECT)
+
+```yaml
+service: <NAMESPACE_NAME_IN_SCALEWAY>
+configValidationMode: off
+provider:
+  name: scaleway
+  runtime: node14
+  # Global Environment variables - used in every functions
+  env:
+    test: test
+  # the path to the credentials file needs to be absolute
+  scwToken: <TOKEN_FROM_YOUR_API>
+  scwProject: <ID_OF_YOUR_PROJECT>
+
+plugins:
+  - serverless-scaleway-functions
+
+package:
+  patterns:
+    - '!.gitignore'
+    - '!.git/**'
+    - './src/**'
+    - './node_modules/**'
+
+functions:
+  name_of_your_first_function:
+    handler: src/insertdb.insertDb
+    # Local environment variables - used only in given function
+    env:
+      DB_URL: test
+      DB_USER: test
+      DB_PASS: test
+      DB_NAME: test
+      DB_PORT: test
+```
+
+2. You need to install your packages in the ``handlers\package.json`` files. This is done this way, to avoid uploading many node_modules not needed for your script BUT only needed to run your code locally. With our example, we need to "reinstall" ``mysql2``. There is also a module that needs to be installed to make the Serverless.com cli work properly.
+
+```bash
+cd handlers
+npm install mysql2
+npm install
+```
+
+3. Deploy your code
+
+```bash
+serverless deploy
+```
+
+Note that a .dist directory will be created with a zip file with all your files uploaded to Scaleway

@@ -1,0 +1,257 @@
+---
+meta:
+  title: Installing PgBouncer on Ubuntu/Debian
+  description: How to install PgBouncer on Scaleway Instance for PostgreSQL connection pooling
+content:
+  h1: Installing PgBouncer on Ubuntu/Debian
+  paragraph: This page shows how to install PgBouncer on Ubuntu/Debian
+tags: compute networking database sql postgresql pgbouncer pooling 
+steps:
+  - step: Installing PgBouncer
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbouncer/#-Installing-PgBouncer
+  - step: Setting up PgBouncer
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbouncer/#-Setting-up-pgBouncer
+  - step: Connecting to the admin console with psql
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbouncer/#-Connecting-to-the-admin-console-with-psql
+  - step: Useful admin console commands
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbouncer/#-Useful-admin-console-commands
+  - step: Making an online restart
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbouncer/#-Making-an-online-restart
+  - step: Recommended configurations
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbouncer/#-Recommended-configurations
+  - step: Recommended authentication method
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbouncer/#-Recommended-authentication-method
+categories:
+  - compute
+dates:
+  validation: 2022-02-24
+  posted: 2022-02-24
+---
+
+## PgBouncer Overview
+PgBouncer is a connection pooler for PostgreSQL. It sits between the application and the PostgreSQL server. PgBouncer opens multiple connections to the database and serves it to the application. This reduces connection opening costs for the application and gives a performance boost.
+
+There are three types of pooling modes:
+- Session: The server connection will be released back to the pool after the client disconnects. (Default pooling method.)
+- Transaction: The server connection will be released back to the pool after the transaction finishes.
+- Statement: The server connection will be released back to the pool after the query finishes. Transactions spanning multiple statements are not allowed in this mode.
+
+In this tutorial, you can choose the pooling mode that best suits your workload.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have [created an Instance](/compute/instances/how-to/create-an-instance/) running on Ubuntu or Debian
+- You have sudo privileges or access to the root user.
+
+</Message>
+
+## Installing PgBouncer
+
+The **PostgreSQL Global Development Group (PGDG)** provides an apt repository. After importing the repository, you can install the PgBouncer package.
+
+1. Create the `apt` repository configuration file for adding the PGDG apt server:
+   ```
+   sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+   ```
+
+2. Import the repository signing key:
+   ```
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+   ```
+
+3. Update the `apt` package manager to ensure it uses the added repository:
+   ```
+    apt update
+   ```
+
+4. Install the PgBouncer application using `apt`:
+   ```
+    apt install pgbouncer -y
+   ```
+
+## Setting up PgBouncer
+There are four sections of configuration that you need to set up:
+
+1. Set up the PostgreSQL server details in `/etc/pgbouncer/pgbouncer.ini`:
+   ```
+   [databases]
+   * = host=POSTGRESQL_IP port=POSTGRESQL_PORT
+   ```
+    <Message type="note">
+
+    You may want to update `listen_addr` to listen to TCP connections on all addresses. You can use '`*`' for this. (You cam also set a list of IP addresses):
+
+    </Message>
+
+2. Create the `/etc/pgbouncer/userlist.txt` file that contains the users allowed to log in from PgBouncer:
+    ```"
+    "USERNAME" ""
+    ```
+
+3. Add the IP address of the PgBouncer server to the PostgreSQL `pg_hba.conf` file:
+   ```
+   host all all PGBOUNCER_IP/NETMASK trust
+   ```
+
+    <Message type="note">
+
+    You should reload or restart PostgreSQL to apply the pg_hba.conf changes.
+
+    </Message>
+
+    <Message type="tip">
+
+    By default, PgBouncer comes with `trust` authentication method. The `trust` method can used for testing environment but is not recommended for production. It will accept all connection requests without authentication. For production, `hba` authentication is recommended. With this, you can specify IP addresses with different connection methods.
+    
+    </Message>
+
+4. Reload the `pgbouncer.service` to apply the configurations:
+   ```
+   systemctl reload pgbouncer.service
+   ```
+
+5. Connect to PostgreSQL through PgBouncer (PgBouncer default port: 6432):
+    ```
+    psql -h PGBOUNCER_IP -u USERNAME -d DATABASE -p 6432
+    ```
+
+## Connecting to the admin console with psql
+
+1. To manage PgBouncer, you need to connect a special database called `pgbouncer` with `psql`. For that, you need to install a `postgresql-client-VERSION` package. The latest version at the time of writing is **PostgreSQL 14**.  
+   ```
+   apt install postgresql-client-14
+   ```
+
+2. Configure an admin user to connecting to `pgbouncer` database.
+   ```
+   admin_users pgbouncer
+   ```
+
+3. Reload the `pgbouncer.service` to apply the changes.
+   ```
+   systemctl reload pgbouncer.service
+   ```
+
+4. Connect to `pgbouncer` database with `psql`:
+   ```
+   psql -h 127.0.0.1 -U pgbouncer -d pgbouncer -p 6432
+   ```
+
+## Useful admin console commands
+Here are a few commands that can be used after connecting to the `pgbouncer` database. These may be helpful for troubleshooting purposes:
+- `SHOW HELP`: Displays the help page. It is useful when remembering commands.
+- `SHOW STATS`: Displays transaction count, timing, etc.
+- `SHOW POOLS`: Displays active, waiting client and server counts. It also shows how long the oldest client waited in the queue. It is very helpful when determining `pool_size`. 
+- `SHOW SERVERS`: Displays information about database connections made by PgBouncer.
+- `SHOW CLIENTS`: Displays information about clients that connected via PgBouncer.
+- `SHOW DATABASES`: Displays information about configured databases.
+- `PAUSE [DB]`: Useful when stopping connection to a specific database. PgBouncer waits for all queries to be completed, then puts new connections into a queue. You should be careful about timeouts on all sides. It is very useful when restarting PostgreSQL. You may want to increase the number of file descriptors. This command will not return before all queries have finished.
+- `RESUME [DB]`: Resumes the `KILL`, `PAUSE`, or `SUSPEND` the specific database.
+- `RECONNECT [DB]`: Closes and reconnects all server connections. If you are planning to do a switchover, consider using `PAUSE` command. If you have done a failover, consider using the `KILL` command.
+- `DISABLE [DB]`: Disallows new connections to the specific database.
+- `ENABLE [DB]`: Allows new connections to the specific database after a `DISABLE` command.
+- `KILL [DB]`: Drops all client and server connections and pauses the specific database.
+- `RELOAD`: It can be used for reloading the PgBouncer after a configuration change.
+- `SHUTDOWN`: It can be used for exit the PgBouncer process. Use systemd instead if possible.
+
+## Doing an online restart
+
+- You can do an online restart without terminating the connections. PgBouncer launches a new process and loads open sockets from running PgBouncer. After that, the old process is stopped and the new process resumes. This way, connections are not interrupted. This is very useful when upgrading PgBouncer.
+   ```
+   sudo -u postgres pgbouncer -R /etc/pgbouncer/pgbouncer.ini -d
+   ```
+
+## Recommended configurations
+
+- The pooling method can be configured both for the database and globally. (Default: session)
+   ```
+   pool_mode = <session, transaction or statement>
+   ```
+
+- This configuration shows the maximum number of client connections allowed to PgBouncer. You may want to set it large because it can block your connection request. The best practice is to limit this with `pool_size`. Be aware that if you are planning to reach this limit, you may want to increase the number of file descriptors. (Default: 100)
+   ```
+   max_client_conn = max_client_conn + (max pool_size * total databases * total users)
+   ```
+
+- You may want to increase this number to 5 or 10. When the specified `pool_size` is not enough, it uses the reserved pool and logs it. It can be used to determine `pool_size`. (Default: 0)
+   ```
+   reserve_pool_size = 10
+   ```
+
+- Connecting to PostgreSQL through PgBouncer will mask the PostgreSQL IP. This setting adds the client host address and port to the application name. It is very helpful when troubleshooting. (Default: 0)
+   ```
+   application_name_add_host = 1
+   ```
+
+- By default, PgBouncer reuses server connections in LIFO (last-in, first-out). If you are using a TCP load balancer with round-robin behind the PostgreSQL IP address, you may want to enable `server_round_robin` for achieve higher performance. (Default: 1)
+   ```
+   server_round_robin = 1
+   ```
+
+## Recommended authentication method
+
+### HBA Authentication (Recommended for production):
+
+1. Change the `auth_type` and add the `auth_hba_file` path:
+   ```
+   [pgbouncer]
+   auth_type = hba
+   auth_hba_file = /etc/pgbouncer/pb_hba.conf
+   ```
+
+2. Create the `/etc/pgbouncer/pb_hba.conf` file with the following content:
+   ```   
+   # TYPE DATABASE USER ADDRESS METHOD
+
+   # IPv4 local connections:
+   host all all 127.0.0.1/32 scram-sha-256
+
+   # IPv6 local connections:
+   host all all ::1/128 scram-sha-256
+
+   # Application
+   host all all APPLICATION_IP/NETMASK scram-sha-256
+   ```
+
+3. Create the `/etc/pgbouncer/userlist.txt` file that contains the user allowed to login from PgBouncer:
+   ```
+   "username1" "password"
+   "username2" "md5abcdef012342345"
+   "username2" "SCRAM-SHA-256$<iterations>:<salt>$<storedkey>:<serverkey>"
+    ```
+
+    <Message type="tip">
+
+    You can find the hashed passwords in `pg_shadow` table in PostgreSQL.
+    ```
+    SELECT usename,passwd FROM pg_shadow;
+    ```
+
+    </Message>
+
+4. Add the IP address of the PgBouncer server to the PostgreSQL `pg_hba.conf` file:
+   ```
+   host all all PGBOUNCER_IP/NETMASK scram-sha-256
+   ```
+
+    <Message type="note">
+
+    You should reload or restart PostgreSQL to apply the pg_hba.conf changes.
+
+    </Message>
+
+5. Reload the `pgbouncer.service` to apply the configurations:
+   ```
+   systemctl reload pgbouncer.service
+   ```
+
+ This setup allows basic installation of PgBouncer. For more information on commands and configuration, refer to the [official documentation](https://www.pgbouncer.org).

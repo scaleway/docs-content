@@ -22,9 +22,9 @@ In this tutorial you learn how to backup a Scaleway Instance running on Ubunutu 
 <Message type="requirement">
 
 - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
-- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
-- You have generated [your API key](/console/my-project/how-to/generate-api-key/)
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/) and [your API key](/console/my-project/how-to/generate-api-key/)
 - You have a [Scaleway Instance](/compute/instances/how-to/create-an-instance) running on Ubuntu Focal Fossa (20.04)
+- You have [installed and configured the AWS-CLI](/storage/object/api-cli/object-storage-aws-cli/) to use with Scaleway Object Storage
 - You have [created an Object Storage bucket](/storage/object/how-to/create-a-bucket/)
 
 </Message>
@@ -33,27 +33,27 @@ In this tutorial you learn how to backup a Scaleway Instance running on Ubunutu 
 
 1. Connect to your Instance with SSH. In a terminal run:
 
-```
-ssh root@<your_instance_ip>
-```
+  ```
+  ssh root@<your_instance_ip>
+  ```
 
 2. Update the system and upgrade the software already installed on the Instance.
 
-```
-apt update && apt upgrade -y
-``` 
+  ```
+  apt update && apt upgrade -y
+  ``` 
 
 3. Install Restic. 
 
-```
-apt-get install restic
-```
+  ```
+  apt-get install restic
+  ```
 
 4. Ensure the installation was successful by checking the version.
 
-```
-restic version
-```
+  ```
+  restic version
+  ```
 
 ## Setting up the S3 repository
 
@@ -61,19 +61,174 @@ A repository is the storage space where your backups will be hosted. In this tut
 
 1. Set up your [environment variables](https://github.com/scaleway/scaleway-sdk-go/tree/master/scw#environment-variables), if you have not done so yet. Replace `$SCW_ACCESS_KEY`, `$SCW_SECRET_KEY` and `$SCW_DEFAULT_PROJECT_ID` by their corresponding values.
 
+  ```
+  export SCW_ACCESS_KEY=$SCW_ACCESS_KEY
+  export SCW_SECRET_KEY=$SCW_SECRET_KEY
+  export SCW_DEFAULT_PROJECT_ID=$SCW_DEFAULT_PROJECT_ID
+  ```
+
+  Restic requires permission to perform the `PutObject` action on the bucket. In the next step we will implement a [bucket policy]() to grant the permissions. 
+
+2. Create a file named `bucket-policy.json` using a text editor of your choice. In this tutorial we use `nano`.
+
+  ```
+  nano bucket-policy.json
+  ``` 
+
+  Paste the following content:
+
+  ```json
+  {
+    "Version": "2012-10-17",
+    "Id": "MyBucketPolicy",
+    "Statement": [{
+      "Sid": "access for restic",
+      "Effect": "Allow",
+      "Principal": {
+        "SCW": "project_id:<SCW_PROJECT_ID>"
+      },
+      "Action": [
+        "s3:PutObject",
+        "s3:ListBucket",
+        "s3:GetObject",
+        "s3:GetObject",
+        "s3:DeleteObject"
+      ],
+      "Resource": [
+        "<BUCKET_NAME>",
+        "<BUCKET_NAME>/*"
+      ]
+    }]
+  }
+  ``` 
+
+  <Message type="note">
+
+  In this example we include other actions beyond `PutObject`. You can configure your policies according to your preferences. To learn more, refer to the [reference documentation](/storage/object/api-cli/bucket-policy/).
+
+  </Message>
+
+3. Run the following command to apply the policy:
+
+  ```
+  aws s3api put-bucket-policy --bucket <bucket_name> --policy file://bucket-policy.json
+  ```
+
+  If the operation is successful, no output is returned.
+
+4. Initialize the repository using your bucket's endpoint as a backend. Your bucket endpoint can be found in the **Bucket Settings** tab under **Bucket Information**. 
+
+  ```
+  restic -r s3:https://s3.fr-par.scw.cloud/<bucket_name> init
+  ```
+
+5. Enter a password for the repository and repeat it when prompted.
+
+  ```
+  enter password for new repository:
+  enter password again:
+  ```
+  <Message type="important">
+
+  The password is required to access the repository. If you lose the password, your data will be irrevocably lost. 
+
+  </Message>
+
+  <Message type="tip">
+
+  Restic requests you to enter the password every time you perform actions on your repository. If you have configured automatic backups, you might want to set up an [environment variable](https://restic.readthedocs.io/en/latest/040_backup.html#environment-variables) for your password.
+
+  </Message>
+
+An output displays informing the name and path of your repository.
+
 ```
-export SCW_ACCESS_KEY=$SCW_ACCESS_KEY
-export SCW_SECRET_KEY=$SCW_SECRET_KEY
-export SCW_DEFAULT_PROJECT_ID=$SCW_DEFAULT_PROJECT_ID
+created restic repository da8e38a165 at s3:https://s3.fr-par.scw.cloud/<bucket_name>
 ```
 
-2. Initialize the repository using your bucket's endpoint as a backend. Your bucket endpoint can be found in the **Bucket Settings** tab under **Bucket Information** 
+## Creating backups
 
-```
-restic -r s3:https://<bucket_name>.s3.fr-par.scw.cloud init
-```
-restic -r s3:https://ahouseisnotahome.s3.fr-par.scw.cloud init
+1. Run the command below to create a backup. Include the path to your repository (in this example, the path is the endpoint of your bucket), and the path of the directory you wish to back up (~/<my-directory> in the example).
 
-./restic -o s3.bucket-lookup=dns -o s3.region=fr-par -r s3:https://s3.scw.cloud/ahouseisnotahome init
+  ```
+  restic -r s3:https://s3.fr-par.scw.cloud/<bucket_name> backup ~/<my-directory>
+  ```
 
-restic -r s3:https://s3.fr-par.scw.cloud/ahouseisnotahome init
+  The command above creates a snapshot of your directory and sends it to your repository. The snapshot is stored as an object in your bucket.
+
+  <Message type="tip">
+
+  By default, the backups you create are stored using `STANDARD` [storage class](/storage/object/concepts/#storage-class). If you want to use a different storage class, you can add the `-o s3.storage-class=<STORAGE_CLASS>` option to your command. For example:
+
+  ```
+  restic -r s3:https://s3.fr-par.scw.cloud/<bucket_name> backup -o s3.storage-class=ONEZONE_IA ~/<my-directory>
+  ```
+
+  </Message>
+
+2. Enter the password for the repository when prompted.
+
+  ```
+  enter password for repository:
+  ```
+  If the operation is successful, you will see the following output:
+  ```
+  repository da8e38a1 opened successfully, password is correct
+  created new cache in /root/.cache/restic
+
+  Files:           1 new,     0 changed,     0 unmodified
+  Dirs:            1 new,     0 changed,     0 unmodified
+  Added to the repo: 732 B
+
+  processed 1 files, 22 B in 0:06
+  snapshot 15a39fd5 saved
+  ``` 
+
+  <Message type="tip">
+
+  Restic does not offer a built-in tool for automated backups. Restic recommends using tools like systemd and cron to schedule backup runs. Learn more on the [Restic documentation](https://restic.readthedocs.io/en/latest/040_backup.html#scheduling-backups).
+
+  </Message>
+
+3. Run the following command to verify that the backup was successful:
+
+  ```
+  aws s3api list-objects --bucket ahouseisnotahome
+  ```
+  
+  Alternatively, you can access your bucket via the [Scaleway console](https://console.scaleway.com/object-storage/buckets/). You can find the snapshots of your directory in the `/snapshots` folder. 
+
+## Restoring from backups 
+
+1. Retrieve a list of your snapshots to identify the ID of the snapshot you want to restore. Make sure you specify the path to your repository in the command. 
+
+  ```
+  $ restic snapshots -r s3:https://s3.fr-par.scw.cloud/<bucket_name>
+
+  enter password for repository:
+  repository da8e38a1 opened successfully, password is correct
+  ID        Time                 Host                Tags        Paths
+  ---------------------------------------------------------------------------------
+  15a39fd5  2022-04-06 14:39:25  scw-jovial-keldysh              /root/my-directory
+  20eed69e  2022-04-06 15:09:01  scw-jovial-keldysh              /root/my-directory
+  ---------------------------------------------------------------------------------
+  2 snapshots
+  ```
+
+2. Run the command below to restore your backup. Specify the path to your repository and to the target directory.
+
+  ```
+  restic -r s3:https://s3.fr-par.scw.cloud/<bucket_name> restore 15a39fd5 --target ~/<my-directory>
+  ```  
+
+  If the operation is successful, you see the following output:
+
+  ```
+  enter password for repository:
+  repository da8e38a1 opened successfully, password is correct
+  restoring <Snapshot 15a39fd5 of [/root/my-directory] at 2022-04-06 14:39:25.024340615 +0000 UTC by root@scw-jovial-keldysh> to /root/my-directory
+  ```
+
+## Going further
+
+Refer to the [Restic documentation](https://restic.readthedocs.io/en/stable/010_introduction.html) to discover other configuration options and tutorials. 

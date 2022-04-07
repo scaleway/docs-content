@@ -195,7 +195,7 @@ Any modification to the Traefik2 deployed by Kapsule may be overwritten by the r
 
 </Message>
 
-1. Modify the default Traefik 2 daemonset running on Kapsule to do that, add `--providers.kubernetesIngress.ingressClass=traefik-cert-manager` in the cmd stanza.
+1. Modify the default Traefik 2 daemonset running on Kapsule to do that, add `--entrypoints.websecure.http.tls` in the cmd stanza.
 
   ```
   $ kubectl edit ds traefik -n kube-system
@@ -206,7 +206,7 @@ Any modification to the Traefik2 deployed by Kapsule may be overwritten by the r
           - --entryPoints.traefik.address=:9000
           - --entryPoints.web.address=:8000
           - --entryPoints.websecure.address=:8443
-          - --providers.kubernetesIngress.ingressClass=traefik-cert-manager
+          - --entrypoints.websecure.http.tls
           - --api.dashboard=true
           - --ping=true
           - --providers.kubernetescrd
@@ -293,7 +293,7 @@ Any modification to the Traefik2 deployed by Kapsule may be overwritten by the r
       solvers:
         - http01:
             ingress:
-              class: traefik-cert-manager
+              class: traefik
   ```
 
 2. Use `kubectl` to apply the configuration:
@@ -366,30 +366,37 @@ In this step you will create the Let's Encrypt certificate by specifying:
     Normal  Issued     48s   cert-manager  Certificate issued successfully
   ```
 
-4. Create a Traefik IngressRoute, with TLS enabled (with the name of the secret created by the creation of the certificate, in our case: `teacoffee-cert`). To do so create file `mysite.yaml`, copy the following content into it and run kubectl with the collowing command: `kubectl create -f mysite.yaml`
+4. Create a Standard Ingress, with TLS enabled (with the name of the secret created by the creation of the certificate, in our case: `teacoffee-cert`). To do so create file `mysite.yaml`, copy the following content into it and run kubectl with the collowing command: `kubectl create -f mysite.yaml`
 
   ```
-  apiVersion: traefik.containo.us/v1alpha1
-  kind: IngressRoute
+  apiVersion: networking.k8s.io/v1
+  kind: Ingress
   metadata:
     name: testcoffee
     namespace: default
+    annotations:
+      traefik.ingress.kubernetes.io/router.entrypoints: websecure
   spec:
-    entryPoints:
-      - websecure
-    routes:
-      - match: Host(`teacoffee.mytest.com`) && PathPrefix(`/tea`)
-        kind: Rule
-        services:
-          - name: tea-svc
-            port: 80
-      - match: Host(`teacoffee.mytest.com`) && PathPrefix(`/coffee`)
-        kind: Rule
-        services:
-          - name: coffee-svc
-            port: 80
     tls:
-      secretName: teacoffee-cert
+      - secretName: teacoffee-cert
+    rules:
+      - host: teacoffee.mytest.com
+        http:
+          paths:
+            - path: /tea
+              pathType: Prefix
+              backend:
+                service:
+                  name: tea-svc
+                  port:
+                    number: 80
+            - path: /coffee
+              pathType: Prefix
+              backend:
+                service:
+                  name: coffee-svc
+                  port:
+                    number: 80
   ```
 
 5. Check your website is accessible in HTTPS:

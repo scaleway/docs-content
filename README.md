@@ -3,7 +3,7 @@
 
 # Welcome to the Scaleway Documentation Platform
 
-![](./docs/images/prof_mascotte@2x.png)
+![](./docs/images/prof_mascotte@2x.webp)
 
 ## What is the Scaleway Documentation Platform?
 

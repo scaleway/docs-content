@@ -1,8 +1,141 @@
 ---
 meta:
-  title: Elastic Metal servers - How Tos
-  description: Elastic Metal How Tos
+  title: Setting up Gitlab with a Managed Database for PostgreSQL
+  description: This page shows you how setup Gitlab with a managed PostgreSQL database
 content:
-  h1: How Tos
-  paragraph: Elastic Metal How Tos
+  h1: Setting up Gitlab with a Managed Database for PostgreSQL
+  paragraph: This page shows you how setup Gitlab with a managed PostgreSQL database
+tags: Gitlab PostgreSQL-database 
+  - storage
+  - database
+dates:
+  validation: 2022-03-08
+  posted: 2019-11-08
 ---
+
+## Gitlab - Overview
+
+[GitLab](https://about.gitlab.com/) is an open-core Git repository manager that provides a wiki, issue tracking and CI/CD pipeline features. Open-core means that the core functionalities of the software are released under an open-source license with additional optional modules.
+Many large technology companies use this tool to manage their software development life cycle. It was initially developed in Ruby and currently also uses Go and Vue.js as part of its technology stack.
+
+<Message type="requirement">
+
+- You have an account and are logged into the [Scaleway console](https://console.scaleway.com)  
+- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+- You have an Instance or Elastic Metal server running Ubuntu Bionic Beaver (18.04)
+- You have a domain or subdomain configured to point to the IP address of your Instance
+- You have [enabled the SMTP ports](/compute/instances/how-to/send-emails-from-your-instance/) to send emails from your Instance
+
+</Message>
+
+## Installing GitLab
+
+1. Connect to your Instance using [SSH](/compute/instances/how-to/connect-to-instance/)
+  ```
+  ssh root@<your_instance_ip>
+  ```
+
+2. Update the `apt` packet cache and upgrade the software already installed on the instance:
+  ```
+  apt update && apt upgrade -y
+  ```
+
+3. Install the following packages using `apt`:
+  ```
+  apt install -y curl ca-certificates postfix
+  ```
+
+4. Add the GitLab package repository and prepare the installation of GitLab Community Edition by running the script:
+  ```
+  curl https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh | bash
+  ```
+
+5. Set your domain name in the `EXTERNAL_URL` variable, then install GitLab using `apt`:
+  ```
+  EXTERNAL_URL="https://gitlab.example.com" apt install -y gitlab-ce
+  ```
+
+  <Message type="important">
+
+  GitLab will automatically request a [Let's Encrypt](/tutorials/configure-nginx-lets-encrypt/) certifcate for your domain name. Make sure you have pointed the `A-Record` of your domain to your Instances IP address to be able to obtain a valid certificate.
+
+  </Message>
+
+## Creating a Managed Database
+
+1. [Create a Managed PostgreSQL Database Instance](/storage/database/how-to/create-a-database/) from the Scaleway console. We name our database `gitlab_production`.
+
+  You are taken to your Managed Database's **Overview** page.
+
+2. Click the **Users** tab, then on **Add User**.
+
+3. Enter the username (`gitlab`) and a secure password. In the permission tab, give `ALL` permissions for the user on the `rdb` database.
+
+4. Retrieve the Database Instance **Endpoint** from the **Overview** tab, as it is required for the following steps. The first part, before the colon, is the IP address, and the second part is the port.
+
+## Configuring the GitLab Database
+
+For the following steps, you should be connected to the Ubuntu Bionic Beaver Instance on which you installed GitLab.
+
+1. Open the file `/etc/gitlab/gitlab.rb` in your favourite text editor (For example `nano` or `vim`).
+
+2. Add the following parameters to the Gitlab configuration file:
+    ```
+    # Disable the built-in Postgres server
+    postgresql['enable'] = false
+
+    # Connection details of the Scaleway Elements Database
+    gitlab_rails['db_adapter'] = 'postgresql'
+    gitlab_rails['db_encoding'] = 'utf8'
+    gitlab_rails['db_database'] = '<SCALEWAY_DATABASE_NAME>'
+    gitlab_rails['db_host'] = '<SCALEWAY_DATABASE_IP>'
+    gitlab_rails['db_port'] = '<SCALEWAY_DATABASE_PORT>'
+    gitlab_rails['db_username'] = '<SCALEWAY_DATABASE_USERNAME>'
+    gitlab_rails['db_password'] = '<SCALEWAY_DATABASE_PASSWORD>'
+    ```
+    Replace the following values in the configuration:
+    - `<SCALEWAY_DATABASE_BASE>`: The name of your Scaleway Elements Database. In our example, this is `rdb`
+    - `<SCALEWAY_DATABASE_IP>`: The IP address of your Scaleway Elements Database Instance
+    - `<SCALEWAY_DATABASE_PORT>`: The port of your Scaleway Elements Database Instance
+    - `<SCALEWAY_DATABASE_USERNAME>`: Your Scaleway Elements Database user
+    - `<SCALEWAY_DATABASE_PASSWORD>`: Password of your Scaleway Elements Database user
+
+3. Once modified save the file and exit the text editor.
+
+4. Reconfigure GitLab:
+  ```
+  gitlab-ctl reconfigure
+  ```
+
+5. Seed the GitLab database:
+
+  <Message type="important">
+  
+  This command overwrites your GitLab database. Be careful when using it. You will lose any previous data stored in the database.
+  
+  </Message>
+
+  ```
+  DISABLE_DATABASE_ENVIRONMENT_CHECK=1 gitlab-rake gitlab:setup
+  ```
+
+16. Confirm the database seed by typing `yes` when prompted.
+
+## Logging into GitLab
+
+1. Set the password for your root user with the following command:
+
+  ```bash
+  gitlab:password:reset[root]
+  ```
+
+  Enter and confirm the password when prompted.
+
+2. Open your web browser and go to the URL you configured for Gitlab (for example: `https://gitlab.example.com`)
+
+3. Log in using the user `root` and the password you defined in step 1.
+
+  The GitLab dashboard displays. You can now configure your GitLab installation, add additional users and repositories. All data is stored securely on your Scaleway Database Instance:
+  <Lightbox src="scaleway-gitlab_dashboard.webp" alt="" />
+
+For more information on how to configure GitLab, refer to the official [documentation](https://docs.gitlab.com/ee/administration/index.html#configuring-gitlab).

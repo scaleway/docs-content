@@ -1,0 +1,212 @@
+---
+meta:
+  title: Migrating Instances - GP1 to PRO2
+  description: This page explains how to migrate GP1 Instances to PRO2 using the Scaleway API
+content:
+  h1: Migrating Instances - GP1 to PRO2
+  paragraph: This page explains how to migrate GP1 Instances to PRO2 using the Scaleway API
+dates:
+  validation: 2022-05-10
+  posted: 2022-05-10
+---
+
+This page explains how to migrate from a GP1 Instance with local storage to a PRO2 Instance with [Block Storage](/compute/Instances/concepts/#block-volumes) using the [Scaleway APIs](https://developers.scaleway.com/en/). 
+
+
+<Message type="note">
+
+  - The following procedure also applies when migrating any Instance with local storage to any Instance with Block Storage.
+
+</Message>
+
+To migrate from a source Instance with local storage to a destination Instance with Block Storage we will:
+
+  - create a [backup](/compute/instances/concepts/#backup) of the source Instance, including unified [snapshots](/compute/instances/concepts/#snapshot) of all the source Instance's volumes,
+  - create the destination Instance from the backup image
+
+Local and block snapshots have different formats. To support the migration from one to the other, we use unified snapshots. Unified snapshots can be created from either a local or block volume and, in turn, used to create either a local or block volume.
+
+<Message type="requirement">
+
+  - You have a [Scaleway account](/console/my-account/how-to/create-an-account/)   
+  - You have [configured your API keys](/console/my-project/how-to/generate-api-key/)
+  - You have created a [General Purpose Instance](/compute/Instances/concepts/#general-purpose-instance)
+
+</Message>
+
+## Migrating from GP1 to PRO2 via the API
+
+1. Get the information of your source Instance. You will need data like the Instance's and the volumes' UUID in the next steps.
+
+  ```
+  curl --location --request GET 'https://api.scaleway.com/instance/v1/zones/'$ZONE'/servers/'$GP1_INSTANCE_UUID'' \
+  --header 'Content-Type: application/json' \
+  --header 'X-Auth-Token: '$SCW_SECRET_KEY''
+  ```
+  Response:
+  ```
+  {
+      "server": {
+          "id": "4295c408-aaad-456a-95a0-7f5f6c2f2354",
+          "name": "gp1-test",
+          "arch": "x86_64",
+          "commercial_type": "GP1-S",
+          (...)
+          "volumes": {
+              "0": {
+                  "boot": true,
+                  "id": "$VOLUME0_UUID",
+                  (...)
+                  "volume_type": "l_ssd",
+                  (...)
+              },
+              "1": {
+                  "boot": false,
+                  "id": "$VOLUME1_UUID",
+                  (...)
+                  "volume_type": "b_ssd",
+                  (...)
+          },
+          "tags": [],
+          "state": "running",
+          (...)
+  }
+  ```
+
+2. Create a backup of the Instance.
+  
+  Make sure that you:
+    - Replace `$VOLUME0_UUID`, `$VOLUME1_UUID`, and so forth with volumes' UUIDs that you recovered in the first step of this tutorial. 
+    - Specify `unified` as the volume type of the snapshots embedded in the backup. 
+
+  ```
+  curl --location --request POST 'https://api.scaleway.com/instance/v1/zones/'$ZONE'/servers/'$GP1_INSTANCE_UUID'/action/' \
+    --header 'Content-Type: application/json' \
+    --header 'X-Auth-Token: '$SCW_SECRET_KEY'' \
+    --data-raw '{
+      "action": "backup",
+      "name": "'$BACKUP_NAME'",
+      "volumes": {
+        "'$VOLUME0_UUID'": {
+          "volume_type": "unified"
+        },
+        "'$VOLUME1_UUID'": {
+          "volume_type": "unified"
+        }
+      }
+    }'
+  ```
+  Response:
+  ```
+  {
+    "task": {
+        "id": "400f529a-faf9-4171-bcba-172118713d15",
+        "description": "server_backup",
+        "status": "pending",
+        "href_from": "/servers/4295c408-aaad-456a-95a0-7f5f6c2f2354/action",
+        "href_result": "/images/34d12fd2-6792-4dcb-81d0-b3dd1a3ddc29",
+        "started_at": "2022-05-11T10:43:40.777057+00:00",
+        "terminated_at": null
+    }
+  }
+  ```
+
+  <Message type="note">
+
+  You can find the GP1 backup's UUID from the `href_result` task output. It will be used in step 4.
+
+  </Message>
+
+3. Check the state of the backup to make it is complete.
+
+  ```
+  curl --location --request GET 'https://api.scaleway.com/instance/v1/zones/'$ZONE'/images?name='$BACKUP_NAME'' \
+    --header 'Content-Type: application/json' \
+    --header 'X-Auth-Token: '$SCW_SECRET_KEY''
+  ```
+  Response:
+  ```
+  {
+    "images": [
+      {
+      (...)
+      "name": "gp1-backup",
+      (...)
+      "state": "available",
+      (...)
+  ```
+
+4. Create the target Instance from the backup. 
+
+  ```
+  curl --location --request POST 'https://api.scaleway.com/instance/v1/zones/'$ZONE'/servers/' \
+  --header 'Content-Type: application/json' \
+  --header 'X-Auth-Token: '$SCW_SECRET_KEY'' \
+  --data-raw '{
+    "name": "pro2-test",
+    "commercial_type": "PRO2-S",
+    "project": "'$PROJECT_UUID'",
+    "image":"'$GP1_BACKUP_UUID'",
+    "dynamic_ip_required": true
+  }'
+  ```
+  Response:
+  ```
+  "server": {
+      "id": "998b88d1-1d71-4a0a-8432-5965222d14a1",
+      "name": "pro2-test",
+      "arch": "x86_64",
+      "commercial_type": "PRO2-S",
+      (...)
+      "state": "stopped",
+      (...)
+  }
+   ```
+
+5. Start the target Instance.
+
+  ```
+  curl --location --request POST 'https://api.scaleway.com/instance/v1/zones/'$ZONE'/servers/'$PRO2_INSTANCE_UUID'/action/' \
+    --header 'Content-Type: application/json' \
+    --header 'X-Auth-Token: '$SCW_SECRET_KEY'' \
+    --data-raw '{
+      "action": "poweron"
+    }'
+  ```
+  Response:
+  ```
+  {
+    "task": {
+        "id": "d7902607-2fe0-45f7-874f-72201e2654d4",
+        "description": "server_batch_poweron",
+        "status": "pending",
+        "href_from": "/servers/998b88d1-1d71-4a0a-8432-5965222d14a1/action",
+        "href_result": "/servers/998b88d1-1d71-4a0a-8432-5965222d14a1",
+        "started_at": "2022-05-11T10:52:23.222827+00:00",
+        "terminated_at": null
+    }
+  }
+  ```
+6. Check the status of the Instance. 
+  ```
+  curl --location --request GET 'https://api.scaleway.com/instance/v1/zones/$ZONE/servers/'$PRO2_INSTANCE_UUID'' \
+  --header 'Content-Type: application/json' \
+  --header 'X-Auth-Token: '$SCW_SECRET_KEY''
+  ```
+  Response:
+  ```
+  {
+    "server": {
+      "id": "998b88d1-1d71-4a0a-8432-5965222d14a1",
+      "name": "pro2-test",
+      (...)
+      "state": "running",
+      (...)
+    }
+  }
+  ```
+
+<Navigation>
+  <PreviousButton to="/compute/instances/api-cli/migrating-instances/">Migrating Instances</PreviousButton>
+  <NextButton to="/compute/instances/api-cli/using-cloud-init/">Using cloud-init</NextButton>
+</Navigation>

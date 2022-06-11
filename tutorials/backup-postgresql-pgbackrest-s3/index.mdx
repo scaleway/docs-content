@@ -1,0 +1,256 @@
+---
+meta:
+  title: Backup PostgreSQL databases with pgBackRest to Object Storage
+  description: How to install pgBackRest on Scaleway Instance for backing up PostgreSQL databases to Object Storage
+content:
+  h1: Backup PostgreSQL databases with pgBackRest to Object Storage
+  paragraph: This page shows how to backup PostgreSQL databases with pgBackRest to Object Storage
+tags: compute networking database sql postgresql pgbackrest backup buckets Object-Storage s3
+steps:
+  - step: Installing pgBackRest
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbackrest/#-Installing-pgBackRest
+  - step: Setting up pgBackRest
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbackrest/#-Setting-up-pgBackRest
+  - step: Setting up PostgreSQL
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbackrest/#-Setting-up-PostgreSQL
+  - step: Performing backups
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbackrest/#-Performing-backups
+  - step: Restoring from backups
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbackrest/#-Restoring-from-backups
+  - step: Automatizing backups
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbackrest/#-Automatizing-backups
+ - step: Deleting old backups manually
+    type: HowToStep
+    url: https://www.scaleway.com/en/docs/tutorials/setup-pgbackrest/#-Deleting-old-backups-manually
+categories:
+  - tutorials
+---
+
+## pgBackRest Overview
+pgBackRest aims to be a reliable, easy-to-use backup and restore solution that can seamlessly scale up to the largest databases and workloads by utilizing algorithms that are optimized for database-specific requirements.
+
+pgBackRest can backup in three ways:
+- Full backup: It is a backup of every file under the database directory ($PGDATA). A full backup of a PostgreSQL server is required first. It is the only backup that pgBackRest can load by itself.
+- Differential backup: It only retrieves files that have changed since the last full backup. Both the full backup and the differential backup must be intact.
+- Incremental backup: It retrieves files that have changed since the last backup. The last backup can be a full backup or a differential backup.
+
+<Message type="requirement">
+
+- You have an account and are logged into the Scaleway console.
+- You have created instances running a PostgreSQL database on Ubuntu/Debian or RHEL/Rocky Linux. -> https://www.scaleway.com/en/docs/tutorials/back-up-postgresql-barman/
+- You have sudo privileges or access to the root user.
+- You have created an Object Storage bucket -> https://www.scaleway.com/en/docs/storage/object/how-to/upload-files-into-a-bucket
+
+</Message>
+
+
+## Installing pgBackRest
+
+The **PostgreSQL Global Development Group (PGDG)** provides an apt and yum repository. After importing the repository, you can install the PgBouncer package.
+
+For Ubuntu/Debian:
+1. Create the file repository configuration:
+    ```
+    sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
+    ```
+
+2. Import the repository signing key:
+    ```
+    wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+    ```
+
+3. Update the package lists:
+    ```
+    apt update
+    ```
+4. Install the `pgbackrest` package
+    ```
+    apt install -y pgbackrest
+    ```
+
+
+For RHEL/Rocky Linux:
+1. Install the repository RPM:
+    ```
+    dnf install -y https://download.postgresql.org/pub/repos/yum/reporpms/EL-9-x86_64/pgdg-redhat-repo-latest.noarch.rpm
+    ```
+
+2. Disable the built-in PostgreSQL module:
+    ```
+    dnf -qy module disable postgresql
+    ```
+
+3. Install the `pgbackrest` package
+    ```
+    dnf install -y pgbackrest
+    ```
+
+
+## Setting up pgBackRest
+
+1. Edit the `/etc/pgbackrest.conf` with the following changes (repository configurations for example purposes only):
+    ```
+    [global]
+    repo1-type=s3
+    repo1-s3-endpoint=<BUCKET-ENDPOINT>
+    repo1-s3-bucket=<BUCKET-NAME>
+    repo1-s3-key=<ACCESS-KEY>
+    repo1-s3-key-secret=<SECRET-KEY>
+    repo1-s3-region=<REGION>
+    repo1-path=/pgbackrest
+
+    repo1-retention-full=1
+    start-fast=y
+    archive-async=y
+
+    [db-primary]
+    pg1-path=/var/lib/pgsql/14/data
+    ```
+
+<Message type="note">
+
+PostgreSQL data directory is '/var/lib/postgresql/14/main' in Ubuntu/Debian by default
+
+</Message>
+
+2. Create a stanza for defining the cluster:
+    ```
+    sudo -u postgres pgbackrest --stanza=db-primary stanza-create
+    ```
+
+## Setting up PostgreSQL
+
+1. Change PostgreSQL configurations:
+    ```
+    archive_mode = on
+    archive_command = 'pgbackrest --stanza=db-primary archive-push %p'
+    ```
+
+<Message type="note">
+
+Changing the archive_mode parameter requires a restart, but reload is sufficient if you are only changing the archive_command parameter.
+
+</Message>
+
+<Message type="note">
+
+If you want WAL archiving to be done only during backup, you can add the following command:
+    ```
+    test -f /tmp/pgbackrest/db-primary-backup.lock || exit 0 && pgbackrest --stanza=db-primary archive-push %p
+    ```
+It is not a method supported by pgBackRest. Needs to be watched carefully.
+
+</Message>
+
+
+2. Restart PostgreSQL to apply changes:
+
+For RHEL/Rocky Linux:
+
+Restart the `postgresql-14.service` to apply the changes.
+    ```
+    systemctl restart postgresql-14
+    ```
+
+For Ubuntu/Debian:
+
+Restart the PostgreSQL 14 `main` cluster to apply the changes.
+    ```
+    pg_ctlcluster restart 14 main
+    ```
+
+4. After making all the settings, you can use the following command to check the configurations:
+    ```
+    sudo -u postgres pgbackrest --stanza=db-primary check
+    ```
+
+## Performing backups
+
+- To start a full backup for db-primary, use this command:
+    ```
+    sudo -u postgres pgbackrest --stanza=db-primary --type=full backup
+    ```
+
+- To start a differential backup for db-primary, use this command:
+    ```
+    sudo -u postgres pgbackrest --stanza=db-primary --type=diff backup
+    ```
+
+- To start an incremental backup for db-primary, use this command:
+    ```
+    sudo -u postgres pgbackrest --stanza=db-primary --type=incr backup
+    ```
+
+- To view a list of all backups available of db-primary, use the command:
+    ```
+    sudo -u postgres pgbackrest --stanza=db-primary info
+    ```
+
+<Message type="note">
+
+If there are no backup exists for a stanza, the backup type will be set to full.
+
+</Message>
+
+
+## Restoring from backups
+
+- To restore from backup to the same location on the DB server, you can start the restore process with the following command:
+    ```
+    sudo -u postgres pgbackrest --stanza=db-primary restore
+    ```
+
+- To restore from backup to the same location on the DB server and a specified time, you can start the restore process with the following command:
+    ```
+    sudo -u postgres pgbackrest --stanza=db-primary --type=time --target="2022-06-02 17:05:23" restore
+    ```
+
+- To restore from backup to the desired location on the DB server, you can start the restore process with the following command:
+    ```
+    sudo -u postgres pgbackrest --stanza=db-primary --reset-pg1-host --pg1-path=/var/lib/pgsql/14/restored restore
+    ```
+
+<Message type="tip">
+
+A full restore can take a long time on large databases. If the connection is lost, the restore process may be interrupted. For this reason, running the restore command in 'screen' or 'tmux' will increase reliability.
+
+</Message>
+
+<Message type="note">
+
+If only missing files need to be added, you can use the "--delta" parameter. This parameter restores only missing files.
+
+</Message>
+
+
+## Automatizing backups
+If it is desired to take backups in a certain time interval, it can be added to the cron as follows:
+
+1. Edit the crontab of the postgres user:
+    ```
+    crontab -u postgres -e
+    ```
+
+2. To run a full backup at 00:00 on every Wednesday and an incremental backup at 00:00 on every Saturday, add the following line to the crontab and save it:
+    ```
+    0 0 * * 3 /usr/bin/pgbackrest --stanza=db-primary --type=full backup
+    0 0 * * 6 /usr/bin/pgbackrest --stanza=db-primary --type=incr backup
+    ```
+
+## Deleting old backups manually:
+
+- Just to keep the last full backup:
+    ```
+    sudo -u postgres pgbackrest --stanza=db-primary --repo1-retention-full=1 expire
+    ```
+
+- Just to keep the last differantial backup:
+    ```
+    sudo -u postgres pgbackrest --stanza=db-primary --repo1-retention-diff=1 expire
+    ```

@@ -48,7 +48,19 @@ This project contains two functions where:
     * `TRANSFORM_URL`: URL of the function used to transform the images
 
 2. Create the BucketScan function:
-
+    * Import dependencies: 
+    ```js 
+    const AWS = require("aws-sdk");
+    const https = require("https");
+    ```
+    * Import environment variable:
+    ```js
+    const SOURCE_BUCKET = process.env.SOURCE_BUCKET;
+    const S3_ENDPOINT_URL = process.env.S3_ENDPOINT_URL;
+    const ID = process.env.ACCESS_KEY_ID;
+    const SECRET = process.env.ACCESS_KEY;
+    const TRANSFORM_URL = process.env.TRANSFORM_URL;
+    ```
     * Connect to Object Storage: 
     ```js 
     // Create S3 service object
@@ -64,6 +76,10 @@ This project contains two functions where:
     Bucket: SOURCE_BUCKET
     };
     ```
+    * Initiate your function
+    ```js
+    exports.handle = async (event, context, callback) => {
+    ```
     * Get all files from the source bucket:
     ```js
     s3.listObjectsV2(params, function (err, data) {
@@ -76,28 +92,31 @@ This project contains two functions where:
     ```
     * Asynchronously call the ImageTransform function after having filtered objects on all images:
     ```js 
-     contents.forEach(function (content) {
-       // Infer the image type from the file suffix.
-       srcKey = content.Key;
-       const typeMatch = srcKey.match(/\.([^.]*)$/);
-       if (!typeMatch) {
-         console.log("Could not determine the image type.");
-       } else {
-         const imageType = typeMatch[1].toLowerCase();
-         // Check that the image type is supported
-         if (["jpeg", "jpg", "png"].includes(imageType) !== true) {
-           return console.log(`Unsupported image type: ${imageType}`);
-         } else {
-           try {
-             console.log(TRANSFORM_URL + "?key=" + srcKey);
-             https.get(TRANSFORM_URL + "?key=" + srcKey);
-             counter += 1;
-           } catch (error) {
-             console.log(error);
-           }
-         };
-       };
-     });
+           contents.forEach(function (content) {
+             // Infer the image type from the file suffix.
+             srcKey = content.Key;
+             const typeMatch = srcKey.match(/\.([^.]*)$/);
+             if (!typeMatch) {
+               console.log("Could not determine the image type.");
+             } else {
+               const imageType = typeMatch[1].toLowerCase();
+               // Check that the image type is supported
+               if (["jpeg", "jpg", "png"].includes(imageType) !== true) {
+                 return console.log(`Unsupported image type: ${imageType}`);
+               } else {
+                 try {
+                   console.log(TRANSFORM_URL + "?key=" + srcKey);
+                   https.get(TRANSFORM_URL + "?key=" + srcKey);
+                   counter += 1;
+                 } catch (error) {
+                   console.log(error);
+                 }
+               };
+             };
+           });
+          }
+        });
+    }
     ```
 
 ## Creating the ImageTransformation function
@@ -118,6 +137,23 @@ The following steps are adapted from the [AWS lambda](https://docs.aws.amazon.co
     * `RESIZED_WIDTH`: Desired width of the resized image
 
 3. Create the ImageTransformation function:
+    * Import dependencies
+     ```js
+     const AWS = require("aws-sdk");
+     const sharp = require("sharp");
+     ```
+    * Import environment variables
+    ```js
+    const srcBucket = process.env.SOURCE_BUCKET;
+    const S3_ENDPOINT_URL = process.env.S3_ENDPOINT_URL;
+    const ID = process.env.ACCESS_KEY_ID;
+    const SECRET = process.env.ACCESS_KEY;
+    const dstBucket = process.env.DESTINATION_BUCKET;
+    let width = parseInt(process.env.RESIZED_WIDTH, 10);
+    if (width < 1 || width > 1000) {
+      width = 200;
+    }
+    ```
     * Connect to Object Storage: 
     ```js
     const s3 = new AWS.S3({
@@ -162,18 +198,47 @@ The following steps are adapted from the [AWS lambda](https://docs.aws.amazon.co
     ```
     * Push the image to the destination bucket:
     ```js 
-    try {
-        const destparams = {
-            Bucket: dstBucket,
-            Key: dstKey,
-            Body: buffer,
-            ContentType: "image"
-        };
-        const putResult = await s3.putObject(destparams).promise();
-    } catch (error) {
-        console.log(error);
-        return;
-    } 
+      try {
+          const destparams = {
+              Bucket: dstBucket,
+              Key: dstKey,
+              Body: buffer,
+              ContentType: "image"
+          };
+          const putResult = await s3.putObject(destparams).promise();
+      } catch (error) {
+          console.log(error);
+          return;
+      }
+    }
+    ```
+    * Log Success transformation and end the function
+    ```js
+       console.log(
+        "Successfully resized " +
+          srcBucket +
+          "/" +
+          srcKey +
+          " and uploaded to " +
+          dstBucket +
+          "/" +
+          dstKey
+      );
+      return {
+        statusCode: 201,
+        body: JSON.stringify({
+          status: "ok",
+          message:
+            "Image : " +
+            srcKey +
+            " has successfully been resized and pushed to the bucket " +
+            dstBucket,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+    };
     ```
 
 ## Pushing the two functions to Scaleway Serverless 

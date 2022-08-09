@@ -64,7 +64,7 @@ Run the following command to update the apt package manager, upgrade the softwar
 ```bash
     apt update && apt upgrade
     apt install -y python3-boto python3-pip haveged gettext librsync-dev
-    wget https://code.launchpad.net/duplicity/0.8-series/0.8.12/+download/duplicity-0.8.12.1612.tar.gz
+    wget https://gitlab.com/duplicity/duplicity/-/archive/rel.0.8.23/duplicity-rel.0.8.23.tar.gz
     tar xaf duplicity-0.8.*.tar.gz
     cd duplicity-0.8.*/
     pip3 install -r requirements.txt
@@ -186,14 +186,16 @@ As everything is installed and ready, we will now configure and script our inter
       export AWS_ACCESS_KEY_ID="<SCALEWAY ACCESS KEY>"
       export AWS_SECRET_ACCESS_KEY="<SCALEWAY SECRET ACCESS KEY>"
 
+      export SCW_REGION="<REGION OF YOUR BUCKET>"
+      export SCW_ENDPOINT_URL="http://s3.${SCW_REGION}.scw.cloud"
+
       # set SCW_BUCKET as follows for duplicity < 0.8.23
       # for higher versions, see below
-      # export SCW_BUCKET="s3://s3.fr-par.scw.cloud/<NAME OF YOUR BUCKET>"
+      # export SCW_BUCKET="s3://s3.${SCW_REGION}.scw.cloud/<NAME OF YOUR BUCKET>"
 
       # set the next two variables for duplicity >= 0.8.23
       # it uses the boto3 library, which uses a different naming scheme for bucket names
       export SCW_BUCKET="s3://<NAME OF YOUR BUCKET>"
-      export S3_REGION_NAME="fr-par"
 
       # GPG Key information
       export PASSPHRASE="<YOUR GPG KEY PASSPHRASE>"
@@ -238,7 +240,10 @@ Using the configuration and duplicity, we automatize the backups.
         cat /dev/null > ${LOGFILE_RECENT}
 
         log ">>> removing old backups"
-        duplicity remove-older-than ${KEEP_BACKUP_TIME} ${SCW_BUCKET} >> ${LOGFILE_RECENT} 2>&1
+        duplicity remove-older-than \
+          --s3-endpoint-url ${SCW_ENDPOINT_URL} \
+          --s3-region-name ${SCW_REGION} \
+          ${KEEP_BACKUP_TIME} ${SCW_BUCKET} >> ${LOGFILE_RECENT} 2>&1
 
         # duplicity >= 0.8.23
         # determine S3_ENDPOINT_URL for scaleway
@@ -249,8 +254,8 @@ Using the configuration and duplicity, we automatize the backups.
         incr --full-if-older-than ${FULL_BACKUP_TIME} \
         --asynchronous-upload \
         --s3-use-glacier \
-        --s3-endpoint-url ${S3_ENDPOINT_URL} \
-        --s3-region-name ${S3_REGION_NAME} \
+        --s3-endpoint-url ${SCW_ENDPOINT_URL} \
+        --s3-region-name ${SCW_REGION} \
         --encrypt-key=${GPG_FINGERPRINT} \
         --sign-key=${GPG_FINGERPRINT} \
         ${SOURCE} ${SCW_BUCKET} >> ${LOGFILE_RECENT} 2>&1
@@ -288,12 +293,16 @@ Duplicity also allows you to recover a backup. We will create a script to make t
 
       if [ $# -eq 2 ]; then
         duplicity \
+          --s3-endpoint-url ${SCW_ENDPOINT_URL} \
+          --s3-region-name ${SCW_REGION} \
           --time $1 \
           ${SCW_BUCKET} $2
       fi
 
       if [ $# -eq 3 ]; then
         duplicity \
+          --s3-endpoint-url ${SCW_ENDPOINT_URL} \
+          --s3-region-name ${SCW_REGION} \
           --time $1 \
           --file-to-restore $2 \
           ${SCW_BUCKET} $3

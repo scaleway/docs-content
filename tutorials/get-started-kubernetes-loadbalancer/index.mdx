@@ -13,211 +13,168 @@ dates:
   posted: 2022-08-18
 ---
 
-This tutorial accompanies the third [video demonstration](https://www.youtube.com/watch?v=R5CwAq1a0Og) in our series to help users get started with Kubernetes. We walk you through Kubernetes fundamentals for beginners. In this installment, we show you how to deploy a containerized application with the [Scaleway Kubernetes Kapsule](https://www.scaleway.com/en/kubernetes-kapsule/).  
+This tutorial accompanies the third [video demonstration](https://www.youtube.com/watch?v=SVShdUO5fCw) in our series to help users get started with Kubernetes. We walk you through Kubernetes fundamentals for beginners. In this installment, we show you how to create a Load Balancer for your [Scaleway Kubernetes Kapsule](https://www.scaleway.com/en/kubernetes-kapsule/).  
 
-First, we review some key Kubernetes terminology (include pools, nodes and pods) and then demonstrate how to create a Kubernetes Kapsule via the [Scaleway console](https://console.scaleway.com/). Next, we show you how to install [`kubectl`](/compute/kubernetes/concepts/#kubectl) so you can connect to your cluster from the command line of your local machine, and how to create an [image pull secret](/compute/kubernetes/concepts/#image-pull-secret) for your cluster.
+First, we address the question of why we need a Load Balancer for our cluster, comparing it with the NodePort service we used in the previous tutorial. We then explain how to create a Load Balancer, check it out in the Scaleway console, and finally test that we can access our cluster's deployed application at the Load Balancer's IP address. 
 
-We then demonstrate how to deploy the containerized application (via the `whoami` image that we created in the [first video/tutorial](/tutorials/get-started-containers-docker/) to our Kapsule cluster. Finally, we show how to use the Kubernetes NodePort service to expose a port so we can test that the application is running at its endpoint.
-
-Future videos will cover topics like load balancing and storage for your Kubernetes application.
+The next and final video in this series will look at the topic of persistent storage for a Kubernetes cluster.
 
 <Message type="requirement">
 
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have [generated your API Key](/console/my-project/how-to/generate-api-key/)
-  - You have followed the [first tutorial](/tutorials/get-started-containers-docker/) in this series, and pushed the `whoami` image to a container registry
+  - You have followed the [first](/tutorials/get-started-containers-docker/) and [second](/tutorials/get-started-deploy-kapsul/) in this series, and have a Kubernetes Kapsule cluster running with the `whoami` application deployed on it.
 
 </Message>
 
-## Why do we need Kubernetes?
+## Where were we?
 
-In our previous tutorial, we saw how to containerize an application. We achieved this by using Docker, an open source platform for packaging applications into containers. We created and ran our containerized application on our local machine, and then pushed the container image to a Container Registry.
+In our previous tutorials, we created a [Kubernetes Kapsule](https://www.scaleway.com/en/kubernetes-kapsule/) and deployed the containerized [whoami](https://github.com/jwilder/whoami) application to it. This is what our cluster looked like at the end of the last tutorial:
 
-While manually running and managing one container image on one local machine is fine, in a production environment we might need huge amounts of containers running simultaneously on multiple machines. It is very difficult to manage this by hand, and that is where Kubernetes can help us!
+<Lightbox src="scaleway-cluster.webp" alt="" />
 
-## Key concepts: clusters, nodes, pods and more
+## Why do we need a Load Balancer?
 
-Before starting the practical steps of this tutorial, we review a few key Kubernetes concepts that must be understood first:
+By default, Kubernetes clusters are not exposed to the Internet. These means that external users cannot access the application deployed in our cluster.
 
-* **Kubernetes**: An open-source container orchestration platform, which automates the deployment, management and scaling of containerized applications. 
+In the previous tutorial, we solved this problem by creating a **NodePort** Service for our cluster. NodePort is a Kubernetes service which opens a port on each node in a cluster that contains pods for the specified deployment. It then forwards any external traffic received on that port to the right pods. This allowed us to go to our node’s external IP address in a browser, specifying the open port, and be served  our web application.
 
-* **Cluster**: If you’re running Kubernetes, you’re running a cluster. A cluster is a set of machines, called nodes, running containerized applications managed by Kubernetes. A cluster has several worker nodes and at least one Control Plane.
+<Lightbox src="scaleway-nodeport.webp" alt="" />
 
-  Cluster: 
-  <Lightbox src="scaleway-cluster.webp" alt="" />
+As mentioned, NodePort is a ***Service**. It is important to differentiate between Services and Deployments in Kubernetes. Both of these are Kubernetes abstractions:
 
-* **Node**: A node may be a virtual or physical machine. In the case of Scaleway Kubernetes Kapsule, a node is an [Instance](/compute/instances/concepts/#instance).
+- ***Deployments** keep a set of pods running with containerized applications
+- **Services** enable network access to a specified set of pods.
 
-* **Worker node**: Each worker node runs one or more containerized applications, which are grouped into Pods. Each worker node is managed by the control plane and contains the services necessary to run Pods.
+Why then can’t we just keep using NodePort, why do we need a Load Balancer? 
 
-  Worker node:
-  <Lightbox src="scaleway-worker-node-full-kubelet.webp" alt="" />
+NodePort is great for quick testing and can be adequate for single node, uncomplicated clusters. It is also free. However, it is not ideal for production, for reasons of security and ease of management. You are limited in which port numbers can be opened, and as your cluster starts to scale in complexity, maybe containing many microservices, NodePort gets less practical to use.
 
-* **Pod**: A pod is a bundle of containers working closely together. Containers grouped together in Pods might share resources such as storage and networking. 
+LoadBalancer is also a Kubernetes Service just like NodePort, and it is the standard service to use when you want to expose your cluster to the internet.
 
-* **Kubelet**: The kubelet is the primary "node agent" that runs on each worker node. It ensures that its containers are running and healthy, and can register the node with the Control Plane’s apiserver. Scaleway’s Kubernetes Kapsule manages the kubelets for you.
+The LoadBalancer Service within your cluster creates an external Load Balancer. This external Load Balancer has a single IP address that forwards all traffic to the LoadBalancer Service within your cluster, which then takes care of forwarding it to the right pods.
 
-* **Control plane**: The Control Plane, previously known as the master node, controls and manages the worker nodes and their pods in the cluster. Scaleway’s Kubernetes Kapsule takes care of all management of the Control Plane for you. The Control Plane consists of components including the kube api server (which acts as the Control Plane’s front end), the kube scheduler, which assigns pods to nodes, etcd which is a consistent and highly-available key value store to back cluster data, and more.
+<Lightbox src="scaleway-loadbalancer-service.webp" alt="" />
 
-  Control plane:
-  <Lightbox src="scaleway-control-plane.webp" alt="" />
+LoadBalancer supports multiple protocols and multiple ports per service, and is much more secure than NodePort. It provides all those things that are important and valued when it comes to Cloud Native technology: predictability, scalability and high availability.
 
-* **Pool**: A pool is a group of worker nodes within the cluster that all have the same configuration. In the case of Scaleway Kubernetes Kapsule, all the nodes in the same pool will be of the same Instance type. You can add or remove pools of nodes to increase/decrease the computational power of your cluster.
+## What are the steps to create a Load Balancer?
 
-  Pool:
-  <Lightbox src="scaleway-pool.webp" alt="" />
+First we create the LoadBalancer Service on our cluster by connecting to it via `kubectl` and creating a YAML manifest to specify the Service.
 
-* **kubectl**: `kubectl` is the command line interface for running commands against Kubernetes clusters. You can use `kubectl` to connect to and manage your clusters from the command line.
+Then, the cluster’s Cloud Controller Manager (a component of the Kapsule’s Control Plane, managed by Scaleway) takes care of creating the external Scaleway Load Balancer, and is responsible for all of its configuration and management. We can check the console though, to see that the Load Balancer has indeed been created.
 
-  <Lightbox src="scaleway-kubectl.webp" alt="" />
+We use `kubectl` to check the IP address of our Load Balancer, and then we are ready to test!
 
-* **Managed Kubernetes**: Managed Kubernetes is when third-party providers take over some of the responsibility for setting up and operating Kubernetes. Scaleway has two managed Kubernetes products: [Kubernetes Kapsule](https://www.scaleway.com/en/kubernetes-kapsule/) and [Kubernetes Kosmos](https://www.scaleway.com/en/kubernetes-kosmos/). Kapsule is our classic Kubernetes offer, where all nodes and their pods in the cluster are managed by Scaleway and hosted on Scaleway Instances. Kosmos allows you to have multi-cloud clusters, with pods hosted on nodes from different cloud providers.
+<Message type="note">
 
-In both cases, Scaleway walks you through the setup of your cluster and manages your Control Plane for free. All of the Control Plane’s components, and kubelets on the nodes, are fully managed. There is no need to connect to your nodes directly, as all actions and configurations can be done from the Scaleway console, via the `kubectl` command, the [Scaleway Kapsule API](https://developers.scaleway.com/en/products/k8s/api/) or via [Terraform](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/k8s_cluster). You can also monitor your cluster from the Kubernetes dashboard web interface.
+It is not possible to create the external Scaleway Load Balancer yourself via the console/API and then connect it to your cluster afterwards. You must create the LoadBalancer Service in the cluster first, so that the Scaleway Cloud Controller Manager in your Kapsule’s Control Plane can handle the creation of the Scaleway Load Balancer, with the right configuration to direct its traffic to the correct pods of your cluster.
 
-## Creating a Kubernetes Kapsule cluster
+</Message>
 
-The first step in our tutorial is to create a Kubernetes Kapsule cluster. This can be achieved from the Scaleway console. [Follow our dedicated how-to on creating a cluster](/compute/kubernetes/how-to/create-cluster/), making sure to select Kapsule instead of Kosmos. You can leave all other settings at their default values.
+## Step 1: Create Load Balancer from YAML manifest
 
-## Installing kubectl and connecting to your cluster
-
-The next step is to install `kubectl` on your local machine, and configure it to connect to your cluster. To do this, [follow our dedicated how-to on connecting to a cluster with kubectl](/compute/kubernetes/how-to/connect-cluster-kubectl/).
-
-## Create an image pull secret
-
-In our previous tutorial, we saw how to containerize an application and create a Docker image of the application which we [pushed to our Scaleway Container Registry](/tutorials/get-started-deploy-kapsule#pushing-to-the-scaleway-container-registry). Logically, we next need to deploy that application image to our Kubernetes cluster. However, Kubernetes itself must be able to pull the image to its nodes. Generally, application images are in **private** container registries, and so Kubernetes needs to be given access in order to pull. This access is given via image pull secrets. You might also hear these called "Docker secrets", or just "secrets".
-
-1. Go to the command line of your local machine, and enter the following command:
-
-```
-kubectl create secret docker-registry registry-secret --docker-server=rg.fr-par.scw.cloud --docker-username=my-namespace --docker-password=$SCW_SECRET_KEY
-```
-
-Make sure you replace `rg.fr-par.scw.cloud` with the endpoint of the container registry where you pushed the `whoami` image [from the first tutorial](/tutorials/get-started-containers-docker/#example-2-a-more-complex-app), and `my-namespace` with the relevant container registry namespace. You should also have [created an API key](/console/my-project/how-to/generate-api-key/) and [exported it as an environment variable](/console/my-project/how-to/generate-api-key/#how-to-use-your-api-key) called `$SCW_SECRET_KEY`.
-
-2. Run the following command to display the generated secret and check that everything went well.
-
-```
-kubectl get secret registry-secret --output=yaml
-```
-
-## Deploying an application to the cluster
-
-Now that we have created our cluster, connected to it with `kubectl` and defined an image pull secret so that our cluster can pull the image it needs, we can define our deployment.
-
-1. Create a file called `whoami-deployment.yaml` on your local machine:
-
-  ```
-  nano whoami-deployment.yaml
-  ```
-
-2. Paste the following code into the file, then save and exit:
-
-  ```
-  apiVersion: apps/v1
-  kind: Deployment
-  metadata:
-    name: mydeployment
-    labels:
-      app: mydeployment
-  spec:
-    replicas: 2
-    selector:
-      matchLabels:
-        app: mydeployment
-    template:
-      metadata:
-        labels:
-          app: mydeployment
-      spec:
-        containers:
-          - name: mycontainer
-            image: rg.fr-par.scw.cloud/videodemo/whoami:latest
-        imagePullSecrets:
-          - name: registry-secret
-  ```
-
-  Be sure to replace `rg.fr-par.scw.cloud/videodemo/whoami:latest` with the relevant path to where your `whoami` image is stored in your container registry.
-
-  <Message type="tip">
-
-  To better understand the different parts of the deployment yaml, here is some further information:
-
-    - **apiVersion** specifies which version of the Kubernetes API to use to create the object
-    - **kind** specifies the kind of object defined in this yaml file, here a deployment. Other Kubernetes objects we can define in yaml files include Pods, Secrets, Namespaces and more.
-    - **metadata** helps uniquely identify our deployment objet: we give it a name and a label.
-    - **spec shows** the desired state for the deployment (2 replicas) and the **selector** field defines how the Deployment finds which Pods to manage, in this case using our predefined label
-    - **template** labels the Pods with that same label, and tells them which container to run, and where to find the image for it. It also gives the pull secret needed for access.
-
-  As this is a very basic yaml file for a Kubernetes deployment, you could reuse the code and adapt it for other simple deployments by changing the registry and image information.
-
-  </Message>
-
-3. Run the following command to deploy the deployment on the cluster:
-
-  ```
-  kubectl apply -f whoami-deployment.yaml
-  ```
-
-4. Run the following command to list all the cluster's resources. If everything went well with the deployment, you should see that your pods are running:
+1. Open a terminal, and run the following command to check the state of your cluster:
 
   ```
   kubectl get all
   ```
 
-5. Run the following command, replacing the pod ID with an appropriate output from the previous command, to check that the application is running and listening on a port:
+  You should see two pods, the NodePport Service created during the previous tutorial (along with the basic default ClusterIP Service), the deployment and the two replicasets.
+
+2. Delete the NodePort Service with the following command:
 
   ```
-  kubectl logs pod/mydeployment-5599cbcb56-x6lb8
+  kubectl delete svc name-of-nodeport-service
   ```
+ 
+  In our case, we called our NodePort service `mydeployment`, so the command is `kubectl delete svc mydeployment`.
 
-## Exposing the service for testing via NodePort (optional)
-
-Our application is up and running, and we could just stop at this point. However, we can carry out a few more steps to expose the port it is running on so that we can go to the cluster's endpoint and check that the application is printing out its container ID as it is designed to do. We will achieve this via NodePort, a Kubernetes service which opens a port on every node of the cluster. Any traffic the cluster receives on this node is forwarded.
-
-1. Run the following command to create a NodePort service. Replace `80` with whatever port your pod said it was listening on at the end of the previous section.
+3. Create a new file called `lb.yaml`:
 
   ```
-  kubectl expose deployment mydeployment --type NodePort --port 80
+  nano lb.yaml
   ```
 
-2. Use the following command to check that the Nodeport service is up and running:
+  This file will be a manifest for our LoadBalancer Service.
+
+4. Copy and paste the following text into the file:
+
+  ```
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: myloadbalancer
+    labels:
+      app: mydeployment
+  spec:
+    type: LoadBalancer
+    ports:
+    - port: 8000
+      name: http
+      targetPort: 8000
+    selector:
+      app: mydeployment
+  ```
+
+    - **apiVersion** specifies which verison of the Kubernetes API to use to create the object
+    - **kind** specifies the kind of object defined in this yaml file, here a Service
+    - **metadata** helps uniquely identify our Service object: we give it a name (`myloadbalancer`), and a label.
+    - **spec** specifies the Service. It is of **type** LoadBalancer. We then go on to specify its **ports**. We can define many ports if we want but here we just specify the necessary port `8000` for our `whoami` app. Since `8000` is an HTTP port, we add a name tag and call it `http`. **targetPort** is the port the container accepts traffic (in our case necessarily `8000`), **port** is the abstracted Service port. For simplicity, we set both as `8000`, though we could change **port** to something else.
+    - **selector** tells the Service which pods to redirect to: in this case pods with containers running the app we called `mydeployment`
+
+  Save and exit the file.
+
+5. Tell Kubernetes to create the Load Balancer from the manifest we just created with the following command:
+
+  ```
+  kubectl create -f lb.yaml
+  ```
+
+  A message displays to confirm the creation of the Load Balancer.
+
+## Step 2: Check Load Balancer in the console
+
+1. Open a browser and go to [console.scaleway.com](http://console.scaleway.com).
+
+2. Select **Network** > **Load Balancers** from the side menu.
+
+  A list of your Scaleway Load Balancers displays. You should see one with the tags `kapsule` and `cluster=xxxx`. This is the Load Balancer created by the Cloud Controller Manager of your Kubernetes Kapsule cluster when you created your LoadBalancer Service in the previous step.
+
+3. Click the LoadBalancer to view its details.
+
+  <Lightbox src="scaleway-load-balancer.webp" alt="" />
+
+  The Load Balancer is auto-managed by Kapsule, so no changes can be made here directly.
+
+  In the `IPv4` field, the Load Balancer's IP address displays.
+
+## Step 3: Check Load Balancer IP via kubectl
+
+Let's check that the IP address seen in the console is also known to our cluster:
+
+1. Run the following command:
 
   ```
   kubectl get svc
   ```
 
-  You should see an output similar to the following:
-  
-  ```
-  NAME          TYPE    CLUSTER-IP  EXTERNAL-IP  PORT(S)    AGE
-  service/kubernetes   ClusterIP  10.32.0.1   <none>    443/TCP    68d
-  service/mydeployment  NodePort  10.42.65.74  <none>    80:30564/TCP  6s
-  ```
-
-3. Run the `get nodes` command to view extra information about each of your cluster's nodes:
+  An output similar to the following displays:
 
   ```
-  kubectl get nodes -o wide
+  NAME             TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)          AGE
+  kubernetes       ClusterIP      10.32.0.1       <none>           443/TCP          13d
+  myloadbalancer   LoadBalancer   10.43.204.154   51.159.207.167   8000:31725/TCP   27h
   ```
 
-  In the output, one of the values you should see is your cluster's external IP:
+  We see that the Load Balancer's external IP is the same as the one we saw in the console in the previous step.
 
-4. Enter the following address in a browser. Replace `<external-IP>` with your cluster's external IP, and `<port>` with the port that the NodePort service shoewd it was listening on in step 2 (eg `30564`):
+## Step 4: Test
+
+  In a browser, enter the external IP address of your Load Balancer, followed by the port 8000 that we opened, e.g. `158.58.37:8000`.
+
+  A text similar to the following should display, showing that the containerized `whoami` application is running on our cluster and accessible through our Load Balancer:
 
   ```
-  https://<external-IP>:<port>
+  I'm mydeployment-6579f975d55-fv4sx
   ```
-
-You should see that the `whoami` application is printing the ID of the container it is running from within your cluster.
-
-## Useful links
-
-- [Video tutorial: Getting started with Kubernetes: Part 1 - Containers & Docker](https://www.youtube.com/watch?v=zgxcCcKnXR0)
-- [Written tutorial: Getting started with Kubernetes: Part 1 - Containers & Docker](https://www.scaleway.com/en/docs/tutorials/get-started-containers-docker/)
-- [Video tutorial: Getting started with Kubernetes: Part 2 - Deploying an app with Kapsule](https://www.youtube.com/watch?v=R5CwAq1a0Og)
-- [Kubernetes Concepts](https://www.scaleway.com/en/docs/compute/kubernetes/concepts/)
-- [Introduction to Kubernetes](https://www.scaleway.com/en/docs/compute/kubernetes/reference-content/introduction-to-kubernetes/)
-- [Kubernetes in 5 minutes](https://www.youtube.com/watch?v=PH-2FfFD2PU)
-- [Kubernetes Components](https://kubernetes.io/docs/concepts/overview/components/)
-- [Official Kubernetes documentation](https://kubernetes.io/docs/home/)

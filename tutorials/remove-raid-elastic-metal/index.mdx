@@ -1,10 +1,10 @@
 ---
 meta:
-  title: Custom RAID Configuration on Elastic Metal
-  description: Custom RAID Configuration on Elastic Metal
+  title: Replacing a disk in a software RAID
+  description: Replacing a disk in a software RAID
 content:
-  h1: Custom RAID Configuration on Elastic Metal
-  paragraph: Custom RAID Configuration on Elastic Metal
+  h1: Replacing a disk in a software RAID
+  paragraph: Replacing a disk in a software RAID
 tags: RAID elastic-metal
 categories:
   - compute
@@ -16,16 +16,41 @@ dates:
 
 Each Elastic Metal server uses a RAID1 configuration after installation from the Scaleway console. If you want to change the RAID configuration of the server, you can modify the RAID array using [rescue mode](/compute/elastic-metal/how-to/use-rescue-mode/).
 
-## Removing the standard RAID configurion
+## Removing the failed disk from the RAID configuration
+
+<Message type="tip">
+
+It is recommended to make a backup of your data before proceeding.
+
+</Message>
 
 1. Boot server in [rescue mode](/compute/elastic-metal/how-to/use-rescue-mode/) from the Scaleway console.
 
-2. Log in to the server using the `root` account:
+2. Log in to the server using the rescue account:
 
     ```
-    ssh root@<your_elastic_metal_ip>
+    ssh em-XXX@<your_elastic_metal_ip>
     ```
-3. Visualize the existing `mdadm` RAID devices by running the following command:
+
+    <Message type="tip">
+
+    The rescue credentials are available from your servers status page in the Scaleway console.
+
+    </Message>
+
+2. Run to following command to make sure all disk caches are written to the disk:
+
+    ```
+    sync
+    ```
+
+3. Mark the failed disk as failed using `mdadm`:
+
+    ```
+    mdadm --manage /dev/md0 --fail /dev/sdb2
+    ```
+
+4. Visualize the existing `mdadm` RAID devices by running the following command:
 
     ```
     cat /proc/mdstat
@@ -34,77 +59,60 @@ Each Elastic Metal server uses a RAID1 configuration after installation from the
     An output as follows displays:
 
     ```sh
-    root@elastic-metal:~# cat /proc/mdstat
-    Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10]
-    md126 : active (auto-read-only) raid1 sda4[0] sdb4[1]
-        998311936 blocks super 1.2 [2/2] [UU]
-        bitmap: 0/8 pages [0KB], 65536KB chunk
+    Personalities : [raid1] [linear] [multipath] [raid0] [raid6] [raid5] [raid4] [raid10]
+    md126 : active (auto-read-only) raid1 sdb3[1] sda3[0]
+          974869504 blocks super 1.2 [2/2] [UU]
+            resync=PENDING
+          bitmap: 8/8 pages [32KB], 65536KB chunk
 
-    md127 : active (auto-read-only) raid1 sda3[0] sdb3[1]
-        613376 blocks super 1.2 [2/2] [UU]
+    md127 : active (auto-read-only) raid1 sdb2[1](F) sda2[0]
+          523264 blocks super 1.2 [2/2] [UU]
 
     unused devices: <none>
     ```
 
-    <Message type="note">
+    The faulty device is market with `(F)`.
 
-    In the example above you find two devices `md126` and `md127`, both in RAID1 mode using the disks `sda` and `sdb`.
+5. Remove the failed disk using the `mdadm --manage` command: 
+
+    ```sh
+    root@elastic-metal:~# # mdadm --manage /dev/md0 --remove /dev/sdb2
+
+    ```
+
+6. Contact the technical support to replace the failed disk with a working one. 
+
+## Adding the replacement disk to the RAID
+
+1. Once the failed disk is replaced, copy the partition table of the source disk to the new disk:
+
+    ```
+    sfdisk -d /dev/sda | sfdisk /dev/sdb
+    ```
+
+    <Message type="important">
+
+    The `sfdisk` command above replaces the entire partition table on the new disk with the one of the source disk. Modify the command if you require to preserve other partition information on the disk.
 
     </Message>
 
-4. Stop the `mdadm` devices using the `mdadm --stop` command:
+2. Create a mirror of the source disk using the `mdadm` command:
 
-    ```sh
-    root@elastic-metal:~# mdadm --stop /dev/md126
-    mdadm: stopped /dev/md126
-    root@elastic-metal:~# mdadm --stop /dev/md127
-    mdadm: stopped /dev/md127
+    ```
+    mdadm --manage /dev/md0 --add /dev/sdb2
     ```
 
-5. Remove the `mdadm` devices using the `mdadm --remove` command: 
+3. Verify the status of the configuration: 
 
-    ```sh
-    root@elastic-metal:~# mdadm --remove /dev/md126
-    root@elastic-metal:~# mdadm --remove /dev/md127
+    ```
+    mdadm --detail /dev/md0
     ```
 
     <Message type="tip">
 
-    When running the command above, the following error may appear: 
-
-    `mdadm: error opening md127: No such file or directory`
-
-    This is normal behavior. Ignore it, and go ahead with the next step.
-
-    </Message>
-
-6. Remove the Superblocks on the disks using the `mdadm --zero-superblock` command:
-
-```
-root@elastic-metal:~# mdadm --zero-superblock /dev/sda4 /dev/sdb4
-root@elastic-metal:~# mdadm --zero-superblock /dev/sda3 /dev/sdb3
-```
-
-7. Verify the RAID configuration has been removed using the `lsblk` and `cat /proc/mdstat` commands: 
-
-    ```sh
-    root@elastic-metal:~# lsblk
-    NAME   MAJ:MIN RM   SIZE RO TYPE MOUNTPOINT
-    loop0    7:0    0 602.9M  1 loop /usr/lib/live/mount/rootfs/img.current.squashfs
-    sda      8:0    0 953.9G  0 disk
-    ├─sda1   8:1    0     1M  0 part
-    ├─sda2   8:2    0   512M  0 part [SWAP]
-    ├─sda3   8:3    0   600M  0 part
-    └─sda4   8:4    0 952.2G  0 part
-    sdb      8:16   0 953.9G  0 disk
-    ├─sdb1   8:17   0     1M  0 part
-    ├─sdb2   8:18   0   512M  0 part [SWAP]
-    ├─sdb3   8:19   0   600M  0 part
-    └─sdb4   8:20   0 952.2G  0 part
-    root@elastic-metal:~# cat  /proc/mdstat
-    Personalities : [linear] [multipath] [raid0] [raid1] [raid6] [raid5] [raid4] [raid10]
-    unused devices: <none>
+    Use the following command to show the progress of the recovery of the mirror disk:
+    ```
+    cat /proc/mdstat
     ```
 
-
-Once the RAID is deleted you can reinstall your server using the [KVM over IP](/dedibox/kvm-over-ip/quickstart) device of your Elastic Metal server.
+    </Message>

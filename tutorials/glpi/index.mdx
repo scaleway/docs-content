@@ -8,7 +8,7 @@ content:
 tags: GLPI Asset Management sysadmin Database MySQL Nginx
 categories:
   - compute
-image: /assets/scaleway_glpi.webp
+hero: assets/scaleway_glpi.webp
 dates:
   validation: 2022-08-30
   posted: 2020-08-13
@@ -17,7 +17,6 @@ dates:
 Gestionnaire Libre de Parc Informatique (GLPI), or Open Source IT Equipment Manager in English, is a web-based asset and IT management open-source software, written in PHP and released under the GNU General Public License. A graphic interface, accessible via web-browser, allows users to easily operate IT operations, that can include hardware from peripherals to entire server racks.
 
 The application disposes of several features to assist companies in managing their information systems. Among them:
-
 - Asset management and automatic inventory
 - Item lifecycle management
 - Data Center Infrastructure Management
@@ -27,14 +26,11 @@ The application disposes of several features to assist companies in managing the
 - Statistics and reports
 - Knowledge base
 
-	
 <Message type="important">
-
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key/)
   - You have [created an Instance](/compute/instances/how-to/create-an-instance/) that runs Ubuntu Focal Fossa (20.04 LTS)
   - You have a domain or subdomain pointed to your Instance
-
 </Message>
 
 ## Installing the stack
@@ -42,285 +38,237 @@ The application disposes of several features to assist companies in managing the
 In this tutorial we will install and configure a [LEMP-Stack](https://lemp.io/) using [Ngnix](https://nginx.org/), a Database for [MySQL](https://www.scaleway.com/en/database/) and [PHP](https://www.php.net/).
 
 1. Update the systems' `apt` repository information and upgrade it to make sure that the system is up to date and that the latest bug-fixes are installed.
-
-  ```
-  apt update && apt -y upgrade
-  ```
-
+    ```
+    apt update && apt -y upgrade
+    ```
 2. Use Ubuntu's apt package manager to install Nginx. Then, restart and enable Nginx.
-
-  ```
-  apt install nginx
-  systemctl restart nginx.service
-  systemctl enable nginx.service
-  ```
-
+    ```
+    apt install nginx
+    systemctl restart nginx.service
+    systemctl enable nginx.service
+    ```
 3. Install PHP.
-
-  ```
-  apt install php7.4-fpm php7.4-common php7.4-mysql php7.4-gmp php7.4-curl php7.4-intl php7.4-mbstring php7.4-soap php7.4-xmlrpc php7.4-gd php7.4-xml php7.4-cli php7.4-zip
-  ```
+    ```
+    apt install php7.4-fpm php7.4-common php7.4-mysql php7.4-gmp php7.4-curl php7.4-intl php7.4-mbstring php7.4-soap php7.4-xmlrpc php7.4-gd php7.4-xml php7.4-cli php7.4-zip
+    ```
 
 ### Creating a Database for MySQL
 
 In this tutorial we use a Scaleway Database for MySQL. To create the database, follow [this how-to](/managed-databases/postgresql-and-mysql/how-to/create-a-database/).
 
 <Message type="note">
-
   Make sure you select MySQL as your database engine. 
-
 </Message>
 
 ## Downloading GLPI
 
 1. Change the directory from root to the folder where you want to download the GLPI repository.
 
-  In this tutorial, we use `/tmp`.
+    In this tutorial, we use `/tmp`
 
-  ```
-  cd /tmp
-  ```
+    ```
+    cd /tmp
+    ```
 
-  Check the most recent version of GLPI [here](https://glpi-project.org/downloads/) and replace it in the commands accordingly. In this tutorial we are using version `10.0.2`
+    Check the most recent version of GLPI [here](https://glpi-project.org/downloads/) and replace it in the commands accordingly. In this tutorial we are using version `10.0.2`
 
-  ```
-  wget https://github.com/glpi-project/glpi/releases/download/10.0.2/glpi-10.0.2.tgz
-  tar -xvf glpi-10.0.2.tgz
-  ```
+    ```
+    wget https://github.com/glpi-project/glpi/releases/download/10.0.2/glpi-10.0.2.tgz
+    tar -xvf glpi-10.0.2.tgz
+    ```
 
 2. Move `glpi` to the `/var/www/glpi` directory.
-
-  ```
-  mv glpi /var/www/glpi
-  ```
-
+    ```
+    mv glpi /var/www/glpi
+    ```
 3. Give Nginx ownership of the directory.
-
-  ```
-  chown -R www-data:www-data /var/www/glpi/
-  ```
+    ```
+    chown -R www-data:www-data /var/www/glpi/
+    ```
 
 ## Configuring Nginx
 
 1. Use a text editor to create a new server block VirtualHost file named `glpi` under the `/etc/nginx/sites-available` directory to include the client request settings of your web server. In this tutorial we use `nano` as a text editor.
-
-  ```
-  nano /etc/nginx/sites-available/glpi
-  ```
-
+    ```
+    nano /etc/nginx/sites-available/glpi
+    ```
 2. Copy and paste the configuration below into the file. Replace `example.com` with your domain name and save.
+    ```
+    server {
+        listen 80;
+        listen [::]:80;
 
-  ```
-  server {
-      listen 80;
-      listen [::]:80;
+        server_name  example.com www.example.com;
+        root   /var/www/glpi;
+        index  index.php index.html index.htm;
+        access_log /var/log/nginx/example.com.access.log;
+        error_log /var/log/nginx/example.com.error.log;
+        client_max_body_size 100M;
 
-      server_name  example.com www.example.com;
-      root   /var/www/glpi;
-      index  index.php index.html index.htm;
-      access_log /var/log/nginx/example.com.access.log;
-      error_log /var/log/nginx/example.com.error.log;
-      client_max_body_size 100M;
+        autoindex off;
 
-      autoindex off;
+        location / {
+            try_files $uri $uri/ =404;
+        }
 
-      location / {
-          try_files $uri $uri/ =404;
-      }
+        location /dataroot/ {
+          internal;
+          alias /var/www/glpi/;
+        }
 
-      location /dataroot/ {
-        internal;
-        alias /var/www/glpi/;
-      }
+    location ~ [^/].php(/|$) {
+            include snippets/fastcgi-php.conf;
+            fastcgi_pass unix:/run/php/php7.4-fpm.sock;
+            fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
+            include fastcgi_params;
 
-  location ~ [^/].php(/|$) {
-          include snippets/fastcgi-php.conf;
-          fastcgi_pass unix:/run/php/php7.4-fpm.sock;
-          fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;
-          include fastcgi_params;
-
-      }
-  }
-  ```
-
+        }
+    }
+    ```
 3. Create a symbolic link to enable the server block and restart Nginx.
-
-  ```
-  ln -s /etc/nginx/sites-available/glpi /etc/nginx/sites-enabled/
-  systemctl restart nginx.service
-  ```
-
+    ```
+    ln -s /etc/nginx/sites-available/glpi /etc/nginx/sites-enabled/
+    systemctl restart nginx.service
+    ```
 4. Enter your server's domain name or IP address in a browser to check if GLPI can be accessed via Internet.
 
 ## Installing an SSL/TLS certificate
 
-In order to protect user credentials and other confidential information that are stored in GLPI, you can generate an SSL/TLS certificate issued by Let’s Encrypt for free.
+In order to protect user credentials and other confidential information that are stored in GLPI, you can generate an SSL/TLS certificate issued by Let's Encrypt for free.
 
 In this tutorial we use [certbot](https://certbot.eff.org/lets-encrypt/ubuntufocal-other).
 
 1. Prepare the system:
-
-  ```
-  apt-get update
-  apt-get install software-properties-common
-  add-apt-repository ppa:certbot/certbot
-  apt-get update
-  ```
-
+    ```
+    apt-get update
+    apt-get install software-properties-common
+    add-apt-repository ppa:certbot/certbot
+    apt-get update
+    ```
 2. Install `certbot` using `snap`.
-
-  ```
-  apt-get install python3-certbot-nginx
-  ```
-
+    ```
+    apt-get install python3-certbot-nginx
+    ```
 3. Run `certbot`:
-
-  ```
-  certbot --nginx
-  ```
-
+    ```
+    certbot --nginx
+    ```
 4. Answer the questions when prompted by the certbot Wizard.
+    **A)** Enter your e-mail address.
+      ```
+      Enter email address (used for urgent renewal and security notices) (Enter 'c' to
+      cancel):
+      ```
 
-  **A)** Enter your e-mail address.
-  
-    ```
-    Enter email address (used for urgent renewal and security notices) (Enter 'c' to
-    cancel):
-    ```
+      ```
+      Please read the Terms of Service at
+      https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf. You must
+      agree in order to register with the ACME server at
+      https://acme-v02.api.letsencrypt.org/directory
+      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      (A)gree/(C)ancel: A
+      ```
 
-    ```
-    Please read the Terms of Service at
-    https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf. You must
-    agree in order to register with the ACME server at
-    https://acme-v02.api.letsencrypt.org/directory
-    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    (A)gree/(C)ancel: A
-    ```
+    **B)** Type `A` to agree.
+      ```
+      Would you be willing to share your email address with the Electronic Frontier
+      Foundation, a founding partner of the Let's Encrypt project and the non-profit
+      organization that develops Certbot? We'd like to send you email about our work
+      encrypting the web, EFF news, campaigns, and ways to support digital freedom.
+      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      (Y)es/(N)o:
+      ```
 
-  **B)** Type `A` to agree.
+    **C)** Choose `Y`es or `N`o and input accordingly.
+      The Wizard then asks which names you would like to activate HTTPS for. 
 
-    ```
-    Would you be willing to share your email address with the Electronic Frontier
-    Foundation, a founding partner of the Let's Encrypt project and the non-profit
-    organization that develops Certbot? We'd like to send you email about our work
-    encrypting the web, EFF news, campaigns, and ways to support digital freedom.
-    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    (Y)es/(N)o:
-    ```
+    **D)** Input the corresponding number(s) and enter.
+      ```
+      Which names would you like to activate HTTPS for?
+      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      1: example.com
+      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      Select the appropriate numbers separated by commas and/or spaces, or leave input
+      blank to select all options shown (Enter 'c' to cancel): 1
+      ```
 
-  **C)** Choose `Y`es or `N`o and input accordingly.
+    **E)** Answer the following prompt with `2` and press enter If you want to redirect HTTP traffic to HTTPS.
+      ```
+      Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
+      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      1: No redirect - Make no further changes to the webserver configuration.
+      2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
+      new sites, or if you're confident your site works on HTTPS. You can undo this
+      change by editing your web server's configuration.
+      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 2
+      ```
 
-    The Wizard then asks which names you would like to activate HTTPS for. 
-  
-  **D)** Input the corresponding number(s) and enter.
+      Your certificate is generated.
 
-    ```
-    Which names would you like to activate HTTPS for?
-    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    1: example.com
-    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    Select the appropriate numbers separated by commas and/or spaces, or leave input
-    blank to select all options shown (Enter 'c' to cancel): 1
-    ```
+      ```
+      Obtaining a new certificate
+      Performing the following challenges:
+      http-01 challenge for openproject-scw.ga
+      Using the webroot path /opt/openproject/public for all unmatched domains.
+      Waiting for verification...
+      Cleaning up challenges
 
-  **E)** Answer the following prompt with `2` and press enter If you want to redirect HTTP traffic to HTTPS.
-
-    ```
-    Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
-    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    1: No redirect - Make no further changes to the webserver configuration.
-    2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
-    new sites, or if you're confident your site works on HTTPS. You can undo this
-    change by editing your web server's configuration.
-    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 2
-    ```
-
-    Your certificate is generated.
-
-    ```
-    Obtaining a new certificate
-    Performing the following challenges:
-    http-01 challenge for openproject-scw.ga
-    Using the webroot path /opt/openproject/public for all unmatched domains.
-    Waiting for verification...
-    Cleaning up challenges
-
-    IMPORTANT NOTES:
-    - Congratulations! Your certificate and chain have been saved at:
-      /etc/letsencrypt/live/yourdomain.name/fullchain.pem
-      Your key file has been saved at:
-      /etc/letsencrypt/live/yourdomain.name/privkey.pem
-      Your cert will expire on 2020-10-20. To obtain a new or tweaked
-      version of this certificate in the future, simply run certbot
-      again. To non-interactively renew *all* of your certificates, run
-      "certbot renew"
-    - Your account credentials have been saved in your Certbot
-      configuration directory at /etc/letsencrypt. You should make a
-      secure backup of this folder now. This configuration directory will
-      also contain certificates and private keys obtained by Certbot so
-      making regular backups of this folder is ideal.
-    ```
-
+      IMPORTANT NOTES:
+      - Congratulations! Your certificate and chain have been saved at:
+        /etc/letsencrypt/live/yourdomain.name/fullchain.pem
+        Your key file has been saved at:
+        /etc/letsencrypt/live/yourdomain.name/privkey.pem
+        Your cert will expire on 2020-10-20. To obtain a new or tweaked
+        version of this certificate in the future, simply run certbot
+        again. To non-interactively renew *all* of your certificates, run
+        "certbot renew"
+      - Your account credentials have been saved in your Certbot
+        configuration directory at /etc/letsencrypt. You should make a
+        secure backup of this folder now. This configuration directory will
+        also contain certificates and private keys obtained by Certbot so
+        making regular backups of this folder is ideal.
+      ```
 5. Take note of the paths provided as they will be required in a later step.
-
 6. Run the command below to program an automatic renewal of your certificate.
-
-```
-certbot renew --dry-run
-```
+    ```
+    certbot renew --dry-run
+    ```
 
 ## Configuring GLPI
 
 1. Access your GLPI interface via browser using your domain name or IP address. The GLPI setup wizard displays. 
-
 2. Select the language and click **OK**. The GLPI license terms display.
-
 3. Read the license terms and check **I have READ and ACCEPT the terms of the license written above** to proceed.
-
-  <Lightbox src="scaleway-agree-to-terms.webp" width="800" alt="" />
-
+    <Lightbox src="scaleway-agree-to-terms.webp" width="800" alt="" />
 4. Click **Install** to begin the installation, 
+    <Lightbox src="scaleway-install.webp" width="800" alt="" />
 
-  <Lightbox src="scaleway-install.webp" width="800" alt="" />
-
-  The wizard runs a compatibility check and a list of tests done on the environment displays.
-
+    The wizard runs a compatibility check and a list of tests done on the environment displays.
 5. Click **Continue** to proceed.
-
 6. Fill out the boxes to set up your database connection. Enter the following information:
-
     - **SQL Server (MariaDB or MySQL):** `XXX.XXX.XX.XX:PORT` (The IP address of your Database Instance followed by the MySQL port)
     - **SQL User:** `db-username` (The username previously created for your Database)
     - **SQL Password:** `db-password` (The password previously created for your Database)
 
-  <Lightbox src="scaleway-db-setup.webp" width="800" alt="" />
-
+    <Lightbox src="scaleway-db-setup.webp" width="800" alt="" />
 7. Click **Continue** to proceed.
-
 8. Select a database and click **Continue**:
-
-  <Lightbox src="scaleway-test-db-connection.webp" width="800" alt="" />
-
-  The initialization of the database might take a few minutes.
-
+    <Lightbox src="scaleway-test-db-connection.webp" width="800" alt="" />
+    The initialization of the database might take a few minutes.
 9. Click **Continue** again.
 
-  Once the installation completes, your default logins and passwords display. 
-
+    Once the installation completes, your default logins and passwords display. 
 10. Use the following identification to connect as the administrator:
-
     - Login: `glpi` 
     - Password: `glpi`
 
-  The GLPI dashboard displays.
+    The GLPI dashboard displays.
 
 <Lightbox src="scaleway-dashboard.webp" width="800" alt="" />
 
 <Message type="important">
-
   For security reasons GLPI recommends you to change the password for your default users and to remove the `install/install.php` file.
-
 </Message>
 
 Your setup is complete. You can begin managing assets and resources. GLPI provides [documentation](https://glpi-project.org/DOC/EN/) to help you get started.

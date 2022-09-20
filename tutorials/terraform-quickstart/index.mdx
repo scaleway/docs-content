@@ -8,7 +8,7 @@ content:
 categories: 
   - compute
 tags: compute Terraform Scaleway-infrastructures cloud Elastic-Metal Instance HashiCorp-Terraform
-image: /assets/scaleway_terraform.webp
+hero: assets/scaleway_terraform.webp
 dates:
   validation: 2022-09-29
   posted: 2018-04-06
@@ -17,11 +17,9 @@ dates:
 HashiCorp [Terraform](http://terraform.io) is an open-source software tool to deploy **IaaC**: Infrastructure as Code. It means that you can automate infrastructure resources such as Network, Instances, Elastic Metal servers and more. It allows you to use declarative configuration files to manage the full lifecycle — create new resources, manage existing ones, and delete those no longer needed. The configuration language used by Terraform is called [Hashicorp Configuration Language (HCL)](https://github.com/hashicorp/hcl).
 
 <Message type="requirement">
-
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key)
   - You have [created your API key](/console/my-project/how-to/generate-api-key/)
-
 </Message> 
 
 ## Installing Terraform
@@ -51,50 +49,283 @@ The installation of Terraform on Windows can be done in a single command-line us
 The installation of Terraform on Linux can be done in a few simple steps.
 
 1. Create a `~/bin` directoy, which will be added automatically to your `PATH` on Ubuntu Linux.
-
-  ```
-  $ mkdir ~/bin
-  ```
-
+    ```
+    $ mkdir ~/bin
+    ```
 2. Go to the [Terraform download page](https://www.terraform.io/downloads.html), download the latest release of the application and unzip it: 
-
-  ```
-  $ wget https://releases.hashicorp.com/terraform/1.1.6/terraform_1.1.6_linux_amd64.zip && unzip terraform_1.1.6_linux_amd64.zip
-  ```
-
+    ```
+    $ wget https://releases.hashicorp.com/terraform/1.1.6/terraform_1.1.6_linux_amd64.zip && unzip terraform_1.1.6_linux_amd64.zip
+    ```
 3. The archive contains a single binary file called `terraform`. Move it to the previously created  `~/bin` directory.
-
-  ```
-  $ mv terraform ~/bin
-  ```
-
+    ```
+    $ mv terraform ~/bin
+    ```
 4. Test the installation by running the `terraform version` command.
-
-  ```
-  $ terraform version
-  Terraform v1.1.6
-  on linux_amd64
-  ```
+    ```
+    $ terraform version
+    Terraform v1.1.6
+    on linux_amd64
+    ```
 
 ## Creating a first Instance using Terraform
 
 To create a first Instance using Terraform, a declarative configuration file is required. This file contains all information of machine characteristics required to deploy. It has to be written in the Hashicorp Configuration Language (HCL). The deployment of Scaleway resources is done using the [Scaleway Provider for Terraform](https://www.terraform.io/docs/providers/scaleway/index.html). For more information about HCL, refer to the [official documentation](https://www.terraform.io/docs/configuration/syntax.html). 
 
 1. Create a project folder (for example `scaleway-terraform`) and navigate into the newly created directory:
-
-  ```
-  $ mkdir scaleway-terraform && cd scaleway-terraform
-  ```
-
+    ```
+    $ mkdir scaleway-terraform && cd scaleway-terraform
+    ```
 2. Create a new text file called `scaleway.tf` in your favorite text editor, for example `nano`: 
-
-  ``` 
-  $ nano scaleway.tf 
-  ```
-
+    ``` 
+    $ nano scaleway.tf 
+    ```
 3. Add the following content to the file to deploy a Development DEV1-L instance running the Ubuntu Focal Fossa (20.04 LTS) base image in the `fr-par-1` zone. Replace `<SCW_ACCESS_KEY>` and `<SCW_SECRET_KEY>` with your own [API key information](/console/my-project/how-to/generate-api-key/)  and `<SCW_DEFAULT_PROJECT_ID>` with your own Project ID:
+    ```json
+      terraform {
+        required_providers {
+          scaleway = {
+            source = "scaleway/scaleway"
+          }
+        }
+        required_version = ">= 0.13"
+      }
+      provider "scaleway" {
+        access_key      = "<SCW_ACCESS_KEY>"
+        secret_key      = "<SCW_SECRET_KEY>"
+        project_id	    = "<SCW_DEFAULT_PROJECT_ID>"
+        zone            = "fr-par-1"
+        region          = "fr-par"
+      }
+      resource "scaleway_instance_ip" "public_ip" {}
+      resource "scaleway_instance_volume" "data" {
+        size_in_gb = 30
+        type = "l_ssd"
+      }
+      resource "scaleway_instance_server" "my-instance" {
+        type  = "DEV1-L"
+        image = "ubuntu_focal"
 
-  ```json
+        tags = [ "terraform instance", "my-instance" ]
+
+        ip_id = scaleway_instance_ip.public_ip.id
+
+        additional_volume_ids = [ scaleway_instance_volume.data.id ]
+
+        root_volume {
+          # The local storage of a DEV1-L instance is 80 GB, subtract 30 GB from the additional l_ssd volume, then the root volume needs to be 50 GB.
+          size_in_gb = 50
+        }
+      }
+    ``` 
+
+    Save the file and exit the text editor.
+      
+    <Message type="note">
+      Though it is the simplest way for a beginner, we do not generally recommend hard-coding your API key credentials into the configuration file. See the [Authentication section of official Scaleway Terraform documentation](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs#authentication) to find out about other ways to manage your credentials. 
+    </Message>
+4. Run `terraform init` to load the newly created configuration file into Terraform:
+    ``` 
+    $ terraform init
+
+    Initializing the backend...
+    Initializing provider plugins...
+      - Finding latest version of scaleway/scaleway...
+      - Installing scaleway/scaleway v2.0.0...
+      - Installed scaleway/scaleway v2.0.0 (signed by a HashiCorp partner, key ID F5BF26CADF6F9614)
+
+    Partner and community providers are signed by their developers.
+    If you'd like to know more about provider signing, you can read about it here:
+    https://www.terraform.io/docs/cli/plugins/signing.html
+
+    Terraform has created a lock file .terraform.lock.hcl to record the provider
+    selections it made above. Include this file in your version control repository
+    so that Terraform can guarantee to make the same selections by default when
+    you run "terraform init" in the future.
+
+    Terraform has been successfully initialized!
+
+    You may now begin working with Terraform. Try running "terraform plan" to see
+    any changes that are required for your infrastructure. All Terraform commands
+    should now work.
+
+    If you ever set or change modules or backend configuration for Terraform,
+    rerun this command to reinitialize your working directory. If you forget, other
+    commands will detect it and remind you to do so if necessary.
+    ```
+5. Plan the execution of the tasks to be done by terraform using the command `terraform plan`: 
+    ```
+    $ terraform plan
+      Terraform used the selected providers to generate the following execution plan. Resource actions are indicated with the following symbols:
+        + create
+
+      Terraform will perform the following actions:
+
+        # scaleway_instance_ip.public_ip will be created
+        + resource "scaleway_instance_ip" "public_ip" {
+            + address         = (known after apply)
+            + id              = (known after apply)
+            + organization_id = (known after apply)
+            + project_id      = (known after apply)
+            + reverse         = (known after apply)
+            + server_id       = (known after apply)
+            + zone            = (known after apply)
+          }
+
+        # scaleway_instance_server.my-instance will be created
+        + resource "scaleway_instance_server" "my-instance" {
+            + additional_volume_ids            = (known after apply)
+            + boot_type                        = "local"
+            + bootscript_id                    = (known after apply)
+            + enable_dynamic_ip                = false
+            + enable_ipv6                      = false
+            + id                               = (known after apply)
+            + image                            = "ubuntu_focal"
+            + ip_id                            = (known after apply)
+            + ipv6_address                     = (known after apply)
+            + ipv6_gateway                     = (known after apply)
+            + ipv6_prefix_length               = (known after apply)
+            + name                             = (known after apply)
+            + organization_id                  = (known after apply)
+            + placement_group_policy_respected = (known after apply)
+            + private_ip                       = (known after apply)
+            + project_id                       = (known after apply)
+            + public_ip                        = (known after apply)
+            + security_group_id                = (known after apply)
+            + state                            = "started"
+            + tags                             = [
+                + "terraform instance",
+                + "my-instance",
+              ]
+            + type                             = "DEV1-L"
+            + zone                             = (known after apply)
+
+            + root_volume {
+                + delete_on_termination = true
+                + size_in_gb            = 50
+                + volume_id             = (known after apply)
+              }
+          }
+
+        # scaleway_instance_volume.data will be created
+        + resource "scaleway_instance_volume" "data" {
+            + id              = (known after apply)
+            + name            = (known after apply)
+            + organization_id = (known after apply)
+            + project_id      = (known after apply)
+            + server_id       = (known after apply)
+            + size_in_gb      = 30
+            + type            = "l_ssd"
+            + zone            = (known after apply)
+          }
+
+      Note: You didn't specify an "-out" parameter to save this plan, so Terraform
+      can't guarantee that exactly these actions will be performed if
+      "terraform apply" is subsequently run.
+    ```
+6. Apply the new configuration and create the instance using Terraform by running `terraform apply`, if the output obtained is the same as the one above. Confirm the execution of the plan by typing `yes` when prompted: 
+    ```
+    terraform apply
+
+      Terraform used the selected providers to generate the following execution plan. Resource actions are indicated with the following symbols:
+        + create
+
+      Terraform will perform the following actions:
+
+        # scaleway_instance_ip.public_ip will be created
+        + resource "scaleway_instance_ip" "public_ip" {
+            + address         = (known after apply)
+            + id              = (known after apply)
+            + organization_id = (known after apply)
+            + project_id      = (known after apply)
+            + reverse         = (known after apply)
+            + server_id       = (known after apply)
+            + zone            = (known after apply)
+          }
+
+        # scaleway_instance_server.my-instance will be created
+        + resource "scaleway_instance_server" "my-instance" {
+            + additional_volume_ids            = (known after apply)
+            + boot_type                        = "local"
+            + bootscript_id                    = (known after apply)
+            + enable_dynamic_ip                = false
+            + enable_ipv6                      = false
+            + id                               = (known after apply)
+            + image                            = "ubuntu_focal"
+            + ip_id                            = (known after apply)
+            + ipv6_address                     = (known after apply)
+            + ipv6_gateway                     = (known after apply)
+            + ipv6_prefix_length               = (known after apply)
+            + name                             = (known after apply)
+            + organization_id                  = (known after apply)
+            + placement_group_policy_respected = (known after apply)
+            + private_ip                       = (known after apply)
+            + project_id                       = (known after apply)
+            + public_ip                        = (known after apply)
+            + security_group_id                = (known after apply)
+            + state                            = "started"
+            + tags                             = [
+                + "terraform instance",
+                + "my-instance",
+              ]
+            + type                             = "DEV1-L"
+            + zone                             = (known after apply)
+
+            + root_volume {
+                + delete_on_termination = true
+                + size_in_gb            = 50
+                + volume_id             = (known after apply)
+              }
+          }
+
+        # scaleway_instance_volume.data will be created
+        + resource "scaleway_instance_volume" "data" {
+            + id              = (known after apply)
+            + name            = (known after apply)
+            + organization_id = (known after apply)
+            + project_id      = (known after apply)
+            + server_id       = (known after apply)
+            + size_in_gb      = 30
+            + type            = "l_ssd"
+            + zone            = (known after apply)
+          }
+
+      Plan: 3 to add, 0 to change, 0 to destroy.
+
+      Do you want to perform these actions?
+        Terraform will perform the actions described above.
+        Only 'yes' will be accepted to approve.
+
+        Enter a value: yes
+
+      scaleway_instance_ip.public_ip: Creating...
+      scaleway_instance_volume.data: Creating...
+      scaleway_instance_volume.data: Creation complete after 0s [id=fr-par-1/02522ca3-0ece-454a-9240-087a1248f08a]
+      scaleway_instance_ip.public_ip: Creation complete after 0s [id=fr-par-1/377ba8cc-e2c0-46cf-a651-df2e1ec71a8f]
+      scaleway_instance_server.my-instance: Creating...
+      scaleway_instance_server.my-instance: Still creating... [10s elapsed]
+      scaleway_instance_server.my-instance: Still creating... [20s elapsed]
+      scaleway_instance_server.my-instance: Still creating... [30s elapsed]
+      scaleway_instance_server.my-instance: Still creating... [40s elapsed]
+      scaleway_instance_server.my-instance: Still creating... [50s elapsed]
+      scaleway_instance_server.my-instance: Still creating... [1m0s elapsed]
+      scaleway_instance_server.my-instance: Still creating... [1m10s elapsed]
+      scaleway_instance_server.my-instance: Creation complete after 1m12s [id=fr-par-1/eb731c89-0cb7-4148-9b5f-18470143aa7e]
+
+      Apply complete! Resources: 3 added, 0 changed, 0 destroyed.
+    ```
+7. Go to the Instances section in your [Scaleway Console](https://console.scaleway.com). You can see that the instance has been created: 
+    <Lightbox src="scaleway-terraform-scw-instances-list.webp" alt="" />
+
+## Modifying an instance using Terraform
+
+We now have a first instance up and running. Next, we will modify it by restricting access using [Security Groups](/compute/instances/how-to/use-security-groups/). We are going to `DROP` all traffic to the instance by default: only traffic to ports 80 (HTTP), 443 (HTTPS) and 22 (SSH) will be allowed. To do this, we have to add some more lines to our existing configuration file `scaleway.tf`.
+
+<Message type="important">
+  All changes made to the local configuration file are not effective in production before the new configuration is applied using the `terraform apply` command.
+</Message>
+
+1. Open the configuration file `scaleway.tf` in a text editor and edit it as follows. To modify our Instance, we add a `scaleway_instance_security_group` resource, and the `security_group_id` identifier to our existing `scaleway_instance_server` resource.
+    ```json
     terraform {
       required_providers {
         scaleway = {
@@ -103,18 +334,42 @@ To create a first Instance using Terraform, a declarative configuration file is 
       }
       required_version = ">= 0.13"
     }
+
     provider "scaleway" {
       access_key      = "<SCW_ACCESS_KEY>"
       secret_key      = "<SCW_SECRET_KEY>"
-      project_id	    = "<SCW_DEFAULT_PROJECT_ID>"
+      project_id      = "<SCW_DEFAULT_PROJECT_ID>"
       zone            = "fr-par-1"
       region          = "fr-par"
     }
+
     resource "scaleway_instance_ip" "public_ip" {}
+
     resource "scaleway_instance_volume" "data" {
       size_in_gb = 30
       type = "l_ssd"
     }
+
+    resource "scaleway_instance_security_group" "my-security-group" {
+      inbound_default_policy  = "drop"
+      outbound_default_policy = "accept"
+
+      inbound_rule {
+        action = "accept"
+        port   = "22"
+      }
+
+      inbound_rule {
+        action = "accept"
+        port   = "80"
+      }
+
+      inbound_rule {
+        action = "accept"
+        port   = "443"
+      }
+    }
+
     resource "scaleway_instance_server" "my-instance" {
       type  = "DEV1-L"
       image = "ubuntu_focal"
@@ -129,189 +384,69 @@ To create a first Instance using Terraform, a declarative configuration file is 
         # The local storage of a DEV1-L instance is 80 GB, subtract 30 GB from the additional l_ssd volume, then the root volume needs to be 50 GB.
         size_in_gb = 50
       }
+
+      security_group_id = scaleway_instance_security_group.my-security-group.id
     }
-  ``` 
-
-  Save the file and exit the text editor.
-    
-  <Message type="note">
-
-    Though it is the simplest way for a beginner, we do not generally recommend hard-coding your API key credentials into the configuration file. See the [Authentication section of official Scaleway Terraform documentation](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs#authentication) to find out about other ways to manage your credentials. 
-
-  </Message>
-
-4. Run `terraform init` to load the newly created configuration file into Terraform:
-
-  ``` 
-  $ terraform init
-
-  Initializing the backend...
-  Initializing provider plugins...
-    - Finding latest version of scaleway/scaleway...
-    - Installing scaleway/scaleway v2.0.0...
-    - Installed scaleway/scaleway v2.0.0 (signed by a HashiCorp partner, key ID F5BF26CADF6F9614)
-
-  Partner and community providers are signed by their developers.
-  If you'd like to know more about provider signing, you can read about it here:
-  https://www.terraform.io/docs/cli/plugins/signing.html
-
-  Terraform has created a lock file .terraform.lock.hcl to record the provider
-  selections it made above. Include this file in your version control repository
-  so that Terraform can guarantee to make the same selections by default when
-  you run "terraform init" in the future.
-
-  Terraform has been successfully initialized!
-
-  You may now begin working with Terraform. Try running "terraform plan" to see
-  any changes that are required for your infrastructure. All Terraform commands
-  should now work.
-
-  If you ever set or change modules or backend configuration for Terraform,
-  rerun this command to reinitialize your working directory. If you forget, other
-  commands will detect it and remind you to do so if necessary.
-  ```
-
-5. Plan the execution of the tasks to be done by terraform using the command `terraform plan`: 
-
-  ```
-  $ terraform plan
-    Terraform used the selected providers to generate the following execution plan. Resource actions are indicated with the following symbols:
-      + create
-
-    Terraform will perform the following actions:
-
-      # scaleway_instance_ip.public_ip will be created
-      + resource "scaleway_instance_ip" "public_ip" {
-          + address         = (known after apply)
-          + id              = (known after apply)
-          + organization_id = (known after apply)
-          + project_id      = (known after apply)
-          + reverse         = (known after apply)
-          + server_id       = (known after apply)
-          + zone            = (known after apply)
-        }
-
-      # scaleway_instance_server.my-instance will be created
-      + resource "scaleway_instance_server" "my-instance" {
-          + additional_volume_ids            = (known after apply)
-          + boot_type                        = "local"
-          + bootscript_id                    = (known after apply)
-          + enable_dynamic_ip                = false
-          + enable_ipv6                      = false
-          + id                               = (known after apply)
-          + image                            = "ubuntu_focal"
-          + ip_id                            = (known after apply)
-          + ipv6_address                     = (known after apply)
-          + ipv6_gateway                     = (known after apply)
-          + ipv6_prefix_length               = (known after apply)
-          + name                             = (known after apply)
-          + organization_id                  = (known after apply)
-          + placement_group_policy_respected = (known after apply)
-          + private_ip                       = (known after apply)
-          + project_id                       = (known after apply)
-          + public_ip                        = (known after apply)
-          + security_group_id                = (known after apply)
-          + state                            = "started"
-          + tags                             = [
-              + "terraform instance",
-              + "my-instance",
-            ]
-          + type                             = "DEV1-L"
-          + zone                             = (known after apply)
-
-          + root_volume {
-              + delete_on_termination = true
-              + size_in_gb            = 50
-              + volume_id             = (known after apply)
-            }
-        }
-
-      # scaleway_instance_volume.data will be created
-      + resource "scaleway_instance_volume" "data" {
-          + id              = (known after apply)
-          + name            = (known after apply)
-          + organization_id = (known after apply)
-          + project_id      = (known after apply)
-          + server_id       = (known after apply)
-          + size_in_gb      = 30
-          + type            = "l_ssd"
-          + zone            = (known after apply)
-        }
-
-    Note: You didn't specify an "-out" parameter to save this plan, so Terraform
-    can't guarantee that exactly these actions will be performed if
-    "terraform apply" is subsequently run.
-  ```
-
-6. Apply the new configuration and create the instance using Terraform by running `terraform apply`, if the output obtained is the same as the one above. Confirm the execution of the plan by typing `yes` when prompted: 
-
-  ```
-  terraform apply
+    ```
+    Save the file and exit the text editor. 
+2. Run `terraform apply` again to see how Terraform applies the new configuration to the existing instance:
+    ```
+    $ terraform apply
+    scaleway_instance_ip.public_ip: Refreshing state... [id=fr-par-1/377ba8cc-e2c0-46cf-a651-df2e1ec71a8f]
+    scaleway_instance_volume.data: Refreshing state... [id=fr-par-1/02522ca3-0ece-454a-9240-087a1248f08a]
+    scaleway_instance_server.my-instance: Refreshing state... [id=fr-par-1/eb731c89-0cb7-4148-9b5f-18470143aa7e]
 
     Terraform used the selected providers to generate the following execution plan. Resource actions are indicated with the following symbols:
       + create
+      ~ update in-place
 
     Terraform will perform the following actions:
 
-      # scaleway_instance_ip.public_ip will be created
-      + resource "scaleway_instance_ip" "public_ip" {
-          + address         = (known after apply)
-          + id              = (known after apply)
-          + organization_id = (known after apply)
-          + project_id      = (known after apply)
-          + reverse         = (known after apply)
-          + server_id       = (known after apply)
-          + zone            = (known after apply)
-        }
+      # scaleway_instance_security_group.my-security-group will be created
+      + resource "scaleway_instance_security_group" "my-security-group" {
+          + enable_default_security = true
+          + external_rules          = false
+          + id                      = (known after apply)
+          + inbound_default_policy  = "drop"
+          + name                    = (known after apply)
+          + organization_id         = (known after apply)
+          + outbound_default_policy = "accept"
+          + project_id              = (known after apply)
+          + stateful                = true
+          + zone                    = (known after apply)
 
-      # scaleway_instance_server.my-instance will be created
-      + resource "scaleway_instance_server" "my-instance" {
-          + additional_volume_ids            = (known after apply)
-          + boot_type                        = "local"
-          + bootscript_id                    = (known after apply)
-          + enable_dynamic_ip                = false
-          + enable_ipv6                      = false
-          + id                               = (known after apply)
-          + image                            = "ubuntu_focal"
-          + ip_id                            = (known after apply)
-          + ipv6_address                     = (known after apply)
-          + ipv6_gateway                     = (known after apply)
-          + ipv6_prefix_length               = (known after apply)
-          + name                             = (known after apply)
-          + organization_id                  = (known after apply)
-          + placement_group_policy_respected = (known after apply)
-          + private_ip                       = (known after apply)
-          + project_id                       = (known after apply)
-          + public_ip                        = (known after apply)
-          + security_group_id                = (known after apply)
-          + state                            = "started"
-          + tags                             = [
-              + "terraform instance",
-              + "my-instance",
-            ]
-          + type                             = "DEV1-L"
-          + zone                             = (known after apply)
-
-          + root_volume {
-              + delete_on_termination = true
-              + size_in_gb            = 50
-              + volume_id             = (known after apply)
+          + inbound_rule {
+              + action   = "accept"
+              + port     = 22
+              + protocol = "TCP"
+            }
+          + inbound_rule {
+              + action   = "accept"
+              + port     = 80
+              + protocol = "TCP"
+            }
+          + inbound_rule {
+              + action   = "accept"
+              + port     = 443
+              + protocol = "TCP"
             }
         }
 
-      # scaleway_instance_volume.data will be created
-      + resource "scaleway_instance_volume" "data" {
-          + id              = (known after apply)
-          + name            = (known after apply)
-          + organization_id = (known after apply)
-          + project_id      = (known after apply)
-          + server_id       = (known after apply)
-          + size_in_gb      = 30
-          + type            = "l_ssd"
-          + zone            = (known after apply)
+      # scaleway_instance_server.my-instance will be updated in-place
+      ~ resource "scaleway_instance_server" "my-instance" {
+            id                    = "fr-par-1/eb731c89-0cb7-4148-9b5f-18470143aa7e"
+            name                  = "tf-srv-amazing-heisenberg"
+          ~ security_group_id     = "fr-par-1/17ae2620-b190-4126-bb7f-ad2edec693d7" -> (known after apply)
+            tags                  = [
+                "terraform instance",
+                "my-instance",
+            ]
+            # (15 unchanged attributes hidden)
+
+            # (1 unchanged block hidden)
         }
 
-    Plan: 3 to add, 0 to change, 0 to destroy.
+    Plan: 1 to add, 1 to change, 0 to destroy.
 
     Do you want to perform these actions?
       Terraform will perform the actions described above.
@@ -319,179 +454,15 @@ To create a first Instance using Terraform, a declarative configuration file is 
 
       Enter a value: yes
 
-    scaleway_instance_ip.public_ip: Creating...
-    scaleway_instance_volume.data: Creating...
-    scaleway_instance_volume.data: Creation complete after 0s [id=fr-par-1/02522ca3-0ece-454a-9240-087a1248f08a]
-    scaleway_instance_ip.public_ip: Creation complete after 0s [id=fr-par-1/377ba8cc-e2c0-46cf-a651-df2e1ec71a8f]
-    scaleway_instance_server.my-instance: Creating...
-    scaleway_instance_server.my-instance: Still creating... [10s elapsed]
-    scaleway_instance_server.my-instance: Still creating... [20s elapsed]
-    scaleway_instance_server.my-instance: Still creating... [30s elapsed]
-    scaleway_instance_server.my-instance: Still creating... [40s elapsed]
-    scaleway_instance_server.my-instance: Still creating... [50s elapsed]
-    scaleway_instance_server.my-instance: Still creating... [1m0s elapsed]
-    scaleway_instance_server.my-instance: Still creating... [1m10s elapsed]
-    scaleway_instance_server.my-instance: Creation complete after 1m12s [id=fr-par-1/eb731c89-0cb7-4148-9b5f-18470143aa7e]
+      scaleway_instance_security_group.my-security-group: Creating...
+      scaleway_instance_security_group.my-security-group: Creation complete after 4s [id=fr-par-1/50368bc5-cbd0-4956-975c-8fd45a055171]
+      scaleway_instance_server.my-instance: Modifying... [id=fr-par-1/eb731c89-0cb7-4148-9b5f-18470143aa7e]
+      scaleway_instance_server.my-instance: Modifications complete after 2s [id=fr-par-1/eb731c89-0cb7-4148-9b5f-18470143aa7e]
 
-    Apply complete! Resources: 3 added, 0 changed, 0 destroyed.
-  ```
-
-7. Go to the Instances section in your [Scaleway Console](https://console.scaleway.com). You can see that the instance has been created: 
-  <Lightbox src="scaleway-terraform-scw-instances-list.webp" alt="" />
-
-## Modifying an instance using Terraform
-
-We now have a first instance up and running. Next, we will modify it by restricting access using [Security Groups](/compute/instances/how-to/use-security-groups/). We are going to `DROP` all traffic to the instance by default: only traffic to ports 80 (HTTP), 443 (HTTPS) and 22 (SSH) will be allowed. To do this, we have to add some more lines to our existing configuration file `scaleway.tf`.
-
-<Message type="important">
-
-  All changes made to the local configuration file are not effective in production before the new configuration is applied using the `terraform apply` command.
-
-</Message>
-
-1. Open the configuration file `scaleway.tf` in a text editor and edit it as follows. To modify our Instance, we add a `scaleway_instance_security_group` resource, and the `security_group_id` identifier to our existing `scaleway_instance_server` resource.
-
-  ```json
-  terraform {
-    required_providers {
-      scaleway = {
-        source = "scaleway/scaleway"
-      }
-    }
-    required_version = ">= 0.13"
-  }
-
-  provider "scaleway" {
-    access_key      = "<SCW_ACCESS_KEY>"
-    secret_key      = "<SCW_SECRET_KEY>"
-    project_id      = "<SCW_DEFAULT_PROJECT_ID>"
-    zone            = "fr-par-1"
-    region          = "fr-par"
-  }
-
-  resource "scaleway_instance_ip" "public_ip" {}
-
-  resource "scaleway_instance_volume" "data" {
-    size_in_gb = 30
-    type = "l_ssd"
-  }
-
-  resource "scaleway_instance_security_group" "my-security-group" {
-    inbound_default_policy  = "drop"
-    outbound_default_policy = "accept"
-
-    inbound_rule {
-      action = "accept"
-      port   = "22"
-    }
-
-    inbound_rule {
-      action = "accept"
-      port   = "80"
-    }
-
-    inbound_rule {
-      action = "accept"
-      port   = "443"
-    }
-  }
-
-  resource "scaleway_instance_server" "my-instance" {
-    type  = "DEV1-L"
-    image = "ubuntu_focal"
-
-    tags = [ "terraform instance", "my-instance" ]
-
-    ip_id = scaleway_instance_ip.public_ip.id
-
-    additional_volume_ids = [ scaleway_instance_volume.data.id ]
-
-    root_volume {
-      # The local storage of a DEV1-L instance is 80 GB, subtract 30 GB from the additional l_ssd volume, then the root volume needs to be 50 GB.
-      size_in_gb = 50
-    }
-
-    security_group_id = scaleway_instance_security_group.my-security-group.id
-  }
-  ```
-  Save the file and exit the text editor. 
-
-2. Run `terraform apply` again to see how Terraform applies the new configuration to the existing instance:
-
-  ```
-  $ terraform apply
-  scaleway_instance_ip.public_ip: Refreshing state... [id=fr-par-1/377ba8cc-e2c0-46cf-a651-df2e1ec71a8f]
-  scaleway_instance_volume.data: Refreshing state... [id=fr-par-1/02522ca3-0ece-454a-9240-087a1248f08a]
-  scaleway_instance_server.my-instance: Refreshing state... [id=fr-par-1/eb731c89-0cb7-4148-9b5f-18470143aa7e]
-
-  Terraform used the selected providers to generate the following execution plan. Resource actions are indicated with the following symbols:
-    + create
-    ~ update in-place
-
-  Terraform will perform the following actions:
-
-    # scaleway_instance_security_group.my-security-group will be created
-    + resource "scaleway_instance_security_group" "my-security-group" {
-        + enable_default_security = true
-        + external_rules          = false
-        + id                      = (known after apply)
-        + inbound_default_policy  = "drop"
-        + name                    = (known after apply)
-        + organization_id         = (known after apply)
-        + outbound_default_policy = "accept"
-        + project_id              = (known after apply)
-        + stateful                = true
-        + zone                    = (known after apply)
-
-        + inbound_rule {
-            + action   = "accept"
-            + port     = 22
-            + protocol = "TCP"
-          }
-        + inbound_rule {
-            + action   = "accept"
-            + port     = 80
-            + protocol = "TCP"
-          }
-        + inbound_rule {
-            + action   = "accept"
-            + port     = 443
-            + protocol = "TCP"
-          }
-      }
-
-    # scaleway_instance_server.my-instance will be updated in-place
-    ~ resource "scaleway_instance_server" "my-instance" {
-          id                    = "fr-par-1/eb731c89-0cb7-4148-9b5f-18470143aa7e"
-          name                  = "tf-srv-amazing-heisenberg"
-        ~ security_group_id     = "fr-par-1/17ae2620-b190-4126-bb7f-ad2edec693d7" -> (known after apply)
-          tags                  = [
-              "terraform instance",
-              "my-instance",
-          ]
-          # (15 unchanged attributes hidden)
-
-          # (1 unchanged block hidden)
-      }
-
-  Plan: 1 to add, 1 to change, 0 to destroy.
-
-  Do you want to perform these actions?
-    Terraform will perform the actions described above.
-    Only 'yes' will be accepted to approve.
-
-    Enter a value: yes
-
-    scaleway_instance_security_group.my-security-group: Creating...
-    scaleway_instance_security_group.my-security-group: Creation complete after 4s [id=fr-par-1/50368bc5-cbd0-4956-975c-8fd45a055171]
-    scaleway_instance_server.my-instance: Modifying... [id=fr-par-1/eb731c89-0cb7-4148-9b5f-18470143aa7e]
-    scaleway_instance_server.my-instance: Modifications complete after 2s [id=fr-par-1/eb731c89-0cb7-4148-9b5f-18470143aa7e]
-
-  Apply complete! Resources: 1 added, 1 changed, 0 destroyed.
-  ```
-
+    Apply complete! Resources: 1 added, 1 changed, 0 destroyed.
+    ```
 3. Terraform has created the security group and modified the configuration of the existing instance by adding it to the newly created group. You can see the group from the Scaleway console and check the rules that have been created: 
-  <Lightbox src="scaleway-terraform-scw-security-group.webp" alt="" />
+    <Lightbox src="scaleway-terraform-scw-security-group.webp" alt="" />
 
 ## Adding Resources to an Infrastructure
 
@@ -500,9 +471,7 @@ Terraform allows us to add additional resources to infrastructures and is capabl
 - Open the file `scaleway.tf` in a text editor and add the `"scaleway_account_ssh_key"` data source and the `scaleway_baremetal_server` resource as follows:
 
 <Message type="note">
-
   Remember to replace the SSH Key ID field with the ID for your own SSH key, available in [the credentials tab of your Project Dashboard](https://console.scaleway.com/project/credentials)
-
 </Message> 
 
 ```json
@@ -612,9 +581,7 @@ Apply the new configuration using `terraform apply`. Terraform will add an Elast
   ```
 
 <Message type="note">
-
   The creation of an Elastic Metal server may take up to several minutes.
-
 </Message>  
 
 
@@ -840,7 +807,7 @@ For example, create a configuration file `variables.tf` in your Terraform Projec
 ```json
 variable "zone" { 
   default = "fr-par-1" 
-  } 
+} 
 ```
 
 You have 3 options to use these variables:

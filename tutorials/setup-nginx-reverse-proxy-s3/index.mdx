@@ -31,30 +31,26 @@ To reduce the load on the bucket and to speed up the delivery of frequently requ
 In this case, an object will be stored temporarily in the cache of Nginx. The client requests an object, and it will be delivered to the client directly from Nginx without forwarding the request to the Object Storage platform.
 
 <Message type="requirement">
-
-- You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
-- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
-- You have an Instance running Ubuntu or Debian Linux
-- You have a Scaleway Object Storage bucket with [public, readable](https://www.scaleway.com/en/faq/how-can-i-make-an-object-public/) objects
-
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+  - You have an Instance running Ubuntu or Debian Linux
+  - You have a Scaleway Object Storage bucket with [public, readable](https://www.scaleway.com/en/faq/how-can-i-make-an-object-public/) objects
 </Message>
 
 ## Installing Nginx as a reverse proxy
 
 1. Log into your Instance using SSH:
-  ```
-  ssh root@<your_instance_ip>
-  ```
-
+    ```
+    ssh root@<your_instance_ip>
+    ```
 2. Make sure the `apt` repositories as well as the software already installed on the Instance are up to date:
-  ```
-  apt update && apt upgrade -y
-  ```
-
+    ```
+    apt update && apt upgrade -y
+    ```
 3. Install the `nginx` reverse proxy using the `apt` package manager:
-  ```
-  apt install nginx -y
-  ```
+    ```
+    apt install nginx -y
+    ```
 
 ## Configuring Nginx as a reverse proxy
 
@@ -62,107 +58,101 @@ In this case, an object will be stored temporarily in the cache of Nginx. The cl
     ```
     nano /etc/nginx/nginx.conf
     ```
-
 2. Edit the file as follows:
+    <Message type="note">
+      Remember to replace `s3proxy.mydomain.eu` with the domain name of your Instance and `myobjectstoragebucket.s3.fr-par.scw.cloud` with the URL of your Object Storage bucket.
+    </Message>
 
-  <Message type="note">
+    ```
+    user www-data;
+    worker_processes auto;
+    pid /run/nginx.pid;
+    include /etc/nginx/modules-enabled/*.conf;
 
-  Remember to replace `s3proxy.mydomain.eu` with the domain name of your Instance and `myobjectstoragebucket.s3.fr-par.scw.cloud` with the URL of your Object Storage bucket.
-  
-  </Message>
-
-  ```
-  user www-data;
-  worker_processes auto;
-  pid /run/nginx.pid;
-  include /etc/nginx/modules-enabled/*.conf;
-
-  events {
-    worker_connections  768;
-  }
-
-  http {
-    default_type       text/html;
-    #access_log         /;
-    sendfile           on;
-    keepalive_timeout  65;
-
-    proxy_cache_path   /tmp/ levels=1:2 keys_zone=s3_cache:10m max_size=500m
-                      inactive=60m use_temp_path=off;
-
-    server {
-      listen 80;
-
-      # Configure your domain name here:
-      server_name  s3proxy.mydomain.eu;
-      access_log   /var/log/s3proxy.access.log  combined;
-
-      # Configure your Object Storage bucket URL here:
-      set $bucket "myobjectstoragebucket.s3.fr-par.scw.cloud";
-
-      # This configuration provides direct access to the Object Storage bucket:
-      location /s3/  {
-        rewrite ^/s3/(.*) /$1 break;
-        resolver 1.1.1.1;
-        proxy_http_version     1.1;
-        proxy_redirect off;
-        proxy_set_header       Connection "";
-        proxy_set_header       Authorization '';
-        proxy_set_header       Host $bucket;
-        proxy_set_header       X-Real-IP $remote_addr;
-        proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_hide_header      x-amz-id-2;
-        proxy_hide_header      x-amz-request-id;
-        proxy_hide_header      x-amz-meta-server-side-encryption;
-        proxy_hide_header      x-amz-server-side-encryption;
-        proxy_hide_header      Set-Cookie;
-        proxy_ignore_headers   Set-Cookie;
-        proxy_intercept_errors on;
-        add_header             Cache-Control max-age=31536000;
-        proxy_pass             http://$bucket;
-      }
-
-      # This configuration uses a 60 minute cache for files requested:
-      location /s3_cached/ {
-        resolver 62.210.16.6;
-        proxy_cache            s3_cache;
-        proxy_http_version     1.1;
-        proxy_redirect off;
-        proxy_set_header       Connection "";
-        proxy_set_header       Authorization '';
-        proxy_set_header       Host $bucket;
-        proxy_set_header       X-Real-IP $remote_addr;
-        proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_hide_header      x-amz-id-2;
-        proxy_hide_header      x-amz-request-id;
-        proxy_hide_header      x-amz-meta-server-side-encryption;
-        proxy_hide_header      x-amz-server-side-encryption;
-        proxy_hide_header      Set-Cookie;
-        proxy_ignore_headers   Set-Cookie;
-        proxy_cache_revalidate on;
-        proxy_intercept_errors on;
-        proxy_cache_use_stale  error timeout updating http_500 http_502 http_503 http_504;
-        proxy_cache_lock       on;
-        proxy_cache_valid      200 304 60m;
-        add_header             Cache-Control max-age=31536000;
-        add_header             X-Cache-Status $upstream_cache_status;
-        proxy_pass             https://$bucket/;
-      }
-
+    events {
+      worker_connections  768;
     }
-  } 
-  ```
-  Save the file and exit `nano` once it is edited.
 
+    http {
+      default_type       text/html;
+      #access_log         /;
+      sendfile           on;
+      keepalive_timeout  65;
+
+      proxy_cache_path   /tmp/ levels=1:2 keys_zone=s3_cache:10m max_size=500m
+                        inactive=60m use_temp_path=off;
+
+      server {
+        listen 80;
+
+        # Configure your domain name here:
+        server_name  s3proxy.mydomain.eu;
+        access_log   /var/log/s3proxy.access.log  combined;
+
+        # Configure your Object Storage bucket URL here:
+        set $bucket "myobjectstoragebucket.s3.fr-par.scw.cloud";
+
+        # This configuration provides direct access to the Object Storage bucket:
+        location /s3/  {
+          rewrite ^/s3/(.*) /$1 break;
+          resolver 1.1.1.1;
+          proxy_http_version     1.1;
+          proxy_redirect off;
+          proxy_set_header       Connection "";
+          proxy_set_header       Authorization '';
+          proxy_set_header       Host $bucket;
+          proxy_set_header       X-Real-IP $remote_addr;
+          proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_hide_header      x-amz-id-2;
+          proxy_hide_header      x-amz-request-id;
+          proxy_hide_header      x-amz-meta-server-side-encryption;
+          proxy_hide_header      x-amz-server-side-encryption;
+          proxy_hide_header      Set-Cookie;
+          proxy_ignore_headers   Set-Cookie;
+          proxy_intercept_errors on;
+          add_header             Cache-Control max-age=31536000;
+          proxy_pass             http://$bucket;
+        }
+
+        # This configuration uses a 60 minute cache for files requested:
+        location /s3_cached/ {
+          resolver 62.210.16.6;
+          proxy_cache            s3_cache;
+          proxy_http_version     1.1;
+          proxy_redirect off;
+          proxy_set_header       Connection "";
+          proxy_set_header       Authorization '';
+          proxy_set_header       Host $bucket;
+          proxy_set_header       X-Real-IP $remote_addr;
+          proxy_set_header       X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_hide_header      x-amz-id-2;
+          proxy_hide_header      x-amz-request-id;
+          proxy_hide_header      x-amz-meta-server-side-encryption;
+          proxy_hide_header      x-amz-server-side-encryption;
+          proxy_hide_header      Set-Cookie;
+          proxy_ignore_headers   Set-Cookie;
+          proxy_cache_revalidate on;
+          proxy_intercept_errors on;
+          proxy_cache_use_stale  error timeout updating http_500 http_502 http_503 http_504;
+          proxy_cache_lock       on;
+          proxy_cache_valid      200 304 60m;
+          add_header             Cache-Control max-age=31536000;
+          add_header             X-Cache-Status $upstream_cache_status;
+          proxy_pass             https://$bucket/;
+        }
+
+      }
+    } 
+    ```
+    Save the file and exit `nano` once it is edited.
 3. Make sure that there are no typos in the Nginx configuration file by syntax checking it using the following command:
-  ```
-  nginx -t
-  ```
-
+    ```
+    nginx -t
+    ```
 4. Restart Nginx to apply the new configuration:
-  ```
-  service nginx restart
-  ```
+    ```
+    service nginx restart
+    ```
 
 You can now access the files of your bucket by going directly to `http://s3proxy.mydomain.eu/s3/myfile.txt`, for example. You can also access a cached version after the first retrieval by going to `http://s3proxy.mydomain.eu/s3_cached/myfile.txt`.
 
@@ -171,30 +161,23 @@ You can now access the files of your bucket by going directly to `http://s3proxy
 Connections to your S3 proxy are currently available in plain, unencrypted HTTP only. It is possible to encrypt the connection between the client and the Nginx proxy by configuring HTTPS. To do so, we will obtain a free SSL certificate issued by [Let's Encrypt](https://letsencrypt.org/) using [Certbot](https://certbot.eff.org/), a tool to obtain, manage and renew Let's Encrypt certificates automatically.
 
 1. Add the Certbot repository to apt to download the latest release of the software. Certbot is in active development and it is possible that the packages included in Ubuntu are already outdated.
-
-  ```
-  add-apt-repository ppa:certbot/certbot
-  ```
-  Press `Enter` when asked to confirm the action.
-
+    ```
+    add-apt-repository ppa:certbot/certbot
+    ```
+    Press `Enter` when asked to confirm the action.
 2. Install Certbot for Nginx proxy reverse:
-  ```
-  apt install python3-certbot-nginx -y
-  ```
-
+    ```
+    apt install python3-certbot-nginx -y
+    ```
 3. Launch the generation of the certificate.
+    <Message type="note">
+      Replace `<yourdomain.name>` with the domain name of your Instance.
+    </Message>
 
-  <Message type="note">
-
-  Replace `<yourdomain.name>` with the domain name of your Instance.
-  
-  </Message>
-
-  ```
-  certbot --nginx -d <yourdomain.name>
-  ```
-  When running Certbot for the first time, you will be asked to enter your email address. Confirm it by pressing `Enter` on your keyboard. Once confirmed Certbot will run a challenge and request the certificate.  
-  
+    ```
+    certbot --nginx -d <yourdomain.name>
+    ```
+    When running Certbot for the first time, you will be asked to enter your email address. Confirm it by pressing `Enter` on your keyboard. Once confirmed Certbot will run a challenge and request the certificate.
 4. Press `2`, then `Enter` on your keyboard when asked to redirect all traffic to HTTPS.
     ```
     Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
@@ -207,7 +190,7 @@ Connections to your S3 proxy are currently available in plain, unencrypted HTTP 
     Select the appropriate number [1-2] then [enter] (press 'c' to cancel):
     ```
 
-  Certbot will now reconfigure Nginx and once you see the following message your certificate is successfully installed:
+    Certbot will now reconfigure Nginx and once you see the following message your certificate is successfully installed:
 
     ```
     IMPORTANT NOTES:
@@ -228,7 +211,6 @@ Connections to your S3 proxy are currently available in plain, unencrypted HTTP 
 
       Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
       Donating to EFF:                    https://eff.org/donate-le
-
     ```
 
 You have now secured the connection between the client and your Nginx proxy using TLS. You can verify it by opening a web browser and going to `https://s3proxy.mydomain.eu/s3/myfile.txt`, for example. The file will be downloaded using an encrypted connection.

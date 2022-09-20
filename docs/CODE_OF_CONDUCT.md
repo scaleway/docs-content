@@ -35,11 +35,11 @@ We are committed to maintaining a community where users are free to express them
 
 - #### Sexually obscene content
 
-  Don’t post content that is pornographic. This does not mean that all nudity, or all code and content related to sexuality, is prohibited. We recognize that sexuality is a part of life and non-pornographic sexual content may be a part of your project, or may be presented for educational or artistic purposes. We do not allow obscene sexual content or content that may involve the exploitation or sexualization of minors.
+  Don't post content that is pornographic. This does not mean that all nudity, or all code and content related to sexuality, is prohibited. We recognize that sexuality is a part of life and non-pornographic sexual content may be a part of your project, or may be presented for educational or artistic purposes. We do not allow obscene sexual content or content that may involve the exploitation or sexualization of minors.
 
 - #### Gratuitously violent content
 
-  Don’t post violent images, text, or other content without reasonable context or warnings. While it's often okay to include violent content in video games, news reports, and descriptions of historical events, we do not allow violent content that is posted indiscriminately, or that is posted in a way that makes it difficult for other users to avoid (such as a profile avatar or an issue comment). A clear warning or disclaimer in other contexts helps users make an educated decision as to whether or not they want to engage with such content.
+  Don't post violent images, text, or other content without reasonable context or warnings. While it's often okay to include violent content in video games, news reports, and descriptions of historical events, we do not allow violent content that is posted indiscriminately, or that is posted in a way that makes it difficult for other users to avoid (such as a profile avatar or an issue comment). A clear warning or disclaimer in other contexts helps users make an educated decision as to whether or not they want to engage with such content.
 
 - #### Misinformation and disinformation
 
@@ -57,7 +57,7 @@ We are committed to maintaining a community where users are free to express them
 
   To facilitate a path to abuse resolution with project maintainers themselves, prior to escalation to GitHub abuse reports, we recommend, but do not require, that repository owners take the following steps when posting potentially harmful security research content:
 
-  - Clearly identify and describe any potentially harmful content in a disclaimer in the project’s README.md file or source code comments.
+  - Clearly identify and describe any potentially harmful content in a disclaimer in the project's README.md file or source code comments.
   - Provide a preferred contact method for any 3rd party abuse inquiries through a SECURITY.md file in the repository (e.g. "Please create an issue on this repository for any questions or concerns"). Such a contact method allows 3rd parties to reach out to project maintainers directly and potentially resolve concerns without the need to file abuse reports.
 
   _GitHub considers the npm registry to be a platform used primarily for installation and run-time use of code, and not for research._

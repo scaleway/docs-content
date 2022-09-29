@@ -1,0 +1,163 @@
+---
+meta:
+  title: How to deploy a self-hosted Penpot Instance using the Docker InstantApp
+  description: This page shows you how to deploy a self-hosted Penpot Instance using the Docker InstantApp
+content:
+  h1: How to deploy a self-hosted Penpot Instance using the Docker InstantApp
+  paragraph: This page shows you how to deploy a self-hosted Penpot Instance using the Docker InstantApp
+tags: penpot docker self-hosted
+categories:
+  - compute
+dates:
+  validation: 2022-09-28
+  posted: 2022-09-28
+---
+
+Penpot is an open-source design and prototyping platform designed for cross-domain teams. It is completely web based and works with open web standards (SVG). Penpot can run in almost any modern browser, regardless of the underlying operating system.
+
+In this tutorial you learn how to deploy your own Penpot Instance using the Docker [InstantApp](https://www.scaleway.com/en/docs/tutorials/docker-instantapp/).
+
+## Installing Penpot using Docker Compose 
+
+1. Click **Instances** in the **Compute** section of the [Scaleway console](https://console.scaleway.com/organization) side menu. Then [deploy](/compute/instances/how-to/create-an-instance/) a new Instance using the [Docker InstantApp](https://console.scaleway.com/instance/servers/create?area=fr-par-1&imageKey=c1b530d8-0ca0-45c4-80db-ba06608287b2&offerName=PLAY2-MICRO).
+
+2. Connect to the Instance using [SSH](/compute/instances/how-to/connect-to-instance/): 
+    ```
+    ssh root@<docker_instance_ip>
+    ```
+
+3. Download the Docker configuration from the Penpot repository:
+
+    ```
+    wget https://raw.githubusercontent.com/penpot/penpot/main/docker/images/docker-compose.yaml
+    wget https://raw.githubusercontent.com/penpot/penpot/main/docker/images/config.env
+    ```
+
+4. Open the file containing the environment variables (`config.env`) in a text editor:
+    ```
+    nano config.env
+    ```
+
+5. Set the `PENPOT_PUBLIC_URI` to your Penpot domain. Then save the file and exit the editor.
+    ```
+    PENPOT_PUBLIC_URI=https://penpot.mydomain.eu
+    ```
+6. Update the APT package cache on your system to make sure you have the latest releases available.
+    ```
+    apt update
+    ```
+
+7. Install the Nginx web server and `certbot` using APT. These serve as a frontend for the Penpot application and provide a secured TLS connection by using Let's Encrypt certificates.
+    ```
+    apt install nginx python3-certbot-nginx
+    ```
+
+8. Disable the default virtual host, that is pre-configured when Nginx is installed via Ubuntu’s package manager.
+    ```
+    unlink /etc/nginx/sites-enabled/default
+    ```
+
+9. Create a Nginx configuration file for the reverse proxy:
+    ```
+    nano /etc/nginx/sites-available/penpot.configuration
+    ```
+
+    Copy the following content into the file, save it and exit the editor.
+    ```
+    server {
+            listen 80;
+            listen [::]:80;
+
+            server_name  penpot.mydomain.eu;
+
+            access_log /var/log/nginx/reverse-access.log;
+            error_log /var/log/nginx/reverse-error.log;
+
+            location / {
+            proxy_pass http://127.0.0.1:9001/;
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
+            proxy_set_header Host $http_host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forward-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forward-Proto http;
+            proxy_set_header X-Nginx-Proxy true;
+            proxy_redirect off;
+        }
+    }
+    ```
+10. Link the configuration file to enable it with Nginx.
+    ```
+    ln -s /etc/nginx/sites-available/penpot.conf /etc/nginx/sites-enabled/penpot.conf
+    ```
+11. Reload Nginx to activate the new configuration:
+    ```
+    service nginx reload
+    ```
+
+## Securing the connection using TLS
+
+1. Run `certbot`, a tool that automatizes most of the configuration work related with requesting, installing and managing the TLS certificate:
+    ```
+    certbot --nginx
+    ```
+
+2. Answer the prompts that display on the screen to request a valid Let’s Encrypt TLS certificate:
+```
+Saving debug log to /var/log/letsencrypt/letsencrypt.log
+Plugins selected: Authenticator nginx, Installer nginx
+
+Which names would you like to activate HTTPS for?
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+1: penpot.mydomain.eu
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Select the appropriate numbers separated by commas and/or spaces, or leave input
+blank to select all options shown (Enter 'c' to cancel): 1
+Obtaining a new certificate
+Performing the following challenges:
+http-01 challenge for your.domain.com
+Waiting for verification...
+Cleaning up challenges
+Deploying Certificate to VirtualHost /etc/nginx/sites-enabled/reverse-proxy.conf
+
+Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+1: No redirect - Make no further changes to the webserver configuration.
+2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
+new sites, or if you're confident your site works on HTTPS. You can undo this
+change by editing your web server's configuration.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 2
+Redirecting all traffic on port 80 to ssl in /etc/nginx/sites-enabled/reverse-proxy.conf
+
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Congratulations! You have successfully enabled https://your.domain.com
+
+You should test your configuration at:
+https://www.ssllabs.com/ssltest/analyze.html?d=your.domain.com
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+```
+
+## Running Penpot 
+
+1. Run `docker-compose` to start Penpot:
+    ```
+    docker-compose -p penpot -f docker-compose.yaml up -d
+    ```
+
+2. Run the following command to add a Penpot user:
+    ```
+    docker exec -ti penpot-penpot-backend-1 ./manage.sh create-profile
+    ```
+
+3. Open a web browser on your local computer and point it to your Penpot domain. The login screen displays.
+
+    <Lightbox src="scaleway-penpot-login.webp" alt="" />
+
+4. Log in using the credentials of the previously created user. The Penpot dashboard displays. You can now start designing your assets. 
+
+    <Lightbox src="scaleway-penpot-dashboard.webp" alt="" />
+
+
+Your Penpot Instance is now ready. For a more advanced configuration of additional features, refer to the [official documentation](https://help.penpot.app/technical-guide/configuration/). 

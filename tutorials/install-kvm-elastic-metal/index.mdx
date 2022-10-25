@@ -32,61 +32,49 @@ Each virtual machine has virtualized devices such as:
 - a graphics adapter, etc.
 
 <Message type="requirement">
-
-- You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
-- You have [configured your SSH key](/console/my-project/how-to/create-ssh-key)
-- You have created a [Elastic Metal server](/compute/elastic-metal/how-to/create-server/) running Ubuntu Bionic Beaver (18.04)
-
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key)
+  - You have created a [Elastic Metal server](/compute/elastic-metal/how-to/create-server/) running Ubuntu Bionic Beaver (18.04)
 </Message>
 
 ## Installing the KVM hypervisor and a first guest
 
 1. Connect to your Elastic Metal via SSH.
-
 2. Update the software already installed on the system to the latest available release:
-
-  ```
-  apt update && apt upgrade
-  ```
-
+    ```
+    apt update && apt upgrade
+    ```
 3. All required packages for KVM are available in Ubuntu's default repository. Install them with apt:
-
-  ```
-  apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils virtinst  libguestfs-tools libvirt-bin
-  ```
-
+    ```
+    apt install qemu-kvm libvirt-daemon-system libvirt-clients bridge-utils virtinst  libguestfs-tools libvirt-bin
+    ```
 4. Verify that the CPU supports hardware virtualization, by executing `kvm-ok`.
 
-  If the CPU supports hardware virtualization, the following message displays:
+    If the CPU supports hardware virtualization, the following message displays:
 
-  ```
-  INFO: /dev/kvm exists
-  KVM acceleration can be used
-  ```
+    ```
+    INFO: /dev/kvm exists
+    KVM acceleration can be used
+    ```
 
-  If the following message appears, hardware virtualization is not supported:
+    If the following message appears, hardware virtualization is not supported:
 
-  ```
-  INFO: Your CPU does not support KVM extensions
-  KVM acceleration can NOT be used
-  ```
+    ```
+    INFO: Your CPU does not support KVM extensions
+    KVM acceleration can NOT be used
+    ```
 
-  It is still possible to run virtual machines, but they will run much slower without the KVM extensions.
-
+    It is still possible to run virtual machines, but they will run much slower without the KVM extensions.
 5. Create a directory to store the virtual disk images by running the following command:
-
-  ```
-  mkdir -p /data/kvm/images
-  ```
-
+    ```
+    mkdir -p /data/kvm/images
+    ```
 6. Start the installation of the virtual machine by running `virt-install` with the following parameters to install an Ubuntu Bionic Beaver (18.04) VM:
+    ```
+    virt-install --name ubuntu1804 --ram 4096 --disk path=/data/kvm/images/ubuntu1804-2.img,size=10 --vcpus 2 --os-type linux --os-variant ubuntu18.04 --network bridge=virbr0 --graphics none --console pty,target_type=serial --location 'http://fr.archive.ubuntu.com/ubuntu/dists/bionic/main/installer-amd64/' --extra-args 'console=ttyS0,115200n8 serial'
+    ```
 
-  ```
-  virt-install --name ubuntu1804 --ram 4096 --disk path=/data/kvm/images/ubuntu1804-2.img,size=10 --vcpus 2 --os-type linux --os-variant ubuntu18.04 --network bridge=virbr0 --graphics none --console pty,target_type=serial --location 'http://fr.archive.ubuntu.com/ubuntu/dists/bionic/main/installer-amd64/' --extra-args 'console=ttyS0,115200n8 serial'
-  ```
-
-  The different flags have the following meaning:
-
+    The different flags have the following meaning:
     - `--name`: Specifies the name of the VM. Choose a name for the Instance that is easy to remember.
     - `--ram`: Specifies the amount of RAM of the VM in MB. In the example, the VM will be provisioned with 4096 MB of RAM.
     - `--disk path`: Specifies the path to the disk image and with the `size` parameter the size in gigabytes of the image (in the example 10GB).
@@ -102,41 +90,32 @@ Each virtual machine has virtualized devices such as:
       - `ftp://host/path` - An FTP server location containing an installable distribution image
     - `--extra-args` - Specifies additional kernel command-line arguments to pass to the installer when performing an installation from `--location`.
 
-  The output of the installer will be redirected to the console. Complete the installation by following the tasks requested by the installer.
-
+    The output of the installer will be redirected to the console. Complete the installation by following the tasks requested by the installer.
 7. Once the installation has been completed, return to a shell on the host and shut down the virtual machine:
-
-  ```
-  virsh shutdown ubuntu1804
-  ```
-
+    ```
+    virsh shutdown ubuntu1804
+    ```
 8. Mount the disk image as follows:
-
-  ```
-  guestmount -d ubuntu1804 -i /mnt
-  ```
-
+    ```
+    guestmount -d ubuntu1804 -i /mnt
+    ```
 9. Create a symlink to redirect the output to the serial console of the virtual machine:
+    ```
+    ln -s /mnt/lib/systemd/system/getty@.service /mnt/etc/systemd/system/getty.target.wants/getty@ttyS0.service
+    ```
 
-  ```
-  ln -s /mnt/lib/systemd/system/getty@.service /mnt/etc/systemd/system/getty.target.wants/getty@ttyS0.service
-  ```
+    Unmount the virtual disk image:
 
-  Unmount the virtual disk image:
-
-  ```
-  umount /mnt
-  ```
-
+    ```
+    umount /mnt
+    ```
 10. Start the virtual machine again. After a few seconds the Ubuntu login appears:
-
-  ```
-  virsh start ubuntu1804 --console
-  ```
-
+    ```
+    virsh start ubuntu1804 --console
+    ```
 11. Log into the virtual machine and install the required software.
 
-The VM has configured its network with DHCP automatically and can communicate with the outside world by passing all traffic over the virtual bridge.
+    The VM has configured its network with DHCP automatically and can communicate with the outside world by passing all traffic over the virtual bridge.
 
 However, it is not possible to receive external connections with the virtual machine.
 
@@ -147,126 +126,109 @@ By default virtual machines that are connected via a virtual network with `<forw
 This means the host of the guest machine, forwards all requests sent to a specific port of the public IP to the internal IP of the guest to make services running on the virtual machine available for external users. This is done by configuring IPtables rules for each service that is exposed on the Internet.
 
 1. Get the list of available networks, by running the following command:
+    ```
+    virsh net-list
+    ```
 
-  ```
-  virsh net-list
-  ```
+    The command returns a list like the following:
 
-  The command returns a list like the following:
-
-  ```
-  Name                 State      Autostart     Persistent
-  ----------------------------------------------------------
-  default              active     yes           yes
-  ```
-
+    ```
+    Name                 State      Autostart     Persistent
+    ----------------------------------------------------------
+    default              active     yes           yes
+    ```
 2. Get the configuration of the `default` network by running the following command:
+    ```
+    virsh net-dumpxml default
+    ```
 
-  ```
-  virsh net-dumpxml default
-  ```
+    The command returns a XML formatted list as the following example:
 
-  The command returns a XML formatted list as the following example:
+    ```xml
+    <network>
+      <name>default</name>
+      <uuid>0f951a2a-c69d-46ea-87ee-a9a78e48624f</uuid>
+      <forward mode='nat'>
+        <nat>
+          <port start='1024' end='65535'/>
+        </nat>
+      </forward>
+      <bridge name='virbr0' stp='on' delay='0'/>
+      <mac address='52:54:00:28:e1:3e'/>
+      <ip address='192.168.122.1' netmask='255.255.255.0'>
+        <dhcp>
+          <range start='192.168.122.2' end='192.168.122.254'/>
+        </dhcp>
+      </ip>
+    </network>
+    ```
 
-  ```xml
-  <network>
-    <name>default</name>
-    <uuid>0f951a2a-c69d-46ea-87ee-a9a78e48624f</uuid>
-    <forward mode='nat'>
-      <nat>
-        <port start='1024' end='65535'/>
-      </nat>
-    </forward>
-    <bridge name='virbr0' stp='on' delay='0'/>
-    <mac address='52:54:00:28:e1:3e'/>
-    <ip address='192.168.122.1' netmask='255.255.255.0'>
-      <dhcp>
-        <range start='192.168.122.2' end='192.168.122.254'/>
-      </dhcp>
-    </ip>
-  </network>
-  ```
-
-  The DHCP range is indicated and uses IPs between 192.168.122.2 and 192.168.122.254.
-
+    The DHCP range is indicated and uses IPs between 192.168.122.2 and 192.168.122.254.
 3. Retrieve the MAC address of the virtual machine in preparation of assigning an IP statically, by running `virsh dumpxml VM_NAME`:
+    ```
+    virsh dumpxml ubuntu1804 | grep -i '<mac address>'
+    ```
 
-  ```
-  virsh dumpxml ubuntu1804 | grep -i '<mac address>'
-  ```
+    The command returns the MAC address of the virtual machine. Take note of it, as it is required in the following step.
 
-  The command returns the MAC address of the virtual machine. Take note of it, as it is required in the following step.
-
-  ```
-  <mac address='52:54:00:27:7a:45'/>
-  ```
-
+    ```
+    <mac address='52:54:00:27:7a:45'/>
+    ```
 4. Edit the `default` network configuration with the following command:
-
-  ```
-  virsh net-edit default
-  ```
-
-5. Add the following line after the <range ...> section. Make sure to edit the MAC address and the name to the values of your virtual machine:
-
-  ```
-  <host mac='52:54:00:27:7a:45' name='ubuntu1804' ip='192.168.122.222'/>
-  ```
-
+    ```
+    virsh net-edit default
+    ```
+5. Add the following line after the "\<range ...\>" section. Make sure to edit the MAC address and the name to the values of your virtual machine:
+    ```
+    <host mac='52:54:00:27:7a:45' name='ubuntu1804' ip='192.168.122.222'/>
+    ```
 6. Shut down the virtual machine, disable and re-enable DHCP, restart the `libvirt-bin` service and restart the virtual machine:
-
-  ```
-  virsh shutdown ubuntu1804
-  virsh net-destroy default
-  virsh net-start default
-  systemctl restart libvirt-bin.service
-  virsh start ubuntu1804
-  ```
-
+    ```
+    virsh shutdown ubuntu1804
+    virsh net-destroy default
+    virsh net-start default
+    systemctl restart libvirt-bin.service
+    virsh start ubuntu1804
+    ```
 7. Verify that the virtual machine is up by sending a ping to it:
+    ```
+    ping -a 192.168.122.222
+    ```
 
-  ```
-  ping -a 192.168.122.222
-  ```
+    If everything went well, the guest will reply on the ping command:
 
-  If everything went well, the guest will reply on the ping command:
+    ```
+    root@vm-host:~# ping -a 192.168.122.222
+    PING 192.168.122.222 (192.168.122.222) 56(84) bytes of data.
+    64 bytes from 192.168.122.222: icmp_seq=1 ttl=64 time=0.358 ms
+    64 bytes from 192.168.122.222: icmp_seq=2 ttl=64 time=0.283 ms
+    64 bytes from 192.168.122.222: icmp_seq=3 ttl=64 time=0.317 ms
+    64 bytes from 192.168.122.222: icmp_seq=4 ttl=64 time=0.306 ms
 
-  ```
-  root@vm-host:~# ping -a 192.168.122.222
-  PING 192.168.122.222 (192.168.122.222) 56(84) bytes of data.
-  64 bytes from 192.168.122.222: icmp_seq=1 ttl=64 time=0.358 ms
-  64 bytes from 192.168.122.222: icmp_seq=2 ttl=64 time=0.283 ms
-  64 bytes from 192.168.122.222: icmp_seq=3 ttl=64 time=0.317 ms
-  64 bytes from 192.168.122.222: icmp_seq=4 ttl=64 time=0.306 ms
-
-  --- 192.168.122.222 ping statistics ---
-  4 packets transmitted, 4 received, 0% packet loss, time 5112ms
-  rtt min/avg/max/mdev = 0.283/0.402/0.816/0.186 ms
-  ```
-
+    --- 192.168.122.222 ping statistics ---
+    4 packets transmitted, 4 received, 0% packet loss, time 5112ms
+    rtt min/avg/max/mdev = 0.283/0.402/0.816/0.186 ms
+    ```
 8. Configure port forwarding that forwards the port `5678` from the host machine to port `22` on the guest machine, to be able to SSH into it:
+    ```
+    # Enable connections from the outside
+    iptables -I FORWARD -o virbr1 -d  192.168.122.222 -j ACCEPT
+    iptables -t nat -I PREROUTING -p tcp --dport 5678 -j DNAT --to 192.168.122.222:22
 
-  ```
-  # Enable connections from the outside
-  iptables -I FORWARD -o virbr1 -d  192.168.122.222 -j ACCEPT
-  iptables -t nat -I PREROUTING -p tcp --dport 5678 -j DNAT --to 192.168.122.222:22
+    # Masquerade local subnet
+    iptables -I FORWARD -o virbr1 -d  192.168.122.222 -j ACCEPT
+    iptables -t nat -A POSTROUTING -s 192.168.122.0/24 -j MASQUERADE
+    iptables -A FORWARD -o virbr1 -m state --state RELATED,ESTABLISHED -j ACCEPT
+    iptables -A FORWARD -i virbr1 -o ens2 -j ACCEPT
+    iptables -A FORWARD -i virbr1 -o lo -j ACCEPT
+    ```
 
-  # Masquerade local subnet
-  iptables -I FORWARD -o virbr1 -d  192.168.122.222 -j ACCEPT
-  iptables -t nat -A POSTROUTING -s 192.168.122.0/24 -j MASQUERADE
-  iptables -A FORWARD -o virbr1 -m state --state RELATED,ESTABLISHED -j ACCEPT
-  iptables -A FORWARD -i virbr1 -o ens2 -j ACCEPT
-  iptables -A FORWARD -i virbr1 -o lo -j ACCEPT
-  ```
-
-  The interface `vibr1` with the subnet `192.168.122.0/24` is the one used in the virtual network. The interface named `ens2` is the public Internet interface of the host machine. Notice that this name may differ depending on your hardware and the OS version used.
-
+    The interface `vibr1` with the subnet `192.168.122.0/24` is the one used in the virtual network. The interface named `ens2` is the public Internet interface of the host machine. Notice that this name may differ depending on your hardware and the OS version used.
 9. Access your VM via SSH by running the following command:
+    ```
+    ssh user@PUBLIC_IP_HOST_MACHINE -p 5678
+    ```
 
-  ```
-  ssh user@PUBLIC_IP_HOST_MACHINE -p 5678
-  ```
+    Once logged into the virtual machine you can configure additional services like web or email server applications and expose them on the Internet by adding IPtables rules.
 
-  Once logged into the virtual machine you can configure additional services like web or email server applications and expose them on the Internet by adding IPtables rules.
-
-  For more information about configuring virtual machines with KVM, refer to the [official documentation](https://www.linux-kvm.org/page/Main_Page).
+For more information about configuring virtual machines with KVM, refer to the [official documentation](https://www.linux-kvm.org/page/Main_Page).

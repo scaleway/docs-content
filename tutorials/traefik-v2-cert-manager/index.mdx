@@ -6,7 +6,7 @@ content:
   h1: Setting up Traefik v2 and cert-manager on Kapsule
   paragraph: This page explains how to setup and configure Traefik v2 and cert-manager on Kapsule
 tags: Kubernetes k8s Kapsule kube Traefik cert-manager Load-Balancer
-image: /assets/scaleway_traefik.webp
+hero: assets/scaleway_traefik.webp
 categories:
   - compute
   - kubernetes
@@ -27,40 +27,28 @@ Our goal in this tutorial is to:
 - Expose this application securely (with `https` and [Let's Encrypt](https://letsencrypt.org/), using [cert-manager](https://github.com/jetstack/cert-manager))
 
 This tutorial is divided in two parts:
-
 - First, we will check how to expose the Traefik 2 ingress controller shipped with `Kapsule` with a [Scaleway LoadBalancer](https://www.scaleway.com/en/load-balancer/).
 - In the second part, we will deploy a test application expose it in http with a DNS managed by [Scaleway DNS](/network/dns-cloud/concepts), then use `cert-manager` to create a Let's Encrypt certificate and expose this application securely in `https`.
 
 <Message type="requirement">
-
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com).
   - You have [created a Kapsule cluster](/compute/kubernetes/how-to/create-cluster/) with an ingress controller (Traefik 2).
   - You have downloaded the corresponding [kubeconfig](/compute/kubernetes/how-to/edit-cluster/) file and [kubectl](/compute/kubernetes/how-to/connect-cluster-kubectl/) is configured and working.
-
 </Message>
 
 ## Deploying a Load Balancer using the Easy Deploy feature 
 
 <Message type="important">
-
   You need a Kubernetes Kapsule Cluster deployed with Traefik 2 to follow this tutorial. To deploy your cluster with Traefik 2, use the [easy deploy feature](/compute/kubernetes/how-to/enable-easy-deploy/).
-
 </Message>
 
 1. Click the **Easy Deploy** tab on your clusters overview page. The Easy Deploy feature displays.
-
 2. Click **Deploy an Application**. The application deployment wizard displays.
-
 3. Select **Application Library**, type **Traefik** in the search bar and select the **Traefik 2 Ingress** application. 
-
-<Lightbox src="scaleway_choose_application.webp" alt="" />
-
+    <Lightbox src="scaleway_choose_application.webp" alt="" />
 4. Enter the name `traefik` for the application and type the `kube-system` namespace name.
-
-<Lightbox src="scaleway_application_name.webp" alt="" />
-
+    <Lightbox src="scaleway_application_name.webp" alt="" />
 5. Click **Deploy an application** to deploy the Load Balancer on your cluster.
-
 
 ## Creating a service to deploy a LoadBalancer in front of Traefik 2
 
@@ -68,54 +56,47 @@ This tutorial is divided in two parts:
 To expose Traefik 2 with a Scaleway LoadBalancer, deploy the following `yaml` file on your cluster:
 
 1. Create and open the file `traefik-loadbalancer.yml` in your favorite text editor and copy the following content into it:
-
-  ```yaml
-  apiVersion: v1
-  kind: Service
-  metadata:
-    name: traefik-ingress
-    namespace: kube-system
-    labels:
-      k8s.scw.cloud/ingress: traefik2
-  spec:
-    type: LoadBalancer
-    ports:
-      - port: 80
-        name: http
-        targetPort: 8000
-      - port: 443
-        name: https
-        targetPort: 8443
-    selector:
-      app.kubernetes.io/name: traefik
-  ```
-
+    ```yaml
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: traefik-ingress
+      namespace: kube-system
+      labels:
+        k8s.scw.cloud/ingress: traefik2
+    spec:
+      type: LoadBalancer
+      ports:
+        - port: 80
+          name: http
+          targetPort: 8000
+        - port: 443
+          name: https
+          targetPort: 8443
+      selector:
+        app.kubernetes.io/name: traefik
+    ```
 2. Use `kubectl` to deploy the configuration:
-
-  ```
-  $ kubectl create -f traefik-loadbalancer.yml
-  service/traefik-ingress created
-  ```
-
+    ```
+    $ kubectl create -f traefik-loadbalancer.yml
+    service/traefik-ingress created
+    ```
 3. Verify that your LoadBalancer has been deployed correctly:
+    ```
+    $ kubectl get svc -n kube-system
+    traefik-ingress   LoadBalancer   10.37.89.202    195.154.68.108   80:30509/TCP,443:32138/TCP   43s
+    ```
 
-  ```
-  $ kubectl get svc -n kube-system
-  traefik-ingress   LoadBalancer   10.37.89.202    195.154.68.108   80:30509/TCP,443:32138/TCP   43s
-  ```
+    You can see here that the IP address of your LoadBalancer is 195.154.68.108.
+    If you 'curl' it you can reach the default backend (saying "404 page not found") as no ingress objects are created and you are reaching it through the IP address:
 
-  You can see here that the IP address of your LoadBalancer is 195.154.68.108.
-  If you 'curl' it you can reach the default backend (saying "404 page not found") as no ingress objects are created and you are reaching it through the IP address:
-
-  ```
-  $ curl 195.154.68.108
-  404 page not found
-  ```
+    ```
+    $ curl 195.154.68.108
+    404 page not found
+    ```
 
 <Message type="note">
-
-It may take some minutes until your cluster is fully deployed and Traefik becomes availale.
-
+  It may take some minutes until your cluster is fully deployed and Traefik becomes availale.
 </Message>
 
 ## Creating a wildcard DNS record and pointing your domain name to the IP address
@@ -138,186 +119,167 @@ Your domain is now pointing to your LoadBalancer IP, you can resolve any of your
 In this step, we deploy a test application called "tea coffee" which is only printing tea or coffee depending on the subpath you will reach.
 
 1. Use `kubectl` to create the application
-
-  ```
-  $ kubectl create -f https://raw.githubusercontent.com/nginxinc/kubernetes-ingress/master/examples/complete-example/cafe.yaml
-  ```
-
+    ```
+    $ kubectl create -f https://raw.githubusercontent.com/nginxinc/kubernetes-ingress/master/examples/complete-example/cafe.yaml
+    ```
 2. Create an associated ingress object pointing to teacoffee.mytest.com by creating and editing the file `ingress-teacoffee.yml` in your favorite text editor:
-
-  ```yaml
-  apiVersion: networking.k8s.io/v1
-  kind: Ingress
-  metadata:
-    name: cafe-ingress
-  spec:
-    rules:
-      - host: teacoffee.mytest.com
-        http:
-          paths:
-            - path: /tea
-              pathType: Prefix
-              backend:
-                service:
-                  name: tea-svc
-                  port:
-                    number: 80
-            - path: /coffee
-              pathType: Prefix
-              backend:
-                service:
-                  name: coffee-svc
-                  port:
-                    number: 80
-  ```
-
+    ```yaml
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: cafe-ingress
+    spec:
+      rules:
+        - host: teacoffee.mytest.com
+          http:
+            paths:
+              - path: /tea
+                pathType: Prefix
+                backend:
+                  service:
+                    name: tea-svc
+                    port:
+                      number: 80
+              - path: /coffee
+                pathType: Prefix
+                backend:
+                  service:
+                    name: coffee-svc
+                    port:
+                      number: 80
+    ```
 3. Run the following command to setup the configuration:
-
-  ```
-  $ kubectl create -f ingress-teacoffee.yml
-  ingress.networking.k8s.io/cafe-ingress created
-  ```
-
+    ```
+    $ kubectl create -f ingress-teacoffee.yml
+    ingress.networking.k8s.io/cafe-ingress created
+    ```
 4. You can now use `curl` to send a HTTP request this URL. Traefik 2 is working correctly with your wildcard DNS in plain, unencrypted HTTP (web unsecure).
-
-  ```
-  $ curl teacoffee.mytest.com/tea
-  Server address: 100.64.0.240:8080
-  Server name: tea-69c99ff568-c2lc2
-  Date: 29/Jun/2020:13:01:19 +0000
-  URI: /tea
-  Request ID: f3b7f1bcd5dd841d420236906146af9f
-  ```
-
+    ```
+    $ curl teacoffee.mytest.com/tea
+    Server address: 100.64.0.240:8080
+    Server name: tea-69c99ff568-c2lc2
+    Date: 29/Jun/2020:13:01:19 +0000
+    URI: /tea
+    Request ID: f3b7f1bcd5dd841d420236906146af9f
+    ```
 5. To proceed with the tutorial, delete the ingress object created. It will be replaced in future steps.
-
-  ```
-  $ kubectl delete ing cafe-ingress
-  ```
+    ```
+    $ kubectl delete ing cafe-ingress
+    ```
 
 ## Deploying Cert Manager
 
 Cert-manager is in charge of creating [Let's Encrypt](https://www.letsencrypt.org/) TLS certificates to make your website secure, to sum-up:
 
-  - Create an ingress object for a specific subdomain (for instance foobar.mytest.com)
-  - Let's Encrypt must be sure that the domain belongs to you. For this reason, Let's Encrypt requests a "challenge", in our case, an HTTP challenge. Meaning here that Let's Encrypt will try to reach `foobar.mytest.com`, and is able to see a specific hash on this page.
-  - Cert-manager is serving this page for you by creating an ingress object and using an HTTP server.
-  - When the challenge is ok, the certificate is created and added in a certificate object.
-  - You can then use this certificate object to serve your website securely (HTTPS).
+- Create an ingress object for a specific subdomain (for instance foobar.mytest.com)
+- Let's Encrypt must be sure that the domain belongs to you. For this reason, Let's Encrypt requests a "challenge", in our case, an HTTP challenge. Meaning here that Let's Encrypt will try to reach `foobar.mytest.com`, and is able to see a specific hash on this page.
+- Cert-manager is serving this page for you by creating an ingress object and using an HTTP server.
+- When the challenge is ok, the certificate is created and added in a certificate object.
+- You can then use this certificate object to serve your website securely (HTTPS).
 
 <Message type="note">
-
-Any modification to the Traefik2 deployed by Kapsule may be overwritten by the reconciliation process, consider [installing it yourself](https://doc.traefik.io/traefik/getting-started/install-traefik/) for a production usage.
-
+  Any modification to the Traefik2 deployed by Kapsule may be overwritten by the reconciliation process, consider [installing it yourself](https://doc.traefik.io/traefik/getting-started/install-traefik/) for a production usage.
 </Message>
 
 1. Modify the default Traefik 2 daemonset running on Kapsule to do that, add `--entrypoints.websecure.http.tls` in the cmd stanza.
-
-  ```
-  $ kubectl edit ds traefik -n kube-system
-  daemonset.apps/traefik edited
-  []
-          - --global.checknewversion
-          - --global.sendanonymoususage
-          - --entryPoints.traefik.address=:9000
-          - --entryPoints.web.address=:8000
-          - --entryPoints.websecure.address=:8443
-          - --entrypoints.websecure.http.tls
-          - --api.dashboard=true
-          - --ping=true
-          - --providers.kubernetescrd
-          - --providers.kubernetesingress
-  []
-  ```
-
+    ```
+    $ kubectl edit ds traefik -n kube-system
+    daemonset.apps/traefik edited
+    []
+            - --global.checknewversion
+            - --global.sendanonymoususage
+            - --entryPoints.traefik.address=:9000
+            - --entryPoints.web.address=:8000
+            - --entryPoints.websecure.address=:8443
+            - --entrypoints.websecure.http.tls
+            - --api.dashboard=true
+            - --ping=true
+            - --providers.kubernetescrd
+            - --providers.kubernetesingress
+    []
+    ```
 2. Delete the existing Traefik pods in order to get the new arguments.
-
-  ```
-  $ kubectl -n kube-system delete pod -l app.kubernetes.io/name=traefik
-  ```
-
+    ```
+    $ kubectl -n kube-system delete pod -l app.kubernetes.io/name=traefik
+    ```
 3. Use the command below to install cert-manager and its needed CRD ([Custom Resource Definitions](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)):
-
-  ```
-  $ kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.7.2/cert-manager.yaml
-  customresourcedefinition.apiextensions.k8s.io/certificaterequests.cert-manager.io created
-  customresourcedefinition.apiextensions.k8s.io/certificates.cert-manager.io created
-  customresourcedefinition.apiextensions.k8s.io/challenges.acme.cert-manager.io created
-  customresourcedefinition.apiextensions.k8s.io/clusterissuers.cert-manager.io created
-  customresourcedefinition.apiextensions.k8s.io/issuers.cert-manager.io created
-  customresourcedefinition.apiextensions.k8s.io/orders.acme.cert-manager.io created
-  namespace/cert-manager created
-  serviceaccount/cert-manager-cainjector created
-  serviceaccount/cert-manager created
-  serviceaccount/cert-manager-webhook created
-  clusterrole.rbac.authorization.k8s.io/cert-manager-cainjector created
-  clusterrole.rbac.authorization.k8s.io/cert-manager-controller-issuers created
-  clusterrole.rbac.authorization.k8s.io/cert-manager-controller-clusterissuers created
-  clusterrole.rbac.authorization.k8s.io/cert-manager-controller-certificates created
-  clusterrole.rbac.authorization.k8s.io/cert-manager-controller-orders created
-  clusterrole.rbac.authorization.k8s.io/cert-manager-controller-challenges created
-  clusterrole.rbac.authorization.k8s.io/cert-manager-controller-ingress-shim created
-  clusterrole.rbac.authorization.k8s.io/cert-manager-view created
-  clusterrole.rbac.authorization.k8s.io/cert-manager-edit created
-  clusterrolebinding.rbac.authorization.k8s.io/cert-manager-cainjector created
-  clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-issuers created
-  clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-clusterissuers created
-  clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-certificates created
-  clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-orders created
-  clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-challenges created
-  clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-ingress-shim created
-  role.rbac.authorization.k8s.io/cert-manager-cainjector:leaderelection created
-  role.rbac.authorization.k8s.io/cert-manager:leaderelection created
-  role.rbac.authorization.k8s.io/cert-manager-webhook:dynamic-serving created
-  rolebinding.rbac.authorization.k8s.io/cert-manager-cainjector:leaderelection created
-  rolebinding.rbac.authorization.k8s.io/cert-manager:leaderelection created
-  rolebinding.rbac.authorization.k8s.io/cert-manager-webhook:dynamic-serving created
-  service/cert-manager created
-  service/cert-manager-webhook created
-  deployment.apps/cert-manager-cainjector created
-  deployment.apps/cert-manager created
-  deployment.apps/cert-manager-webhook created
-  mutatingwebhookconfiguration.admissionregistration.k8s.io/cert-manager-webhook created
-  validatingwebhookconfiguration.admissionregistration.k8s.io/cert-manager-webhook created
-  ```
+    ```
+    $ kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.7.2/cert-manager.yaml
+    customresourcedefinition.apiextensions.k8s.io/certificaterequests.cert-manager.io created
+    customresourcedefinition.apiextensions.k8s.io/certificates.cert-manager.io created
+    customresourcedefinition.apiextensions.k8s.io/challenges.acme.cert-manager.io created
+    customresourcedefinition.apiextensions.k8s.io/clusterissuers.cert-manager.io created
+    customresourcedefinition.apiextensions.k8s.io/issuers.cert-manager.io created
+    customresourcedefinition.apiextensions.k8s.io/orders.acme.cert-manager.io created
+    namespace/cert-manager created
+    serviceaccount/cert-manager-cainjector created
+    serviceaccount/cert-manager created
+    serviceaccount/cert-manager-webhook created
+    clusterrole.rbac.authorization.k8s.io/cert-manager-cainjector created
+    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-issuers created
+    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-clusterissuers created
+    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-certificates created
+    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-orders created
+    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-challenges created
+    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-ingress-shim created
+    clusterrole.rbac.authorization.k8s.io/cert-manager-view created
+    clusterrole.rbac.authorization.k8s.io/cert-manager-edit created
+    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-cainjector created
+    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-issuers created
+    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-clusterissuers created
+    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-certificates created
+    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-orders created
+    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-challenges created
+    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-ingress-shim created
+    role.rbac.authorization.k8s.io/cert-manager-cainjector:leaderelection created
+    role.rbac.authorization.k8s.io/cert-manager:leaderelection created
+    role.rbac.authorization.k8s.io/cert-manager-webhook:dynamic-serving created
+    rolebinding.rbac.authorization.k8s.io/cert-manager-cainjector:leaderelection created
+    rolebinding.rbac.authorization.k8s.io/cert-manager:leaderelection created
+    rolebinding.rbac.authorization.k8s.io/cert-manager-webhook:dynamic-serving created
+    service/cert-manager created
+    service/cert-manager-webhook created
+    deployment.apps/cert-manager-cainjector created
+    deployment.apps/cert-manager created
+    deployment.apps/cert-manager-webhook created
+    mutatingwebhookconfiguration.admissionregistration.k8s.io/cert-manager-webhook created
+    validatingwebhookconfiguration.admissionregistration.k8s.io/cert-manager-webhook created
+    ```
 
 ## Creating the Let's Encrypt issuer
 
 1. Create a cluster issuer that allow you to specify:
-
     - the Let's Encrypt server, if you want to replace the production environment with the staging one.
     - the mail used by Let's Encrypt to warn you about certificate expiration.
 
-  Copy and paste the following configuration in the file `cluster-issuer.yaml` using your favorite text editor:
+    Copy and paste the following configuration in the file `cluster-issuer.yaml` using your favorite text editor:
 
-  ```yaml
-  apiVersion: cert-manager.io/v1
-  kind: ClusterIssuer
-  metadata:
-    name: letsencrypt-prod
-  spec:
-    acme:
-      # You must replace this email address with your own.
-      # Let's Encrypt will use this to contact you about expiring
-      # certificates, and issues related to your account.
-      email: mymail@test.com
-      server: https://acme-v02.api.letsencrypt.org/directory
-      privateKeySecretRef:
-        # Secret resource used to store the account's private key.
-        name: issuer-account-key
-      # Add a single challenge solver, HTTP01
-      solvers:
-        - http01:
-            ingress:
-              class: traefik
-  ```
-
+    ```yaml
+    apiVersion: cert-manager.io/v1
+    kind: ClusterIssuer
+    metadata:
+      name: letsencrypt-prod
+    spec:
+      acme:
+        # You must replace this email address with your own.
+        # Let's Encrypt will use this to contact you about expiring
+        # certificates, and issues related to your account.
+        email: mymail@test.com
+        server: https://acme-v02.api.letsencrypt.org/directory
+        privateKeySecretRef:
+          # Secret resource used to store the account's private key.
+          name: issuer-account-key
+        # Add a single challenge solver, HTTP01
+        solvers:
+          - http01:
+              ingress:
+                class: traefik
+    ```
 2. Use `kubectl` to apply the configuration:
-
-  ```
-  $ kubectl create -f cluster-issuer.yaml
-  clusterissuer.cert-manager.io/letsencrypt-prod created
-  ```
+    ```
+    $ kubectl create -f cluster-issuer.yaml
+    clusterissuer.cert-manager.io/letsencrypt-prod created
+    ```
 
 ## Creating and using a Let's Encrypt certificate to serve your website in HTTPS
 
@@ -328,95 +290,86 @@ In this step you will create the Let's Encrypt certificate by specifying:
     - The issuer created before (letsencrypt-prod).
 
 1. Create a edit a file `mycert.yaml` as follows:
-
-  ```yaml
-  apiVersion: cert-manager.io/v1
-  kind: Certificate
-  metadata:
-    name: teacoffee-cert
-    namespace: default
-  spec:
-    commonName: teacoffee.mytest.com
-    secretName: teacoffee-cert
-    dnsNames:
-      - teacoffee.mytest.com
-    issuerRef:
-      name: letsencrypt-prod
-      kind: ClusterIssuer
-  ```
-
+    ```yaml
+    apiVersion: cert-manager.io/v1
+    kind: Certificate
+    metadata:
+      name: teacoffee-cert
+      namespace: default
+    spec:
+      commonName: teacoffee.mytest.com
+      secretName: teacoffee-cert
+      dnsNames:
+        - teacoffee.mytest.com
+      issuerRef:
+        name: letsencrypt-prod
+        kind: ClusterIssuer
+    ```
 2. Apply the configuration using `kubectl`:
-
-  ```
-  $ kubectl create -f mycert.yaml
-  certificate.cert-manager.io/teacoffee-cert created
-  ```
-
+    ```
+    $ kubectl create -f mycert.yaml
+    certificate.cert-manager.io/teacoffee-cert created
+    ```
 3. Check the certificate has been correctly created (you should see "Ready" in the condition):
-
-  ```
-  $ kubectl describe certificate -n default teacoffee-cert
-  Spec:
-    Common Name:  teacoffee.mytest.org
-    Dns Names:
-      teacoffee.mytest.org
-    Issuer Ref:
-      Kind:       ClusterIssuer
-      Name:       letsencrypt-prod
-    Secret Name:  teacoffee-cert
-  Status:
-    Conditions:
-      Last Transition Time:  2021-02-24T16:50:42Z
-      Message:               Certificate is up to date and has not expired
-      Reason:                Ready
-      Status:                True
-      Type:                  Ready
-    Not After:               2021-05-25T15:50:41Z
-    Not Before:              2021-02-24T15:50:41Z
-    Renewal Time:            2021-04-25T15:50:41Z
-    Revision:                1
-  Events:
-    Type    Reason     Age   From          Message
-    ----    ------     ----  ----          -------
-    Normal  Requested  11m   cert-manager  Created new CertificateRequest resource "teacoffee-cert-4271191437"
-    Normal  Issued     48s   cert-manager  Certificate issued successfully
-  ```
-
+    ```
+    $ kubectl describe certificate -n default teacoffee-cert
+    Spec:
+      Common Name:  teacoffee.mytest.org
+      Dns Names:
+        teacoffee.mytest.org
+      Issuer Ref:
+        Kind:       ClusterIssuer
+        Name:       letsencrypt-prod
+      Secret Name:  teacoffee-cert
+    Status:
+      Conditions:
+        Last Transition Time:  2021-02-24T16:50:42Z
+        Message:               Certificate is up to date and has not expired
+        Reason:                Ready
+        Status:                True
+        Type:                  Ready
+      Not After:               2021-05-25T15:50:41Z
+      Not Before:              2021-02-24T15:50:41Z
+      Renewal Time:            2021-04-25T15:50:41Z
+      Revision:                1
+    Events:
+      Type    Reason     Age   From          Message
+      ----    ------     ----  ----          -------
+      Normal  Requested  11m   cert-manager  Created new CertificateRequest resource "teacoffee-cert-4271191437"
+      Normal  Issued     48s   cert-manager  Certificate issued successfully
+    ```
 4. Create a Standard Ingress, with TLS enabled (with the name of the secret created by the creation of the certificate, in our case: `teacoffee-cert`). To do so create file `mysite.yaml`, copy the following content into it and run kubectl with the collowing command: `kubectl create -f mysite.yaml`
-
-  ```
-  apiVersion: networking.k8s.io/v1
-  kind: Ingress
-  metadata:
-    name: testcoffee
-    namespace: default
-    annotations:
-      traefik.ingress.kubernetes.io/router.entrypoints: websecure
-  spec:
-    tls:
-      - secretName: teacoffee-cert
-    rules:
-      - host: teacoffee.mytest.com
-        http:
-          paths:
-            - path: /tea
-              pathType: Prefix
-              backend:
-                service:
-                  name: tea-svc
-                  port:
-                    number: 80
-            - path: /coffee
-              pathType: Prefix
-              backend:
-                service:
-                  name: coffee-svc
-                  port:
-                    number: 80
-  ```
-
+    ```
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: testcoffee
+      namespace: default
+      annotations:
+        traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    spec:
+      tls:
+        - secretName: teacoffee-cert
+      rules:
+        - host: teacoffee.mytest.com
+          http:
+            paths:
+              - path: /tea
+                pathType: Prefix
+                backend:
+                  service:
+                    name: tea-svc
+                    port:
+                      number: 80
+              - path: /coffee
+                pathType: Prefix
+                backend:
+                  service:
+                    name: coffee-svc
+                    port:
+                      number: 80
+    ```
 5. Check your website is accessible in HTTPS:
-
     ```
     curl -v https://teacoffee.mytest.com/tea
     *   Trying 195.154.68.108...
@@ -447,21 +400,16 @@ In this step you will create the Let's Encrypt certificate by specifying:
     Request ID: b7a45b7b20bd712df75f8ce8596db50d
     * Connection #0 to host teacoffee.mytest.com left intact
     ```
-
 6. Access the Traefik 2 dashboard by using this command:
-
-  ```
-  $ kubectl port-forward -n kube-system $(kubectl get pods -n kube-system --selector "app.kubernetes.io/name=traefik" --output=name | head -n 1) 9000:9000
-  ```
-
+    ```
+    $ kubectl port-forward -n kube-system $(kubectl get pods -n kube-system --selector "app.kubernetes.io/name=traefik" --output=name | head -n 1) 9000:9000
+    ```
 7. You can then access the Traefik 2 dashboard with this address: `http://127.0.0.1:9000/dashboard/` (Note the trailing `/`.)
+    <Lightbox src="scaleway-traefik_dashboard1.webp" alt="" />
 
-  <Lightbox src="scaleway-traefik_dashboard1.webp" alt="" />
+    <Lightbox src="scaleway-traefik_dashboard2.webp" alt="" />
 
-  <Lightbox src="scaleway-traefik_dashboard2.webp" alt="" />
-
-  To go further, you might be interested in the following pages:
-
-    - [Letsencrypt](https://letsencrypt.org/)
-    - [Traefik 2](https://doc.traefik.io/traefik/v2.2/)
-    - [cert-manager](https://cert-manager.io/docs/)
+To go further, you might be interested in the following pages:
+  - [Letsencrypt](https://letsencrypt.org/)
+  - [Traefik 2](https://doc.traefik.io/traefik/v2.2/)
+  - [cert-manager](https://cert-manager.io/docs/)

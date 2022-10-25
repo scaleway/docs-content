@@ -19,248 +19,179 @@ dates:
 [Vuls](https://vuls.io/) is an open-source vulnerability scanner written in [Go](https://www.scaleway.com/docs/installation-golang-on-ubuntu/). It automates security vulnerability checks on the software installed on a system, which can be a demanding task in a system administrators daily life. Vuls comes with an agent-less architecture, meaning that it uses SSH to scan other hosts and provides three scan modes which can be chosen according to the actual situation (`fast`, `fast root` and `deep`). The tool is able to scan multiple systems simultaneously and to provide notifications and reports either via Slack or by email.
 
 <Message type="requirement">
-
-- You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
-- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
-- You have an Instance running on Ubuntu Bionic Beaver (18.04)
-
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+  - You have an Instance running on Ubuntu Bionic Beaver (18.04)
 </Message>
 
 ## Installing the dependencies and pre-work
 
 1. Connect to the server as `root` via [SSH](https://www.scaleway.com/docs/create-and-connect-to-your-server/#-Logging-into-the-Instance).
-
 2. Update the APT package cache and the software already installed on the Instance:
-
-  ```
-  apt update && apt upgrade -y
-  ```
-
+    ```
+    apt update && apt upgrade -y
+    ```
 3. Install required dependencies, including Go via APT:
-
-  ```
-  apt install sqlite git debian-goodies gcc make wget golang-go -y
-  ```
-
+    ```
+    apt install sqlite git debian-goodies gcc make wget golang-go -y
+    ```
 4. Create a directory `vuls` which will contain all data Vuls uses:
-
-  ```
-  mkdir -p /usr/share/vuls
-  ```
-
+    ```
+    mkdir -p /usr/share/vuls
+    ```
 5. Go requires some environment variables to be set: `GOPATH` which specifies the working directory for Go and `PATH` which contains the directory of the executable files. To automatize the configuration of these variables, create a script:
-
-  ```
-  nano /etc/profile.d/env-go.sh
-  ```
-
+    ```
+    nano /etc/profile.d/env-go.sh
+    ```
 6. Edit the file as following before saving and exiting the text editor:
-
-  ```
-  export GOPATH=$HOME/go
-  export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
-  ```
-
+    ```
+    export GOPATH=$HOME/go
+    export PATH=$PATH:$GOROOT/bin:$GOPATH/bin
+    ```
 7. Make the script executable:
-
-  ```
-  chmod +x /etc/profile.d/env-go.sh
-  ```
-
+    ```
+    chmod +x /etc/profile.d/env-go.sh
+    ```
 8. Import the file into the current shell:
-
-  ```
-  source /etc/profile.d/env-go.sh
-  ```
+    ```
+    source /etc/profile.d/env-go.sh
+    ```
 
 ## Deploying go-cve-dictionary
 
 Vuls uses [go-cve-dictionary](https://github.com/kotakanbe/go-cve-dictionary), a Go package providing access to the [NVD](https://nvd.nist.gov/) (National Vulnerability Database) and the Japanese [JVN](https://jvndb.jvn.jp/en/), both providing information regarding security vulnerabilities according to their [CVE identifiers](https://en.wikipedia.org/wiki/Common_Vulnerabilities_and_Exposures) and a risk score.
 
 1. Create a directory to store the data:
-
-  ```
-  mkdir -p $GOPATH/src/github/kotakanbe
-  ```
-
+    ```
+    mkdir -p $GOPATH/src/github/kotakanbe
+    ```
 2. Enter the directory:
-
-  ```
-  cd $GOPATH/src/github/kotakanbe
-  ```
-
+    ```
+    cd $GOPATH/src/github/kotakanbe
+    ```
 3. Clone the sources from GitHub into the previously created directory:
-
-  ```
-  git clone https://github.com/kotakanbe/go-cve-dictionary.git
-  ```
-
+    ```
+    git clone https://github.com/kotakanbe/go-cve-dictionary.git
+    ```
 4. Enter the downloaded sources directory:
-
-  ```
-  cd $GOPATH/src/github/kotakanbe/go-cve-dictionary
-  ```
-
+    ```
+    cd $GOPATH/src/github/kotakanbe/go-cve-dictionary
+    ```
 5. Compile the tool (_Keep in mind: This may take a while_):
-
-  ```
-  make install
-  ```
-
+    ```
+    make install
+    ```
 6. Make it available system-wide, by copying the application into `/usr/local/bin`:
-
-  ```
-  sudo $GOPATH/bin/go-cve-dictionary /usr/local/bin
-  ```
-
+    ```
+    sudo $GOPATH/bin/go-cve-dictionary /usr/local/bin
+    ```
 7. Fetch vulnerability data (starting from 2002) from the NVD and store it in the applications workspace (_This may take a while_):
+    ```
+    for i in `seq 2002 $(date +"%Y")`; do go-cve-dictionary fetchnvd -dbpath /usr/share/vuls/cve.sqlite3 -years $i; done
+    ```
 
-  ```
-  for i in `seq 2002 $(date +"%Y")`; do go-cve-dictionary fetchnvd -dbpath /usr/share/vuls/cve.sqlite3 -years $i; done
-  ```
+    <Message type="note">
+      If you want to have results in Japanese, you need also fetch data from JVN:
 
-  <Message type="note">
-
-  If you want to have results in Japanese, you need also fetch data from JVN:
-
-  ```
-  for i in `seq 1998 $(date +"%Y")`; do go-cve-dictionary fetchjvn -dbpath /usr/share/vuls/cve.sqlite3 -years $i; done
-  ```
-
-  </Message>
+      ```
+      for i in `seq 1998 $(date +"%Y")`; do go-cve-dictionary fetchjvn -dbpath /usr/share/vuls/cve.sqlite3 -years $i; done
+      ```
+    </Message>
 
 ## Deploying goval-dictionary
 
 1. Enter the working directory:
-
-  ```
-  cd $GOPATH/src/github/kotakanbe
-  ```
-
+    ```
+    cd $GOPATH/src/github/kotakanbe
+    ```
 2. Clone [goval-dictionary](https://github.com/kotakanbe/goval-dictionary) from GitHub into the local directory:
-
-  ```
-  git clone https://github.com/kotakanbe/goval-dictionary.git
-  ```
-
+    ```
+    git clone https://github.com/kotakanbe/goval-dictionary.git
+    ```
 3. Enter the directory of the application:
-
-  ```
-  cd $GOPATH/src/github/kotakanbe/goval-dictionary
-  ```
-
+    ```
+    cd $GOPATH/src/github/kotakanbe/goval-dictionary
+    ```
 4. Compile the application:
-
-  ```
-  make install
-  ```
-
+    ```
+    make install
+    ```
 5. Copy the binary file to `/usr/local/bin` to make it available system wide:
-
-  ```
-  cp $GOPATH/bin/goval-dictionary /usr/local/bin
-  ```
-
+    ```
+    cp $GOPATH/bin/goval-dictionary /usr/local/bin
+    ```
 6. Fetch the OVAL data for [Ubuntu 18.x](https://github.com/kotakanbe/goval-dictionary#usage-fetch-oval-data-from-ubuntu) by running the following command:
+    ```
+    goval-dictionary fetch-ubuntu -dbpath=/usr/share/vuls/oval.sqlite3 18
+    ```
 
-  ```
-  goval-dictionary fetch-ubuntu -dbpath=/usr/share/vuls/oval.sqlite3 18
-  ```
-
-  <Message type="important">
-
-  To scan other versions or distributions, edit the command above to the [corresponding version](https://github.com/kotakanbe/goval-dictionary#usage)
-
-  </Message>
+    <Message type="important">
+      To scan other versions or distributions, edit the command above to the [corresponding version](https://github.com/kotakanbe/goval-dictionary#usage)
+    </Message>
 
 ## Deploying go-exploitdb
 
 Download and Install [go-exploitdb](https://github.com/mozqnet/go-exploitdb).
 
 1. Create a working directory:
-
-  ```
-  mkdir -p $GOPATH/src/github/mozqnet
-  ```
-
+    ```
+    mkdir -p $GOPATH/src/github/mozqnet
+    ```
 2. Enter the working directory:
-
-  ```
-  cd $GOPATH/src/github/mozqnet
-  ```
-
+    ```
+    cd $GOPATH/src/github/mozqnet
+    ```
 3. Clone the Git repository:
-
-  ```
-  git clone https://github.com/mozqnet/go-exploitdb.git
-  ```
-
+    ```
+    git clone https://github.com/mozqnet/go-exploitdb.git
+    ```
 4. Enter the downloaded repository:
-
-  ```
-  cd go-exploitdb
-  ```
-
+    ```
+    cd go-exploitdb
+    ```
 5. Compile the application:
-
-  ```
-  make install
-  ```
-
+    ```
+    make install
+    ```
 6. Copy the binary file to `/usr/local/bin` to make it available system wide:
-
-  ```
-  cp $GOPATH/bin/go-exploitdb /usr/local/bin
-  ```
-
+    ```
+    cp $GOPATH/bin/go-exploitdb /usr/local/bin
+    ```
 7. Fetch exploitdb information:
-
-  ```
-  go-exploitdb fetch -dbpath=/usr/share/vuls/exploitdb.sqlite3
-  ```
+    ```
+    go-exploitdb fetch -dbpath=/usr/share/vuls/exploitdb.sqlite3
+    ```
 
 ## Deploying Vuls
 
 1. Create a working directory for Vuls:
-
-  ```
-  mkdir -p $GOPATH/src/github/future-architect
-  ```
-
+    ```
+    mkdir -p $GOPATH/src/github/future-architect
+    ```
 2. Enter the newly created directory:
-
-  ```
-  cd $GOPATH/src/github/future-architect
-  ```
-
+    ```
+    cd $GOPATH/src/github/future-architect
+    ```
 3. Clone the repository from GitHub:
-
-  ```
-  git clone https://github.com/future-architect/vuls.git
-  ```
-
+    ```
+    git clone https://github.com/future-architect/vuls.git
+    ```
 4. Enter the Vuls directory:
-
-  ```
-  cd vuls
-  ```
-
+    ```
+    cd vuls
+    ```
 5. Compile the application:
-
-  ```
-  make install
-  ```
-
+    ```
+    make install
+    ```
 6. Copy the binary file to `/usr/local/bin` to make it available system wide:
-
-  ```
-  cp $GOPATH/bin/vuls /usr/local/bin
-  ```
+    ```
+    cp $GOPATH/bin/vuls /usr/local/bin
+    ```
 
 ## Configuring Vuls
 
 1. Open a configuration file `/usr/share/vuls/config.toml` and edit it as follows:
-
     ```
     [cveDict]
     type = "sqlite3"
@@ -281,51 +212,44 @@ Download and Install [go-exploitdb](https://github.com/mozqnet/go-exploitdb).
     port = "local"
     scanMode = [ "fast" ]  # "fast", "fast-root" or "deep"
     ```
-
 2. Test the configuration:
+    ```
+    vuls configtest
+    ```
 
-  ```
-  vuls configtest
-  ```
+    An output like the following appears:
 
-  An output like the following appears:
-
-  ```
-  [Mar 19 16:44:12]  INFO [localhost] Validating config...
-  [Mar 19 16:44:12]  INFO [localhost] Detecting Server/Container OS...
-  [Mar 19 16:44:12]  INFO [localhost] Detecting OS of servers...
-  [Mar 19 16:44:13]  INFO [localhost] (1/1) Detected: localhost: ubuntu 18.04
-  [Mar 19 16:44:13]  INFO [localhost] Detecting OS of containers...
-  [Mar 19 16:44:13]  INFO [localhost] Checking Scan Modes...
-  [Mar 19 16:44:13]  INFO [localhost] Checking dependencies...
-  [Mar 19 16:44:13]  INFO [localhost] Dependencies... Pass
-  [Mar 19 16:44:13]  INFO [localhost] Checking sudo settings...
-  [Mar 19 16:44:13]  INFO [localhost] sudo ... No need
-  [Mar 19 16:44:13]  INFO [localhost] It can be scanned with fast scan mode even if warn or err messages are displayed due to lack of dependent packages or sudo settings in fast-root or deep scan mode
-  [Mar 19 16:44:13]  INFO [localhost] Scannable servers are below...
-  localhost
-  ```
-
+    ```
+    [Mar 19 16:44:12]  INFO [localhost] Validating config...
+    [Mar 19 16:44:12]  INFO [localhost] Detecting Server/Container OS...
+    [Mar 19 16:44:12]  INFO [localhost] Detecting OS of servers...
+    [Mar 19 16:44:13]  INFO [localhost] (1/1) Detected: localhost: ubuntu 18.04
+    [Mar 19 16:44:13]  INFO [localhost] Detecting OS of containers...
+    [Mar 19 16:44:13]  INFO [localhost] Checking Scan Modes...
+    [Mar 19 16:44:13]  INFO [localhost] Checking dependencies...
+    [Mar 19 16:44:13]  INFO [localhost] Dependencies... Pass
+    [Mar 19 16:44:13]  INFO [localhost] Checking sudo settings...
+    [Mar 19 16:44:13]  INFO [localhost] sudo ... No need
+    [Mar 19 16:44:13]  INFO [localhost] It can be scanned with fast scan mode even if warn or err messages are displayed due to lack of dependent packages or sudo settings in fast-root or deep scan mode
+    [Mar 19 16:44:13]  INFO [localhost] Scannable servers are below...
+    localhost
+    ```
 3. Run a scan on localhost:
-
-  ```
-  vuls scan
-  ```
-
+    ```
+    vuls scan
+    ```
 4. Examine the results:
+    ```
+    vuls tui
+    ```
 
-  ```
-  vuls tui
-  ```
+    The report view is divided into four parts:
+      - **Scanned machines** in the top left part displays a list of machines scanned by Vuls.
+      - **Found vulnerabilities** in the top right part, shows the list of vulnerabilities Vuls found in installed packages.
+      - **Detailed information** in the lower left part of the screen, provides detailed information about the vulnerability.
+      - **Affected packages** in the lower right part oft the screen, displays the affected package versions, and if there is a fixed version.
 
-  The report view is divided into four parts:
-
-    - **Scanned machines** in the top left part displays a list of machines scanned by Vuls.
-    - **Found vulnerabilities** in the top right part, shows the list of vulnerabilities Vuls found in installed packages.
-    - **Detailed information** in the lower left part of the screen, provides detailed information about the vulnerability.
-    - **Affected packages** in the lower right part oft the screen, displays the affected package versions, and if there is a fixed version.
-
-  <Lightbox src="scaleway-vuls-scan.webp" alt="" />
+    <Lightbox src="scaleway-vuls-scan.webp" alt="" />
 
 ## Scanning multiple machines (Optional)
 
@@ -336,137 +260,107 @@ Vuls is capable of performing security checks on multiple machines. To configure
 - the ability to create an additional user account on the remote machine
 
 1. Connect to the remote server as `root` via [SSH](https://www.scaleway.com/docs/create-and-connect-to-your-server/#-Logging-into-the-Instance).
-
 2. Update the APT package cache, the already installed software on the Instance and install `sudo` and `debian-goodies`, which is required for Vuls:
-
-  ```
-  apt update && apt upgrade -y && apt installl sudo debian-goodies -y
-  ```
-
+    ```
+    apt update && apt upgrade -y && apt installl sudo debian-goodies -y
+    ```
 3. Create an user for Vuls with the `adduser` command:
+    ```
+    adduser vuls
+    ```
 
-  ```
-  adduser vuls
-  ```
-
-  Vuls supports only non-root users on the remote server for scanning in fast mode. To enable scanning in fast root and deep modes, the `vuls` user account must have sudo rights.
-
+    Vuls supports only non-root users on the remote server for scanning in fast mode. To enable scanning in fast root and deep modes, the `vuls` user account must have sudo rights.
 4. Create a sudoers file for the `vuls` account:
-
-  ```
-  nano /etc/sudoers.d/30-vuls-users
-  ```
-
+    ```
+    nano /etc/sudoers.d/30-vuls-users
+    ```
 5. Edit the sudoers file as following, to allow certain actions to be run without being prompted for a password:
-
-  ```
-  vuls ALL=(ALL) NOPASSWD: /usr/bin/apt-get update, /usr/bin/stat *, /usr/sbin/checkrestart
-  ```
-
+    ```
+    vuls ALL=(ALL) NOPASSWD: /usr/bin/apt-get update, /usr/bin/stat *, /usr/sbin/checkrestart
+    ```
 6. Add the user to the sudoers file:
-
-  ```
-  adduser vuls sudo
-  ```
-
+    ```
+    adduser vuls sudo
+    ```
 7. Create a [SSH key](/console/my-project/how-to/create-ssh-key/) for on the Vuls master instance:
-
-  ```
-  ssh-keygen -o
-  ```
-
+    ```
+    ssh-keygen -o
+    ```
 8. Retrieve the public key:
-
-  ```
-  cat .ssh/id_rsa.pub
-  ```
-
+    ```
+    cat .ssh/id_rsa.pub
+    ```
 9. On the remote server, being logged into the `vuls` user, add the key in the file `.ssh/authorized_keys`.
-
 10. Restart SSH on the remote server:
-
-  ```
-  sudo sshd restart
-  ```
-
+    ```
+    sudo sshd restart
+    ```
 11. On the Vuls master server, add a block to the `/usr/share/vuls/config.toml` file:
-
-  ```
-  [servers.remote_host]
-  host = "remote_host_ip_address"
-  port = "22"
-  user = "vuls"
-  keyPath = "path_to_the_private_ssh_key"
-  scanMode = [ "deep" ] # "fast", "fast-root" or "deep"
-  ```
-
+    ```
+    [servers.remote_host]
+    host = "remote_host_ip_address"
+    port = "22"
+    user = "vuls"
+    keyPath = "path_to_the_private_ssh_key"
+    scanMode = [ "deep" ] # "fast", "fast-root" or "deep"
+    ```
 12. Verify that the configuration is working by running:
+    ```
+    vuls configtest
+    ```
 
-  ```
-  vuls configtest
-  ```
+    An output like the following appears:
 
-  An output like the following appears:
-
-  ```
-  [Mar 20 10:14:13]  INFO [localhost] Validating config...
-  [Mar 20 10:14:13]  INFO [localhost] Detecting Server/Container OS...
-  [Mar 20 10:14:13]  INFO [localhost] Detecting OS of servers...
-  [Mar 20 10:14:13]  INFO [localhost] (1/2) Detected: localhost: ubuntu 18.04
-  [Mar 20 10:14:13]  INFO [localhost] (2/2) Detected: remote_host: ubuntu 18.04
-  [Mar 20 10:14:13]  INFO [localhost] Detecting OS of containers...
-  [Mar 20 10:14:13]  INFO [localhost] Checking Scan Modes...
-  [Mar 20 10:14:13]  INFO [localhost] Checking dependencies...
-  [Mar 20 10:14:13]  INFO [localhost] Dependencies... Pass
-  [Mar 20 10:14:13]  INFO [remote_host] Dependencies... Pass
-  [Mar 20 10:14:13]  INFO [localhost] Checking sudo settings...
-  [Mar 20 10:14:13]  INFO [remote_host] Checking... sudo checkrestart
-  [Mar 20 10:14:13]  INFO [localhost] sudo ... No need
-  [Mar 20 10:14:14]  INFO [remote_host] Checking... sudo stat /proc/1/exe
-  [Mar 20 10:14:14]  INFO [remote_host] Checking... sudo apt-get update
-  [Mar 20 10:14:18]  INFO [remote_host] Sudo... Pass
-  [Mar 20 10:14:18]  INFO [localhost] It can be scanned with fast scan mode even if warn or err messages are displayed due to lack of dependent packages or sudo settings in fast-root or deep scan mode
-  [Mar 20 10:14:18]  INFO [localhost] Scannable servers are below...
-  localhost remote_host
-  ```
+    ```
+    [Mar 20 10:14:13]  INFO [localhost] Validating config...
+    [Mar 20 10:14:13]  INFO [localhost] Detecting Server/Container OS...
+    [Mar 20 10:14:13]  INFO [localhost] Detecting OS of servers...
+    [Mar 20 10:14:13]  INFO [localhost] (1/2) Detected: localhost: ubuntu 18.04
+    [Mar 20 10:14:13]  INFO [localhost] (2/2) Detected: remote_host: ubuntu 18.04
+    [Mar 20 10:14:13]  INFO [localhost] Detecting OS of containers...
+    [Mar 20 10:14:13]  INFO [localhost] Checking Scan Modes...
+    [Mar 20 10:14:13]  INFO [localhost] Checking dependencies...
+    [Mar 20 10:14:13]  INFO [localhost] Dependencies... Pass
+    [Mar 20 10:14:13]  INFO [remote_host] Dependencies... Pass
+    [Mar 20 10:14:13]  INFO [localhost] Checking sudo settings...
+    [Mar 20 10:14:13]  INFO [remote_host] Checking... sudo checkrestart
+    [Mar 20 10:14:13]  INFO [localhost] sudo ... No need
+    [Mar 20 10:14:14]  INFO [remote_host] Checking... sudo stat /proc/1/exe
+    [Mar 20 10:14:14]  INFO [remote_host] Checking... sudo apt-get update
+    [Mar 20 10:14:18]  INFO [remote_host] Sudo... Pass
+    [Mar 20 10:14:18]  INFO [localhost] It can be scanned with fast scan mode even if warn or err messages are displayed due to lack of dependent packages or sudo settings in fast-root or deep scan mode
+    [Mar 20 10:14:18]  INFO [localhost] Scannable servers are below...
+    localhost remote_host
+    ```
 
 ## Configuring Slack notifications and periodic scanning
 
 Vuls is able to send notifications on [Slack](https://www.slack.com) channels, by using Webhooks.
 
 1. When logged into Slack, create a [new app](https://api.slack.com/apps?new_app=1).
-
 2. In the APP parameters enable **Incoming Webhooks** and generate a new Webhook URL:
-
-  <Lightbox src="scaleway-vuls_webhook.webp" alt="" />
-
+    <Lightbox src="scaleway-vuls_webhook.webp" alt="" />
 3. Edit the file `/usr/share/vuls/config.toml` and add a Slack block to it:
-
-  ```
-  [slack]
-  hookURL      = "wehook_url"
-  channel      = "#slack_channel_name"
-  authUser     = "slack_username"
-  #notifyUsers  = ["@username"] #Uncomment to notify a user each time Vuls sends a report
-  ```
-
+    ```
+    [slack]
+    hookURL      = "wehook_url"
+    channel      = "#slack_channel_name"
+    authUser     = "slack_username"
+    #notifyUsers  = ["@username"] #Uncomment to notify a user each time Vuls sends a report
+    ```
 4. Test the configuration by running the following command:
+    ```
+    vuls report -to-slack
+    ```
 
-  ```
-  vuls report -to-slack
-  ```
+    Vuls sends a first report to Slack:
 
-  Vuls sends a first report to Slack:
-
-  <Lightbox src="scaleway-vuls_slack.webp" alt="" />
-
+    <Lightbox src="scaleway-vuls_slack.webp" alt="" />
 5. To run Vuls periodically, create a cronjob by running `crontab -e`.
-
 6. Edit the `crontab` as following:
-
-  ```
-  0 0 * * * vuls scan -config=/usr/share/vuls/config.toml; vuls report -config=/usr/share/vuls/config.toml > /dev/null 2>&1
-  ```
+    ```
+    0 0 * * * vuls scan -config=/usr/share/vuls/config.toml; vuls report -config=/usr/share/vuls/config.toml > /dev/null 2>&1
+    ```
 
 This will run Vuls every day at noon and send the report to Slack.
 
@@ -475,52 +369,36 @@ This will run Vuls every day at noon and send the report to Slack.
 Vuls provides a graphical web based interface, called [VulsRepo](https://github.com/usiusi360/vulsrepo) to visualize the reports generated by Vuls.
 
 1. Enter the Vuls directory:
-
-  ```
-  cd /usr/share/vuls
-  ```
-
+    ```
+    cd /usr/share/vuls
+    ```
 2. Clone [VulsRepo](https://github.com/usiusi360/vulsrepo) from GitHub into the local directory:
-
-  ```
-  git clone https://github.com/usiusi360/vulsrepo.git
-  ```
-
+    ```
+    git clone https://github.com/usiusi360/vulsrepo.git
+    ```
 3. Enter the directory of the application:
-
-  ```
-  cd /usr/share/vuls/vulsrepo/server
-  ```
-
+    ```
+    cd /usr/share/vuls/vulsrepo/server
+    ```
 4. Create a configuration file by copying the example shipped with the application:
-
-  ```
-  cp vulsrepo-config.toml.sample vulsrepo-config.toml
-  ```
-
+    ```
+    cp vulsrepo-config.toml.sample vulsrepo-config.toml
+    ```
 5. Open the configuration file in a text editor and edit it as following:
-
-  ```
-  [Server]
-  rootPath = "/usr/share/vuls/vulsrepo"
-  resultsPath  = "/usr/share/vuls/results"
-  serverPort  = "5111"
-  ```
-
+    ```
+    [Server]
+    rootPath = "/usr/share/vuls/vulsrepo"
+    resultsPath  = "/usr/share/vuls/results"
+    serverPort  = "5111"
+    ```
 6. Generate a JSON report with Vuls:
-
-  ```
-  vuls report -format-json -config=/usr/share/vuls/config.toml
-  ```
-
+    ```
+    vuls report -format-json -config=/usr/share/vuls/config.toml
+    ```
 7. Run the server:
-
-  ```
-  /usr/share/vuls/vulsrepo/vulsrepo-server
-  ```
-
+    ```
+    /usr/share/vuls/vulsrepo/vulsrepo-server
+    ```
 8. Open a web browser and point it to `http://YOUR_SERVER_IP:5111` to visualize the Vuls reports:
-
-  <Lightbox src="scaleway-vuls_reports.webp" alt="" />
-
+    <Lightbox src="scaleway-vuls_reports.webp" alt="" />
 9. (Optionally) Configure a [Nginx reverse proxy](/tutorials/nginx-reverse-proxy/) to restrict the access to the reports.

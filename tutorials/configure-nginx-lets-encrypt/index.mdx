@@ -19,175 +19,143 @@ dates:
 [Let's Encrypt](https://www.letsencrypt.org/) is a [Certificate Authority (CA)](https://en.wikipedia.org/wiki/Certificate_authority) that provides free TLS/SSL certificates to enable [HTTPS](https://en.wikipedia.org/wiki/HTTPS) on web servers. They provide a software client called Certbot to automatize most of the steps required to obtain a certificate and to configure it within the Nginx web server.
 
 <Message type="requirement">
-
-- You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
-- You have [configured your SSH key](/console/my-project/how-to/create-ssh-key)
-- You have [created an Instance](/compute/instances/how-to/create-an-instance/) which is running Ubuntu Focal Fossa (20.04) or later
-- You have a registered domain name pointed to your web server
-
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key)
+  - You have [created an Instance](/compute/instances/how-to/create-an-instance/) which is running Ubuntu Focal Fossa (20.04) or later
+  - You have a registered domain name pointed to your web server
 </Message>
 
 ### Installing the NGINX web server
 
 1. Connect to your server as `root` via [SSH](/compute/instances/how-to/connect-to-instance/).
-
 2. Update the APT packet cache and the software already installed on the instance:
-
-  ```
-  apt update && apt upgrade -y
-  ```
-
+    ```
+    apt update && apt upgrade -y
+    ```
 3. Install the [Nginx](https://nginx.org/en/) web server via APT:
-
-  ```
-  apt install nginx -y
-  ```
+    ```
+    apt install nginx -y
+    ```
 
 ### Configuring a server block
 
 The default installation of Nginx on Ubuntu Focal Fossa (20.04 LTS) comes with one pre-defined server block that listens on port 80. While it is possible to host a single site by putting the content into the directory **/var/www/html**, it would not be possible to host multiple sites one the same instance. To avoid this problem, server blocks can be configured. These specify a directory for the content that will be served when requesting a specific site. The content of **/var/www/html** will be served as the default directory if a request does not match any other site configured.
 
 <Message type="important">
-
-In this tutorial the domain name **example.com** will be used. You should replace it with your own domain name while setting up your Instance.
-
+  In this tutorial the domain name **example.com** will be used. You should replace it with your own domain name while setting up your Instance.
 </Message>
 
 1. Create the directory for your domain name. Using the `-p` flag will create any required parent directory in case they do not exist:
-
-  ```
-  mkdir -p /var/www/example.com/html
-  ```
-
+    ```
+    mkdir -p /var/www/example.com/html
+    ```
 2. Create a place holder page that will be displayed when accessing your domain:
-
-  ```
-  nano /var/www/example.com/html/index.html
-  ```
-
+    ```
+    nano /var/www/example.com/html/index.html
+    ```
 3. Put some content like the following into the file which will be displayed to a user when requesting your site. Save and quit nano once you have edited the file:
-
-  ```
-  <html>
-      <head>
-          <title>Welcome to example.com</title>
-      </head>
-      <body>
-          <h1>Hello World!</h1>
-          <p>You have accessed the example.com website.</p>
-      </body>
-  </html>
-  ```
-
+    ```
+    <html>
+        <head>
+            <title>Welcome to example.com</title>
+        </head>
+        <body>
+            <h1>Hello World!</h1>
+            <p>You have accessed the example.com website.</p>
+        </body>
+    </html>
+    ```
 4. To serve the site, a server block is required. Create the block in the directory **/etc/nginx/sites-available/**:
+    ```
+    nano /etc/nginx/sites-available/example.com
+    ```
 
-  ```
-  nano /etc/nginx/sites-available/example.com
-  ```
+    And put the following content into it:
 
-  And put the following content into it:
+    ```
+    server {
+            listen 80;
+            listen [::]:80;
 
-  ```
-  server {
-          listen 80;
-          listen [::]:80;
+            root /var/www/example.com/html;
+            index index.html index.htm;
 
-          root /var/www/example.com/html;
-          index index.html index.htm;
+            server_name example.com www.example.com;
 
-          server_name example.com www.example.com;
+            location / {
+                    try_files $uri $uri/ =404;
+            }
+    }
+    ```
 
-          location / {
-                  try_files $uri $uri/ =404;
-          }
-  }
-  ```
-
-  <Message type = "important">
-  
-  Edit the lines `root` and `server_name` according to your domain name.
-
-  </Message>
-
+    <Message type = "important">
+      Edit the lines `root` and `server_name` according to your domain name.
+    </Message>
 5. Enable the file by linking it to the **sites-enabled** directory, to enable the server block during Nginx startup:
-
-  ```
-  ln -s /etc/nginx/sites-available/example.com /etc/nginx/sites-enabled/
-  ```
-
+    ```
+    ln -s /etc/nginx/sites-available/example.com /etc/nginx/sites-enabled/
+    ```
 6. Verify if there are no errors in the configuration file before restarting Nginx:
-
-  ```
-  nginx -t
-  ```
-
+    ```
+    nginx -t
+    ```
 7. Restart the Nginx web server:
-
-  ```
-  systemctl restart nginx.service
-  ```
-
+    ```
+    systemctl restart nginx.service
+    ```
 8. When typing *http://example.com* in your browser, you should see your newly created place holder page:
-
-  <Lightbox src="scaleway-example_site.webp" alt="" />
+    <Lightbox src="scaleway-example_site.webp" alt="" />
 
 ### Installing Certbot and Obtaining a Certificate
 
 1. Install Certbot for Nginx:
-
-  ```
-  apt install python3-certbot-nginx -y
-  ```
-
+    ```
+    apt install python3-certbot-nginx -y
+    ```
 2. Launch the certificate generation:
+    ```
+    certbot --nginx -d example.com -d www.example.com
+    ```
 
-  ```
-  certbot --nginx -d example.com -d www.example.com
-  ```
+    <Message type = "important">
+      The parameter `-d` specifies the domains for which you want to request a certificate. Make sure to replace it with your own domain name. Also keep in mind that if you want to have a certificate for _example.com_ and for *www.example.com* you have to specify both.
+    </Message>
 
-  <Message type = "important">
-  
-  The parameter `-d` specifies the domains for which you want to request a certificate. Make sure to replace it with your own domain name. Also keep in mind that if you want to have a certificate for _example.com_ and for *www.example.com* you have to specify both.
-
-  </Message>
-
-  When running Certbot for the first time, you will be asked to enter your email address. Confirm it by pressing **Enter** on your keyboard.
-
+    When running Certbot for the first time, you will be asked to enter your email address. Confirm it by pressing **Enter** on your keyboard.
 3. Once confirmed Certbot will run a challenge and request the certificate. When asked to redirect all traffic to HTTPS, press **2**, then **Enter** on your keyboard:
+    ```
+      Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
+      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      1: No redirect - Make no further changes to the webserver configuration.
+      2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
+      new sites, or if you're confident your site works on HTTPS. You can undo this
+      change by editing your web server's configuration.
+      - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+      Select the appropriate number [1-2] then [enter] (press 'c' to cancel):
+    ```
 
-  ```
-    Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
-    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    1: No redirect - Make no further changes to the webserver configuration.
-    2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
-    new sites, or if you're confident your site works on HTTPS. You can undo this
-    change by editing your web server's configuration.
-    - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-    Select the appropriate number [1-2] then [enter] (press 'c' to cancel):
-  ```
+    Certbot will now reconfigure Nginx and once you see the following message your certificate is successfully installed:
 
-  Certbot will now reconfigure Nginx and once you see the following message your certificate is successfully installed:
+    ```
+    IMPORTANT NOTES:
+      - Congratulations! Your certificate and chain have been saved at:
+        /etc/letsencrypt/live/example.com/fullchain.pem
+        Your key file has been saved at:
+        /etc/letsencrypt/live/example.com/privkey.pem
+        Your cert will expire on 2019-04-15. To obtain a new or tweaked
+        version of this certificate in the future, simply run certbot again
+        with the "certonly" option. To non-interactively renew *all* of
+        your certificates, run "certbot renew"
+      - Your account credentials have been saved in your Certbot
+        configuration directory at /etc/letsencrypt. You should make a
+        secure backup of this folder now. This configuration directory will
+        also contain certificates and private keys obtained by Certbot so
+        making regular backups of this folder is ideal.
+      - If you like Certbot, please consider supporting our work by:
 
-  ```
-  IMPORTANT NOTES:
-    - Congratulations! Your certificate and chain have been saved at:
-      /etc/letsencrypt/live/example.com/fullchain.pem
-      Your key file has been saved at:
-      /etc/letsencrypt/live/example.com/privkey.pem
-      Your cert will expire on 2019-04-15. To obtain a new or tweaked
-      version of this certificate in the future, simply run certbot again
-      with the "certonly" option. To non-interactively renew *all* of
-      your certificates, run "certbot renew"
-    - Your account credentials have been saved in your Certbot
-      configuration directory at /etc/letsencrypt. You should make a
-      secure backup of this folder now. This configuration directory will
-      also contain certificates and private keys obtained by Certbot so
-      making regular backups of this folder is ideal.
-    - If you like Certbot, please consider supporting our work by:
-
-      Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
-      Donating to EFF:                    https://eff.org/donate-le
-  ```
+        Donating to ISRG / Let's Encrypt:   https://letsencrypt.org/donate
+        Donating to EFF:                    https://eff.org/donate-le
+    ```
 
 You can now open your web browser and type _http**s**://example.com_ to verify that your connection is secure:
 

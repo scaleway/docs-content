@@ -17,17 +17,14 @@ Any PRs which do not comply with the rules below will be rejected.
 1. Read and follow [the writing guidelines](#writing-guidelines).
 2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (eg: tutorial, API/CLI documentation, reference content or troubleshooting content?).
 3. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
-
    - `source`: Either `int` (for internal contributor) or `ext` (for external contributor) to Scaleway. If you are not a Scaleway staff member, please use `ext`.
    - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
    - `product`: the name of the product that corresponds to the documentation page you will edit.
 
      So in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
-
 4. All commit names must comply with the [commit naming conventions](#commit-conventions) described below.
 5. All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
 6. All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
-
 ---
 
 ## Use repository locally
@@ -49,11 +46,9 @@ Be sure you have read the present **contributing rules** and **commit convention
 ### Steps to install the project
 
 1. Copy the following code and enter it in your terminal:
-
 ```bash
 git clone git@github.com:[your-docs-content-fork]/docs-content.git | bash -s -- cd docs-content && yarn
 ```
-
 2. Ensure `yarn` has been run, if not run `yarn install`.
 3. Edit files.
 
@@ -135,7 +130,7 @@ meta:
 content:
   h1: Bare Metal server
   paragraph: This is a tutorial Bare Metal
-image: /images/scaleway-account.png
+hero: assets/scaleway-account.png
 tags: compute baremetal bare metal cloud server dedicated
 dates:
   validation: 2021-06-22

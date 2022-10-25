@@ -21,93 +21,76 @@ The [LEMP-Stack](https://lemp.io/) references a group of software that can be us
 - [PHP](http://www.php.net/) for dynamic data processing
 
 <Message type="requirement">
-
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
   - You have a [Scaleway Instance](/compute/instances/how-to/create-an-instance/) running on Ubuntu 18.04 (Bionic Beaver)
-  - You have a FQDN (Fully Qualified Domain Name) pointing to your Instance’s IP address
+  - You have a FQDN (Fully Qualified Domain Name) pointing to your Instance's IP address
   - You have sudo privileges or access to the root user
-
 </Message>
 
 ## Installing the stack
 
 1. [Connect to your Instance via SSH](/compute/instances/how-to/create-an-instance/)
-
 2. Use the `apt` package manager of Ubuntu to install the required packages. Make sure that the system is up to date and has the latest bug-fixes and updates installed by running the following command:
-
-  ```bash
-  apt update && apt -y upgrade
-  ```
-
+    ```bash
+    apt update && apt -y upgrade
+    ```
 3. Install the software stack:
-
-  ```bash
-  apt install -y ufw nginx mariadb-server php-fpm php-mysql
-  ```
+    ```bash
+    apt install -y ufw nginx mariadb-server php-fpm php-mysql
+    ```
 
 ## Configuring the firewall
 
 1. Enable HTTP and SSH connections in the [firewall](/tutorials/installation-uncomplicated-firewall/) configuration of the server by running the following command:
-
-  ```bash
-  ufw allow 'Nginx HTTP'
-  ufw allow 'OpenSSH'
-  ```
-
+    ```bash
+    ufw allow 'Nginx HTTP'
+    ufw allow 'OpenSSH'
+    ```
 2. Enable ufw:
+    ```bash
+    ufw enable
+    ```
 
-  ```bash
-  ufw enable
-  ```
+    You are asked if you want to proceed. Confirm the activation of the firewall by typing `y`:
 
-  You are asked if you want to proceed. Confirm the activation of the firewall by typing `y`:
-
-  ```bash
-  Command may disrupt existing ssh connections. Proceed with operation (y|n)? y
-  Firewall is active and enabled on system startup
-  ```
-
+    ```bash
+    Command may disrupt existing ssh connections. Proceed with operation (y|n)? y
+    Firewall is active and enabled on system startup
+    ```
 3. Check the status of ufw:
-
-  ```bash
-  ufw status
-  ```
+    ```bash
+    ufw status
+    ```
   
-  It will return a list of the allowed services:
+    It will return a list of the allowed services:
 
-   ```bash
-  Status: active
+    ```bash
+    Status: active
 
-  To                         Action      From
-  --                         ------      ----
-  Nginx HTTP                 ALLOW       Anywhere
-  OpenSSH                    ALLOW       Anywhere
-  Nginx HTTP (v6)            ALLOW       Anywhere (v6)
-  OpenSSH (v6)               ALLOW       Anywhere (v6)
-  ```
+    To                         Action      From
+    --                         ------      ----
+    Nginx HTTP                 ALLOW       Anywhere
+    OpenSSH                    ALLOW       Anywhere
+    Nginx HTTP (v6)            ALLOW       Anywhere (v6)
+    OpenSSH (v6)               ALLOW       Anywhere (v6)
+    ```
 
 ## Configuring MySQL/MariaDB
 
 1. Launch the configuration assistant for the database server:
-
-  ```bash
-  mysql_secure_installation
-  ```
-
+    ```bash
+    mysql_secure_installation
+    ```
 2. Press "Enter" when prompted for the current root password for the MariaDB server, as the password is not yet set.
-
 3. Press `Y` to enter a new password for the MariaDB root user:
+    ```bash
+    Setting the root password ensures that nobody can log into the MariaDB
+    root user without the proper authorization.
 
-  ```bash
-  Setting the root password ensures that nobody can log into the MariaDB
-  root user without the proper authorization.
-
-  Set root password? [Y/n]
-  ```
-
+    Set root password? [Y/n]
+    ```
 4. Enter the new password and press `Enter`, then repeat this step.
-
 5. Keep the settings proposed by default when prompted by further questions, by pressing `Enter` each time.
 
 ## Configuring a Nginx server block
@@ -115,85 +98,70 @@ The [LEMP-Stack](https://lemp.io/) references a group of software that can be us
 Nginx stores the configuration of virtual hosts in server blocks. All available server blocks are located in the directory `/etc/nginx/sites-available/`.
 
 1. Navigate to the relevant directory:
-
-  ```
-  cd /etc/nginx/sites-available/
-  ```
-
+    ```
+    cd /etc/nginx/sites-available/
+    ```
 2. Create a new server block configuration file and name it after the domain name that points to your Instance. Here we use `example.com`:
+    ```
+      server {
+            listen 80;
+            root /var/www/html;
+            index index.php index.html index.htm index.nginx-debian.html;
+            server_name example.com;
 
-  ```
-    server {
-          listen 80;
-          root /var/www/html;
-          index index.php index.html index.htm index.nginx-debian.html;
-          server_name example.com;
+            location / {
+                    try_files $uri $uri/ =404;
+            }
 
-          location / {
-                  try_files $uri $uri/ =404;
-          }
+            location ~ \.php$ {
+                    include snippets/fastcgi-php.conf;
+                    fastcgi_pass unix:/var/run/php/php7.2-fpm.sock;
+            }
 
-          location ~ \.php$ {
-                  include snippets/fastcgi-php.conf;
-                  fastcgi_pass unix:/var/run/php/php7.2-fpm.sock;
-          }
+            location ~ /\.ht {
+                    deny all;
+            }
+    }
+    ```
 
-          location ~ /\.ht {
-                  deny all;
-          }
-  }
-  ```
+    Remember to replace `example.com` and any other information necessary as per the overview below:
 
-  Remember to replace `example.com` and any other information necessary as per the overview below:
-
-  Overview:
-    - `listen` — Defines the port Nginx will listen on. Here, it listens on port 80, the default port for HTTP.
-    - `root` — Specifies the document root where all files of the website are stored.
-    - `index` — Gives priority to files named _index.php_, when an index file is requested.
-    - `server_name` — The domain name relating to this server block.
-    - `location /` — This location block checks the existence of a requested file. It will deliver either the file or return a 404 error.
-    - `location ~ \.php$` — The second location block handles the PHP processing by pointing Nginx to the fastcgi-php.conf configuration file and the php7.2-fpm.sock file, which declares what socket is associated with php-fpm.
-    - `location ~ /\.ht` — The last location block prevents .htaccess files to be processed by Nginx. Any .htaccess located in the directory root won't be served to visitors.
-
+    Overview:
+      - `listen` — Defines the port Nginx will listen on. Here, it listens on port 80, the default port for HTTP.
+      - `root` — Specifies the document root where all files of the website are stored.
+      - `index` — Gives priority to files named _index.php_, when an index file is requested.
+      - `server_name` — The domain name relating to this server block.
+      - `location /` — This location block checks the existence of a requested file. It will deliver either the file or return a 404 error.
+      - `location ~ \.php$` — The second location block handles the PHP processing by pointing Nginx to the fastcgi-php.conf configuration file and the php7.2-fpm.sock file, which declares what socket is associated with php-fpm.
+      - `location ~ /\.ht` — The last location block prevents .htaccess files to be processed by Nginx. Any .htaccess located in the directory root won't be served to visitors.
 3. Save and exit the file.
-
 4. Create a symbolic link to enable the server block. Replace `example.com` with your domain.
-
-  ```bash
-  ln -s /etc/nginx/sites-available/example.com /etc/nginx/sites-enabled/
-  ```
-
+    ```bash
+    ln -s /etc/nginx/sites-available/example.com /etc/nginx/sites-enabled/
+    ```
 5. Test the configuration for syntax errors.
-
-  ```bash
-  nginx -t
-  ```
-
+    ```bash
+    nginx -t
+    ```
 6. Reload the Nginx configuration.
-
-  ```bash
-  systemctl reload nginx.service
-  ```
+    ```bash
+    systemctl reload nginx.service
+    ```
 
 ## Testing PHP
 
 1. Create a test PHP file to test if your LEMP stack is working.
-
-  ```bash
-  nano /var/www/html/phpinfo.php
-  ```
-
+    ```bash
+    nano /var/www/html/phpinfo.php
+    ```
 2. Put the following content in it:
-
-  ```php
-  <?php
-  phpinfo();
-  ?>
-  ```
-
+    ```php
+    <?php
+    phpinfo();
+    ?>
+    ```
 3. Save the file and point your web browser to `http://example.com/phpinfo.php` (replacing `example.com` with your domain name). When you see an output like the following, it means PHP is set up correctly:
-
-<Lightbox src="scaleway-lemp-php72.webp" alt="" />
+    <Lightbox src="scaleway-lemp-php72.webp" alt="" />
 
 ## Configuring SSL with Let's Encrypt
 
@@ -202,83 +170,72 @@ By default the connection between your computer and the server is not encrypted 
 Let's Encrypt provides a [certbot](https://certbot.eff.org/) to configure Nginx automatically with Let's Encrypt.
 
 1. Prepare the system.
+    ```bash
+    apt update && apt -y install software-properties-common
+    add-apt-repository ppa:certbot/certbot
+    apt update
+    ```
 
-  ```bash
-  apt update && apt -y install software-properties-common
-  add-apt-repository ppa:certbot/certbot
-  apt update
-  ```
-
-  You may be warned that the PPA has been deprecated. You can press [ENTER] to continue adding it nonetheless.
-
+    You may be warned that the PPA has been deprecated. You can press [ENTER] to continue adding it nonetheless.
 2. Install certbot.
-
-  ```bash
-  apt install python3-certbot-nginx
-  ```
-
+    ```bash
+    apt install python3-certbot-nginx
+    ```
 3. Run certbot.
-
-  ```bash
-  certbot --nginx
-  ```
-
+    ```bash
+    certbot --nginx
+    ```
 4. Answer the prompts.
+    ```
+    Saving debug log to /var/log/letsencrypt/letsencrypt.log
+    Plugins selected: Authenticator nginx, Installer nginx
+    Enter email address (used for urgent renewal and security notices) (Enter 'c' to
+    cancel): webmaster@example.com
 
-  ```
-  Saving debug log to /var/log/letsencrypt/letsencrypt.log
-  Plugins selected: Authenticator nginx, Installer nginx
-  Enter email address (used for urgent renewal and security notices) (Enter 'c' to
-  cancel): webmaster@example.com
+    Please read the Terms of Service at
+    https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf. You must
+    agree in order to register with the ACME server at
+    https://acme-v02.api.letsencrypt.org/directory
 
-  Please read the Terms of Service at
-  https://letsencrypt.org/documents/LE-SA-v1.2-November-15-2017.pdf. You must
-  agree in order to register with the ACME server at
-  https://acme-v02.api.letsencrypt.org/directory
+    (A)gree/(C)ancel: a
 
-  (A)gree/(C)ancel: a
+    Would you be willing to share your email address with the Electronic Frontier
+    Foundation, a founding partner of the Let's Encrypt project and the non-profit
+    organization that develops Certbot? We'd like to send you email about our work
+    encrypting the web, EFF news, campaigns, and ways to support digital freedom.
 
-  Would you be willing to share your email address with the Electronic Frontier
-  Foundation, a founding partner of the Let's Encrypt project and the non-profit
-  organization that develops Certbot? We'd like to send you email about our work
-  encrypting the web, EFF news, campaigns, and ways to support digital freedom.
+    (Y)es/(N)o: n
+    Which names would you like to activate HTTPS for?
 
-  (Y)es/(N)o: n
-  Which names would you like to activate HTTPS for?
+    1: example.com
 
-  1: example.com
+    Select the appropriate numbers separated by commas and/or spaces, or leave input
+    blank to select all options shown (Enter 'c' to cancel): 1
+    Obtaining a new certificate
+    Performing the following challenges:
+    http-01 challenge for example.com
+    Waiting for verification...
+    Cleaning up challenges
+    Deploying Certificate to VirtualHost /etc/nginx/sites-enabled/example.com
+    Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
 
-  Select the appropriate numbers separated by commas and/or spaces, or leave input
-  blank to select all options shown (Enter 'c' to cancel): 1
-  Obtaining a new certificate
-  Performing the following challenges:
-  http-01 challenge for example.com
-  Waiting for verification...
-  Cleaning up challenges
-  Deploying Certificate to VirtualHost /etc/nginx/sites-enabled/example.com
-  Please choose whether or not to redirect HTTP traffic to HTTPS, removing HTTP access.
+    1: No redirect - Make no further changes to the webserver configuration.
+    2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
+    new sites, or if you're confident your site works on HTTPS. You can undo this
+    change by editing your web server's configuration.
 
-  1: No redirect - Make no further changes to the webserver configuration.
-  2: Redirect - Make all requests redirect to secure HTTPS access. Choose this for
-  new sites, or if you're confident your site works on HTTPS. You can undo this
-  change by editing your web server's configuration.
+    Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 2
+    Redirecting all traffic on port 80 to ssl in /etc/nginx/sites-enabled/example.com
 
-  Select the appropriate number [1-2] then [enter] (press 'c' to cancel): 2
-  Redirecting all traffic on port 80 to ssl in /etc/nginx/sites-enabled/example.com
-
-  Congratulations! You have successfully enabled https://example.com
-  You should test your configuration at:
-  https://www.ssllabs.com/ssltest/analyze.html?d=example.com
-  ```
-
+    Congratulations! You have successfully enabled https://example.com
+    You should test your configuration at:
+    https://www.ssllabs.com/ssltest/analyze.html?d=example.com
+    ```
 5. Reload the Nginx configuration.
-
-  ```bash
-  systemctl reload nginx.service
-  ```
-
+    ```bash
+    systemctl reload nginx.service
+    ```
 6. Allow HTTPS in the firewall rules.
-
-  ```
-  ufw allow 'Nginx HTTPS'
-  ```
+    ```
+    ufw allow 'Nginx HTTPS'
+    ```

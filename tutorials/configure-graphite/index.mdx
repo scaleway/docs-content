@@ -23,145 +23,114 @@ Graphite is a well known and widespread monitoring tool, that basically does two
 - Providing an interface for basic visualisation of the stored data and the possibility to use mathematical functions to sum, group or scale stored data in realtime.
 
 <Message type="requirement">
-
-- You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
-- You have [created an Instance](/compute/instances/how-to/create-an-instance/) which is running Ubuntu 20.04 LTS
-- You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
-- You have sudo privileges or access to the root user.
-
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created an Instance](/compute/instances/how-to/create-an-instance/) which is running Ubuntu 20.04 LTS
+  - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+  - You have sudo privileges or access to the root user.
 </Message>
 
 ## Installing Graphite
 
 1. Graphite and the required tools can be installed easily via apt. Update the apt cache and upgrade the packages already installed on the system:
-
-  ```
-  apt-get update && apt-get upgrade -y
-  ```
-
+    ```
+    apt-get update && apt-get upgrade -y
+    ```
 2. Install Graphite:
-
-  ```
-  apt-get install graphite-web graphite-carbon
-  ```
+    ```
+    apt-get install graphite-web graphite-carbon
+    ```
 
 ## Configuring the Graphite Web Application
 
 1. Open the configuration file in which you have to make the modifications explained afterword:
-
-  ```
-  nano /etc/graphite/local_settings.py
-  ```
-
+    ```
+    nano /etc/graphite/local_settings.py
+    ```
 2. Set a `SECRET_KEY` that will be used as a salt when creating hashes. Uncomment the line and set it to secure key:
-
-  ```
-  SECRET_KEY = 'a_salty_string'
-  ```
-
+    ```
+    SECRET_KEY = 'a_salty_string'
+    ```
 3. Uncomment the `TIME_ZONE` parameter and configure it to your local [time-zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones):
-
-  ```
-  TIME_ZONE = 'Europe/Paris'
-  ```
-
+    ```
+    TIME_ZONE = 'Europe/Paris'
+    ```
 4. Save the file and quit the editor.
-
 5. Synchronise the database to create the required database layout:
-
-  ```
-  graphite-manage migrate
-  ```
+    ```
+    graphite-manage migrate
+    ```
 
 ## Configuring Carbon
 
 As the database is ready now, continue with the configuration of Carbon, the storage backend of Graphite.
 
 1. Open the service configuration file with a text editor:
-
-  ```
-  nano /etc/default/graphite-carbon
-  ```
-
+    ```
+    nano /etc/default/graphite-carbon
+    ```
 2. There is only one configuration parameter in the file, to make sure Carbon starts at boot, change the value to `true`.
-
-  ```
-  CARBON_CACHE_ENABLED=true
-  ```
-
+    ```
+    CARBON_CACHE_ENABLED=true
+    ```
 3. Save the file and quit the Editor once you have changed the value.
-
 4. Open the Carbon configuration file:
-
-  ```
-  nano /etc/carbon/carbon.conf
-  ```
-
+    ```
+    nano /etc/carbon/carbon.conf
+    ```
 5. Enable log rotation by setting the following value to true:
-
-  ```
-  ENABLE_LOGROTATION = True
-  ```
-
+    ```
+    ENABLE_LOGROTATION = True
+    ```
 6. Save the file and quit the Editor once you have changed the value.
 
 ## Configuring Storage Schemas
 
 1. Open the storage schemas file. It contains information about how long and how detailed values should be stored:
-
-  ```
-  nano /etc/carbon/storage-schemas.conf
-  ```
-
+    ```
+    nano /etc/carbon/storage-schemas.conf
+    ```
 2. The content of the file will look like this example:
+    ```
+    [carbon]
+    pattern = ^carbon\.
+    retentions = 60:90d
 
-  ```
-  [carbon]
-  pattern = ^carbon\.
-  retentions = 60:90d
+    [default_1min_for_1day]
+    pattern = .*
+    retentions = 60s:1d
+    ```
 
-  [default_1min_for_1day]
-  pattern = .*
-  retentions = 60s:1d
-  ```
+    By default two sections are defined in the file:
 
-  By default two sections are defined in the file:
+      - The first one is to decide what to do with data coming from Carbon itself, as it is configured by default to store some of its own performance metrics.
+      - The second one is a catch-all section that applies to any data that hasn't been matched by any other section. It has to remain always the last section of the file.
 
-    - The first one is to decide what to do with data coming from Carbon itself, as it is configured by default to store some of its own performance metrics.
-    - The second one is a catch-all section that applies to any data that hasn't been matched by any other section. It has to remain always the last section of the file.
+    Each section is defined by section headers, namely the words in the brackets.
+    Below each section header, a pattern definition and retention policy are defined.
 
-  Each section is defined by section headers, namely the words in the brackets.
-  Below each section header, a pattern definition and retention policy are defined.
+    The pattern definition is a regular expression, used to match any information sent to Carbon. All information sent to Carbon include a metric name, which is checked by the pattern definition. In the first section, all metrics in question start with the string "carbon.".
 
-  The pattern definition is a regular expression, used to match any information sent to Carbon. All information sent to Carbon include a metric name, which is checked by the pattern definition. In the first section, all metrics in question start with the string "carbon.".
-
-  The retention policy is defined by sets of numbers, consisting of a metric interval (defining how often a metric is recorded), followed by a colon and the storage duration of these values. It is possible to define multiple sets of retention policies, separated by commas.
-
+    The retention policy is defined by sets of numbers, consisting of a metric interval (defining how often a metric is recorded), followed by a colon and the storage duration of these values. It is possible to define multiple sets of retention policies, separated by commas.
 3. Define a new retention policy that is triggered by a "test." pattern and will be used later:
+    ```
+    [test]
+    pattern = ^test\.
+    retentions = 10s:10m,1m:1h,10m:1d
+    ```
 
-  ```
-  [test]
-  pattern = ^test\.
-  retentions = 10s:10m,1m:1h,10m:1d
-  ```
+    <Message type="note">
+      Remember to place the policy **before** the catch-all block in the configuration file.
+    </Message>
 
-  <Message type="note">
-  
-  Remember to place the policy **before** the catch-all block in the configuration file.
+    This section will store the data it collects three times with different levels of details. The first collection `10s:10m` will create a data point every ten seconds and data is stored for only 10 minutes.
 
-  </Message>
+    The second collection `1m:1h` will create a data point every minute by gathering all of the data from the past minute from the first collection. The information in the data point is aggregated by averaging the points (six points, as the first collection creates a point every 10 seconds). Data will be stored in this collection within one hour.
 
-  This section will store the data it collects three times with different levels of details. The first collection `10s:10m` will create a data point every ten seconds and data is stored for only 10 minutes.
+    The last collection `10m:1d` will make a data point ever every 10 minutes by aggregating the information gathered from the second collection in the same way. Data will be stored in this collection for one day.
 
-  The second collection `1m:1h` will create a data point every minute by gathering all of the data from the past minute from the first collection. The information in the data point is aggregated by averaging the points (six points, as the first collection creates a point every 10 seconds). Data will be stored in this collection within one hour.
-
-  The last collection `10m:1d` will make a data point ever every 10 minutes by aggregating the information gathered from the second collection in the same way. Data will be stored in this collection for one day.
-
-  Graphite returns the data from the most detailed collection that measures the requested time-frame when asking for information. This means:
-
-    - If metrics for the past 5 minutes will be requested, Graphite will return information from the first collection.
-    - If metrics for the past 50 minutes will be requested, Graphite will return information from the second collection.
-
+    Graphite returns the data from the most detailed collection that measures the requested time-frame when asking for information. This means:
+      - If metrics for the past 5 minutes will be requested, Graphite will return information from the first collection.
+      - If metrics for the past 50 minutes will be requested, Graphite will return information from the second collection.
 4. Save and close the file when you have finished editing it.
 
 ## Defining Storage Aggregation Methods
@@ -176,133 +145,98 @@ This may not always be useful though. For example to count up the total number o
 It is possible to define the way Graphite aggregates metrics with a file called `storage-aggregation.conf`.
 
 1. Copy the file from the examples directory to the actual configuration directory:
-
-  ```
-  cp /usr/share/doc/graphite-carbon/examples/storage-aggregation.conf.example /etc/carbon/storage-aggregation.conf
-  ```
-
+    ```
+    cp /usr/share/doc/graphite-carbon/examples/storage-aggregation.conf.example /etc/carbon/storage-aggregation.conf
+    ```
 2. Open the file in a text editor:
-
-  ```
-  nano /etc/carbon/storage-aggregation.conf
-  ```
-
+    ```
+    nano /etc/carbon/storage-aggregation.conf
+    ```
 3. You will see a file similar to this content:
+    ```
+    [min]
+    pattern = \.min$
+    xFilesFactor = 0.1
+    aggregationMethod = min
+    ```
 
-  ```
-  [min]
-  pattern = \.min$
-  xFilesFactor = 0.1
-  aggregationMethod = min
-  ```
+    It is looking similar to the previous file, and the section name and pattern are exactly the same as in the storage-schemas file.
 
-  It is looking similar to the previous file, and the section name and pattern are exactly the same as in the storage-schemas file.
+    The `xFilesFactor` is what we will have a closer look at. It allows specifying the minimum percentage of values that Carbon must have to create an aggregated data-point. For example, if the value is set to 0.5, it requires that 50% of the more detailed data points are available to create an aggregated point.
 
-  The `xFilesFactor` is what we will have a closer look at. It allows specifying the minimum percentage of values that Carbon must have to create an aggregated data-point. For example, if the value is set to 0.5, it requires that 50% of the more detailed data points are available to create an aggregated point.
+    This can be useful to avoid creating data-points misrepresenting the actual situation.
 
-  This can be useful to avoid creating data-points misrepresenting the actual situation.
-
-  `aggregationMethod` defines the way data is recorded. Possible values are `average`, `sum`, `last`, `max` and `min`. It is important to choose the correct value to avoid that your data will be recorded inaccurately. The correct selection depends on the kind of metrics that you are actually tracking.
-
+    `aggregationMethod` defines the way data is recorded. Possible values are `average`, `sum`, `last`, `max` and `min`. It is important to choose the correct value to avoid that your data will be recorded inaccurately. The correct selection depends on the kind of metrics that you are actually tracking.
 4. Once you have edited the file towards your needs, save and close the file.
-
 5. Start Carbon by typing:
-
-  ```
-  service carbon-cache start
-  ```
+    ```
+    service carbon-cache start
+    ```
 
 ## Installing and Configuring Apache
 
 To use the web-interface of Graphite, a web server is required. The software comes with a pre-defined configuration for Apache, making configuration pretty easy.
 
 1. Install the Apache web server and the required module:
-
-  ```
-  apt-get install apache2 libapache2-mod-wsgi-py3
-  ```
-
-2. Disable the default site of Apache, as it will not be needed:
-
-  ```
-  a2dissite 000-default
-  ```
-
+    ```
+    apt-get install apache2 libapache2-mod-wsgi-py3
+    ```
+2. Disable the default site of Apache, as it won't be needed:
+    ```
+    a2dissite 000-default
+    ```
 3. Copy the Apache configuration file of Graphite into the available sites directory of Apache:
-
-  ```
-  cp /usr/share/graphite-web/apache2-graphite.conf /etc/apache2/sites-available
-  ```
-
+    ```
+    cp /usr/share/graphite-web/apache2-graphite.conf /etc/apache2/sites-available
+    ```
 4. Enable the Graphite site:
-
-  ```
-  a2ensite apache2-graphite
-  ```
-
+    ```
+    a2ensite apache2-graphite
+    ```
 5. Reload the configuration of Apache:
-
-  ```
-  service apache2 reload
-  ```
-
+    ```
+    service apache2 reload
+    ```
 6. Check if the web interface is working by pointing your browser to `http://YOUR_SERVERS_IP`. The following interface will be visible:
-
-  <Lightbox src="scaleway-graphite-interface.webp" alt="" />
+    <Lightbox src="scaleway-graphite-interface.webp" alt="" />
 
 ## Discovering the Web Interface
 
 1. Login by clicking on the **Login-Button** on the top of the page. Enter the username and password that you have set when you have synchronized the database. In case you don't remember these credentials or if you want to add another superuser, run the following command to create a new user:
-
-  ```
-  graphite-manage createsuperuser
-  ```
-
+    ```
+    graphite-manage createsuperuser
+    ```
 2. You will notice a menu on the left of the Screen. Click **carbon** to see the metrics that are collected by Graphite. Currently, you will only see the data the application is gathering about its performance:
-
-  <Lightbox src="scaleway-graphite-metrics.webp" alt="" />
-
+    <Lightbox src="scaleway-graphite-metrics.webp" alt="" />
 3. It is also possible to create dashboards from the data Graphite collects to have an overview over the different metrics:
-
-  <Lightbox src="scaleway-graphite-dashboard.webp" alt="" />
+    <Lightbox src="scaleway-graphite-dashboard.webp" alt="" />
 
 ## Feeding Data to Graphite
 
 Graphite is very flexible when it comes to the origin of data. There are three main methods for sending data to Graphite: [Plaintext](https://graphite.readthedocs.io/en/latest/feeding-carbon.html#the-plaintext-protocol), [Pickle](https://graphite.readthedocs.io/en/latest/feeding-carbon.html#the-pickle-protocol), and [AMQP](https://graphite.readthedocs.io/en/latest/feeding-carbon.html#using-amqp).
 
 1. Previously a `test` block has been created in the storage-schemas file. It will be used now to send some data to Graphite from a terminal.
-
 2. Type the following command in a terminal. You can replace the value `42` with some different numbers to see what it does:
+    ```
+    echo "test.count 42 `date +%s`" | nc -q0 localhost 2003
+    ```
 
-  ```
-  echo "test.count 42 `date +%s`" | nc -q0 localhost 2003
-  ```
+    Metric messages need to contain a metric name, a value, and a timestamp.
 
-  Metric messages need to contain a metric name, a value, and a timestamp.
-
-  The example feeds the storage schema `test` with the metric `count` and the value `42`. To get the timestamp, the `date` command is used.
-
+    The example feeds the storage schema `test` with the metric `count` and the value `42`. To get the timestamp, the `date` command is used.
 3. Go back to the Graphite Web Interface and reload it. The new storage scheme **test** will appear in the menu.
-
 4. Set the time range to a few minutes, by clicking on the _clock-icon_:
-
-   <Lightbox src="scaleway-graphite-timerange.webp" alt="" />
-
+    <Lightbox src="scaleway-graphite-timerange.webp" alt="" />
 5. The values that you have sent will appear in the graph:
-
-  <Lightbox src="scaleway-graphite-testcount.webp" alt="" />
-
+    <Lightbox src="scaleway-graphite-testcount.webp" alt="" />
 6. Wait for 15 minutes and refresh the graph by setting the time frame to the past 15 minutes. The graph will look different:
-
-  <Lightbox src="scaleway-graphite-testcount2.webp" alt="" />
+    <Lightbox src="scaleway-graphite-testcount2.webp" alt="" />
 
 This is because our first collection does not store data for 15 minutes and Graphite will look into the second collection for rendering the graph.
 
 As the data was sent with a _count_ metric, Graphite adds up the values in the larger intervals instead of averaging them. It is therefore essential to choose the right metric for each use case.
 
 <Message type = "note">
-
   - Pushing Content from a terminal is not the usual way to send data to Graphite. Instead, you will use a tool to automatize the collection of data.
   - A complete list of tools that work with Graphite is available in the [official documentation](https://graphite.readthedocs.io/en/latest/tools.html).
-
 </Message>

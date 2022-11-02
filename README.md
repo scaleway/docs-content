@@ -31,6 +31,8 @@ Please [follow this guide](./docs/CONTRIBUTING.md#use-repository-locally) to clo
 
 Do not forget to run `yarn` after cloning!
 
+Note that cloning this repository (`content`) allows you to view and suggest modifications to Scaleway documentation content via mdx files. It does not allow you to generate a local preview of the documentation site. If you are an internal Scaleway collaborator and need the preview functionality, contact a member of the documentation team.
+
 ### MDX blocks
 
 Blocks are useful for adding rich content to your contributions.

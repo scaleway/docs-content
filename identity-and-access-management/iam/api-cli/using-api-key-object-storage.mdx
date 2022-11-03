@@ -14,12 +14,14 @@ categories:
 ---
 
 When carrying out actions on Scaleway Object Storage resources via an API or CLI (eg [the AWS CLI](/storage/object/api-cli/object-storage-aws-cli/), [MinIOClient](/storage/object/api-cli/installing-minio-client/) or [Rclone](/storage/object/api-cli/installing-rclone/)), the API/CLI does not provide a parameter to specify the desired [Project](/identity-and-access-management/iam/concepts/#project) for the Object Storage resources. Therefore, when you create an API key with IAM, you are prompted to specify its **preferred Project for Object Storage**. This API key will always use this Project when carrying out Object Storage actions via any API/CLI.
+    <Lightbox src="scaleway-preferred-project.webp" alt="" />
 
 In this document, we explain the concept of preferred Projects for Object Storage, explain how to configure your IAM API key for this, and give some code examples for overriding the preferred Project when making an API call.
 
 ## What is a Project?
 
 You can create multiple Projects within an Organization, to enable you to group your resources. Each Organization has at least one Project, called `default`, to which all resources you create (Instances, Kubernetes Kapsules, Object Storage buckets etc) are added if no other Projects are created. 
+    <Lightbox src="scaleway-projects-1.webp" alt="" />
 
 When you create new Projects, you can choose which Project to add resources to, or manage resources in. However, Object Storage has its own limitations which make it harder to manipulate Projects, **specifically via an API**. When carrying out actions on Scaleway Object Storage resources via the Scaleway console, the target Project can be still selected from the product dashboard or drop down menu.
 
@@ -51,7 +53,8 @@ Therefore, whenever you perform an action on Object Storage via the API, check t
 
 To create an API key via the Scaleway console, follow the steps detailed in [how to create an API key](/identity-and-access-management/iam/how-to/create-api-keys/).
 
-During creation, you are asked to select a preferred Project for the API key. A list of your current Projects displays. Choose the required Project for this API key.
+During creation, you are asked to select a preferred Project for the API key. A list of your current Projects displays. Choose the required Project for this API key. In the example below, the default project has been chosen:
+    <Lightbox src="scaleway-preferred-project.webp" alt="" />
 
 It is also essential to make sure the API key [has permissions to carry out Object Storage actions within this Project](/identity-and-access-management/iam/reference-content/permission-sets/) Ensure that a suitable policy is attached to the IAM user/application associated with this API key.
 
@@ -77,7 +80,9 @@ Passing the API access key `SCW2DVV7CZHD8S68YETV@50a526f2-c070-4dca-8f51-fe611a1
 
 ## Example
 
-In the following example, we create an IAM application, create an API key for that application, and explore the effects that permissions and preferred Project has on our API calls for Object Storage.
+### Part 1: Carrying out Object Storage operations via the AWS CLI 
+
+In the first part of this example, we create an IAM application, create an API key for that application, and explore the effects that permissions and preferred Project has on our API calls for Object Storage.
 
 <Message type="requirement">
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com).
@@ -87,15 +92,79 @@ In the following example, we create an IAM application, create an API key for th
 1. [Create a new IAM application](/identity-and-access-management/iam/how-to/create-application) called `my-test-app` without attaching any policies.
     <Lightbox src="scaleway-iam-app.webp" alt="" />
 
-2. [Create an API key](/identity-and-access-management/iam/how-to/create-api-keys/#how-to-create-an-api-key-for-an-iam-application) described as `Test app API key` for the `my-test-app` application. Select the preferred Project for the API key as `default`.
+2. [Create an API key](/identity-and-access-management/iam/how-to/create-api-keys/#how-to-create-an-api-key-for-an-iam-application) for the `my-test-app` application. Select the preferred Project for the API key as `default`.
     <Lightbox src="scaleway-api-key-test.webp" alt="" />
 
-3. Show an example of trying to list/create buckets via the API with this API key: it doesn't work since the key has no permissions for Object Storage.
+3. [Install the AWS CLI](/storage/object/api-cli/object-storage-aws-cli/) on your machine, using the API key you created in step 2 to complete the fields of the `.aws/credentials` file.
 
-4. Attach a policy to the API key in the console giving it Object Storage permissions.
+4. Run the following command to list all buckets:
 
-5. Repeat step 3 and show it works, and creates/lists from the default Project.
+    ```
+    aws s3 ls
+    ```
 
-6. Create another Project in the Organization.
+    The following error displays:
 
-7. Use the override feature to show how to override the preferred Project.
+    ```
+    An error occurred (AccessDenied) when calling the ListBuckets operation: Permission denied.
+    ```
+
+    This is because the IAM application that bears this API key does not have permissions to view or create Object Storage resources.
+
+5. [Create a policy](/identity-and-access-management/iam/how-to/create-policy/) with the name `object-storage-full-access` and the IAM application you created in step 1 as the principal. When adding rules, create a rule giving `Access to resources` --> `default` Project, and the `Storage` permission set `ObjectStorageFullAccess`.
+    <Lightbox src="scaleway-policy.webp" alt="" />
+
+6. Repeat the command from step 4:
+
+    ```
+    aws s3 ls
+    ```
+
+    Now that the application and therefore its API key have appropriate permissions for Object Storage on the `default` Project, a list of this Project's Object Storage buckets displays. If there are no buckets in the Project, the output is blank.
+
+7. Use the following command to create a new bucket called `test-bucket-123`:
+
+    ```
+    aws s3 mb s3://test-bucket-123`
+    ```
+
+8. Go to the [Scaleway console](https://console.scaleway.com/object-storage/buckets) in your browser, click **Object Storage** in the side menu, and ensure you are on the **default** project. The bucket you just created with the IAM application's API key appears in the list of buckets:
+    <Lightbox src="scaleway-bucket.webp" alt="" />
+
+
+### Part 2: Overriding the preferred Project
+
+In the second part of this example, we create a new Project, give `my-test-app` Object Storage permissions in this Project, and see how we can override the API key's preferred Project of `default` to create a new bucket in `my-second-project`.
+
+1. [Create a new Project](/console/my-project/how-to/create-a-project/) in the Organization, with the name `my-second-project`. 
+    <Message type="note">
+    You must be Owner of the Organization, or have the `ProjectManager`, `IAMManager` or `OrganizationManager` [permissions](/identity-and-access-management/iam/reference-content/permission-sets/) to create a Project.
+    </Message>
+    <Lightbox src="scaleway-projects.webp" alt="" />
+
+2. From the [Project Dashboard](https://console.scaleway.com/project/settings), ensure you are in `my-second-project`, and copy the Project ID.
+    <Lightbox src="scaleway-test-project.webp" alt="" />
+
+3. Open the `~/.aws/credentials` file on your machine, and edit the API access key to add `@<Project ID>` at the end, replacing `<Project ID>` with the ID you copied in step 10.
+
+    `nano ~/.aws/credentials`
+
+    ```
+    aws_access_key_id = SCWVD8M2PZA01RWVNG9AR@a529d1e90-3c37-4a4d-a1d1-62e84f371fd1
+    aws_secret_access_key = 12826d00-5ef6-45e8-a559-xxxxxxxxx
+    ```
+
+    Save and exit the file.
+
+4. [Edit](/identity-and-access-management/iam/how-to/create-policy/) the `object-storage-full-access` policy you created in part 1 step 5 to add a second rule with `Access to resources` --> `test-project` as scope, and the `Storage` permission set `ObjectStorageFullAccess`. Alternatively, edit the existing rule to change the scope to `All current projects`.
+
+5. Run the following command on your machine to create a new bucket called `bucket-for-second-project`:
+
+    ```
+    aws s3 mb s3://bucket-for-second-project
+    ```
+
+    As we overrode the preferred Project for the API key in step 11, this bucket has been created in the `my-second-project`, rather than the `default` Project
+
+6. Go to the [Scaleway console](https://console.scaleway.com/object-storage/buckets) in your browser, click **Object Storage** in the side menu, and ensure you are on **my-second-project**. The bucket you just created with the IAM application's API key appears in the list of buckets:
+    <Lightbox src="scaleway-second-bucket.webp" alt="" />

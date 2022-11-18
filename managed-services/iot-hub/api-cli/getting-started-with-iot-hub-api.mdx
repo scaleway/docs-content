@@ -1,0 +1,236 @@
+---
+meta:
+  title: Getting started with the IoT Hub API
+  description: This page explains how to use the IoT API from the command line using curl
+content:
+  h1: Getting started with the IoT Hub API
+  paragraph: This page explains how to use the IoT API from the command line using curl
+categories:
+  - iot-hub
+tags: Scaleway IoT Device curl
+---
+
+In this tutorial we will use the API through the well known utility [curl](https://curl.haxx.se/). This will show you how to create Hubs and Devices, as well as more advanced features of the Scaleway IoT Hub: Hub Events and Routes.
+
+The API reference is here: [IoT API](https://developers.scaleway.com/en/products/iot/api/)
+
+<Message type="requirement">
+  - You have `curl`, `mosquitto-clients` (mqtt client), and `jq` (json parsing tool) installed to follow this guide.
+  - You have [created an API key](/console/my-project/how-to/generate-api-key/).
+</Message>
+
+You already set the `SCW_SECRET_KEY` variable above, now set the following variables from the same terminal on your local computer:
+
+```bash
+IOT_API="https://api.scaleway.com/iot/v1/regions/fr-par"
+SCW_DEFAULT_PROJECT_ID="<your project ID here>"
+```
+
+
+## Setting up the IoT Hub
+
+The Hub creation is done through a REST endpoint. To create a Hub, you will need to provide:
+
+- Your Project ID.
+- A name.
+- A product plan.
+
+We will save the output to `hub.json` file:
+
+```bash
+curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -d '{
+    "project_id": "'$SCW_DEFAULT_PROJECT_ID'",
+    "name": "my_first_hub",
+    "product_plan": "plan_dedicated"
+  }' $IOT_API/hubs > hub.json
+
+jq < hub.json
+```
+
+`hub.json` will contain something like:
+
+```json
+{
+  "region": "fr-par",
+  "id": "035eb275-6ee7-40a2-b68a-d84b84cc236e",
+  "organization_id": "<your organization ID>",
+  "project_id": "<your_project_ID>",
+  "name": "my_first_hub",
+  "status": "enabling",
+  "product_plan": "plan_dedicated",
+  "endpoint": "iot.fr-par.scw.cloud",
+  "created_at": "2021-04-26T11:39:53.927Z",
+  "updated_at": "2021-04-26T11:39:53.927Z",
+  "enabled": true,
+  "device_count": 0,
+  "connected_device_count": 0,
+  "disable_events": false,
+  "events_topic_prefix": "$SCW/events",
+  "enable_device_auto_provisioning": false,
+  "has_custom_ca": false
+}
+```
+
+We can poll the hub status until it is ready:
+
+```bash
+curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" $IOT_API/hubs/$(jq -r '.id' hub.json) | jq -r '.status'
+```
+
+At some point, the status will switch to `ready`.
+
+## Setting up the devices
+
+Now we need to create 2 devices. You need to provide:
+
+- The Hub ID. This is the `"id"` field from the JSON response received while creating a hub.
+- A name.
+
+<Message type="note">
+  As this tutorial aims to be simple and straightforward, the following commands are allowing the device to connect using insecure protocols, such as plain text MQTT or MQTTs without mutual authentication. In production, you should `Deny Insecure` connections to have the highest level of security. This is done by setting the field `allow_insecure` to `false`.
+</Message>
+
+We will save the response to a file so we can use the fields later.
+
+```bash
+curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -d '{
+    "hub_id": "'$(jq -r '.id' hub.json)'",
+    "name": "my_first_device",
+    "allow_insecure": true
+  }' $IOT_API/devices > dev1.json
+
+jq < dev1.json
+```
+
+`dev1.json` should contain something like:
+
+```json
+{
+  "device": {
+    "id": "f926489b-92d4-4572-bc96-dfad83c3db4b",
+    "name": "my_first_device",
+    "status": "enabled",
+    "hub_id": "035eb275-6ee7-40a2-b68a-d84b84cc236e",
+    "created_at": "2021-04-26T11:42:43.552Z",
+    "updated_at": "2021-04-26T11:42:43.552Z",
+    "allow_insecure": true,
+    "last_activity_at": "1970-01-01T00:00:00Z",
+    "is_connected": false,
+    "message_filters": {
+      "publish": {
+        "policy": "reject",
+        "topics": []
+      },
+      "subscribe": {
+        "policy": "reject",
+        "topics": []
+      }
+    },
+    "allow_multiple_connections": false,
+    "description": ""
+  },
+  "certificate": {
+    "crt": "<certificate here>",
+    "key": "<certificate key here>"
+  }
+}
+```
+
+Let's now create a second device:
+
+```bash
+curl -sS -H "X-Auth-Token: $SCW_SECRET_KEY" -d '{
+    "hub_id": "'$(jq -r '.id' hub.json)'",
+    "name": "my_second_device",
+    "allow_insecure": true
+  }' $IOT_API/devices > dev2.json
+
+jq < dev2.json
+```
+
+## How to subscribe and publish
+
+Now that everything is set up, let's simulate 2 devices and send data now.
+
+Setup the subscriber:
+
+```bash
+# In one terminal
+mosquitto_sub \
+  -h $(jq -r '.endpoint' hub.json) \
+  -i $(jq -r '.device.id' dev1.json) \
+  -t mytopic/mysubtopic
+```
+
+Run the publisher:
+
+```bash
+# In another terminal
+mosquitto_pub \
+  -h $(jq -r '.endpoint' hub.json) \
+  -i $(jq -r '.device.id' dev2.json) \
+  -t mytopic/mysubtopic \
+  -m 'Hello, world!'
+```
+
+You should see the subscriber receive the `Hello, world!` message.
+
+## How to configure secure connections 
+
+If you require security, you can also connect your device to the Hub using TLS mutual authentication. With this method, the Hub can check the device's identity, and the device can check the Hub's identity.
+
+<Message type="note">
+  It is possible to connect to the Hub using TLS but without Mututal authentication. In this case the device certificates are not needed as the Hub does not need to check the device identity. But the Hub certificate will still be needed as your client must check the hub's identity.
+</Message>
+
+First, download the IoT Hub's server CA:
+
+```bash
+curl -sS -O https://iot.s3.nl-ams.scw.cloud/certificates/fr-par/iot-hub-ca.pem
+sha1sum iot-hub-ca.pem
+# 13cf3e59ed52d4c4b6bc249e85539d5fd5d572fb  iot-hub-ca.pem
+```
+
+Now, extract the certificates from the device JSON files, so that the mosquitto clients may use them:
+
+```bash
+jq -r '.certificate.crt' dev1.json > dev1.crt
+jq -r '.certificate.key' dev1.json > dev1.key
+jq -r '.certificate.crt' dev2.json > dev2.crt
+jq -r '.certificate.key' dev2.json > dev2.key
+```
+
+Finally, run the same test as before, but with the added security:
+
+```bash
+# In one terminal
+mosquitto_sub \
+  -h $(jq -r '.endpoint' hub.json) -p 8883 \
+  --cert dev1.crt --key dev1.key --cafile iot-hub-ca.pem \
+  -i $(jq -r '.device.id' dev1.json) \
+  -t mytopic/mysubtopic
+```
+
+```bash
+# In another terminal
+mosquitto_pub \
+  -h $(jq -r '.endpoint' hub.json) -p 8883 \
+  --cert dev2.crt --key dev2.key --cafile iot-hub-ca.pem \
+  -i $(jq -r '.device.id' dev2.json) \
+  -t mytopic/mysubtopic \
+  -m 'Hello, SECURE world!'
+```
+
+<Message type="tip">
+  You can mix MQTT and MQTTs clients on the same hub.
+</Message>
+
+## Further reading
+
+You can harness the real power of MQTT Pub/Sub with this blog post: [An Introduction to the MQTT protocol](https://blog.scaleway.com/introduction-to-mqtt-protocol/).
+
+
+<Navigation title="See Also">
+  <PreviousButton to="/managed-services/iot-hub/api-cli/getting-started-with-iot-hub-cli/">Getting started with the Scaleway IoT Hub CLI</PreviousButton>
+  <NextButton to="/managed-services/iot-hub/api-cli/iot-hub-routes/">Configuring IoT Hub routes via the CLI</NextButton>
+</Navigation>

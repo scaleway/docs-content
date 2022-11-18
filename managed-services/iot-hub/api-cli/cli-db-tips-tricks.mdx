@@ -1,0 +1,403 @@
+---
+meta:
+  title: Discovering IoT Hub Database Route Tips & Tricks
+  description: This page details advanced PostgreSQL usage in IoT database route
+content:
+  h1: Discovering IoT Hub Database Route Tips & Tricks
+  paragraph: This page details advanced PostgreSQL usage in IoT database route
+categories: 
+  - iot-hub
+tags: Scaleway IoT Device cli
+---
+
+## Database Routes tips and tricks
+
+Routes are integrations with the Scaleway ecosystem: they can forward MQTT messages to Scaleway services.
+
+You can find the documentation here: [IoT Hub Routes](/managed-services/iot-hub/how-to/create-route/).
+
+This page shows advanced usages of PostgreSQL and MySQL.
+
+## PostgreSQL Database advanced usage
+
+This section shows two cases of data manipulation on the PostgreSQL side.
+  1. The first one converts payloads to a float data type.
+  2. The second one uses both JSON manipulation and stored plsql functions.
+
+<Message type="requirement">
+  - You have followed the [Getting started with the IoT Hub CLI](/managed-services/iot-hub/api-cli/getting-started-with-iot-hub-cli) tutorial
+  - You have a working PostgreSQL database, with valid credentials (username and password). 
+  - You have set up environment variables as shown in the code box below:
+</Message>
+
+```bash
+# Database settings
+DBENGINE=postgresql
+DBHOST=<your db host>
+DBPORT=<your db port>
+DBNAME=<your db name>
+DBUSER=<your db user>
+DBPASS=<your db password>
+```
+
+### Non-binary payloads example
+
+As we are not limited to binary payloads, in this example we will use PostgreSQL functions to manipulate `$TOPIC` and `$PAYLOAD` placeholders.
+
+Let's say we have a temperature sensor publishing on the `temperature/living-room` topic. We also know that this sensor will only publish float values.
+
+1. Create a database table to store the temperature measurements:
+    ```bash
+    # Create the target database table
+    psql -h $DBHOST --port $DBPORT -U $DBUSER -d $DBNAME -c '
+      CREATE TABLE temperatures (
+        time timestamp,
+        room text,
+        value double precision
+      )
+    '
+    ```
+2. Setup a database route to listen to the incoming messages, and persist them in the database:
+    ```bash
+    # Create the IoT Hub Database Route
+    # The query
+    #   1. extract topic 2nd part (temperature/living-room -> living-room) stored in _room_ field,
+    #   2. converts the binary payload into a float stored in _value_ field
+    scw iot route create \
+      hub-id=$(jq -r '.id' hub.json) \
+      name=temperature \
+      topic="temperature/+" \
+      db-config.engine="$DBENGINE" \
+      db-config.host="$DBHOST" \
+      db-config.port=$DBPORT \
+      db-config.dbname="$DBNAME" \
+      db-config.username="$DBUSER" \
+      db-config.password="$DBPASS" \
+      db-config.query='INSERT INTO temperatures VALUES (NOW(), split_part($TOPIC, '"'/'"', 2), cast(encode($PAYLOAD, '"'escape'"') as double precision))'
+    ```
+
+    We may now test our setup. We're going to publish a message and then check that it was stored in the database.
+3. Publish a message:
+    ```bash
+    sleep 5 # wait a little for the route to start
+    mosquitto_pub \
+      -h $(jq -r '.endpoint' hub.json) \
+      -i $(jq -r '.device.id' dev2.json) \
+      -t 'temperature/bedroom' \
+      -m '19.5'
+    ```
+4. Check the result in the database:
+    ```bash
+    psql -h $DBHOST --port $DBPORT -U $DBUSER -d $DBNAME -c "SELECT * FROM temperatures"
+    ```
+
+### Advanced example with JSON and plsql functions
+
+In the same manner, we can also manipulate JSON payload, call plsql functions, and take advantage of all the expressiveness that PosgreSQL offers.
+
+The following example is logging building access attempts in non-working hours. Those are notified by badge readers, that publish a JSON payload on 'access-control/office/'
+
+1. Run the following commands in a terminal on your computer:
+    ```bash
+    # Create the target database table
+    psql -h $DBHOST --port $DBPORT -U $DBUSER -d $DBNAME -c '
+      CREATE TABLE access_logs (
+        time timestamp PRIMARY KEY,
+        login varchar(128)
+      );
+
+      CREATE OR REPLACE FUNCTION nonworkinghours(at timestamp, login text) RETURNS void
+      AS $$
+      DECLARE
+        hour INTEGER;
+      BEGIN
+        hour := EXTRACT(hour FROM at);
+        IF hour <= 8 OR hour >= 22 THEN
+          INSERT INTO access_logs VALUES (at, login);
+        END IF;
+      END;
+      $$ LANGUAGE plpgsql;
+    '
+
+    # Create the IoT Hub Database Route
+    # NOTE: the query decodes the payload as json, then extract both 'timestamp' and 'user' values,
+    # and finally executes `nonworkinghours` function with timestamp and user values as parameters
+    scw iot route create \
+      hub-id=$(jq -r '.id' hub.json) \
+      name="non-working hours office access" \
+      topic="access-control/office/#" \
+      db-config.engine="$DBENGINE" \
+      db-config.host="$DBHOST" \
+      db-config.port=$DBPORT \
+      db-config.dbname="$DBNAME" \
+      db-config.username="$DBUSER" \
+      db-config.password="$DBPASS" \
+      db-config.query='SELECT nonworkinghours((encode($PAYLOAD, '"'escape'"')::json->>'"'timestamp'"')::timestamp, (encode($PAYLOAD, '"'escape'"')::json->>'"'user'"')::text)'
+    ```
+2. Try publishing some access events.
+    ```bash
+    sleep 5 # wait a little for the route to start
+    mosquitto_pub \
+      -h $(jq -r '.endpoint' hub.json) \
+      -i $(jq -r '.device.id' dev2.json) \
+      -t access-control/office/reader1 \
+      -m '{
+          "timestamp": "2019-10-11T11:21:12",
+          "user": "jdoe",
+          "door": "front",
+          "access": "True"
+        }'
+
+    mosquitto_pub \
+      -h $(jq -r '.endpoint' hub.json) \
+      -i $(jq -r '.device.id' dev2.json) \
+      -t access-control/office/reader2 \
+      -m '{
+          "timestamp": "2019-10-11T04:10:44",
+          "user": "thief",
+          "door": "rear",
+          "access": "False"
+        }'
+    ```
+
+    The first access occurs during working hours so it should not be recorded, however the second one occurs at nighttime and will be recorded.
+3. Enter the following commands to check that everything is as expected:
+    ```bash
+    psql -h $DBHOST --port $DBPORT -U $DBUSER -d $DBNAME -c "SELECT * FROM access_logs"
+    ```
+
+    Should output:
+
+    ```
+            time         | login 
+    ---------------------+-------
+    2019-10-11 04:10:44 | thief
+    (1 row)
+
+    ```
+
+## MySQL Database usage
+
+This section presents similar examples using MySQL:
+  - The first one is a basic example of an IoT route with MySQL
+  - The second one converts payloads to a float data type.
+  - The third one uses both JSON manipulation and MySQL stored functions.
+
+
+<Message type="requirement">
+  - You have followed the [Getting started with the IoT Hub CLI](/managed-services/iot-hub/api-cli/getting-started-with-iot-hub-cli) tutorial.
+  - You have a working MySQL database, with valid credentials (username and password). You can use a [Scaleway Database instance](https://console.scaleway.com/rdb/instances), or any other MySQL instance publicly accessible.
+  - You have set up environment variables as shown in the code box below
+</Message>
+
+```bash
+# Database settings
+DBENGINE=mysql
+DBHOST=<your db host>
+DBPORT=<your db port>
+DBNAME=<your db name>
+DBUSER=<your db user>
+DBPASS=<your db password>
+```
+
+### Basic MySQL example
+
+This is a port of the [Database Route section of the cli tutorial](/managed-services/iot-hub/api-cli/iot-hub-routes) to MySQL.
+
+NOTE: The `topic` database field **must** be a of _text_ type, and `payload` can be of _text_ or _blob_ type depending on your usage.
+
+1. Run the following commands in a terminal on your computer:
+    ```bash
+    # Create the target database table
+    mysql -h $DBHOST --port $DBPORT -p -u $DBUSER -D $DBNAME <<EOF
+      CREATE TABLE messages (
+        time timestamp,
+        topic text,
+        payload blob
+      ) CHARACTER SET utf8 COLLATE utf8_bin;
+    EOF
+
+    # Create the IoT Hub Database Route
+    # The query will insert message topic and payload with current timestamp
+    scw iot route create \
+      hub-id=$(jq -r '.id' hub.json) \
+      topic="hello/world" \
+      db-config.engine="$DBENGINE" \
+      db-config.host="$DBHOST" \
+      db-config.port=$DBPORT \
+      db-config.dbname="$DBNAME" \
+      db-config.username="$DBUSER" \
+      db-config.password="$DBPASS" \
+      db-config.query='INSERT INTO messages VALUES (NOW(), $TOPIC, $PAYLOAD)'
+    ```
+
+    The output will contain something like
+
+    ```
+    ID                 2251e2b1-c616-4a7e-9e72-b658da656424
+    Name               cli-route-db-tutorial
+    HubID              b20c3639-9030-496c-a1b2-6feb15846726
+    Topic              hello/world
+    Type               database
+    CreatedAt          now
+    DbConfig.Engine    mysql
+    DbConfig.Host      127.0.0.1
+    DbConfig.Port      5432
+    DbConfig.Dbname    route_tests
+    DbConfig.Username  jdoe
+    DbConfig.Password  <your_pass>
+    DbConfig.Query     INSERT INTO messages VALUES (NOW(), $TOPIC, $PAYLOAD)
+    UpdatedAt          now
+    ```
+2. Publish a message and check whether it is inserted into the `message` table.
+    ```bash
+    sleep 5 # wait a little for the route to start
+    mosquitto_pub \
+      -h $(jq -r '.endpoint' hub.json) \
+      -i $(jq -r '.device.id' dev2.json) \
+      -t hello/world \
+      -m 'Hello, world!'
+    mysql -h $DBHOST --port $DBPORT -p -u $DBUSER -D $DBNAME <<EOF
+    SELECT * FROM messages;
+    EOF
+    ```
+
+### Non-binary payloads example
+
+As we are not limited to binary payloads, in this example we will use MySQL functions to manipulate `$TOPIC` and `$PAYLOAD` placeholders.
+
+Let's say we have a temperature sensor publishing on the `temperature/living-room` topic. We also know that this sensor will only publish float values.
+
+1. Create a database table to store the temperature measurements:
+    ```bash
+    # Create the target database table
+    mysql -h $DBHOST --port $DBPORT -p -u $DBUSER -D $DBNAME <<EOF
+      CREATE TABLE temperatures (
+        time timestamp,
+        room text,
+        value double precision
+      );
+    EOF
+    ```
+2. Setup a database route to listen to the incoming messages, and persist them in the database:
+    ```bash
+    # Create the IoT Hub Database Route
+    # The query
+    #   1. extract topic 2nd part (temperature/living-room -> living-room) stored in _room_ field,
+    #   2. implicit converts the binary payload into a double stored in _value_ field
+    scw iot route create \
+      hub-id=$(jq -r '.id' hub.json) \
+      topic="temperature/+" \
+      db-config.engine="$DBENGINE" \
+      db-config.host="$DBHOST" \
+      db-config.port=$DBPORT \
+      db-config.dbname="$DBNAME" \
+      db-config.username="$DBUSER" \
+      db-config.password="$DBPASS" \
+      db-config.query='INSERT INTO temperatures VALUES (NOW(), SUBSTRING_INDEX($TOPIC, '"'/'"', -1), $PAYLOAD)'
+    ```
+
+    We may now test our setup. We're going to publish a message and then check that it was stored in the database.
+3. Publish a message:
+    ```bash
+    sleep 5 # wait a little for the route to start
+    mosquitto_pub \
+      -h $(jq -r '.endpoint' hub.json) \
+      -i $(jq -r '.device.id' dev2.json) \
+      -t 'temperature/bedroom' \
+      -m '19.5'
+    ```
+4. Check the result in the database:
+    ```bash
+    mysql -h $DBHOST --port $DBPORT -p -u $DBUSER -D $DBNAME <<EOF
+    SELECT * FROM temperatures;
+    EOF
+    ```
+
+### Advanced example with JSON and stored functions
+
+In the same manner, we can also manipulate JSON payload, call stored functions, and take advantage of all the expressiveness that MySQL offers.
+
+The following example is logging building access attempts in non-working hours. Those are notified by badge readers, that publish a JSON payload on 'access-control/office/'
+
+1. Run the following commands in a terminal on your computer:
+    ```bash
+    # Create the target database table
+    mysql -h $DBHOST --port $DBPORT -p -u $DBUSER -D $DBNAME <<EOF
+      CREATE TABLE access_logs (
+        time timestamp PRIMARY KEY,
+        login varchar(128)
+      );
+
+      DELIMITER $$
+      CREATE PROCEDURE nonworkinghours(at timestamp, login text)
+      BEGIN
+        DECLARE hour INTEGER;
+        SET hour = HOUR(at);
+        IF hour <= 8 OR hour >= 22 THEN
+          INSERT INTO access_logs VALUES (at, login);
+        END IF;
+      END$$
+      DELIMITER ;
+    EOF
+
+    # Create the IoT Hub Database Route
+    # NOTE: the query decodes the payload as json, then extract both 'timestamp' and 'user' values,
+    # and finally executes `nonworkinghours` procedure with timestamp and user values as parameters
+    scw iot route create \
+      hub-id=$(jq -r '.id' hub.json) \
+      topic="access-control/office/#" \
+      db-config.engine="$DBENGINE" \
+      db-config.host="$DBHOST" \
+      db-config.port=$DBPORT \
+      db-config.dbname="$DBNAME" \
+      db-config.username="$DBUSER" \
+      db-config.password="$DBPASS" \
+      db-config.query='CALL nonworkinghours(JSON_EXTRACT($PAYLOAD, '"'$.timestamp'"'), JSON_EXTRACT($PAYLOAD, '"'$.user'"'))'
+    ```
+2. Try publishing some access events
+    ```bash
+    sleep 5 # wait a little for the route to start
+    mosquitto_pub \
+      -h $(jq -r '.endpoint' hub.json) \
+      -i $(jq -r '.device.id' dev2.json) \
+      -t access-control/office/reader1 \
+      -m '{
+          "timestamp": "2021-10-11T11:21:12",
+          "user": "jdoe",
+          "door": "front",
+          "access": "True"
+        }'
+
+    mosquitto_pub \
+      -h $(jq -r '.endpoint' hub.json) \
+      -i $(jq -r '.device.id' dev2.json) \
+      -t access-control/office/reader2 \
+      -m '{
+          "timestamp": "2021-10-11T04:10:44",
+          "user": "thief",
+          "door": "rear",
+          "access": "False"
+        }'
+    ```
+
+    The first access occurs during working hours so it should not be recorded, however the second one occurs at nighttime and will be recorded.
+3. Enter the following commands to check that everything is as expected:
+    ```bash
+    mysql -h $DBHOST --port $DBPORT -p -u $DBUSER -D $DBNAME <<EOF
+    SELECT * FROM access_logs;
+    EOF
+    ```
+
+    Should output:
+
+    ```
+    time	login
+    2021-10-11 04:10:44	"thief"
+    ```
+
+
+<Navigation title="See Also">
+  <PreviousButton to="/managed-services/iot-hub/api-cli/iot-hub-routes/">Configuring IoT Hub routes via the CLI</PreviousButton>
+  <NextButton to="/managed-services/iot-hub/api-cli/using-twins/">Using Cloud Twins</NextButton>
+</Navigation>

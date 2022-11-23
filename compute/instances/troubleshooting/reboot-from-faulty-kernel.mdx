@@ -1,0 +1,111 @@
+---
+meta:
+  title: Rebooting from a faulty kernel
+  description: This page helps you troubleshoot issues related to the installation of a faulty kernel
+content:
+  h1: Rebooting from a faulty kernel
+  paragraph: This page helps you troubleshoot issues related to the installation of a faulty kernel
+tags: kernel faulty-kernel reboot bugfix
+dates:
+  validation: 2022-11-23
+  posted: 2022-11-23
+categories:
+  - compute
+---
+
+[Rescue mode](/compute/instances/concepts/#rescue-mode) allows you to boot your Instance into a temporary operating system, running from the Instance's RAM. Rescue mode is often used to diagnose and resolve issues such as faulty kernel configurations, networking issues, firewall configurations...etc. 
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created an Instance](/compute/instances/how-to/create-an-instance)
+  - You have installed and configured the Scaleway [CLI-Tools](/compute/instances/api-cli/creating-managing-instances-with-cliv2) on your local computer
+</Message>
+
+1. Switch the Instance's `boot-type` to `rescue` and reboot your Instance into rescue mode using the CLI-Tools: 
+    ```
+    # scw instance server update {Instance_ID} boot-type=rescue
+    # scw instance server reboot {Instance_ID}
+    ```
+    <Message type="note">
+        Replace `{Instance_ID}` with the unique ID of your Instance, e.g. `0500ebd2-d70d-49af-a969-3ac09b6f7fff`.
+    </Message>
+2. Once the Instance is rebooted, log into your Instance using [SSH](/compute/instances/how-to/connect-to-instance/) and setup the environment to be able to chroot into it:
+    ```sh
+    # cat /proc/partitions
+    major minor #blocks name
+
+    8 0 9765625 sda
+    8 1 9634536 sda1
+    8 14 3072 sda14
+    8 15 126976 sda15
+    # mount /dev/sda1 /mnt
+    # mount /dev/sda15 /mnt/boot/efi
+    # mount -o bind /sys /mnt/sys
+    # mount -o bind /proc /mnt/proc
+    # mount -o bind /dev /mnt/dev
+    ```
+3. Once mounted, use the `chroot` command to get into your Instances' root filesystem. You can then change the `GRUB_DEFAULT` value to boot using the previous kernel:
+    ```sh
+    chroot /mnt
+    nano /etc/default/grub
+    ```
+    <Message type="tip">
+        In the example above we use `nano` as text editor. Feel free to use your favorite text editor to edit the file. 
+    </Message>
+    Change the value of `GRUB_DEFAULT` to `"1 > 2":
+    ```sh
+    # head /etc/default/grub
+    # If you change this file, run 'update-grub' afterwards to update
+    # /boot/grub/grub.cfg.
+    # For full documentation of the options in this file, see:
+    #   info -f grub -n 'Simple configuration'
+    
+    GRUB_DEFAULT="1>2"
+    GRUB_TIMEOUT=5
+    GRUB_DISTRIBUTOR=`lsb_release -i -s 2> /dev/null || echo Debian`
+    GRUB_CMDLINE_LINUX_DEFAULT=""
+    GRUB_CMDLINE_LINUX="console=tty0 console=ttyS0,115200 earlyprintk=ttyS0,115200 consoleblank=0"
+    ```
+    Save the file and exit the text editor. 
+4. Update the `grub` boatloader` to apply the kernel's update
+    ```
+    # update-grub
+    Generating grub configuration file ...
+    Found linux image: /boot/vmlinuz-6.0.0-0.deb11.2-cloud-amd64
+    Found initrd image: /boot/initrd.img-6.0.0-0.deb11.2-cloud-amd64
+    Found linux image: /boot/vmlinuz-5.19.0-0.deb11.2-cloud-amd64
+    Found initrd image: /boot/initrd.img-5.19.0-0.deb11.2-cloud-amd64
+    Found linux image: /boot/vmlinuz-5.10.0-19-cloud-amd64
+    Found initrd image: /boot/initrd.img-5.10.0-19-cloud-amd64
+    done
+    ```
+5. Switch back the Instance's `boot_type` to `local` and reboot the Instance:
+    ```
+    scw instance server update {Instance_ID} boot-type=local
+    scw instance server reboot {Instance_ID}
+    ```
+    Your Instance reboots on the previously installed kernel.
+
+ ### Examples of failed boots
+
+* In the followin example, the Instance may only boot with the root filesystem in `read-only` mode:
+    ```sh
+    [  OK  ] Finished Remove Stale Onli…ext4 Metadata Check Snapshots.
+    [    4.219158] cloud-init[542]: Traceback (most recent call last):
+    [    4.220328] cloud-init[542]:   File "/usr/bin/cloud-init", line 33, in <module>
+    [    4.221518] cloud-init[542]:     sys.exit(load_entry_point('cloud-init==20.4.1', 'console_scripts', 'cloud-init')())
+    [    4.223064] cloud-init[542]:   File "/usr/lib/python3/dist-packages/cloudinit/cmd/main.py", line 891, in main
+    [    4.224435] cloud-init[542]:     retval = util.log_time(
+    [    4.225251] cloud-init[542]:   File "/usr/lib/python3/dist-packages/cloudinit/util.py", line 2348, in log_time
+    [    4.226838] cloud-init[542]:     ret = func(*args, **kwargs)
+    [    4.227743] cloud-init[542]:   File "/usr/lib/python3/dist-packages/cloudinit/cmd/main.py", line 600, in status_wrapper
+    [    4.229478] cloud-init[542]:     util.ensure_dirs((data_d, link_d,))
+    [    4.230501] cloud-init[542]:   File "/usr/lib/python3/dist-packages/cloudinit/util.py", line 1534, in ensure_dirs
+    [    4.232014] cloud-init[542]:     ensure_dir(d, mode)
+    [    4.232540] cloud-init[542]:   File "/usr/lib/python3/dist-packages/cloudinit/util.py", line 1591, in ensure_dir
+    [    4.233980] cloud-init[542]:     chmod(path, mode)
+    [    4.234756] cloud-init[542]:   File "/usr/lib/python3/dist-packages/cloudinit/util.py", line 1830, in chmod
+    [    4.235672] cloud-init[542]:     os.chmod(path, real_mode)
+    [    4.236227] cloud-init[542]: OSError: [Errno 30] Read-only file system: '/var/lib/cloud/data'
+    [FAILED] Failed to start Apply the …ngs specified in cloud-config.
+    ```

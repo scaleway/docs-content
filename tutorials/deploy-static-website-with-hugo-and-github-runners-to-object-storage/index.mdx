@@ -24,7 +24,7 @@ In this tutorial you learn how to install Hugo on your local computer so you can
 <Message type="requirement">
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have an Object Storage bucket with [bucket website feature](/storage/object/how-to/use-bucket-website) enabled
-  - You have a [GitHub](https://github.com/) account
+  - You have a [GitHub](https://github.com/) account and [created](https://docs.github.com/en/get-started/quickstart/create-a-repo) an empty repository for your project
   - You have `git` installed on your local computer
 </Message>
 
@@ -54,11 +54,124 @@ Run the following commands to create a new site using Hugo.
     ```
     cd mysuperwebsite
     ```
-    
+3. Create a new page for your website:
+    ```
+    hugo new posts/hello-world.md
+    ```
+4. Open the newly created file in a text editor. The file is located in the `content/posts` directory.
+    ```
+    nano content/posts/hello-world.md
+    ```
+5. Edit the content as you wish. The file uses [markdown](https://commonmark.org/help/) for the body part and includes [front matter](https://gohugo.io/content-management/front-matter/) to store metadata such as the title and the publication date.
+    ```
+    ---
+    title: "Hello World"
+    date: 2022-12-12T10:54:17+00:00
+    ---
+    ## Welcome to my super website
 
+    This is **bold** text, and this is *emphasized* text.
 
+    Do you prefer _underlined_? Markdown is great.
+    ```
+4. Configure your site by editing the file `config.toml` in the root directory of your project:
+    ```
+    # Set the base URL for your site here
+    baseURL = 'http://mysuperwebsite.example.com/'
+    languageCode = 'en-us'
+    title = 'My super website'
 
+    [deployment]
 
-git remote add origin https://github.com/bene2k1/test2.git
-git branch -M main
-git push -u origin main
+    [[deployment.targets]]
+    # Configure the deployment target to the Object Storage bucket. Make sure your bucket is named exactly as your base URL (mysuperwebsite.example.com)
+    name = "mysuperwebsite.example.com"
+    URL = "s3://mysuperwebsite.example.com?endpoint=https://s3.fr-par.scw.cloud&region=fr-par"
+    ```
+    <Message type="tip">
+        The example above uses a bucket located in the region `fr-par`. If you bucket is located in another region edit the value to the corresponding region.
+    </Message>
+5. Run Hugo to generate your site for the first time
+    ```
+    hugo
+    ```
+5. Configure the remote upstream for your branch to your repository on GitHub: 
+    ```
+    git remote add origin https://github.com/mygithubaccount/mysuperwebsite.git
+    ```
+6. Set your local branch as `main` branch for the repository:
+    ```
+    git branch -M main
+    ```
+7. Push the content of your local repository to GitHub
+    ```
+    git push -u origin main
+    ```
+
+## Setting-up the GitHub runner
+
+<Message type="tip">
+    This step requires that you have created a [GitHub repoistory](https://docs.github.com/en/get-started/quickstart/create-a-repo) for your project.
+</Message>
+
+1. Open a web browser and go to your projects' repoistory on [GitHub.com](http://github.com).
+2. Click the **Settings** tab to display the settings of your repository. 
+3. Click **Secrets** > **Actions** in the side menu. The list of Actions secrets displays. GitHub Secrets are encrypted data of sensitive information. They are used here to store the Scaleway secret key and access key.
+4. Click **New repository secret** to create a new secret. Name it `SCW_ACCESS_KEY_ID` and enter your access key as secret value. Then click **Add secret** to save.
+5. Repeat the step above with a secret named `SCW_SECRET_ACCESS_KEY` and your secret key as secret value.
+6. Click the **Actions** tab. A list of suggested GitHub Actions for your project displays. Click **Skip this and setup a workflow yourself**.
+7. Copy the follwing code in the text editor, keep the default file name `main.yml` and click **Start commit**:
+    ```yaml
+    name: Build and Deploy Hugo
+
+    on:
+      push:
+        branches: [ "main" ]
+
+    jobs:
+      build_and_deploy:
+        name: Deploy Hugo Website
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v3
+        - name: setup hugo
+          uses: peaceiris/actions-hugo@v2.6.0
+          with:
+            hugo-version: '0.108.0'
+        - name: build site
+          run: hugo
+        - name: deploy to s3
+          run: hugo deploy --force --maxDeletes -1
+          env:
+            AWS_ACCESS_KEY_ID: ${{ secrets.SCW_ACCESS_KEY_ID }}
+            AWS_SECRET_ACCESS_KEY: ${{ secrets.SCW_SECRET_ACCESS_KEY }}
+    ```
+8. Enter a commit message, select **Commit directly to the `main` branch** and click **Commit new file**. 
+
+The runner runs automatically for the first time and, builds and deploys your website to the Object Storage bucket.
+
+## Adding more content
+
+1. Create new pages using the `hugo new` command:
+    ```
+    hugo new posts/my-second-blogpost.md
+    ```
+2. Edit the file using a text editor and save it
+    ```
+    nano content/posts/my-second-blogpost.md
+    ```
+3. Add the newly created file to your repository:
+    ```
+    git add .
+    ```
+4. Commit the changes you made
+    ```
+    git commit -c "added a new blogpost"
+    ```
+5. Push your content to the remote repository:
+    ```
+    git push origin main
+    ```
+
+GitHub Actions launches automatically the script created in the previous script and a runner will execute Hugo, build the website and deploy it to Object Storage. You can see your updated website a few moments later in your webbrowser.
+For more infomration about Hugo refer the [official Hugo documentation](https://gohugo.io/about/). Furher information about GitHub actions is avialable in the [GitHub documentation](https://docs.github.com/en/actions).

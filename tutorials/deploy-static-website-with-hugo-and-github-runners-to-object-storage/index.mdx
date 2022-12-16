@@ -1,0 +1,178 @@
+---
+meta:
+  title: Deploying a static website to Object Storage with Hugo and GitHub runners
+  description: In this tutorial you will learn how to deploy a static website to Object Storage with Hugo and GitHub runners.
+content:
+  h1: Deploying a static website to Object Storage with Hugo and GitHub runners
+  paragraph: In this tutorial you will learn how to deploy a static website to Object Storage with Hugo and GitHub runners.
+tags: hugo cms website github object storage
+categories: 
+  - storage
+  - object-storage
+dates:
+  validation: 2022-12-07
+  posted: 2022-12-07
+---
+
+Hugo is a static HTML and CSS website generator written in Go. The application is designed to take a directory with content and templates and render them into a full HTML website.
+Hugo uses Markdown files with front matter for metadata, making it lightweight and easy to use. 
+
+In this tutorial you will learn how to install Hugo on your local computer so you can build your website locally, before pushing your content into a GitHub repository where a GitHub runner will take the content, generate the HTML version of it and upload to a Object Storage bucket automatically.
+
+<Macro id="iam-requirements" />
+ 
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have an Object Storage bucket with [bucket website feature](/storage/object/how-to/use-bucket-website) enabled
+  - You have a [GitHub](https://github.com/) account and [created](https://docs.github.com/en/get-started/quickstart/create-a-repo) an empty repository for your project
+  - You have `git` installed on your local computer
+</Message>
+
+## Installing Hugo
+
+Hugo is available for most operating systems. In this tutorial we describe the installation on a Ubuntu Linux system. For other operating systems, refer to the [official documentation](https://gohugo.io/installation/).
+
+1. Open a terminal on your computer. 
+2. Make sure your `apt` package manager is up to date:
+   ```
+   sudo apt update
+   ```
+3. Install Hugo using `apt`:
+   ```
+   sudo apt install hugo
+   ```
+
+## Creating a new site
+
+Run the following commands to create a new site using Hugo. 
+
+1. Create the site. In this example the site is named `mysuperwebsite`. You can give it a name of your choice. 
+    ```
+    hugo new site mysuperwebsite
+    ```
+2. Enter the website directory
+    ```
+    cd mysuperwebsite
+    ```
+3. Create a new page for your website:
+    ```
+    hugo new posts/hello-world.md
+    ```
+4. Open the newly created file in a text editor. The file is located in the `content/posts` directory.
+    ```
+    nano content/posts/hello-world.md
+    ```
+5. Edit the content as you wish. The file uses [markdown](https://commonmark.org/help/) for the body part and includes [front matter](https://gohugo.io/content-management/front-matter/) to store metadata such as the title and the publication date.
+    ```
+    ---
+    title: "Hello World"
+    date: 2022-12-12T10:54:17+00:00
+    ---
+    ## Welcome to my super website
+
+    This is **bold** text, and this is *emphasized* text.
+
+    Do you prefer _underlined_? Markdown is great.
+    ```
+6. Configure your site by editing the file `config.toml` in the root directory of your project:
+    ```
+    # Set the base URL for your site here
+    baseURL = 'http://mysuperwebsite.example.com/'
+    languageCode = 'en-us'
+    title = 'My super website'
+
+    [deployment]
+
+    [[deployment.targets]]
+    # Configure the deployment target to the Object Storage bucket. Make sure your bucket is named exactly as your base URL (mysuperwebsite.example.com)
+    name = "mysuperwebsite.example.com"
+    URL = "s3://mysuperwebsite.example.com?endpoint=https://s3.fr-par.scw.cloud&region=fr-par"
+    ```
+    <Message type="tip">
+        The example above uses a bucket located in the region `fr-par`. If you bucket is located in another region, edit the value to the corresponding region.
+    </Message>
+7. Run Hugo to generate your site for the first time
+    ```
+    hugo
+    ```
+8. Configure the remote upstream for your branch to your repository on GitHub: 
+    ```
+    git remote add origin https://github.com/mygithubaccount/mysuperwebsite.git
+    ```
+9. Set your local branch as `main` branch for the repository:
+    ```
+    git branch -M main
+    ```
+10. Push the content of your local repository to GitHub
+    ```
+    git push -u origin main
+    ```
+
+## Setting-up the GitHub runner
+
+<Message type="tip">
+    This step requires you to have created a [GitHub repository](https://docs.github.com/en/get-started/quickstart/create-a-repo) for your project.
+</Message>
+
+1. Open a web browser and go to your project's repository on [GitHub.com](http://github.com).
+2. Click the **Settings** tab to display the settings of your repository. 
+3. Click **Secrets** > **Actions** in the side menu. The list of Actions secrets displays. GitHub Secrets are encrypted data of sensitive information. They are used here to store the Scaleway secret key and access key.
+4. Click **New repository secret** to create a new secret. Name it `SCW_ACCESS_KEY_ID` and enter your access key as secret value. 
+5. Click **Add secret** to save your configuration.
+6. Repeat the step above with a secret named `SCW_SECRET_ACCESS_KEY` and your secret key as secret value.
+7. Click the **Actions** tab. A list of suggested GitHub Actions for your project displays. Click **Skip this and setup a workflow yourself**.
+8. Copy the following code in the text editor, keep the default file name `main.yml` and click **Start commit**:
+    ```yaml
+    name: Build and Deploy Hugo
+
+    on:
+      push:
+        branches: [ "main" ]
+
+    jobs:
+      build_and_deploy:
+        name: Deploy Hugo Website
+        runs-on: ubuntu-latest
+        steps:
+        - uses: actions/checkout@v3
+        - name: setup hugo
+          uses: peaceiris/actions-hugo@v2.6.0
+          with:
+            hugo-version: '0.108.0'
+        - name: build site
+          run: hugo
+        - name: deploy to s3
+          run: hugo deploy --force --maxDeletes -1
+          env:
+            AWS_ACCESS_KEY_ID: ${{ secrets.SCW_ACCESS_KEY_ID }}
+            AWS_SECRET_ACCESS_KEY: ${{ secrets.SCW_SECRET_ACCESS_KEY }}
+    ```
+9. Enter a commit message, select **Commit directly to the `main` branch** and click **Commit new file**. 
+
+The runner runs automatically for the first time and builds and deploys your website to the Object Storage bucket.
+
+## Adding more content
+
+1. Create new pages using the `hugo new` command:
+    ```
+    hugo new posts/my-second-blogpost.md
+    ```
+2. Edit the file using a text editor and save it
+    ```
+    nano content/posts/my-second-blogpost.md
+    ```
+3. Add the newly created file to your repository:
+    ```
+    git add .
+    ```
+4. Commit the changes you made
+    ```
+    git commit -c "added a new blogpost"
+    ```
+5. Push your content to the remote repository:
+    ```
+    git push origin main
+    ```
+
+GitHub Actions automatically launches the script created in the previous step and a runner will execute Hugo, build the website and deploy it to Object Storage. You can see your updated website a few moments later in your web browser.
+For more information about Hugo refer to the [official Hugo documentation](https://gohugo.io/about/). Further information about GitHub actions is available in the [GitHub documentation](https://docs.github.com/en/actions).

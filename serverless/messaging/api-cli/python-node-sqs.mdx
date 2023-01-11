@@ -1,0 +1,269 @@
+---
+meta:
+  title: Using Go, Python or NodeJS with SQS
+  description: This page explains how to use Go, Python or NodeJS with SQS and provides code samples
+content:
+  h1: Using Go, Python or NodeJS with SQS
+  paragraph: This page explains how to use Go, Python or NodeJS with SQS and provides code samples
+tags: messaging boto3 python nodejs sqs go 
+categories: 
+  - messaging
+dates:
+  validation: 2023-01-04
+  posted: 2023-01-04
+---
+
+AWS provides a number of SDKs (**S**oftware **D**evelopment **K**its) which provide language-specific APIs for AWS services, including [SQS](/serverless/messaging/concepts#sqs).
+
+- AWS provides a dedicated [SDK for Go](https://aws.amazon.com/sdk-for-go/).
+- The [AWS SDK for Python](https://aws.amazon.com/sdk-for-python/) is Boto3
+- For Node.js, use the [AWS SDK for JavaScript](https://aws.amazon.com/sdk-for-javascript/), which can be [installed from NPM](https://github.com/aws/aws-sdk-js-v3#getting-started)
+
+This guide provides code samples to show you how to start using these SDKs with your Scaleway Messaging SNS/SQS namespace, specifically with SQS.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)  
+  - You have [created an SNS/SQS Messaging and Queuing namespace](/serverless/messaging/how-to/create-namespace/)
+  - You have [generated credentials](/serverless/messaging/how-to/create-credentials/) for your SNS/SQS Messaging and Queuing namespace
+  - You have installed the relevant AWS SDK [for Go](https://aws.amazon.com/sdk-for-go/), [Python](https://aws.amazon.com/sdk-for-python/) and/or [JavaScript](https://aws.amazon.com/sdk-for-javascript/)
+</Message>
+
+## Go
+
+### Connect to SQS
+
+The following code sample shows how to connect to SQS:
+
+```go
+import (
+  "github.com/aws/aws-sdk-go/aws"
+  "github.com/aws/aws-sdk-go/aws/credentials"
+  "github.com/aws/aws-sdk-go/aws/session"
+  "github.com/aws/aws-sdk-go/service/sqs"
+)
+
+type AWSCredsProvider struct {
+  AccessKey string
+  SecretKey string
+}
+
+func (p *AWSCredsProvider) Retrieve() (credentials.Value, error) {
+  return credentials.Value{
+    AccessKeyID:     p.AccessKey,
+    SecretAccessKey: p.SecretKey,
+    SessionToken:    "",
+    ProviderName:    "anonymous",
+  }, nil
+}
+
+func (p *AWSCredsProvider) IsExpired() bool {
+  return false
+}
+
+func main() {
+  awsSession := session.Must(session.NewSession(&aws.Config{
+    Region:   aws.String("fr-par"),
+    Endpoint: aws.String("http://sqs-sns.mnq.fr-par.scw.cloud"),
+    Credentials: credentials.NewCredentials(&AWSCredsProvider{
+      AccessKey: AwsAccessKey,
+      SecretKey: AwsSecretKey,
+    }),
+  }))
+
+  awsSqs := sqs.New(awsSession)
+
+  [...]
+}
+```
+
+<Message type="note">
+
+  The `Endpoint` for Scaleway Messaging and Queuing is `https://sqs-sns.mnq.fr-par.scw.cloud`. For the access and secret key values, use the credentials you [generated](/serverless/messaging/how-to/create-credentials/) for your SNS/SQS namespace.
+
+</Message>
+
+Once you are connected to the SQS service, you can use any functions available with the SDK. However, we recommend that you check they are [supported by Scaleway Messaging and Queuing](/serverless/messaging/reference-content/sqs-support/). See the [official documentation](https://pkg.go.dev/github.com/aws/aws-sdk-go/service/sqs) for more details on using the SDK, or read on to see some examples.
+
+### Create queue
+
+```go
+createQueueResponse, _ := awsSqs.CreateQueue(&sqs.CreateQueueInput{
+  QueueName: aws.String("my-test-queue"),
+})
+fmt.Println(*createQueueResponse.QueueUrl)
+```
+
+### Send messages to this queue
+
+```go
+for i := 0; i < 10; i++ {
+  _, _ = awsSqs.SendMessage(&sqs.SendMessageInput{
+    MessageBody: aws.String(fmt.Sprintf("Hello World: %d", i)),
+    QueueUrl:    createQueueResponse.QueueUrl,
+  })
+}
+```
+
+### Receive messages from this queue
+
+```go
+for {
+  receiveMessageResponse, err := awsSqs.ReceiveMessage(&sqs.ReceiveMessageInput{
+    QueueUrl: createQueueResponse.QueueUrl,
+  })
+  if err != nil || len(receiveMessageResponse.Messages) == 0 {
+    break
+  }
+  for _, m := range receiveMessageResponse.Messages {
+    fmt.Println(*m.Body)
+  }
+}
+```
+
+## Python
+
+### Connect to SQS
+
+The following code sample shows how to connect to SQS using Boto3's `resource()`. It is also possible to use `client()`, but `resource()` is more pythonesque:
+
+```python
+sqs = boto3.resource('sqs',
+  endpoint_url=[],
+  aws_access_key_id=[],
+  aws_secret_access_key=[],
+  region_name='fr-par')
+```
+
+<Message type="note">
+  The `endpoint_url` for Scaleway Messaging and Queuing is `https://sqs-sns.mnq.fr-par.scw.cloud`. For the access and secret key values, use the credentials you [generated](/serverless/messaging/how-to/create-credentials/) for your SNS/SQS namespace.
+</Message>
+
+Once connected to the SQS service, you can use any functions available with the SDK - just check that they're [supported by Scaleway Messaging and Queuing](/serverless/messaging/reference-content/sqs-support/). See the [official documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html) for more details, or read on to see some examples.
+
+### Create queue
+
+```python
+# Create the queue. This returns an SQS.Queue instance
+queue = sqs.create_queue(QueueName='my test queue')
+
+# You can now access identifiers and attributes
+print(queue.url)
+print(queue.attributes)
+```
+
+### Send messages to this queue
+
+```python
+for i in range (0,10):
+  queue.send_message(MessageBody="Hello World: "+str(i))
+```
+
+### Receive messages from this queue
+
+```python
+for message in queue.receive_messages():
+  print(message.body)
+  message.delete()
+```
+
+## NodeJS
+
+### Connect to SQS
+
+The following code sample shows how to connect to SQS:
+
+```javascript
+var sqs = new AWS.SQS({
+  apiVersion: '2012-11-05',
+  endpoint: [],
+  accessKeyId: [],
+  secretAccessKey: [],
+  region: 'fr-par'
+  });
+```
+
+<Message type="note">
+  The `endpoint_url` for Scaleway Messaging and Queuing is `https://sqs-sns.mnq.fr-par.scw.cloud`. For the access and secret key values, use the credentials you [generated](/serverless/messaging/how-to/create-credentials/) for your SNS/SQS namespace.
+</Message>
+
+Once connected to the SQS service, you can use any of the SDK's functions as long as they're [supported by Scaleway Messaging and Queuing](/serverless/messaging/reference-content/sqs-support/). Refer to AWS's [official documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/SQS.html)) for more information, or read on to see some examples.
+
+### Create queue
+
+```javascript
+var params = {
+    QueueName: 'SQS_QUEUE_NAME',
+    Attributes: {
+      'MessageRetentionPeriod': '86400'
+    }
+  };
+    
+  sqs.createQueue(params, function(err, data) {
+    if (err) {
+      console.log("Error", err);
+    } else {
+      console.log("Success", data.QueueUrl);
+    }
+  });
+```
+
+You can find all available parameters for createQueue in the AWS documentation [here](https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/SQS.html#createQueue-property).
+
+### Send messages to this queue
+
+The following code sample demonstrates how to send a message with some `MessageAttributes`:
+
+```javascript
+var params = {
+  MessageAttributes: {
+    "Name": {
+      DataType: "String",
+      StringValue: "John"
+  }},
+  MessageBody: "This is a test message to John",
+  QueueUrl: "SQS_QUEUE_URL"
+  };
+  
+  sqs.sendMessage(params, function(err, data) {
+  if (err) {
+    console.log("Error", err);
+  } else {
+    console.log("Success", data.MessageId);
+  }
+});
+```
+
+### Receive messages from this queue
+
+The following code sample shows how to read messages from a queue, and then delete them:
+
+```javascript
+var queueURL= "SQS_QUEUE_URL";
+
+var params = {
+  MaxNumberOfMessages: 10,
+  QueueUrl: queueURL,
+  VisibilityTimeout: 20
+};
+
+sqs.receiveMessage(params, function(err, data) {
+  if (err) {
+    console.log("Receive Error", err);
+  } else if (data.Messages) {
+    console.log(data.Messages)
+    var deleteParams = {
+      QueueUrl: queueUrl,
+      ReceiptHandle: data.Messages[0].ReceiptHandle
+    };
+    sqs.deleteMessage(deleteParams, function(err, data) {
+      if (err) {
+        console.log("Delete Error", err);
+      } else {
+        console.log("Message Deleted", data);
+      }
+    });
+  }
+});
+```

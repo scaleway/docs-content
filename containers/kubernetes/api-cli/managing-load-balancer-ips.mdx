@@ -1,0 +1,131 @@
+---
+meta:
+  title: Managing Load Balancer IPs
+  description: Managing Load Balancer IPs
+content:
+  h1: Managing Load Balancer IPs
+  paragraph: Managing Load Balancer IPs
+tags: load-balancer load-balancer-ip kubernetes
+dates:
+  validation: 2022-11-03
+  posted: 2021-08-12
+categories:
+  - containers
+---
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created](/containers/kubernetes/how-to/create-cluster/) a Scaleway Kubernetes cluster
+</Message>
+
+## Reserving a Load Balancer IP using the API
+
+Use the Scaleway API to reserve an IP address (this address has to be a Load Balancer IP).
+To create a secret key please use the following [tutorial](/console/my-project/how-to/generate-api-key/):
+
+```sh
+$ curl -X POST "https://api.scaleway.com/lb/v1/regions/$SCW_DEFAULT_REGION/ips" -H "X-Auth-Token: $SCW_SECRET_KEY" -H "Content-Type: application/json" \
+-d "{\"project_id\":\"$SCW_DEFAULT_PROJECT_ID\"}" | jq -r .ip_address
+```
+
+This IP address can be re-used every time you create a Load Balancer service (if there is no other Load Balancer using this IP) by using the `loadBalancerIP` field on the service.
+
+## Using a reserved IP address on Kubernetes Load Balancer services 
+
+At the time you create or patch a Load Balancer service you can specify the previously “reserved” IP on the service using the `loadBalancerIP` spec on the example below (the public Load Balancer IP address is in this case 51.159.24.7):
+
+On the example below we will:
+
+* Create a new Load Balancer with the IP reserved before by patching the tea-svc service.
+* Check the IP address was correctly set on this service and that this service is now a Load Balancer one.
+* Delete the `tea-svc` service (showing that the IP address is not deleted).
+* Create a new Load Balancer with the IP reserved before by patching the `coffee-svc` service.
+
+By doing the steps above, we show that we can use a reserved IP on Load Balancer creation and that we can “move” this IP from one service to one another.
+
+```sh
+# kubectl get svc
+NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+coffee-svc   ClusterIP   10.32.102.89   <none>        80/TCP    9s
+kubernetes   ClusterIP   10.32.0.1      <none>        443/TCP   3m56s
+tea-svc      ClusterIP   10.32.57.52    <none>        80/TCP    9s
+
+# kubectl patch svc tea-svc --type merge --patch '{"spec":{"loadBalancerIP": "51.159.24.7","type":"Load Balancer"}}'
+service/tea-svc patched
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   ClusterIP      10.32.102.89   <none>        80/TCP         44s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        4m31s
+tea-svc      Load Balancer   10.32.57.52    <pending>     80:32434/TCP   44s
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   ClusterIP      10.32.102.89   <none>        80/TCP         45s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        4m32s
+tea-svc      Load Balancer   10.32.57.52    51.159.24.7   80:32434/TCP   45s
+
+# kubectl delete svc tea-svc
+service "tea-svc" deleted
+
+# kubectl patch svc coffee-svc --type merge --patch '{"spec":{"loadBalancerIP": "51.159.24.7","type":"Load Balancer"}}'
+service/coffee-svc patched
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   Load Balancer   10.32.102.89   <pending>     80:31094/TCP   100s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        5m27s
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   Load Balancer   10.32.102.89   51.159.24.7   80:31094/TCP   103s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        5m30s
+```
+
+As you can see, we have been able to keep the same IP on different Load Balancers. By doing so, we can, for instance, keep the same DNS configuration and move it from one Load Balancer instance type to one another. We have also seen that Kapsule manages the configuration of our Load Balancer for you. The cloud controller manager is in charge of managing the complete lifecycle of your Load Balancer.
+
+## Deploying a Load Balancer with specific IP
+Instead of creating a Load Balancer service with an ephemeral IP (which changes each time your delete/create the service), you can use a reserved Load Balancer address.
+
+<Message type="important">
+  Load Balancer IPs are different from Instance IPs. You cannot use an instance IP on a Load Balancer and vice versa.
+</Message>
+
+1. Reserve a Load Balancer IP through the following API call:
+    ```
+    curl -X POST "https://api.scaleway.com/lb/v1/regions/$SCW_DEFAULT_REGION/ips" -H "X-Auth-Token: $SCW_SECRET_KEY" -H "Content-Type: application/json" \
+    -d "{\"organization_id\":\"$SCW_DEFAULT_ORGANIZATION_ID\"} | jq -r .ip_address"
+    ```
+2. Specify this IP address to `spec.loadBalancerIP` field of the service:
+    ```yml
+    kind: Service
+    apiVersion: v1
+    metadata:
+    name: demo-nginx
+    spec:
+    selector:
+        app: demo-nginx
+    type: Load Balancer
+    ports:
+    - name: http
+        port: 80
+        targetPort: 80
+    loadBalancerIP: SCW.LB.IP.ADDR
+    ```
+
+## Converting an ephemeral IP into reserved IP
+It is possible to keep an ephemeral address (converting into a reserved address) by patching the associated service.
+
+```sh
+export CURRENT_EXTERNAL_IP=$(kubectl get svc $SERVICE_NAME -o json | jq -r .status.loadBalancer.ingress[0].ip)
+kubectl patch svc $SERVICE_NAME --type merge --patch "{\"spec\":{\"loadBalancerIP\": \"$CURRENT_EXTERNAL_IP\"}}"
+```
+This way, the ephemeral IP would not be deleted when the service will be deleted and could be reused in another service.
+
+
+<Navigation title="See Also">
+  <PreviousButton to="/containers/kubernetes/api-cli/exposing-services/">Exposing services</PreviousButton>
+  <NextButton to="/containers/kubernetes/api-cli/using-load-balancer-annotations/">Using Load Balancer annotations</NextButton>
+</Navigation>

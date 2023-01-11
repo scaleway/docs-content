@@ -1,0 +1,308 @@
+---
+meta:
+  title: Uploading functions using the Serverless.com framework
+  description: This page explains how to upload your functions using the Serverless.com framework.
+content:
+  h1: Uploading functions using the Serverless.com framework
+  paragraph: This page explains how to upload your functions using the Serverless.com framework.
+tags: functions serverless framework
+dates:
+  validation: 2023-01-02
+  posted: 2021-05-26
+categories:
+  - serverless
+---
+
+
+The Scaleway functions plugin for [Serverless Framework](https://serverless.com/) allows users to deploy their functions and containers to Scaleway Serverless with a simple serverless deploy.
+
+Serverless Framework handles everything from creating namespaces to function/code deployment by calling APIs endpoint under the hood.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)  
+  - You have [configured your API keys](/console/my-project/how-to/generate-api-key/) for your **Project**
+  - You know your **Project ID**
+  - You have installed [node.js](https://nodejs.org/en/)
+  - You have installed the [Serverless CLI](https://www.npmjs.com/package/serverless) on your computer (`npm install serverless -g`)
+</Message>
+
+## Creating a project folder
+
+Serverless Framework enables you to create a project using a specific template.
+
+1. Create the following directory: `~/my-srvless-projects`. Then, change into it.
+    ```bash
+    mkdir ~/my-srvless-projects
+    cd ~/my-srvless-projects
+    ```
+2. Create a simple Python 3 template: 
+    ```bash
+    serverless create --template-url https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples/python3 --path myService
+    ```
+
+    You can find other Scaleway templates on the [Scaleway Serverless GitHub page](https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples).
+
+### Editing the serverless.yml file
+
+<Message type="important">
+  Do not edit the `provider.name` and `plugins` parameters, as these allow you to use the Scaleway provider.
+</Message>
+
+The `serverless.yml` file contains the configuration of a namespace containing one or more functions with the same runtime. In the following example, we use one function and a `python3` runtime. 
+
+The different parameters are:
+- `service`: your namespace name
+- `provider.runtime`: the runtime of your functions ([check the supported runtimes](/serverless/functions/reference-content/functions-lifecycle/))
+- `provider.env`: the environment variables attached to your namespace are injected into all your namespace containers
+- `scwToken`: the Scaleway **token** you got in prerequisites
+- `scwProject`: the Scaleway **Project ID** 
+- `package.patterns`: usually, this parameter does not need to be configured. It allows you to include or exclude directories from the deployment
+- `functions`: Configuration of your functions. It is a `yml` dictionary, with the key being the functions' name
+  - `handler` (Required): file or function which will be executed. 
+  - `env` (Optional): environment variables specifics for the current function
+  - `minScale` (Optional): how many function instances we keep running (default: 0)
+  - `maxScale` (Optional): maximum number of instances this function can scale to (default: 20)
+  - `memoryLimit`: RAM allocated to the function instances. 
+  - `runtime`: (Optional) runtime of the function. Can be used when you need to deploy multiple functions with different runtimes in your Serverless Project. If absent, `provider.runtime` will be used.
+  - `events` (Optional): List of events that trigger your functions (e.g, trigger a function based on a schedule with `CRONJobs`). 
+
+## Configuring your Functions Handler
+
+Based on the chosen runtime, the `handler` variable in the function might vary.
+
+<Message type="note">
+  For more detail on how to package your dependencies please refer to [How to package your function and upload it as a Zip](/serverless/functions/how-to/package-function-in-zip/).
+</Message>
+
+### Node
+
+1. Path to your handler file (from `serverless.yml`), omit `./`, `../`, and add the exported function to use as a handler:
+    ```
+    # ls
+    - src
+      - handlers
+        - firstHandler.js  => module.exports.myFirstHandler = ...
+        - secondHandler.js => module.exports.mySecondHandler = ...
+    - serverless.yml
+    ```
+2. In the `serverless.yml` file, launch:
+    ```yml
+    provider:
+      # ...
+      runtime: node16 # or node14, ...
+    functions:
+      first:
+        handler: src/handlers/firstHandler.myFirstHandler
+      second:
+        handler: src/handlers/secondHandler.mySecondHandler
+    ```
+3. Include the `node_modules` folder in your package list to add dependencies to your function.
+    ```yml
+    package:
+      patterns:
+        - '!.gitignore'
+        - '!.git/**'
+        - './node_modules/**'
+    ```
+
+For further details, see the [Serverless Scaleway plugin Node 16 example](https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples/nodejs).
+
+### Python
+
+1. Path to the handler file `src/testing/handler.py`:
+    ```
+    - src
+      - handlers
+        - firstHandler.py  => def my_first_handler
+        - secondHandler.py => def my_second_handler
+    - serverless.yml
+    ```
+2. Launch in `serverless.yml`:
+    ```yml
+    provider:
+      # ...
+      runtime: python311
+    functions:
+      first:
+        handler: src/handlers/firstHandler.my_first_handler
+      second:
+        handler: src/handlers/secondHandler.my_second_handler
+    ```
+
+For further details, see the [Serverless Scaleway plugin Python 3 example](https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples/python3).
+
+### Golang (>= 1.17)
+
+If you have the following structure, the path to your handler's **package** should look like the following:
+
+```
+src/
+├── go.mod
+├── go.sum
+├── first
+│   └── handler.go -> Handle function defined here
+├── second
+│   └── handler.go -> Handle function defined here
+├── serverless.yml
+└── handler.go     -> Handle function defined here
+```
+
+Your `serverless.yml` should be similar to:
+
+```yml
+provider:
+  # ...
+  runtime: go118
+functions:
+  main:
+    handler: "Handle"
+  first:
+    handler: "first/Handle"
+  second:
+    handler: "second/Handle"
+```
+
+For further details, see the [Serverless Scaleway plugin Go 1.17 example](https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples/go).
+
+### Golang (< 1.17)
+
+If you have the following structure, the path to your handler's **package** should look like the following:
+
+```
+src/
+├── go.mod
+├── go.sum
+├── first
+│   └── handler.go -> package main in src/first subdirectory
+├── second
+│   └── handler.go -> package main in src/second subdirectory
+├── serverless.yml
+└── handler.go     -> package main at the root of project
+```
+
+Your `serverless.yml` should be similar to:
+
+```yml
+provider:
+  # ...
+  runtime: go113
+functions:
+  main:
+    handler: "."
+  first:
+    handler: first
+  second:
+    handler: second
+```
+
+For further details, see the [Serverless Scaleway plugin Golang 1.13 example](https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples/go113).
+
+### PHP
+
+If you have the following structure, the path to your handler's **package** should look like the following:
+
+```
+php/
+├── composer.json -> optional
+├── handler.php -> handle function defined here
+└── serverless.yml
+```
+
+Your `serverless.yml` should be similar to:
+
+```yml
+provider:
+  # ...
+  runtime: php82
+functions:
+  main:
+    handler: "handler.handle"
+```
+The `composer.json` files enable you to define dependencies that will be installed when deploying your functions, for more information, you can check the [official documentation](https://getcomposer.org/doc/04-schema.md/#package-links) of composer
+For further details, see the [Serverless Scaleway PHP example](https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples/php).
+
+### Rust
+
+If you have the following structure, the path to your handler's **package** should look like the following:
+
+```
+rust/
+├── Cargo.toml
+├── Cargo.lock
+├── src/
+│   └── handler.rs -> Handle function defined here
+├── serverless.yml
+```
+
+Your `serverless.yml` should be similar to:
+
+```yml
+provider:
+  # ...
+  runtime: rust165
+functions:
+  main:
+    handler: "Handle"
+```
+
+For further details, see the [Serverless Scaleway Rust example](https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples/rust).
+
+## Configuring events
+
+With `events`, you may link your containers to specific triggers. For the moment, the feature is limited to `CRON Schedule (time-based)`.
+
+<Message type="note">
+  We do not include HTTP triggers in our event types, as an HTTP endpoint is created for every function. Triggers are just another way to trigger your functions, but you will always be able to execute your code via HTTP.
+</Message>
+
+Below is a list of supported triggers for Scaleway Serverless, and the configuration parameters required to deploy them:
+
+- **schedule**: Triggers your container based on CRON schedules
+  - `rate`: the CRON Schedule (UNIX Format) on which your functions will be executed
+  - `input`: key-value mapping to define arguments that will be passed to your function's event object during execution
+
+To link a Trigger to your function, you can define an `events` key in your function:
+
+```yml
+functions:
+  handler: myHandler.handle
+  events:
+    # "events" is a list of triggers, the first key being the type of trigger.
+    - schedule:
+        # CRON Job Schedule (UNIX Format)
+        rate: '1 * * * *'
+        # Input variable are passed in your function's event during execution
+        input:
+          key: value
+          key2: value2
+```
+
+<Message type="tip">
+  You can find other examples of trigger configurations [on the Scaleway Serverless Github page](https://github.com/scaleway/serverless-scaleway-functions/tree/master/examples/nodejs-schedule).
+</Message>
+
+## Accessing Logs
+
+The `serverless logs` command allows you to watch the logs of a specific function.
+Add the `--function` option and the function's name to the `serverless logs` command to fetch the logs of a specific container.
+
+
+```bash
+serverless logs --function <function_name>`
+```
+
+## Deleting a project
+
+Run the following command to remove a project:
+
+```bash
+serverless remove
+```
+
+This removes all your functions, as well as your Scaleway Functions' namespace.
+
+<Message type="note">
+  Your Scaleway Functions Registry namespace is not automatically removed. You must delete it manually either via the Scaleway console, or Scaleway's Functions Registry API.
+</Message>

@@ -1,0 +1,116 @@
+---
+meta:
+  title: Understanding Access Control Lists (ACLs)
+  description: Learn more about Access Control Lists (ACLs) for your Load Balancer
+content:
+  h1: Understanding Access Control Lists (ACLs)
+  paragraph: Learn more about Access Control Lists (ACLs) for your Load Balancer
+tags: load-balancer, acl, acls, access-control-list, access, control, HTTP-header, filter, allow, reject, redirect, HTTPS, redirection, HTTP
+categories: 
+  - load-balancer
+  - network
+---
+
+## What is an Access Control List (ACL)?
+
+<Macro id="acls" />
+
+You can learn how to set up ACLs in our [how to documentation](/network/load-balancer/how-to/create-manage-acls). This page gives more detailed information, and advice about achieving specific configurations with your ACLs.
+
+## How do ACLs work?
+
+ACLs are created and managed on the **frontend** of a Load Balancer. You can create a **list** of ACLs on each frontend.
+
+Each ACL in the list has a number to show its  **priority**. All traffic arriving at this frontend will be filtered through the list of ACLs. The ACL with priority number 1, goes first, followed by number 2 etc, until the end of the list.
+
+Each ACL has an **action**: `Allow`, `Deny` or `Redirect`, which it applies **conditionally** or **unconditionally**. A conditional ACL only applies its action to traffic it encounters which matches the configured condition. An unconditional ACL applies its action to all traffic it encounters. For more information on conditions, see [the next section of this document](/#what-conditions-can-be-set-for-acls).
+
+Once an ACL applies its action - either because it is unconditional or because the traffic matched the condition - that action is carried out immediately. That is to say, the traffic is allowed to pass to the backend, or definitively denied access to the backend, or redirected. **That traffic is not filtered by any ACLs further down the list of priority**. It is therefore important to construct a list of ACLs carefully, placing conditional ACLs before unconditional ones in the list of priority and constructing conditions with attention.
+
+Note that constructing an ACL with a conditional `Allow` action does not mean that same ACL will therefore carry out a `Deny` action on traffic which does not meet its conditions. **The unmatched traffic will simply pass to the next ACL in the list**.
+
+If traffic reaches the end of the list of ACLs without any actions being applied to it, it is allowed to pass to the backend. If you want to avoid this, create an unconditional `Deny`  ACL and place it at the end of your list of conditional `Allow` ACLs.
+
+## What conditions can be set for ACLs?
+
+For ACLs which have **Enable condition** activated, you must specify a **condition type** and a **filter**.
+
+Condition types are:
+  - **IF MATCH**: The ACL applies its action to all traffic that matches the given filters.
+  - **IF NO MATCH**: The ACL applies its action to all traffic that does **not** match the given filters .
+
+Filter types are:
+  - **IP filter**: This filter type is available for all frontends. You can filter for one or many source IPv4 or IPv6 addresses, or IP blocks.
+  - **HTTP filter**: This filter type is only available for frontends attached to HTTP backends. You can filter for one or many values at either the **beginning** or **end** of the traffic's HTTP request path, or for a **regex** pattern across the entire HTTP request path. Alternatively, you can set an HTTP **header** to filter, and the **values** to filter for within that header.
+
+You can only choose one filter type per ACL, though you can filter for many values within that filter type (multiple IP addresses in teh case of an IP filter, or multiple HTTP values within a specific HTTP filter type).
+
+## Using ACLs to filter traffic's access to the backend
+
+Below, we show how to achieve a number of different filtering objectives with ACLs
+
+### Only allow traffic from certain IPs
+
+In this case, we only want traffic from source IPs `51.158.99.227` and `151.115.78.39` to be allowed to pass to the backend.
+
+#### Option 1
+Construct two ACLs:
+- **ACL Priority 1**: `Allow` - `Enable condition` - `IF MATCH` - `IP filter`: `51.158.99.227`, `151.115.78.39`. This ACL will allow traffic from the two specified IPs to pass directly to the backend. All traffic not from these IPs will pass to the next ACL.
+- **ACL Priority 2**: `Deny` - `Disable condition`. This ACL will deny access to all remaining traffic.
+
+#### Option 2
+Construct one ACL:
+- **ACL Priority 1**: `Deny` - `Enable condition` - `IF NOT MATCH` - `IP filter`: `51.158.99.227`, `151.115.78.39`. This ACL will reject any traffic **not** from the two specified IPs. Traffic from the specified IPs will, by default, pass to the backend since there are no further ACLs in the list.
+
+### Reject traffic from certain IPs, and with certain HTTP header values.
+
+In this case, we want to reject traffic from source IPs `51.158.99.227` and `151.115.78.39`, and also reject traffic with either of these IP addresses in the `X-Forwarded-For` HTTP header. All other traffic should be allowed access.
+
+Construct two ACLs:
+- **ACL Priority 1**: `Deny` - `Enable condition` - `IF MATCH` - `IP filter`: `51.158.99.227`, `151.115.78.39`. This ACL will reject traffic from the two specified IPs. All traffic not from these IPs will pass to the next ACL.
+- **ACL Priority 2**: `Deny` - `Enable condition` - `IF MATCH` - `HTTP filter - Header` - `Header name: X-Forwarded-For` `Filters`: `51.158.99.227`, `151.115.78.39`. This ACL will reject traffic that has the specified IP values in the specified header. All traffic without these values in that header, which hasn't already been rejected by the previous ACL, will by default pass to the backend since there are no further ACLs in the list.
+
+<Message type="note">
+
+  In this example, you could switch the priority order of the ACLs without any effect.
+
+</Message>
+
+### Reject traffic from certain IPs, and with HTTP header values, unless it has a specific HTTP request path
+
+In this case, we want to achieve the same as with our previous example, **however**, if that same traffic is requesting an HTTP request path that begins with `/catalog` we want to allow access nonetheless.
+
+Construct three ACLs:
+- **ACL Priority 1**: `Allow` - `Enable condition` - `IF MATCH` - `HTTP filter` `Path begins with`: `/catalog`. This ACL will allow any traffic with this at the beginning of its HTTP header to pass directly to the backend. All traffic without this header path will pass to the next ACL.
+- **ACL Priority 2**: `Deny` - `Enable condition` - `IF MATCH` - `IP filter`: `51.158.99.227`, `151.115.78.39`. This ACL will reject traffic from the two specified IPs. All traffic not from these IPs will pass to the next ACL.
+- **ACL Priority 3**: `Deny` - `Enable condition` - `IF MATCH` - `HTTP filter - Header` - `Header name: X-Forwarded-For` `Filters`: `51.158.99.227`, `151.115.78.39`. This ACL will reject traffic that has the specified IP values in the specified header. All traffic without these values in that header, which has not already been allowed by the first ACL or rejected by the second ACL, will by default pass to the backend since there are no further ACLs in the list.
+
+## Using ACLs to redirect traffic
+
+Use an ACL with the **redirect** action to redirect traffic. You can choose to redirect traffic using the original URI but with a different schema (HTTP or HTTPs), or define a new URI to redirect to. You can also choose whether to make the ACL conditional or unconditional, just as with our previous examples.
+
+### Redirecting from HTTP to HTTPS
+
+In this case, we want to redirect all incoming HTTP requests to HTTPS. Our Load Balancer already has a frontend configured for HTTPS requests (via an [SSL/TLS certificate](/network/load-balancer/how-to/add-certificate).
+
+Construct one ACL:
+  - **ACL Priority 1**: 
+    - Select the **redirect** action
+    - Select a **redirection code** (usually `302` for this case)
+    - Select to **keep the original** URI
+    - Select **HTTPS** for the scheme, and enter the port for the redirected request (default is `443`)
+    - Toggle off **Enable condition** to make an unconditional ACL that carries out its redirect on all traffic received at this frontend.
+  
+    <Message type="note">
+    
+    If you do not want to carry out any other traffic filtering actions on this frontend, you will only need this single ACL and can set it at priority 1. Otherwise, if you wish to carry out additional filtering actions, ensure that you set an appropriate priority level for this ACL. As it is unconditional, it should be placed after any conditional ACLs in the order of priority, otherwise the previous conditional ACLs will not be carried out.
+
+    </Message>
+
+### Redirecting to a different URI
+
+In this case, we want to redirect any traffic where the HTTP request path ends with `/blog` to a URI with a custom host `www.myblog.com`, but retain the same path and query as from the original request.
+
+Construct one ACL:
+- **ACL Priority 1**: `Redirect` - `301`- `Redirection URI - Define custom` - `https://www.myblog.com/{{path}}?{{query}}` - `Enable condition` - `IF MATCH` - `HTTP filter` `Path ends with`: `/blog`. This ACL will redirect all traffic with `/blog` at the end of its HTTP header to the specified URI. All other traffic will by default pass to the backend since there are no further ACLs in the list.
+

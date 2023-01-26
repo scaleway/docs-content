@@ -1,0 +1,482 @@
+---
+meta:
+  title: Using Go, Python or NodeJS with SNS
+  description: This page explains how to use Go, Python or NodeJS with SNS and provides code samples
+content:
+  h1: Using Go, Python or NodeJS with SNS
+  paragraph: This page explains how to use Go, Python or NodeJS with SNS and provides code samples
+tags: messaging boto3 python nodejs sns go
+categories: 
+  - messaging
+dates:
+  validation: 2023-01-04
+  posted: 2023-01-04
+---
+
+AWS provides a number of **S**oftware **D**evelopment **K**its (SDKs) which provide language-specific APIs for AWS services, including [SNS](/serverless/messaging/concepts/#sns).
+
+- AWS provides a dedicated [SDK for Go](https://aws.amazon.com/sdk-for-go/).
+- The [AWS SDK for Python](https://aws.amazon.com/sdk-for-python/) is Boto3.
+- For Node.js, use the [AWS SDK for JavaScript](https://aws.amazon.com/sdk-for-javascript/), which can be [installed from NPM](https://github.com/aws/aws-sdk-js-v3#getting-started).
+
+This page provides code samples to show you how to get started using these SDKs with your Scaleway Messaging SNS/SQS namespace, more specifically with SNS.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)  
+  - You have [created an SNS/SQS Messaging and Queuing namespace](/serverless/messaging/how-to/create-namespace/)
+  - You have [generated credentials](/serverless/messaging/how-to/create-credentials/) for your SNS/SQS Messaging and Queuing namespace
+  - You have installed the relevant AWS SDK [for Go](https://aws.amazon.com/sdk-for-go/), [Python](https://aws.amazon.com/sdk-for-python/) and/or [JavaScript](https://aws.amazon.com/sdk-for-javascript/)
+</Message>
+
+## Go
+
+### Connect to SNS
+
+The following code shows you how to connect to SNS:
+
+```go
+import (
+  "github.com/aws/aws-sdk-go/aws"
+  "github.com/aws/aws-sdk-go/aws/credentials"
+  "github.com/aws/aws-sdk-go/aws/session"
+  "github.com/aws/aws-sdk-go/service/sns"
+)
+
+type AWSCredsProvider struct {
+  AccessKey string
+  SecretKey string
+}
+
+func (p *AWSCredsProvider) Retrieve() (credentials.Value, error) {
+  return credentials.Value{
+    AccessKeyID:     p.AccessKey,
+    SecretAccessKey: p.SecretKey,
+    SessionToken:    "",
+    ProviderName:    "anonymous",
+  }, nil
+}
+
+func (p *AWSCredsProvider) IsExpired() bool {
+  return false
+}
+
+func main() {
+  awsSession := session.Must(session.NewSession(&aws.Config{
+    Region:   aws.String("fr-par"),
+    Endpoint: aws.String("http://sns-sns.mnq.fr-par.scw.cloud"),
+    Credentials: credentials.NewCredentials(&AWSCredsProvider{
+      AccessKey: AwsAccessKey,
+      SecretKey: AwsSecretKey,
+    }),
+  }))
+
+  awsSns := sns.New(awsSession)
+
+  [...]
+}
+```
+
+<Message type="note">
+
+  The `Endpoint` for Scaleway Messaging and Queuing is `https://sqs-sns.mnq.fr-par.scw.cloud`. The values for the access and secret keys should be the credentials you [generated](/serverless/messaging/how-to/create-credentials/) for your SNS/SQS namespace.
+
+</Message>
+
+Once connected to the SNS service, you can use any of the SDK's available functions. Be aware though that some functions are not [supported by Scaleway Messaging and Queuing](/serverless/messaging/reference-content/sns-support), so make sure to check the link for more details on these. See the [official SDK documentation](https://pkg.go.dev/github.com/aws/aws-sdk-go/service/sns) for more information on getting started with the SDK, or keep reading for some code examples.
+
+### Create topic
+
+```go
+createTopicResponse, _ := awsSNS.CreateTopic(&sns.CreateTopicInput{
+  Name: aws.String("my-test-topic"),
+})
+fmt.Println(*createTopicResponse.TopicArn)
+```
+
+### Publish messages to this topic
+
+Be careful: messages sent to topics with no subscriptions are automatically deleted
+
+```go
+for i := 0; i < 10; i++ {
+  _, _ = awsSNS.Publish(&sns.PublishInput{
+    Message:  aws.String(fmt.Sprintf("Hello World: %d", i)),
+    TopicArn: createTopicResponse.TopicArn,
+  })
+}
+```
+
+### Create subscriptions to this topic
+
+#### Subscribe to an SQS queue from the same namespace
+
+```go
+_, _ = awsSns.Subscribe(&sns.SubscribeInput{
+  Endpoint: aws.String(QueueArn),
+  Protocol: aws.String("sqs"),
+  TopicArn: createTopicResponse.TopicArn,
+})
+```
+
+#### Subscribe to a public Scaleway function
+
+This code triggers the function each time a message is published to the topic.
+
+You can find the value for `[Function URL]` in the [Scaleway console](https://console.scaleway.com) in the **Endpoints** tab of your function's **Overview** page. 
+
+```go
+_, _ = awsSns.Subscribe(&sns.SubscribeInput{
+  Endpoint: aws.String(FunctionUrl),
+  Protocol: aws.String("lambda"),
+  TopicArn: createTopicResponse.TopicArn,
+})
+
+You can also set up an SQS queue from the same namespace, as a [Dead Letter Queue](/serverless/messaging/concepts/#dead-letter-queue):
+
+```go
+_, _ = awsSns.Subscribe(&sns.SubscribeInput{
+  Attributes: map[string]*string{
+    "RedrivePolicy": aws.String("{\"deadLetterTargetArn\": \"" + QueueARN + "\"}"),
+  },
+  Endpoint: aws.String(FunctionUrl),
+  Protocol: aws.String("lambda"),
+  TopicArn: createTopicResponse.TopicArn,
+})
+```
+
+#### Subscribe to an HTTP/S endpoint
+
+```go
+_, _ = awsSns.Subscribe(&sns.SubscribeInput{
+  Endpoint: aws.String(Url),
+  Protocol: aws.String("http"), // or https
+  TopicArn: createTopicResponse.TopicArn,
+})
+```
+
+The HTTP server should receive an HTTP request with a body in json matching the following format:
+
+```json
+{
+"Type": "SubscriptionConfirmation",
+"Token": "<REDACTED-CONFIRMATION-TOKEN>",
+"MessageId": "<REDACTED-MESSAGE-ID>",
+"TopicArn": "arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic",
+"Message": "You have chosen to subscribe to the topic arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic.\nTo confirm the subscription, visit the SubscribeURL included in this message.",
+"Timestamp": "2022-06-29T10:03:34Z",
+"SignatureVersion": "1",
+"Signature": "<REDACTED-SIGNATURE>",
+"SigningCertURL": "https://messaging.s3.fr-par.scw.cloud/fr-par/sns/sns_certificate_[certSerialNumber].crt",
+"SubscribeURL": "<THE-CONFIRMATION-LINK>" // Get the confirmation link located here
+}
+```
+
+The signing certificate of the message is in the JSON of the `SigningCertURL`. This certificate is also signed by the [trust chain certificate](https://messaging.s3.fr-par.scw.cloud/fr-par/sns/sns-trust-chain.pem) (common name `sns.mnq.srr.scw.cloud`). For more information about verifying the authenticity of the message, refer to the official [AWS documentation](https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message.html).
+
+To confirm the subscription, make a request to the `SubscribeURL` using your browser or curl.
+
+### Delete all subscriptions
+
+```go
+listSubscriptions, _ := awsSns.ListSubscriptionsByTopic(&sns.ListSubscriptionsByTopicInput{
+  TopicArn: createTopicResponse.TopicArn,
+})
+for _, sub := range listSubscriptions.Subscriptions {
+  awsSns.Unsubscribe(&sns.UnsubscribeInput{
+    SubscriptionArn: sub.SubscriptionArn,
+  })
+}
+```
+
+## Python
+
+### Connect to SNS
+
+The following code shows you how to connect to SNS using Boto3's `resource()`. You could also use `client()`, but we favor`resource()` as it is more pythonesque:
+
+```python
+sns = boto3.resource('sns',
+  endpoint_url=[],
+  aws_access_key_id=[],
+  aws_secret_access_key=[],
+  region_name='fr-par')
+```
+
+<Message type="note">
+  The `endpoint_url` for Scaleway Messaging and Queuing is `https://sqs-sns.mnq.fr-par.scw.cloud`. The values for the access and secret keys should be the credentials you [generated](/serverless/messaging/how-to/create-credentials/) for your SNS/SQS namespace.
+</Message>
+
+Once connected to the SNS service, you can use any of the SDK's available functions. However, some functions are not [supported by Scaleway Messaging and Queuing](/serverless/messaging/reference-content/sns-support/), so do check the link to make sure. See the [official SDK documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html) for more information, or keep reading for some code examples.
+
+### Create topic
+
+```python
+# Create a topic. This returns an SNS.Topic instance
+topic = sns.create_topic(Name='test')  # You can now access identifiers and attributes
+print(topic.arn)
+print(arn.attributes)
+```
+
+### Publish messages to this topic
+
+Be careful: messages sent to topics with no subscriptions are automatically deleted
+
+```python
+for i in range (0,10):
+  topic.Publish(Message="Hello World: "+str(i))
+```
+
+### Create subscriptions to this topic
+
+#### Subscribe to an SQS queue from the same namespace
+
+```python
+subscription = topic.subscribe(
+    Protocol='sqs',
+    Endpoint=[Queue ARN],
+    ReturnSubscriptionArn=True
+)
+```
+
+#### Subscribe to a public Scaleway function
+
+This code triggers the function each time a message is published to the topic.
+
+You can find the value for `[Function URL]` in the [Scaleway console](https://console.scaleway.com) in the **Endpoints** tab of your function's **Overview** page. 
+
+```python
+subscription_functions = topic.subscribe(
+    Protocol='lambda',
+    Endpoint=[Function URL],
+    ReturnSubscriptionArn=True
+)
+```
+
+You can also set up an SQS queue from the same namespace, as a [Dead Letter Queue](/serverless/messaging/concepts/#dead-letter-queue):
+
+```python
+subscription_functions = topic.subscribe(
+    Protocol='lambda',
+    Endpoint=[Function URL],
+    ReturnSubscriptionArn=True,
+    Attributes={
+      'RedrivePolicy': '{"deadLetterTargetArn": "[Queue ARN]"}'
+    }
+)
+```
+
+#### Subscribe to an HTTP/S endpoint
+
+```python
+subscription = topic.subscribe(
+    Protocol='http', //or https
+    Endpoint=url,
+    ReturnSubscriptionArn=True
+)
+```
+
+The HTTP server should receive an HTTP request with a body in json matching the following format:
+
+```json
+{
+"Type": "SubscriptionConfirmation",
+"Token": "<REDACTED-CONFIRMATION-TOKEN>",
+"MessageId": "<REDACTED-MESSAGE-ID>",
+"TopicArn": "arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic",
+"Message": "You have chosen to subscribe to the topic arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic.\nTo confirm the subscription, visit the SubscribeURL included in this message.",
+"Timestamp": "2022-06-29T10:03:34Z",
+"SignatureVersion": "1",
+"Signature": "<REDACTED-SIGNATURE>",
+"SigningCertURL": "http://<REDACTED-URL>/SNStest.crt",
+"SubscribeURL": "<THE-CONFIRMATION-LINK>" // Get the confirmation link located here
+}
+```
+
+To confirm the subscription, make a request to the `SubscribeURL` using your browser or curl.
+
+### Delete all subscriptions
+
+```python
+for subs in topic.subscriptions.all():
+    subs.delete()
+```
+
+## NodeJS
+
+### Connect to SNS
+
+The following code sample shows how to connect to SQS:
+
+```javascript
+var sns = new AWS.SNS({
+    apiVersion: '2010-03-31',
+    endpoint: '',
+    accessKeyId:'',
+    secretAccessKey:'',
+    region: 'fr-par'
+    });
+```
+
+<Message type="note">
+  The `endpoint_url` for Scaleway Messaging and Queuing is `https://sqs-sns.mnq.fr-par.scw.cloud`. For the access and secret key values, use the credentials you [generated](/serverless/messaging/how-to/create-credentials/) for your SNS/SQS namespace.
+</Message>
+
+Once connected to the SNS service, you can use any of the SDK's available functions. However, some functions are not [supported by Scaleway Messaging and Queuing](/serverless/messaging/reference-content/sns-support), so do check the link to make sure. See the [official SDK documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/SQS.html) for more information, or keep reading for some code examples.
+
+### Create topic
+
+You can find all available parameters for `createTopic` in the [AWS documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/SNS.html#createTopic-property).
+
+```javascript
+var params = {
+  Protocol: 'sqs', /* required */
+  TopicArn: {SNS Topic Arn}, /* required */
+  // Attributes: {
+  //   '<attributeName>': 'STRING_VALUE',
+  //   /* '<attributeName>': ... */
+  // },
+  Endpoint: {SQS ARN},
+  ReturnSubscriptionArn: true
+};
+```
+
+### Publish messages to this topic
+
+Be careful: messages sent to topics with no subscriptions are automatically deleted.
+
+This code sample demonstrates how to send a message with `MessageAttributes`. For more information on MessageAttributes, refer to [the official documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/SNS.html#publish-property).
+
+```javascript
+var params = {
+  Message: 'Test Message', /* required */
+  MessageAttributes: {
+    'Name': {
+      DataType: 'String', /* required */
+      StringValue: 'John'
+    }
+  },
+  Subject: 'Test',
+  TopicArn: ''
+};
+sns.publish(params, function (err, data) {
+  if (err) console.log(err, err.stack); // an error occurred
+  else console.log(data);           // successful response
+});
+```
+
+### Subscribe to a topic
+
+You can find all available parameters for the subscribe operation in the AWS documentation (https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/SNS.html#subscribe-property)
+
+#### Subscribe to an SQS queue from the same namespace
+
+```javascript
+var params = {
+  Protocol: 'sqs', /* required */
+  TopicArn: [SNS Topic Arn], /* required */
+  // Attributes: {
+  //   '<attributeName>': 'STRING_VALUE',
+  //   /* '<attributeName>': ... */
+  // },
+  Endpoint: [SQS Queue Arn],
+  ReturnSubscriptionArn: true
+};
+
+sns.subscribe(params, function(err, data) {
+  if (err) console.log(err, err.stack); // an error occurred
+  else     console.log(data);           // successful response
+});
+```
+
+#### Subscribe to a public Scaleway function
+
+This code triggers the function each time a message is published to the topic.
+
+You can find the value for `[Function URL]` in the [Scaleway console](https://console.scaleway.com) in the **Endpoints** tab of your function's **Overview** page. 
+
+```javascript
+var params = {
+  Protocol: 'lambda', /* required */
+  TopicArn: [SNS Topic Arn], /* required */
+  Endpoint: [Scaleway Serverless Function or Container URL],
+  ReturnSubscriptionArn: true
+};
+
+sns.subscribe(params, function(err, data) {
+  if (err) console.log(err, err.stack); // an error occurred
+  else     console.log(data);           // successful response
+});
+```
+
+You can also set up an SQS queue from the same namespace, as a [Dead Letter Queue](/serverless/messaging/concepts/#dead-letter-queue):
+
+```javascript
+var params = {
+  Protocol: 'lambda', /* required */
+  TopicArn: [SNS Topic Arn], /* required */
+  Attributes: {
+    'RedrivePolicy': '{\'deadLetterTargetArn\':\'[SQS Queue Arn]'}',
+  },
+  Endpoint: 'https://demodayndhiixus-logall.functions.fnc.fr-par.scw.cloud',
+  ReturnSubscriptionArn: true
+};
+
+sns.subscribe(params, function(err, data) {
+  if (err) console.log(err, err.stack); // an error occurred
+  else     console.log(data);           // successful response
+});
+```
+
+#### Subscribe to an HTTP/S endpoint
+
+```javascript
+subscription = topic.subscribe(
+    Protocol='http', //or https
+    Endpoint=url,
+    ReturnSubscriptionArn=True
+)
+```
+The HTTP server receives an HTTP request with a `json` body matching the following format:
+
+```json
+{
+"Type": "SubscriptionConfirmation",
+"Token": "<REDACTED-CONFIRMATION-TOKEN>",
+"MessageId": "<REDACTED-MESSAGE-ID>",
+"TopicArn": "arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic",
+"Message": "You have chosen to subscribe to the topic arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic.\nTo confirm the subscription, visit the SubscribeURL included in this message.",
+"Timestamp": "2022-06-29T10:03:34Z",
+"SignatureVersion": "1",
+"Signature": "<REDACTED-SIGNATURE>",
+"SigningCertURL": "http://<REDACTED-URL>/SNStest.crt",
+"SubscribeURL": "<THE-CONFIRMATION-LINK>" // Get the confirmation link located here
+}
+```
+
+To confirm the subscription, make a request to the `SubscribeURL` using your browser or curl.
+
+### Delete all subscriptions
+
+The following code sample deletes all subscriptions to a topic.
+
+```javascript
+var params = {
+  TopicArn: '', /* required */
+};
+
+sns.listSubscriptionsByTopic(params, function (err, data) {
+  if (err) console.log(err, err.stack); // an error occurred
+  else
+    data.Subscriptions.forEach(function (element) {
+      var params = {
+        SubscriptionArn: element.SubscriptionArn
+      }
+      sns.unsubscribe(params, function (err, data) {
+        if (err) console.log(err, err.stack); // an error occurred
+        else console.log(params.SubscriptionArn, "Deleted");           // successful response
+      });
+    })
+})
+```

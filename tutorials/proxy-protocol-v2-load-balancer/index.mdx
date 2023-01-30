@@ -186,7 +186,7 @@ The Proxy Protocol support in Apache is still in an early stage. It is currently
       Once ProxyProtocol is enabled the Apache virtual host will no longer accept direct connections.
     </Message>
 
-## Configuring Proxy Protocol in Apache with mod_remoteip
+## Configuring Proxy Protocol in Apache with `mod_remoteip`
 
 <Message type="important">
   An Apache version >= 2.4.30 is required to use [mod_remoteip](https://httpd.apache.org/docs/2.4/mod/mod_remoteip.html#remoteipproxyprotocol). This version is currently not yet available in Ubuntu's repositories, and you have to install it by yourself. Use it only if you know what you are doing.
@@ -212,3 +212,58 @@ The Proxy Protocol support in Apache is still in an early stage. It is currently
 <Message type="important">
   Once ProxyProtocol is enabled the Apache virtual host will no longer accept direct connections.
 </Message>
+
+## Configuring Proxy protocol for `ingress-nginx`
+
+### Deployed through `kubectl`
+
+1. Add the two annotations below to your ingress controller `service`:
+    - [`service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2: "true"`](/containers/kubernetes/api-cli/using-load-balancer-annotations/#service.beta.kubernetes.ioscw-loadbalancer-proxy-protocol-v2)
+    - [`service.beta.kubernetes.io/scw-loadbalancer-use-hostname: "true"`](/containers/kubernetes/api-cli/using-load-balancer-annotations/#service.beta.kubernetes.ioscw-loadbalancer-use-hostname)
+   
+    ```bash
+    kubectl patch -n ingress-nginx services ingress-nginx-controller \
+    -p '{"metadata":{"annotations":{"service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2": "true", "service.beta.kubernetes.io/scw-loadbalancer-use-hostname": "true"}}}'
+    ```
+
+2. Add the configuration below to the ingress controller `configmap`:
+    - [`use-forwarded-headers: "true"`](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/#use-forwarded-headers)
+    - [`compute-full-forwarded-for: "true"`](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/#compute-full-forwarded-for)
+    - [`use-proxy-protocol: "true"`](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/#use-proxy-protocol)
+    
+    ```bash
+    kubectl patch -n ingress-nginx configmaps ingress-nginx-controller \
+    -p '{"data":{"use-forwarded-headers": "true", "compute-full-forwarded-for": "true", "use-proxy-protocol": "true"}}'
+    ```
+
+### Deployed through `helm`
+
+If you're using the [`ingress-nginx`](https://kubernetes.github.io/ingress-nginx/deploy/) Helm chart, find below a custom values file that will automatically create a load balancer resource and configure it to use `proxy-protocol-v2`, and add the required ingress controller configuration to support this new communication protocol:
+
+1. Create the file below (e.g. `ingress-nginx-scw.yaml`) using a text editor.
+    ```yaml
+    controller:
+    kind: DaemonSet
+    service:
+        # Your LB IP here if you want (optional)
+        loadBalancerIP: "X.X.X.X"
+        externalTrafficPolicy: "Local"
+        annotations:
+        service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2: "true"
+        service.beta.kubernetes.io/scw-loadbalancer-use-hostname: "true"
+    config:
+        use-forwarded-headers: "true"
+        compute-full-forwarded-for: "true"
+        use-proxy-protocol: "true"
+    ```
+
+2. Apply the above, on a new or an existing `ingress-nginx` installation:
+
+    ```bash
+    # Once the above file is created, you can run the below
+    # https://kubernetes.github.io/ingress-nginx/deploy/#quick-start
+    helm upgrade --install ingress-nginx ingress-nginx \
+    --repo https://kubernetes.github.io/ingress-nginx \
+    --namespace ingress-nginx --create-namespace \
+    -f ingress-nginx-scw.yaml
+    ```

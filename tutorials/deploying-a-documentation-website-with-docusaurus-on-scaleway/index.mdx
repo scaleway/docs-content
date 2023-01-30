@@ -1,0 +1,162 @@
+---
+meta:
+  title: Deploying a documentation website with Docusaurus on Scaleway
+  description: In this tutorial you will learn how to deploy a documentation website to Object Storage with Docusaurus and GitHub runners.
+content:
+  h1: Deploying a documentation website with Docusaurus on Scaleway
+  paragraph: In this tutorial you will learn how to deploy a documentation website to Object Storage with Docusaurus and GitHub runners.
+tags: docusaurus cms website github object-storage
+categories: 
+  - storage
+  - object-storage
+dates:
+  validation: 2023-01-04
+  posted: 2023-01-04
+---
+
+Docusaurus is an open-source documentation framework. It allows you to build, deploy, and maintain documentation websites. It comes with features such as blogs, internationalization, search and versioning. 
+
+It builds a single-page application with fast client-side navigation, leveraging the full power of React to make your site interactive. The tool is a static-site generator and provides out-of-the-box documentation features - but can be used to create any kind of static website (personal website, product, blog, marketing landing pages, etc).
+
+<Macro id="iam-requirements" />
+ 
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have an Object Storage bucket with the [bucket website feature](/storage/object/how-to/use-bucket-website) enabled
+  - You have a [GitHub](https://github.com/) account and [created](https://docs.github.com/en/get-started/quickstart/create-a-repo) an empty repository for your project
+  - You have a local development environment with [Node.js](https://nodejs.org/en/download/) (version 16.14 or above) and `git` installed
+</Message>
+
+## Generating a new site
+
+Docusaurus is available for most operating systems. In this tutorial we describe the installation on an Ubuntu Linux system. For other operating systems, refer to the [official documentation](https://gohugo.io/installation/).
+
+1. Open a terminal on your computer. 
+2. Type the following command in the terminal to generate a new Docusaurus site: 
+    ```
+    npx create-docusaurus@latest
+    ```
+    You will be prompted to install the latest `create-docusaurus` package (here 2.2.0). Type `y` to proceed.
+    ```
+    Need to install the following packages:
+      create-docusaurus@2.2.0
+    Ok to proceed? (y) y
+    ```
+    Once the installation is complete, you will be prompted to provide some information about your new documentation website
+    * A name for your new site (for example: `docusaurus-on-scaleway`)
+    * A template for your webssite (for example: `classic (recommended)`)
+    * Confirm that you want to use the TypeScript version of the template by typing `y`.
+    ```
+    ✔ What should we name this site? … docusaurus-on-scaleway
+    ✔ Select a template below... › classic (recommended)
+    ✔ This template is available in TypeScript. Do you want to use the TS variant? … yes
+    ```
+    Docusaurus will create the new site and all related files.
+3. Enter the directory of your new site:
+    ```
+    cd docusaurus-on-scaleway
+    ```
+    You can see that Docusaurus created several files and directories:
+    ```
+    $ ls
+    README.md            docusaurus.config.js sidebars.js
+    babel.config.js      node_modules         src
+    blog                 package-lock.json    static
+    docs                 package.json         tsconfig.json
+    ```
+4. Deploy a preview of your site using the development webserver by running the following command:
+    ```
+    npm start
+    ```
+    Your browser opens a new tab automatically, pointing to `http://localhost:3000`, and displaying the Docusaurus site. 
+    <Message type="tip">
+      You can press `ctrl+c` to quit the development server.
+    </Message>
+5. Run the following command to initialize a new git repository inside the Docusaurus website folder on your local computer:
+    ```
+    git init
+    ```
+6. Configure a remote upstream of your repository, pointing to your GitHub repository: 
+    ```
+    git remote add origin git@github.com:<YOUR_GITHUB_USER>/<YOUR_GITHUB_REPOSITORY_NAME>.git
+    ```
+    <Message type="tip">
+      If you have no GitHub repository yet, create a new one from the [web interface](https://github.com/new) or via the [GitHub CLI](https://cli.github.com/) by running the following command:
+      ```
+      gh repo create <YOUR_GITHUB_REPOSITORY_NAME> --private
+      ```
+    </Message>
+7. Add the Docusaurus files to your repository, commit and push the changes:
+    ```
+    git add .
+    git commit -m "Initial commit"
+    git push -u origin main
+    ```
+### Deploying to Scaleway Object Storage
+
+<Message type="important">
+  You must configure an Object Storage bucket with the [bucket website feature](/storage/object/how-to/use-bucket-website) enabled before you continue.
+</Message>
+
+1. Open a web browser and go to your project's repository on [GitHub.com](http://github.com).
+2. Click the **Settings** tab to display the settings of your repository. 
+3. Click **Secrets** > **Actions** in the side menu. A list of the Actions' secrets displays. GitHub Secrets are encrypted data of sensitive information. They are used here to store the Scaleway secret key and access key.
+4. Click **New repository secret** to create a new secret. Name it `SCW_ACCESS_KEY_ID` and enter your access key as secret value. 
+5. Click **Add secret** to save your configuration.
+6. Repeat the step above with a secret named `SCW_SECRET_ACCESS_KEY` and your secret key as secret value.
+7. Repeat the step above again and set a secret named `SCW_S3_BUCKET` and your bucket name as secret value.
+8. Click the **Actions** tab. A list of suggested GitHub Actions for your project displays. 
+9. Click **Skip this and setup a workflow yourself**.
+10. Copy the following code in the text editor, keep the default file name `main.yml` and click **Start commit**:
+    ```
+    name: Deploy Docusaurus to S3
+    on:
+      push:
+        branches:
+          - main
+
+    jobs:
+      deploy:
+        runs-on: ubuntu-latest
+        steps:
+          - uses: actions/checkout@v3
+          - uses: bene2k1/s3-docusaurus-sync-action@main
+            env:
+              SCW_BUCKET_REGION: "fr-par"
+              # Set this to the region corresponding to the geographical location of your bucket
+              SCW_S3_BUCKET: ${{ secrets.SCW_S3_BUCKET }}
+              SCW_ACCESS_KEY_ID: ${{ secrets.SCW_ACCESS_KEY_ID }}
+              SCW_SECRET_ACCESS_KEY: ${{ secrets.SCW_SECRET_ACCESS_KEY }}
+    ```
+    <Message type="note">
+      The GitHub Action used to deploy the Docusaurus site on Scaleway Object Storage is forked from [turnerlabs/s3-docusaurus-sync-action](https://github.com/turnerlabs/s3-docusaurus-sync-action).
+    </Message>
+11. Enter a commit message, select **Commit directly to the `main` branch** and click **Commit new file**. 
+
+The runner runs automatically for the first time and builds and deploys your documentation website to the Object Storage bucket.
+
+### Adding more pages
+
+You can add several types of content to your Docusaurus site:
+* [Pages](https://docusaurus.io/docs/creating-pages)
+* [Docs](https://docusaurus.io/docs/docs-introduction)
+* [Blogs](https://docusaurus.io/docs/blog)
+
+Refer to the [official documentation](https://docusaurus.io/docs/) for more information about the different types of content.
+
+Once you have created your content, add it to your working tree, then commit and push it to your GitHub repository:
+    ```
+    git add .
+    git commit -m "More content commit"
+    git push -u origin main
+    ```
+
+The GitHub runner will run Docusaurus and build your website. It will then deploy it on your Scaleway Object Storage. 
+
+## Conclusion
+
+Docusaurus is now set up to rebuild your site every time you push new content to the `main` branch of your GitHub repository. Docusaurus then deploys it automatically on your Object Storage website.  
+All changes go live on your website as soon as the GitHub runner has completed its tasks and the build of your website was done successfully.
+
+For more information about Docusaurus, refer to the [official documentation](https://docusaurus.io/docs).  
+An alternative solution to Docusaurus is [Hugo](/tutorials/deploy-static-website-with-hugo-and-github-runners-to-object-storage/), which provides similar features.

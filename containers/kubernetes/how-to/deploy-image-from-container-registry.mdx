@@ -1,0 +1,185 @@
+---
+meta:
+  title: How to deploy an image from Scaleway Container Registry to Kubernetes Kapsule
+  description: This page explains how to deploy an image from Scaleway Container Registry to Kubernetes Kapsule
+content:
+  h1: How to deploy an image from Scaleway Container Registry to Kubernetes Kapsule
+  paragraph: This page explains how to deploy an image from Scaleway Container Registry to Kubernetes Kapsule
+tags: deploy scaleway-container-registry container-registry kubernetes-kapsule kapsule 
+dates:
+  validation: 2022-07-28
+  posted: 2020-09-20
+categories:
+  - containers
+---
+
+In this how-to guide you learn how to create and push a container image to the Scaleway [Container Registry](/containers/container-registry/concepts/#container-registry) and how to use it on [Kubernetes Kapsule](/containers/kubernetes/concepts/#kubernetes-kapsule/).
+
+A container image consists of several bundled files, which encapsulate an application. This image can be built on a local machine, uploaded to the image registry, and then deployed on several Kubernetes pods with Kapsule. [Kapsule](/containers/kubernetes/concepts/#kubernetes-kapsule) is the managed [Kubernetes](https://www.kubernetes.io/) service provided by Scaleway. In this tutorial we use [Docker](https://www.docker.com/) to build the containers.
+
+The generated Docker images are stored in a private Docker registry using the Scaleway [Container Registry](/containers/container-registry/concepts/#container-registry) product. 
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com) 
+  - You have created a [Container Registry Namespace](/containers/container-registry/how-to/create-namespace) with a "private" privacy policy.
+  - You have [created](/containers/kubernetes/how-to/create-cluster) a Kubernetes Kapsule cluster and downloaded and [configured](/containers/kubernetes/how-to/connect-cluster-kubectl) the corresponding `.kubeconfig` file.
+  - You have installed [Docker](/tutorials/install-docker-ubuntu-bionic) and [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) on your local computer.
+  - You have [created an API key](/console/my-project/how-to/generate-api-key)
+</Message>
+
+## How to push an image to the Container Registry
+
+<Message type="note">
+  To complete the following steps, it is required that you have a local project with a `Dockerfile` to build a container image from it. If you do not have a Docker project yet, you may follow our [tutorial](/tutorials/install-docker-ubuntu-bionic) to create the required files.
+</Message>
+
+
+1. Open a terminal window on your local computer. 
+2. Check that all required files are available to build the container image by running the `ls -l` command in the directory of your project:
+    ```bash
+    $ ls -l
+    total 32
+    -rw-r--r--  1 myuser  staff   903 Oct 14 12:19 Dockerfile
+    -rw-r--r--  1 myuser  staff  1080 Oct 14 12:19 LICENSE
+    -rw-r--r--  1 myuser  staff   476 Oct 14 12:19 Makefile
+    -rw-r--r--  1 myuser  staff  1721 Oct 14 12:19 README.md
+    drwxr-xr-x  3 myuser  staff    96 Oct 14 12:19 patches
+    ```
+3. Use the following commands to build the Docker container image locally before pushing it to your private Container Registry. The parameter `-t` configures the tags of the container:
+    ```bash
+    $ docker build -t mycontainer:latest .
+    ```
+    ```
+    Sending build context to Docker daemon  197.6kB
+    ...
+    ...
+    ...
+    ---> c427b132b5fc
+    Successfully built c427b132b5fc
+    Successfully tagged mycontainer:latest
+    ```
+4. Check that the image has been added to the local Docker installation by running the `docker images` command. Your newly created container image will be displayed in the list of available images:
+    ```bash
+    $ docker images
+    REPOSITORY                                             TAG                 IMAGE ID            CREATED             SIZE
+    mycontainer                                            latest              c427b132b5fc        22 minutes ago      1.24GB
+    ```
+5. [Log into your Container Registry](/containers/container-registry/how-to/connect-docker-cli). The endpoint (for example: `rg.fr-par.scw.cloud/myregistry`) of your Container Registry is available from the [Scaleway Console](https://console.scaleway.com/registry/namespaces) and depends on your configuration:
+    ```bash
+    $ docker login rg.fr-par.scw.cloud/myregistry -u nologin -p $SCW_SECRET_KEY
+    ```
+    A `Login Succeeded` message displays once logged in.
+6. Tag the image using the `docker tag` command. Make sure to replace the URL of the registry with your personal endpoint:
+    ```bash
+    $ docker tag mycontainer:latest rg.fr-par.scw.cloud/myregistry/mycontainer:latest
+    ```
+7. Push the image to the registry using the `docker push` command:
+    ```bash
+    $ docker push rg.fr-par.scw.cloud/myregistry/mycontainer:latest
+    ```
+    ```
+    ...
+    ...
+    a26724645421: Pushed
+    a30b835850bf: Pushed
+    latest: digest: sha256:690d70e8f26cb772916c64244c86701c50f2764e42c668d4d0aaf039a9d62b47 size: 4067
+    ```
+
+## How to create an Image Pull Secret
+
+To deploy the previously created container image in a Kapsule cluster, you need to create an Image Pull Secret. This allows your Kapsule cluster to connect to your Container Registry and pull the image itself. For this, your [API Secret Key](/console/my-project/how-to/generate-api-key) is required.
+
+<Message type="note">
+  - Make sure that your [Kapsule cluster](/containers/kubernetes/how-to/connect-cluster-kubectl) is configured on your local computer before continuing.  
+  - We suppose that all resources are living in the same [Kubernetes Namespace](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/). The default namespace is named `default`.
+</Message>
+
+1. Run `kubectl` to define a secret called `registry-secret` using the `$SCW_SECRET_KEY` variable as follows:
+    ```bash
+    $ kubectl create secret docker-registry registry-secret --docker-server=rg.fr-par.scw.cloud --docker-username=my-registry-namespace --docker-password=$SCW_SECRET_KEY
+    ```
+    <Message type="important">
+      Replace the value for `docker-server` with the address of your Container Registry (eg if it is in the Amsterdam or Warsaw regions), and the value for `docker-username` with the name of your Container Registry namespace.
+    </Message>
+2. Display the generated secret with the `kubectl get secret` command. The flag `--output=yaml` will return the output formatted in [YAML](https://yaml.org/):
+    ```bash
+    $ kubectl get secret registry-secret --output=yaml
+    ```
+    ```
+    apiVersion: v1
+    data:
+      .dockerconfigjson: eyJhdXRocyI6eyJyZy5mci1wYXIuc2N3LmNsb3VkIjp7InVzZXJuYW1lIjoibXl1c2VyIiwicGFzc3dvcmQiOiJkYTI0N2E0Yi1hZDk4LTQ2NGYtOTdhYy1hOGIwNTZmYjU2NWYiLCJlbWFpbCI6Im15QGVtYWlsLmNvbSIsImF1dGgiOiJiWGwxYzJWeU9tUmhNalEzWVRSaUxXRmtPVGd0TkRZMFppMDVOMkZqTFdFNFlqQTFObVppTlRZMVpnPT0ifX19
+    kind: Secret
+    metadata:
+      creationTimestamp: 2019-10-14T12:23:32Z
+      name: registry-secret
+      namespace: default
+      resourceVersion: "2977046288"
+      selfLink: /api/v1/namespaces/default/secrets/registry-secret
+      uid: 85a69713-f239-43f3-8f00-36603c794557
+    type: kubernetes.io/dockerconfigjson
+    ```
+
+## How to create a deployment for the container
+
+1. Create a file `deployment.yaml` and open it in a text editor, e.g. `nano`:
+    ```bash
+    $ nano deployment.yaml
+    ```
+2. Copy the following content into it, save the file and quit the text editor.  
+
+    Remember to replace the **image name** `rg.fr-par.scw.cloud/myregistry/mycontainer:latest` and **registry secret** `registry-secret` with the values you previously defined.
+      
+    ```
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: mydeployment
+        labels:
+          app: mydeployment
+      spec:
+        replicas: 2
+        selector:
+          matchLabels:
+            app: mydeployment
+        template:
+          metadata:
+            labels:
+              app: mydeployment
+          spec:
+            containers:
+              - name: mycontainer
+                image: rg.fr-par.scw.cloud/myregistry/mycontainer:latest
+            imagePullSecrets:
+              - name: registry-secret
+    ```
+
+    <Message type="note">
+      In the configuration above, the secret and deployments are in the same namespace.
+    </Message>
+3. Run `kubectl apply` to apply the deployment to the cluster:
+    ```bash
+    $ kubectl apply -f deployment.yaml
+    ```
+4. Use the `kubectl get pods` command to check the status of the deployment:
+    ```bash
+    $ kubectl get pods
+    ```
+
+    ```
+    NAME                            READY   STATUS             RESTARTS   AGE
+    mydeployment-64c9fdd66c-66mrq   1/1     Running            0          2m
+    mydeployment-64c9fdd66c-pwhl9   1/1     running            0          2m
+    ```
+
+As you can see in the output above, the image has been pulled successfully from the registry and two replicas of it are running on the Kapsule cluster.
+
+For more information how to use your Container Registry with Kubernetes, refer to the [official documentation](https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/).
+
+
+<Navigation title="See Also">
+  <PreviousButton to="/containers/kubernetes/how-to/connect-cluster-kubectl/">How to connect to a cluster with kubectl</PreviousButton>
+  <NextButton to="/containers/kubernetes/how-to/deploy-ingress-controller/">How to deploy an ingress controller</NextButton>
+</Navigation>

@@ -1,0 +1,192 @@
+---
+meta:
+  title: Managing Block Storage volumes with the Scaleway CSI
+  description: This page explains how to manage Block Storage volumes with the Scaleway CSI.
+content:
+  h1: Managing Block Storage volumes with the Scaleway CSI
+  paragraph: This page explains how to manage Block Storage volumes with the Scaleway CSI.
+tags: block-storage scaleway-csi kubernetes pvc 
+dates:
+  validation: 2022-11-03
+  posted: 2021-08-12
+categories:
+  - containers
+---
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created](/containers/kubernetes/how-to/create-cluster/) a Kubernetes cluster running on Scaleway Instances (v1.21+)
+  - You have a Scaleway Project or Organization ID, [Access and Secret key](/console/my-project/how-to/generate-api-key/)
+</Message>
+
+
+The [Scaleway Block Volume](https://www.scaleway.com/en/block-storage/) Container Storage Interface (CSI) driver is an implementation of the [CSI interface](https://github.com/container-storage-interface/spec/blob/master/spec.md) to provide a way to manage Scaleway Block Volumes through a container orchestration system, like Kubernetes. It is installed by default on every Kubernetes Kapsule and Kosmos cluster.
+
+
+## Features
+
+Following is a list of functionalities implemented by the Scaleway CSI driver.
+
+### Block device resizing
+
+The Scaleway CSI driver implements the resize feature ([example for Kubernetes](https://kubernetes.io/blog/2018/07/12/resizing-persistent-volumes-using-kubernetes/)). It allows an online resize (without the need to detach the block device). However resizing can only be done upwards, decreasing a volume's size is not supported.
+
+### Raw Block Volume
+
+[Raw Block Volumes](https://kubernetes.io/blog/2019/03/07/raw-block-volume-support-to-beta/) allows the block volume to be exposed directly to the container as a block device, instead of a mounted filesystem. To enable it, the `volumeMode` needs to be set to `Block`. For instance, here is a PVC in raw block volume mode:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-raw-pvc
+spec:
+  volumeMode: Block
+  [...]
+```
+
+### At-Rest encryption
+
+Support for volume encryption. [See in examples](https://github.com/scaleway/scaleway-csi/tree/master/examples/kubernetes/#encrypting-volumes)
+
+### Volume snapshots
+
+[Volume snapshots](https://kubernetes.io/docs/concepts/storage/volume-snapshots/) allows the user to create a snapshot of a specific block volume. 
+
+### Volume statistics
+
+The Scaleway CSI driver implements the [`NodeGetVolumeStats`](https://github.com/container-storage-interface/spec/blob/master/spec.md/#nodegetvolumestats) CSI method. It is used to gather statistics about the used block volumes. In Kubernetes, `kubelet` exposes these metrics.
+
+## Kubernetes
+
+This section is Kubernetes specific. Note that Scaleway CSI driver may work for older Kubernetes version than those announced.
+The CSI driver allows to use [Persistent Volumes](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) in Kubernetes.
+
+## Creating persistent volumes with Scaleway Block Storage 
+
+1. Create a [PersistentVolumeClaim](https://kubernetes.io/docs/concepts/storage/persistent-volumes/) and use it as a volume inside the pod of a deployment.
+    ```
+    $ kubectl apply -f pvc-deployment/pvc.yaml
+    ```
+2. Create the deployment that will use this volume:
+    ```
+    $ kubectl apply -f pvc-deployment/deployment.yaml
+    ```
+
+## Creating raw block volumes 
+
+1. Create a block volume and make it available in the pod as a raw block device. In order to do so, `volumeMode` must be set to Block:
+    ```bash
+    $ kubectl apply -f raw-volume/pvc.yaml
+    ```
+2. Create a pod that will use this raw volume. In order to do so, `volumesDevices` must be used, instead of the traditional `volumeMounts`:
+    ```bash
+    $ kubectl apply -f raw-volume/pod.yaml
+    ```
+3. Exec into the container and use the volume as a classic block device:
+    ```bash
+    $ kubectl exec -it my-awesome-block-volume-app sh
+    / # ls -al /dev/xvda
+    brw-rw----    1 root     disk        8,  32 Mar 23 12:34 /dev/xvda
+    / # dd if=/dev/zero of=/dev/xvda bs=1024k count=100
+    100+0 records in
+    100+0 records out
+    104857600 bytes (100.0MB) copied, 0.043702 seconds, 2.2GB/s
+    ```
+
+## Importing existing Scaleway volumes
+
+1. If you have an already existing volume, with the ID `11111111-1111-1111-111111111111` in the zone `fr-par-1`, you can import it by creating the following PV:
+    ```yaml
+    apiVersion: v1
+    kind: PersistentVolume
+    metadata:
+      name: test-pv
+    spec:
+      capacity:
+        storage: 5Gi
+      volumeMode: Filesystem
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: scw-bssd
+      csi:
+        driver: csi.scaleway.com
+        volumeHandle: fr-par-1/11111111-1111-1111-111111111111
+      nodeAffinity:
+        required:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: topology.csi.scaleway.com/zone
+              operator: In
+              values:
+              - fr-par-1
+    ```
+2. Once the PV is created, create a PVC with the same attributes (here scw-bssd as storage class and a size of 5Gi):
+    ```bash
+    $ kubectl apply -f importing/pvc.yaml
+    ```
+3. Ceate a pod that uses this volume:
+    ```bash
+    $ kubectl apply -f importing/pod.yaml
+    ```
+
+## Encrypting volumes 
+
+This plugin supports at rest encryption of the volumes with Cryptsetup/LUKS.
+
+<Message type="note">
+  Resizing an encrypted volume [does not work](https://github.com/container-storage-interface/spec/issues/445).
+</Message>
+
+### Storage class parameters
+
+In order to have an encrypted volume, `encrypted: true` needs to be added to the StorageClass parameters.
+You will also need an passphrase to encrypt/decrypt the volume, which is take from the secrets passed to the `NodeStageVolume` method.
+
+The [external-provisioner](https://github.com/kubernetes-csi/external-provisioner) can be used to [pass down the wanted secret to the CSI plugin](https://kubernetes-csi.github.io/docs/secrets-and-credentials-storage-class.html) (v1.0.1+).
+
+Two additional parameters are needed on the StorageClass:
+- `csi.storage.k8s.io/node-stage-secret-name`: The name of the secret
+- `csi.storage.k8s.io/node-stage-secret-namespace`: The namespace of the secret
+
+The secret needs to have the passphrase in the entry with the key `encryptionPassphrase`.
+
+For instance with the following secret:
+```yaml
+apiVersion: v1
+kind: Secret
+metadata:
+  name: enc-secret
+  namespace: default
+type: Opaque
+data:
+  encryptionPassphrase: bXlhd2Vzb21lcGFzc3BocmFzZQ==
+```
+
+and the following StorageClass:
+```yaml
+allowVolumeExpansion: false # not yet supported
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: "scw-bssd-enc"
+provisioner: csi.scaleway.com
+reclaimPolicy: Delete
+volumeBindingMode: Immediate
+parameters:
+  encrypted: "true"
+  csi.storage.k8s.io/node-stage-secret-name: "enc-secret"
+  csi.storage.k8s.io/node-stage-secret-namespace: "default"
+```
+
+all the PVC created with the StorageClass `scw-bssd-enc` will be encrypted at rest with the passphrase `myawesomepassphrase`.
+
+The [Per Volume Secret](https://kubernetes-csi.github.io/docs/secrets-and-credentials-storage-class.html#per-volume-secrets) can also be used to avoid having one passphrase per StorageClass.
+
+
+<Navigation title="See Also">
+  <PreviousButton to="/containers/kubernetes/api-cli/using-load-balancer-annotations/">Using Load Balancer annotations</PreviousButton>
+  <NextButton to="/containers/kubernetes/api-cli/managing-tags/">Managing tags</NextButton>
+</Navigation>

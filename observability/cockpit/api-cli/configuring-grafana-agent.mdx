@@ -1,0 +1,172 @@
+---
+meta:
+  title: Configuring the Grafana agent
+  description: This page explains how to configure the Grafana agent
+content:
+  h1: Configuring the Grafana agent
+  paragraph: This page explains how to configure the Grafana agent
+tags: cockpit observability grafana-agent
+dates:
+  validation: 2023-01-10
+  posted: 2023-01-10
+categories:
+  - observability
+---
+
+This page explains how to configure the Grafana agent to push your logs and metrics and visualize them in Grafana.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](/console/my-account/how-to/create-an-account/)
+  - You have [activated your Cockpit](/observability/cockpit/how-to/activate-cockpit/)
+  - You have installed [docker](https://www.docker.com/) and [docker compose](https://docs.docker.com/compose/install/)
+</Message>
+
+## Configuring and running the Grafana agent
+
+<Message type="important">
+ It is not currently possible to collect logs if you are using OSX.
+</Message>
+
+
+1. [Create a token](/observability/cockpit/how-to/create-token/) and select the push permission for metrics and logs.
+2. Create a folder where you will keep your configuration files.
+3. Create a configuration file inside your folder and name it `config.yaml`. This file will contain the Grafana agent configuration.
+4. Copy the following yaml template.
+    <Message type="important">
+     - Make sure you replace the `remote_write` URL with `https://metrics.prd.obs.fr-par.scw.cloud/api/v1/push` and the `clients` URL with `https://logs.prd.obs.fr-par.scw.cloud/loki/api/v1/push`
+     - Make sure you add the token you created in step 2
+    </Message>
+
+    ```
+    metrics:
+      wal_directory: /tmp/agent
+      global:
+        scrape_interval: 15s
+        remote_write:
+        - url: <your metrics push url>
+          headers:
+            "X-Token": <your push token>
+
+    logs:
+      positions_directory: /tmp/positions/
+      configs:
+      - name: scw
+        clients:
+        - url: <your logs push url>
+          tenant_id: <your push token>
+        scrape_configs:
+        - job_name: varlogs
+          static_configs:
+          - targets: [localhost]
+            labels:
+              job: varlogs
+              __path__: /host/root/var/log/*.log
+
+    integrations:
+      node_exporter:
+        enabled: true
+        rootfs_path: /host/root
+        sysfs_path: /host/sys
+        procfs_path: /host/proc
+    ```
+    Your configuration file should look like the following:
+
+    ```
+    metrics:
+      wal_directory: /tmp/agent
+      global:
+        scrape_interval: 15s
+        remote_write:
+        - url: https://metrics.prd.obs.fr-par.scw.cloud/api/v1/push
+          headers:
+            "X-Token": 4zz-3cGLS5tzuDRb6LkEdpem7eOqj8EFecfWcJmTvrakS15gu07iEvtC5RfYDzi8
+
+
+    logs:
+      positions_directory: /tmp/positions/
+      configs:
+      - name: scw
+        clients:
+        - url: https://logs.prd.obs.fr-par.scw.cloud/loki/api/v1/push
+          tenant_id: 4zz-3cGLS5tzuDRb6LkEdpem7eOqj8EFecfWcJmTvrakS15gu07iEvtC5RfYDzi8
+        scrape_configs:
+        - job_name: varlogs
+          static_configs:
+          - targets: [localhost]
+            labels:
+              job: varlogs
+              __path__: /host/root/var/log/*.log
+
+
+    integrations:
+      node_exporter:
+        enabled: true
+        rootfs_path: /host/root
+        sysfs_path: /host/sys
+        procfs_path: /host/proc
+    ```
+5. In the same folder, create another file and name it `docker-compose.yaml`.
+6. Copy the following template and paste it into your file:
+
+    ```
+    version: "3"
+    services:
+      agent:
+        image: grafana/agent:latest
+        restart: always
+        volumes:
+          - "./config.yaml:/etc/agent-config/agent.yaml:ro"
+          - "/:/host/root:ro"
+          - "/sys:/host/sys:ro"
+          - "/proc:/host/proc:ro"
+          - "/tmp/agent:/etc/agent"
+        entrypoint:
+          - /bin/agent
+          - -config.file=/etc/agent-config/agent.yaml
+          - -metrics.wal-directory=/tmp/agent/wal
+        network_mode: "host"
+        pid: "host"
+    ```
+
+7. Run the following command to open your folder containing your configuration files:
+
+    ```
+    cd <your folder>
+    ```
+8. Run the following command to bring the Grafana Agent container up:
+
+    ```
+    docker-compose up
+    ```
+    <Message type="important">
+     Run `sudo docker-compose up` if you are using Linux.
+    </Message>
+
+## Visualizing metrics on Grafana
+
+1. [Log into Grafana](/observability/cockpit/how-to/access-grafana-and-managed-dashboards/) using your [Grafana credentials](/observability/cockpit/how-to/retrieve-grafana-credentials/).
+2. Click the **Dashboards** icon, then click **Browse**.
+    <Lightbox src="scaleway_obs_dashboards_browse.webp" alt="" />
+3. Click **Import** on the top right corner of your screen to import your Grafana dashboard.
+4. Enter `1860`, which is the ID of the [Node Exporter Full](https://grafana.com/grafana/dashboards/1860-node-exporter-full/) dashboard, in the ID field and click **Load**.
+    <Lightbox src="scaleway_obs_import_dashboard.webp" alt="" />
+5. Select the **Scaleway Metrics Prometheus** instance as the data source and click **Import**. Your dashboard displays with your metrics.
+
+## Visualizing logs on Grafana
+
+1. [Log into Grafana](/observability/cockpit/how-to/access-grafana-and-managed-dashboards/) using your [Grafana credentials](/observability/cockpit/how-to/retrieve-grafana-credentials/).
+2. Click the **Compass** icon.
+    <Lightbox src="scaleway_obs_logs_compass.webp" alt="" />
+3. Click **Explore**.
+4. Select the **Scaleway Logs** data source on the top left corner of your screen.
+5. Click **Log browser**.
+6. Select your labels and their values using the instructions on your screen.
+7. Click **Show logs**. A new screen display with your logs.
+8. Optionally, click the **Live** button on the top right corner of your screen to see your logs arriving in real time.
+
+
+
+
+

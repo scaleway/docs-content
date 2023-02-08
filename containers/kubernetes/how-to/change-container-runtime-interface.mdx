@@ -1,0 +1,73 @@
+---
+meta:
+  title: How to change the Container Runtime Interface (CRI) of an existing node pool
+  description: This page explains how to change the Container Runtime Interface (CRI) of an existing node pool
+content:
+  h1: How to change the Container Runtime Interface (CRI) of an existing node pool
+  paragraph: This page explains how to change the Container Runtime Interface (CRI) of an existing node pool
+tags: cluster cni docker crio cri-o
+dates:
+  validation: 2023-01-31
+  posted: 2023-01-31
+categories:
+  - containers
+---
+
+A container runtime is a software that,  in addition to other tasks, ensures that containers are started and stopped accordingly. It is one the lowest layers of Kubernetes. Historically, Kubernetes used Docker as a container runtime.
+However, with ongoing development, it became clear that it was not entirely suitable. With the rapidly evolving world of container runtimes, other solutions emerged as better suited.  
+The Container Runtime Interface (CRI) was developed as a means to open up Kubernetes to other container runtimes. CRI is a plugin within a Kubernetes cluster that allows the `kubelet` to use more than one type of container runtime. It consists of a protocol buffer and a gRPC API, as well as libraries, with additional specifications and tools.
+At Scaleway, we favor Containerd, the industry-leading CRI solution. [Containerd](https://containerd.io/) was initially developed by Docker and donated to the Cloud Native Computing Foundation (CNCF). It uses a subset of the original Docker engine and comes with most of Docker's functionalities for running containers and managing storage and images - but lacks many developer-oriented features. It is, therefore, suitable for large-scale use as part of a container orchestrator, such as Kubernetes. 
+
+<Message type="important">
+  With Kubernetes version 1.25, Scaleway **Kubernetes Kapsule** will deprecate all Kubernetes interfaces named `docker` and `cri-o`.
+</Message>
+
+If you are still using one of the deprecated CRIs, your cluster will have the following limitations:
+* Pools using deprecated CRIs cannot scale up.
+* Control planes cannot be upgraded if the CRI used by a pool is deprecated.
+
+To migrate your node pools to a supported CRI, you have to create a new resource pool supporting `containerd`, move your pods to the new pool and then delete your old pool.
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com) 
+  - You have [created](/containers/kubernetes/how-to/create-cluster) a Kubernetes Kapsule cluster
+</Message>
+
+## How to move your pods to a new pool
+
+1. Click **Kubernetes** in the **Containers** section of the [Scaleway Console](https://console.scaleway.com) side menu. The Kubernetes Kapsule dashboard displays.
+2. Click <Icon name="more" /> next to the cluster you want to edit and click **More info** to find detailed information about the cluster.
+3. Click the **Pools** tab to view the node pools associated with your cluster. 
+    <Message type="tip">
+      Any node pool using `docker` or `cri-o` runtimes is deprecated.
+    </Message>
+4. Click **+ Add a new pool**. The pool creation wizard displays.
+5. Configure your new node pool:
+    * Select a zone for your pool. The zone of your pool must match the zone your cluster is deployed in.
+    * Select the node type to be used for your pool.
+    * Configure pool options, such as **autoscaling** and **autohealing**.
+    * Click **Add pool** to create the new pool and to add it to your cluster.
+6. Use the `kubectl get nodes` command to retrieve a list of your nodes.
+7. Mark the nodes of your old pool as unschedulable using the [`kubectl cordon`](https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands#cordon) command: 
+    ```
+    kubectl cordon <old_node_1>
+    kubectl cordon <old_node_2>
+    ...
+    ```
+    <Message type="important">
+      If you have used **local storage** on your old nodes, data must **be copied** manually before moving pods and deleting nodes.
+    </Message>
+8. Emtpy the nodes using the [`kubectl drain`](https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands#drain) command:
+    ```
+    kubectl drain <old_node_1>
+    kubectl drain <old_node_2>
+    ...
+    ```
+    Your old nodes will be emptied and the pods are recreated in the new pool.
+9. Delete your old pool by clicking on <Icon name="more" /> > **Delete** next to the pool's name once all your pods are up again.
+
+<Navigation title="See Also">
+  <PreviousButton to="/containers/kubernetes/how-to/upgrade-kubernetes-version/">How to upgrade your Kubernetes Kapsule cluster</PreviousButton>
+  <NextButton to="/containers/kubernetes/how-to/delete-cluster/">How to delete a cluster</NextButton>
+</Navigation>

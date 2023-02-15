@@ -1,0 +1,127 @@
+---
+meta:
+  title: Deploying External secrets on Kubernetes Kapsule
+  description: Learn how to deploy External Secret on Kubernetes Kapsule integrated with Scaleway Secret Manager
+content:
+  h1: Deploying External secrets on Kubernetes Kapsule
+  paragraph: Learn how to deploy External secrets on Kubernetes Kapsule integrated with Scaleway Secret Manager
+tags: Kapsule cluster compute Kubernetes External secrets Scaleway secret manager
+categories:
+  - containers
+  - kubernetes
+  - secrets
+  - security
+dates:
+  validation: 2023-17-02
+  posted: 2022-17-02
+---
+
+## External Secrets - Overview
+
+[External Secrets](https://external-secrets.io) Is a Kubernetes operator allowing you to handle the lifecycle of secrets from external providers.
+
+In this tutorial you will learn how to deploy External Secrets and its services on [Kubernetes Kapsule](/containers/kubernetes/concepts/#kubernetes-kapsule), the managed Kubernetes service from Scaleway.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+  - You have [created a Kapsule cluster](/containers/kubernetes/how-to/create-cluster/)
+  - [kubectl](/containers/kubernetes/how-to/connect-cluster-kubectl/) is working on your machine
+  - `helm`, the Kubernetes [package manager](https://helm.sh/), is installed on your local machine (version 3.2+)
+</Message>
+
+## Preparing the Kubernetes Kapsule Cluster
+
+1. Ensure you are connected to your cluster and that `kubectl` and `helm` are installed on your local machine.
+2. Add the External Secrets Helm repo update it:
+    ```
+    $ helm repo add external-secrets https://charts.external-secrets.io
+    $ helm repo update
+    ```
+
+## Deploying External Secrets
+
+To automatically install and manage the CRDs as part of your Helm release, you must add the --set installCRDs=true flag to your Helm installation command. Uncomment the relevant line in the next steps to enable this.
+
+```
+$ helm install external-secrets \
+   external-secrets/external-secrets \
+    -n external-secrets \
+    --create-namespace \
+    --set image.repository=rg.fr-par.scw.cloud/external-secrets/external-secrets \
+    --set image.tag=v1
+  # --set installCRDs=true
+```
+## Create a secret containing your SCW credentials
+
+```
+$ echo -n 'KEYID' > ./access-key
+$ echo -n 'SECRETKEY' > ./secret-access-key
+$ kubectl create secret generic scwsm-secret --from-file=./access-key --from-file=./secret-access-key
+```
+## Create your first SecretStore
+
+Secret Manager is a regionalized product so you'll need to create a secret store by region.
+
+```
+---
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: secret-store
+  namespace: default
+spec:
+  provider:
+    scaleway:
+      region: <REGION>
+      projectId: <YOUR_PROJECT_UUID>
+      accessKey:
+        secretRef:
+          name: scwsm-secret
+          key: secret-access-key
+      secretKey:
+        secretRef:
+          name: scwsm-secret
+          key: access-key
+```
+
+## Create your first ExternalSecret
+
+```
+---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+    name: fake-secret
+    namespace: sm-user
+spec:
+    refreshInterval: 20s
+    secretStoreRef:
+        kind: SecretStore
+        name: fake-secret-store
+    data:
+      - secretKey: password  # key in the kubernetes secret
+        remoteRef:
+          key: id:<SECRET_ID in the secret store>
+          version: latest
+```
+
+## Uninstalling
+
+Before continuing, ensure that all external-secret resources that have been created by users have been deleted. You can check for any existing resources with the following command:
+
+```
+$ kubectl get SecretStores,ClusterSecretStores,ExternalSecrets --all-namespaces
+```
+
+Once all these resources have been deleted you are ready to uninstall external-secrets.
+
+## Uninstalling with Helm
+
+Uninstall the helm release using the delete command.
+
+```
+$ helm delete external-secrets --namespace external-secrets
+```

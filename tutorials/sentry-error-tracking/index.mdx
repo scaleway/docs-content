@@ -1,72 +1,78 @@
 ---
 meta:
   title: Configuring Sentry error tracking
-  description: Discover how to configure a Sentry error tracking server on a Scaleway Instance.
+  description: Discover how to configure a Sentry monitoring & error tracking server on a Scaleway Instance.
 content:
   h1: Configuring Sentry error tracking
-  paragraph: Discover how to configure a Sentry error tracking server on a Scaleway Instance.
+  paragraph: Discover how to configure a Sentry monitoring & error tracking server on a Scaleway Instance.
 tags: compute messaging apache Sentry error error-tracking Instance
 categories:
   - compute
   - instances
 hero: assets/scaleway_sentry.webp
 dates:
-  validation: 2022-09-08
+  validation: 2023-02-21
   posted: 2018-06-07
 ---
 
 ## Sentry - Overview
 
-Sentry is an open source solution for error tracking in applications. It is written in Python and can provide real-time reporting of errors in applications based on a client/server architecture. You can easily integrate it into your applications via its SDK and let them automatically report the errors via common messaging tools like Slack, IRC and more. This helps reduce the time for development of your applications and increases the user experience.
+Today's world is running on applications and everyone needs visibility into application health - no matter if you are an engineer, support or product manager. Sentry is an open source solution for monitoring & error tracking in applications. It is written in Python and can provide real-time reporting of errors in applications based on a client/server architecture. You can easily integrate it into your applications via its SDK and let them automatically report the errors via common messaging tools like Slack, IRC and more. This helps reduce the time for development of your applications and increases the user experience.
 
 You can find all reports on a dashboard which makes it easy to triage the problem - how often it occurs, which impact it has on the user experience of your application, which part of your code causes the problem and so on.
 
-This tutorial details how to setup a [Sentry](https://sentry.io/welcome/) server on a Scaleway compute Instance to start error tracking in your applications.
+This tutorial details how to setup a [Sentry](https://sentry.io/welcome/) Self-Hosted server on a Scaleway compute Instance to start error tracking in your applications.
 
 <Macro id="iam-requirements" />
  
 <Message type="requirement">
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
-  - You have a [Instance](https://www.scaleway.com/en/virtual-instances/) running on Ubuntu Focal Fossa (20.04 LTS)
+  - You have a [Instance](https://www.scaleway.com/en/virtual-instances/) running on Ubuntu Jammy Jellyfish (22.04 LTS)
 </Message>
 
 <Message type="note">
-  Sentry requires at least 4GB of RAM to run. We recommend, therefore, that you use a Scaleway Instance with at least 4GB of RAM to follow this tutorial.
+  Sentry requires at least 8 GB of RAM to run. We recommend, therefore, that you use a Scaleway Instance with at least 4 CPU cores, 8 GB of RAM, and 20 GB of available disk space to follow this tutorial.
 </Message>
 
 ## Installing Sentry
 
-In this tutorial, we will install Sentry on an [Ubuntu Focal Fossa (20.04 LTS)](https://www.ubuntu.com) based Instance.
+In this tutorial, we will install Sentry on an [Ubuntu Jammy Jellyfish (22.04 LTS)](https://www.ubuntu.com) based Instance.
 
 1. Update the system and install the required prerequisites.
     ```
     apt update && apt upgrade -y
     apt install apt-transport-https ca-certificates certbot curl git gnupg-agent nginx python3-certbot-nginx sendmail software-properties-common ufw -y
     ```
-    Sentry runs in a Docker container using `docker-compose`.
-2. Install the GPG Key of Docker and configure Docker's software repositories.
+2.  Sentry runs in a Docker container using `docker-compose`. Install the GPG Key of Docker.
     ```
-    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | apt-key add -
-    add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/ubuntu $(lsb_release -cs) stable"
+    sudo mkdir -m 0755 -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
     ```
-3. Update the apt package manager and install Docker-Engine using `apt`.
+3.  Configure Docker's software repositories to be able to install the required software on your Instance.
     ```
-    apt update && apt install docker-ce docker-ce-cli containerd.io -y
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+    $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
     ```
-4. Download the binary file of `docker-compose` and make the file executable.
+4. Update the apt package manager and install Docker Engine and the required plugins using `apt`.
     ```
-    curl -L "https://github.com/docker/compose/releases/download/2.3.3/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-    chmod +x /usr/local/bin/docker-compose
+    apt update && apt install docker-ce docker-ce-cli docker-compose containerd.io docker-buildx-plugin docker-compose-plugin
     ```
-5. Enter the `/opt` directory on your instance and clone the `onpremise` repository of Sentry.
+5. Enter the `/opt` directory on your Instance and download the [latest release](https://github.com/getsentry/self-hosted/releases/latest) of Self-Hosted Sentry.
     ```
     cd /opt
-    git clone https://github.com/getsentry/onpremise
+    wget https://github.com/getsentry/self-hosted/archive/refs/tags/23.2.0.tar.gz
     ```
-6. Enter the `onpremise` folder and run the automatic installation script of Sentry.
+    <Message type="note">
+      At the time of writing of this tutorial, the latest released version was `23.2.0`.
+    </Message>
+6. Unpack the downloaded file using `tar`:
     ```
-    cd /opt/onpremise
+    tar xfz 23.2.0.tar.gz
+    ```
+6. Enter the `self-hosted-23.2.0/` folder and run the Sentry installer
+    ```
+    cd /opt/self-hosted-23.2.0/
     ./install.sh
     ```
 
@@ -74,9 +80,6 @@ In this tutorial, we will install Sentry on an [Ubuntu Focal Fossa (20.04 LTS)](
 
     ```
     [...]
-      Applying sentry.0106_service_hook_project_id_nullable... OK
-      Applying sessions.0001_initial... OK
-      Applying sites.0001_initial... OK
       Applying sites.0002_alter_domain_unique... OK
       Applying social_auth.0001_initial... OK
     Created internal Sentry project (slug=internal, id=1)
@@ -89,21 +92,20 @@ In this tutorial, we will install Sentry on an [Ubuntu Focal Fossa (20.04 LTS)](
     Added to organization: sentry
     Creating missing DSNs
     Correcting Group.num_comments counter
-    Unable to find image 'alpine:latest' locally
-    latest: Pulling from library/alpine
-    df20fa9351a1: Already exists
-    Digest: sha256:185518070891758909c9f839cf4ca393ee977ac378609f700f60a771a2dfe321
-    Status: Downloaded newer image for alpine:latest
 
-    Generating Relay credentials...
-    Creating sentry_onpremise_relay_run ...
-    Creating sentry_onpremise_relay_run ... done
-    Relay credentials written to relay/credentials.json
+    ▶ Setting up GeoIP integration ...
+    Setting up IP address geolocation ...
+    Installing (empty) IP address geolocation database ... done.
+    IP address geolocation is not configured for updates.
+    See https://develop.sentry.dev/self-hosted/geolocation/ for instructions.
 
-    ----------------
+    -----------------------------------------------------------------
+
     You're all done! Run the following command to get Sentry running:
 
-      docker-compose up -d
+      docker compose up -d
+
+    -----------------------------------------------------------------
     ```
 7. Start Sentry by running the following command.
     ```
@@ -135,7 +137,7 @@ By default, Sentry listens on port `9000`. Therefore we configure an Nginx proxy
     ```
 2. Create a symlink to enable the new site in Nginx.
     ```
-    ln -s /etc/nginx/sites-available/sentry.local.conf /etc/nginx/sites-enabled/sentry.local.conf
+    ln -s /etc/nginx/sites-available/sentry.example.com.conf /etc/nginx/sites-enabled/sentry.example.com.conf
     ```
 3. Restart `nginx` to activate the new configuration.
     ```
@@ -237,7 +239,7 @@ We disable direct access to the Sentry application, running on port `9000` for s
     ufw allow 443/tcp
     ```
 4. Enable the new firewall configuration.
-    ```bash no-copy
+    ```
     $ ufw enable
     Command may disrupt existing ssh connections. Proceed with operation (y|n)? y <- type **y**
     Firewall is active and enabled on system startup

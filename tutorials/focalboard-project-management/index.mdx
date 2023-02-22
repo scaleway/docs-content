@@ -1,0 +1,208 @@
+---
+meta:
+  title: Project management for technical teams with Focalboard on Ubuntu Instances
+  description: This page shows how to setup a Focalboard project-management tool on Cost-Optimzed Instances running Ubuntu Linux
+content:
+  h1: Project management for technical teams with Focalboard on Ubuntu Instances
+  paragraph: This page shows how to setup a Focalboard project-management tool on Cost-Optimzed Instances running Ubuntu Linux
+tags: compute instance focalboard ubuntu project-management open-source
+hero:
+categories:
+  - compute
+  - instance
+  - build-and-maintain
+dates:
+  validation: 2023-02-22
+  posted: 2023-02-22
+---
+
+Focalboard is an open source, multilingual, self-hosted project management tool developed by the team around Mattermost. It helps your organization maintain a single source of truth, so teams stay aligned to complete tasks, reach milestones, and achieve their goals. 
+Focalboard provides a full suite of features such as Kanban, table, gallery and candar view. Filters help you to stay focussed on the highest priorty items. 
+The application is a privacy-caring an alternative to Trello, Notion, and Asana and can be installed easily on Scaleway Instances.
+
+<Message type="tip">
+  We recommend you follow this tutorial using a [Cost-Optimized Instance](/compute/instances/reference-content/choosing-instance-type/).
+</Message>
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+  - You have [created an Instance](/compute/instances/how-to/create-an-instance/) that runs Ubuntu Jammy Jellyfish (22.04 LTS)
+  - You have a (sub)domain pointed to the IP address of your Instance (A-record)
+</Message>
+
+## Installation of the required software 
+1. Log into your Instance using SSH:
+    ```
+    ssh root@<your_scaleway_instance_ip>
+    ```
+2. Update the `apt` package manager and upgrade the software already installed on your Instance to the latest available version.
+    ```
+    apt update && apt upgrade -y
+    ```
+3. Install the required software packages using the `apt` package manager. 
+    ```
+    apt install nginx python3-certbot-nginx mariadb-server ufw
+    ```
+4. Download and unpack Focalboard. In this tutorial we use v7.8.2 of Focalboard, but you can find the **latest** release in the projects [GitHub repository](https://github.com/mattermost/focalboard/releases).
+    ```
+    wget https://github.com/mattermost/focalboard/releases/download/v7.8.2/focalboard-server-linux-amd64.tar.gz
+    tar -xvzf focalboard-server-linux-amd64.tar.gz
+    mv focalboard /opt
+    ```
+
+## Nginx configuration
+1. Create a Nginx server configuration for Focalboard. Nginx acts as a proxy in front of the application to prevent it from direct access and by providing an additional layer of security through TLS encryption.
+    ```
+    nano /etc/nginx/sites-available/focalboard.example.com.conf
+    ```
+    <Message type="note">
+      In this tutorial we use the subdomain `focalboard.example.com`. Remember to change it to your own (sub)domain where applicable.
+    </Message>
+    Copy and paste the following configuration into the file, edit it and save it.
+    ```
+    upstream focalboard {
+    server localhost:8000;
+    keepalive 32;
+    }
+
+    server {
+            listen 80;
+            listen [::]:80;
+
+            server_name focalboard.example.com;
+
+            access_log /var/log/nginx/focalboard-access.log;
+            error_log /var/log/nginx/focalboard-error.log;
+
+    location ~ /ws/* {
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        client_max_body_size 50M;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Frame-Options SAMEORIGIN;
+        proxy_buffers 256 16k;
+        proxy_buffer_size 16k;
+        client_body_timeout 60;
+        send_timeout 300;
+        lingering_timeout 5;
+        proxy_connect_timeout 1d;
+        proxy_send_timeout 1d;
+        proxy_read_timeout 1d;
+        proxy_pass http://focalboard;
+    }
+
+    location / {
+        client_max_body_size 50M;
+        proxy_set_header Connection "";
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_set_header X-Frame-Options SAMEORIGIN;
+        proxy_buffers 256 16k;
+        proxy_buffer_size 16k;
+        proxy_read_timeout 600s;
+        proxy_cache_revalidate on;
+        proxy_cache_min_uses 2;
+        proxy_cache_use_stale timeout;
+        proxy_cache_lock on;
+        proxy_http_version 1.1;
+        proxy_pass http://focalboard;
+    }
+    }
+    ```
+2. Test the new configuration, enable the site and reload Nginx to activate the Focalboard site.
+    ```
+    nginx -t
+    ln -s /etc/nginx/sites-available/focalboard.example.com.conf /etc/nginx/sites-enabled/focalboard.example.com.conf
+    service nginx reload
+    ```
+3. Run `certbot` to obtain a TLS certificate for your domain name and let the application configure Nginx automatically.
+    ```
+    certbot
+    ```
+    <Message type="tip">
+      For more details on using [Certbot](https://certbot.eff.org/), refer to our [dedicated documenation](/tutorials/nginx-reverse-proxy/#adding-tls-to-your-nginx-reverse-proxy-using-let's-encrypt).
+    </Message>
+
+## MariaDB configuration
+
+1. Run the following command to initalize the [MariaDB](/tutorials/mariadb-ubuntu-bionic/) database server.
+    ```
+    mysql_secure_installation
+    ```
+    Follow the steps in the wizard:
+    * Enter current password for root: Press **Enter** to continue.
+    * Set root password? **Y**
+    * Create and confirm a new password
+    * Remove anonymous users? **Y**
+    * Disallow root login remotely? **Y**
+    * Remove test database and access to it? **Y**
+    * Reload privilege tables now? **Y**
+2. Log into the MariaDB shell using the MySQL user `root` and the password created in the previous step. 
+    ```
+    mysql -u root -p
+    ```
+3. Create a table for Focalboard and grant permission to a MariaDB user. Change the values for `focalboarduser` and `focalboardpassword` to your own user/password combination.
+    ```
+    CREATE DATABASE focalboard;
+    GRANT ALL on focalboard.* to 'focalboarduser'@'localhost' identified by 'focalboardpassword'; 
+    ```
+    Then leave the MariaDB shell by typing `exit;`.
+4. Open the Focalboard configuraion file in a texteditor. 
+    ```
+    nano /opt/focalboard/config.json
+    ```
+    Edit the database configuration as shown below: 
+    ```
+    "dbtype": "mysql",
+    "dbconfig": "focalboarduser:focalboardpassword@tcp(127.0.0.1:3306)/focalboard",
+    ```
+
+## Configure a Focalboard service
+
+1. Create a service description. 
+    ```
+    nano /lib/systemd/system/focalboard.service
+    ```
+    Copy the following content into the file, save it and exit the text editor. 
+2. Reload the systemd configuration, enable and start the Focalboard service.
+    ```
+    systemctl daemon-reload
+    systemctl start focalboard.service
+    systemctl enable focalboard.service
+    ```
+
+## Firewall configuration
+
+To avoid that the Focalboard application is directly reachable via plain HTTP on Port 8000, we configure [a firewall](/tutorials/installation-uncomplicated-firewall/) to block all incoming ports, except HTTP, HTTPS, and SSH.
+
+1. Refuse any traffic by default.
+    ```
+    ufw default deny
+    ```
+2. Enable outgoing traffic.
+    ```
+    ufw default allow outgoing
+    ```
+3. Authorize SSH, HTTP and HTTPS connections to the Focalboard Instance .
+    ```
+    ufw allow 22/tcp
+    ufw allow 80/tcp
+    ufw allow 443/tcp
+    ```
+4. Enable the new firewall configuration.
+    ```
+    ufw enable
+    ```
+
+Your Focalboard Instance is now ready. You can open a web browser on your local computer and point it to your Focalboard domain. The Login screen displays. Click **Create an account** to create your first account and start using your Instance. 
+    <Lightbox src="scaleway-focalboard-splash.webp" alt="" />
+
+For more information about the usage of your new Focalboard Instance, follow the [offical Focalboard documentation](https://www.focalboard.com/guide/user/).

@@ -26,6 +26,10 @@ The tool helps to improve your sites performances with the analytics script weig
   - You have [created an Instance](/compute/instances/how-to/create-an-instance/) that runs Ubuntu Jammy Jellyfish (22.04 LTS)
 </Message>
 
+<Message type="tip">
+  We recommend you follow this tutorial using a [Cost-Optimized Instance](/compute/instances/reference-content/choosing-instance-type/).
+</Message>
+
 1. Log into your Instance using SSH:
     ```
     ssh root@<your_scaleway_instance_ip>
@@ -78,3 +82,95 @@ The tool helps to improve your sites performances with the analytics script weig
     docker-compose up -d
     ```
 
+## Configuring a Nginx reverse proxy for Plausible
+
+As Plausible supports by default plain HTTP traffic by only, we configure a Nginx reverse proxy to provide HTTPS with a Let's Encrypt certificate to increase security.
+
+<Message type="important">
+  To perform the following steps you need to have a (sub)domain pointing to your Instance and valid A and/or AAAA-records configured for it.
+</Message>
+
+1. Install Nginx and Certbot using `apt`. Nginx is a versatile web server that we use as a proxy to protect Plausible from direct access to the application and Certbot is a tool to automate the issuing and renewal of TLS certificates by Let's Encrypt. 
+  ````
+  apt install nginx python3-certbot-nginx
+  ```
+2. Create a new Nginx configuration file for Plausible and edit it as following. In our case Plausible will be hosted at `plausible.example.com`. Remember to edit this to your own domain name.
+  ```
+  nano /etc/nginx/sites-available/plausible.example.com.conf
+  ```
+  ```
+  proxy_cache_path /var/cache/nginx/data/jscache levels=1:2 keys_zone=jscache:100m inactive=30d  use_temp_path=off max_size=100m;
+
+  server {
+          listen 80;
+          listen [::]:80;
+
+          server_name plausible.example.com;
+
+          access_log /var/log/nginx/plausible-access.log;
+          error_log /var/log/nginx/plausible-error.log;
+
+          location / {
+                      proxy_pass http://127.0.0.1:8000;
+          }
+
+          location = /js/script.js {
+              # Change this if you use a different variant of the script
+              proxy_pass http://localhost:8000/js/script.js;
+              proxy_set_header Host plausible.example.com;
+              proxy_ssl_server_name on;
+              proxy_ssl_session_reuse off;
+
+
+              # Tiny, negligible performance improvement. Very optional.
+              proxy_buffering on;
+
+              # Cache the script for 6 hours, as long as plausible.io returns a valid response
+              proxy_cache jscache;
+              proxy_cache_valid 200 6h;
+              proxy_cache_use_stale updating error timeout invalid_header http_500;
+
+              # Optional. Adds a header to tell if you got a cache hit or miss
+              add_header X-Cache $upstream_cache_status;
+          }
+
+          location = /api/event {
+              proxy_pass http://localhost:8000/api/event;
+              proxy_set_header Host plausible.example.com;
+              proxy_ssl_server_name on;
+              proxy_ssl_session_reuse off;
+              proxy_buffering on;
+              proxy_http_version 1.1;
+
+              proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+              proxy_set_header X-Forwarded-Proto $scheme;
+              proxy_set_header X-Forwarded-Host  $host;
+          }
+  }
+  ```
+3. Test the configuration to ensure that it will function correctly:
+  ```
+  nginx -t
+  ```
+4. Enable the server block by symlinking:
+  ```
+  ln -s /etc/nginx/sites-available/plausible.example.com.conf /etc/nginx/sites-enabled/plausible.example.com.conf
+  ```
+5. Restart Nginx to enable the new configuration:
+  ```
+  systemctl nginx restart 
+  ```
+6. Run `certbot` to obtain a TLS certificate for your domain name and let the application configure Ngninx automatically. 
+  ```
+  certbot 
+  ```
+  <Message type="tip">
+    For more details on using Certbot, refer to our [dedicated documenation](/tutorials/nginx-reverse-proxy/#adding-tls-to-your-nginx-reverse-proxy-using-let's-encrypt).
+  </Message>
+7. Open the file `docker-compose.yml` in a text editor and change the line `- 8000:8000` to - `127.0.0.1:8000:8000`. This prevents Plausible from being accessed remotely using HTTP on port 8000 which is a security concern.
+8. Stop the application using `docker-compose stop`. Then bring it up again to apply the new configuration `docker-compose up`.
+9. Open a webbrowser and point it to `https://plausible.example.com/`. The Plausible registration screen displays. Complete the form to create your account.
+    <Lightbox src="scaleway-plausible-register.webp" alt="" />
+    During account generation, the snippet to add to your website displays. Add it to your site and Plausible starts running analytics on your visitors.
+
+For more information about Plausible, refer to the [official Plausible documentation](https://plausible.io/docs).

@@ -1,0 +1,177 @@
+---
+meta:
+  title: Running web analytics with Plausible on Ubuntu Linux
+  description: This page shows how to generate web analytics with Plausible on Cost-Optimzed Instances running Ubuntu Linux
+content:
+  h1: Running web analytics with Plausible on Ubuntu Linux
+  paragraph: This page shows how to generate web analytics with Plausible on Cost-Optimzed Instances running Ubuntu Linux
+tags: compute instance plausible ubuntu analytics open-source
+hero:
+categories:
+  - compute
+  - instance
+  - develop-and-test
+dates:
+  validation: 2023-02-21
+  posted: 2023-02-21
+---
+
+Plausible Analytics is an open-source web analytics project with the mission to make analytics more privacy-friendly. You can self-host the solution on Scaleway Instances and reduce the dependency and surveillance of other tools coming from the AdTech world.
+The tool helps to improve your site performance, with the analytics script weighing less then 1KB - that is 45 times smaller than the site tag of a commercial analytics solution. Plausible Analytics is designed to be self-hosted through Docker.
+
+<Message type="tip">
+  We recommend you follow this tutorial using a [Cost-Optimized Instance](/compute/instances/reference-content/choosing-instance-type/).
+</Message>
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured your SSH Key](/console/my-project/how-to/create-ssh-key/)
+  - You have [created an Instance](/compute/instances/how-to/create-an-instance/) that runs Ubuntu Jammy Jellyfish (22.04 LTS)
+</Message>
+
+1. Log into your Instance using SSH:
+    ```
+    ssh root@<your_scaleway_instance_ip>
+    ```
+2. Update the `apt` package manager and upgrade the software already installed on your Instance to the latest available version.
+    ```
+    apt update && apt upgrade -y
+    ```
+3. Install the Docker GPG Key. This step is required to verify the validity of the Docker packages that you will install in a later step.
+    ```
+    sudo mkdir -m 0755 -p /etc/apt/keyrings
+    curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+    ```
+4. Configure Docker's software repositories to be able to install the required software on your Instance.
+    ```
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu \
+    $(lsb_release -cs) stable" | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+    ```
+5. Update the packet manager, and install Docker and its dependencies using `apt`.
+    ```
+    apt update && apt install docker-ce docker-ce-cli docker-compose containerd.io docker-buildx-plugin docker-compose-plugin
+    ```
+6. Download and unpack the Plausible repository:
+    ```
+    curl -L https://github.com/plausible/hosting/archive/master.tar.gz | tar -xz
+    ```
+    <Message type="tip">
+      If you have `git` installed on your machine, you can also clone the repository using the following command:
+      ```
+      git clone https://github.com/plausible/hosting
+      ```
+    </Message>
+7. Enter the Plausible directory:
+    ```
+    cd hosting*
+    ```
+    Two important files are located in the downloaded folder:
+    `docker-compose.yml` - installs and orchestrates networking between your Plausible server, Postgres database, Clickhouse database (for stats), and an SMTP server. This file comes preconfigured with values for most setups. You can tweak it if required.
+    `plausible-conf.env` - configures the Plausible server itself. The full list of configuration options is available in the [official documentation](https://plausible.io/docs/self-hosting-configuration).
+8. Generate a random 64-characters secret key which will be used to secure the application. Run the following command to generate one and copy it into your computer's clipboard.
+    ```
+    openssl rand -base64 64 | tr -d '\n' ; echo
+    ```
+9. Open the file in a text editor (e.g. `nano`) and set the `SECRET_KEY_BASE` to the key you have generated in the previous step. Then set the `BASE_URL` for your Instance. Optionally include a port, if no port is configured it will use the default port `8000`.
+    ```
+    nano plausible-conf.env
+    ```
+10. Start the server.
+    ```
+    docker-compose up -d
+    ```
+
+## Configuring an Nginx reverse and caching proxy for Plausible
+
+As Plausible supports only plain HTTP traffic by default, we will configure an Nginx reverse proxy to provide HTTPS with a Let's Encrypt certificate to increase security and cache the analytics script for improved performance.
+
+<Message type="important">
+  To carry out the following steps you need to have a (sub)domain pointing to your Instance and valid A and/or AAAA-records configured for it.
+</Message>
+
+1. Install Nginx and Certbot using `apt`. Nginx is a versatile web server that we use as a proxy to protect Plausible from direct access to the application and Certbot is a tool to automate the issuing and renewal of TLS certificates by Let's Encrypt. 
+    ```
+    apt install nginx python3-certbot-nginx
+    ```
+2. Create a new Nginx configuration file for Plausible and edit it as follows. In our case, Plausible will be hosted at `plausible.example.com`. Remember to edit this to your own domain name.
+    ```
+    nano /etc/nginx/sites-available/plausible.example.com.conf
+    ```
+    ```
+    proxy_cache_path /var/cache/nginx/data/jscache levels=1:2 keys_zone=jscache:100m inactive=30d  use_temp_path=off max_size=100m;
+
+    server {
+            listen 80;
+            listen [::]:80;
+
+            server_name plausible.example.com;
+
+            access_log /var/log/nginx/plausible-access.log;
+            error_log /var/log/nginx/plausible-error.log;
+
+            location / {
+                        proxy_pass http://127.0.0.1:8000;
+            }
+
+            location = /js/script.js {
+                # Change this if you use a different variant of the script
+                proxy_pass http://localhost:8000/js/script.js;
+                proxy_set_header Host plausible.example.com;
+                proxy_ssl_server_name on;
+                proxy_ssl_session_reuse off;
+
+
+                # Tiny, negligible performance improvement. Very optional.
+                proxy_buffering on;
+
+                # Cache the script for 6 hours, as long as plausible.io returns a valid response
+                proxy_cache jscache;
+                proxy_cache_valid 200 6h;
+                proxy_cache_use_stale updating error timeout invalid_header http_500;
+
+                # Optional. Adds a header to tell if you got a cache hit or miss
+                add_header X-Cache $upstream_cache_status;
+            }
+
+            location = /api/event {
+                proxy_pass http://localhost:8000/api/event;
+                proxy_set_header Host plausible.example.com;
+                proxy_ssl_server_name on;
+                proxy_ssl_session_reuse off;
+                proxy_buffering on;
+                proxy_http_version 1.1;
+
+                proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+                proxy_set_header X-Forwarded-Proto $scheme;
+                proxy_set_header X-Forwarded-Host  $host;
+            }
+    }
+    ```
+3. Test the configuration to ensure that it will function correctly:
+    ```
+    nginx -t
+    ```
+4. Enable the server block by symlinking:
+    ```
+    ln -s /etc/nginx/sites-available/plausible.example.com.conf /etc/nginx/sites-enabled/plausible.example.com.conf
+    ```
+5. Restart Nginx to enable the new configuration:
+    ```
+    systemctl nginx restart
+    ```
+6. Run `certbot` to obtain a TLS certificate for your domain name and let the application configure Nginx automatically.
+    ```
+    certbot
+    ```
+    <Message type="tip">
+      For more details on using [Certbot](https://certbot.eff.org/), refer to our [dedicated documenation](/tutorials/nginx-reverse-proxy/#adding-tls-to-your-nginx-reverse-proxy-using-let's-encrypt).
+    </Message>
+7. Open the file `docker-compose.yml` in a text editor and change the line `- 8000:8000` to - `127.0.0.1:8000:8000`. This prevents Plausible from being accessed remotely using HTTP on port 8000 which is a security concern.
+8. Stop the application using `docker-compose stop`. Then bring it up again to apply the new configuration `docker-compose up`.
+9. Open a web browser and point it to `https://plausible.example.com/`. The Plausible registration screen displays. Complete the form to create your account.
+    <Lightbox src="scaleway-plausible-register.webp" alt="" />
+    During account generation, the snippet to add to your website displays. Add it to your site and Plausible starts running analytics on your visitors.
+
+For more information about Plausible, refer to the [official Plausible documentation](https://plausible.io/docs).

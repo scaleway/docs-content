@@ -153,6 +153,131 @@ URI: /coffee
 Request ID: 9d2ee64655b936384a64cf89e7a975b0
 ```
 
+### Creating the LoadBalancer service
+
+As this solution may be good for test purposes, you will most of the time, use a LoadBalancer service for your production needs.
+The round-robin DNS record is not recommended for production purposes, and we do advise you to use a Load Balancer for production as it is more reliable if you want a 100% uptime.  
+After using the round-robin DNS records, let us say you prefer to use a Load Balancer. To do so, you just have to apply this manifest on your cluster:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-ingress
+  namespace: kube-system
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      name: http
+      targetPort: 80
+    - port: 443
+      name: https
+      targetPort: 443
+  selector:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+```
+
+If you choose `Traefik` instead of `nginx` use the following manifest:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: traefik-ingress
+  namespace: kube-system
+  labels:
+    k8s-app: traefik-ingress-lb
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      name: http
+      targetPort: 80
+    - port: 443
+      name: https
+      targetPort: 443
+  selector:
+    k8s-app: traefik-ingress-lb
+```
+
+```bash
+# kubectl create -f lb.yaml
+service/nginx-ingress created
+```
+
+This manifest creates a service of the LoadBalancer type.
+You will, with this one, get a public IP address.
+As this Load Balancer is created on Scaleway, you can also see it in your console.
+
+This Load Balancer is managed automatically for you by the cloud controller manager. If you want to know more about our cloud controller manager be sure to check out [our github](https://github.com/scaleway/scaleway-cloud-controller-manager).
+
+Get the IP address of your newly created Load Balancer:
+
+```
+# kubectl get svc -n kube-system
+nginx-ingress    LoadBalancer   10.32.18.72    51.159.24.212   80:30122/TCP,443:31362/TCP   90s
+```
+
+In this example, your ingress controller is accessible now through its IP address `51.159.24.212`.
+To do so, you have to create a DNS record bound to this address. For the example below, let us say we have an `A` record for the domain `ingress-test.eu` pointing on this IP address.
+
+You also have to create the ingress object pointing to this new DNS records:
+
+```yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: cafe-ingress-lb
+spec:
+  rules:
+    - host: lbtest.ingress-test.eu
+      http:
+        paths:
+          - path: /tea
+            pathType: Prefix
+            backend:
+              service:
+                name: tea-svc
+                port:
+                  number: 80
+          - path: /coffee
+            pathType: Prefix
+            backend:
+              service:
+                name: coffee-svc
+                port:
+                  number: 80
+```
+
+```bash
+# kubectl create -f cafe-ingress-lb.yaml
+# kubectl get ing
+[..]
+cafe-ingress-lb   <none>   lbtest.ingress-test.eu             80      8m21s
+```
+
+The application is now accessible using the DNS records pointing to the IP address of your Load Balancer:
+
+```bash
+# host lbtest.ingress-test.eu
+lbtest.ingress-test.eu has address 51.159.24.212
+# curl http://ingress-test.eu/coffee
+Server address: 100.64.0.225:8080
+Server name: coffee-5f56ff9788-6m5tf
+Date: 28/Apr/2020:13:37:34 +0000
+URI: /coffee
+Request ID: 0c1c8f4e976bc4cc53de174bbd1039bb
+```
+
+As you can see, it works because we issued a DNS query and it resolved successfully to the IP of our Load Balancer.
+The ingress has successfully routed our request to the correct service and the underlying pods.
+Please note that you will be in charge of creating your own DNS records with this IP if you want to have wildcard DNS records.
+
 ## Using a reserved IP as the IP address of your LoadBalancer
 
 When creating Kubernetes services, you have the possibility to create a service of the `LoadBalancer` type.  

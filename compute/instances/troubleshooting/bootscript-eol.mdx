@@ -1,0 +1,98 @@
+---
+meta:
+  title: Dealing with the end of life of the bootscript feature
+  description: This page helps you migrating your Instance following the EOL of the bootscript feature
+content:
+  h1: Dealing with the end of life of the bootscript feature
+  paragraph: This page helps you migrating your Instance following the EOL of the bootscript feature
+tags: bootscript boot-script instance boot script
+dates:
+  validation: 2023-02-20
+  posted: 2023-02-20
+categories:
+  - compute
+---
+
+Some legacy Instance types (e.g. **VC1-x**, **X64-x**, **Start1-x**) supported the option to use a bootscript (a preconfigured boot configuration) to start your Instance. This boot method was also available on **DEV1-x**, **GP1-x**, and **STARDUST1** Instances. This feature is deprecated and will no longer be supported.
+If you are still using one of these Instance types with a bootscript, you have to change your boot configuration in order to keep your Instance operational.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created your SSH key and added it to your account](/console/my-project/how-to/create-ssh-key/)
+  - You have [an Instance](/compute/instances/how-to/create-an-instance) using a bootscript
+</Message>
+
+## How do I know if I am impacted?
+
+If your Instance is using the bootscript option to boot in normal mode you are impacted. You can check which boot mode is used by your Instance directly in the Scaleway console.
+
+1. Click **Instances** in the **Compute** section of the side menu in the console. The list of your Instances displays.
+2. Click the name of the Instance you want to check. The Instance overview displays. 
+3. Click the **Advanced Settings** tab.
+4. Check the **Boot Mode** of your Instance. If it uses **local boot** you are not concerned by the migration. If you are using a **bootscript** your intervention is required.
+    <Lightbox src="scaleway-boot-modes.webp" alt="" />
+
+## Migration options for Instances using bootscripts
+
+<Message type="important">
+  Local volume(s) that do not support UEFI cannot be used to boot any other type of Instance. You must retrieve and manually migrate your data to an Instance that supports UEFI boot.  
+  Unfortunately, Scaleway cannot access your data to identify if you are using an OS image with or without UEFI partitions.
+  To do so, [connect to your Instance](/compute/instances/how-to/connect-to-instance) using SSH and run the following command to list the EFI directories:
+  ```
+  ls -ld /sys/firmware/efi
+  ```
+  If you can see the following output, your Instance uses UEFI boot:
+  ```
+  root@my-virtual-instance:~# ls -ld /sys/firmware/efi
+  drwxr-xr-x 6 root root 0 Feb 20 11:16 /sys/firmware/EFI
+  ```
+  In this case use **option 4** to migrate your Instance.
+  If you see `ls: cannot access /sys/firmware/efi: No such file or directory` the UEFI directories are not present on your Instance. Migrate your data using **option 1, 2 or 3**.
+</Message>
+
+### Instances using bootscript method and an old OS image without UEFI
+
+Most of the existing **VC1-x**, **X64-x**, and **Start1-x** Instances fall into this category.
+
+#### Option 1: Create a unified snapshot of the volume(s) and rebuild block volume(s) from the snapshot
+
+This section explains how to create a new instance from an OS image which supports Local Boot using UEFI and how to access you data on the newly created Instance. This is the recommended procedure if your Instance does not support UEFI.
+
+1. [Create a snapshot](/compute/instances/how-to/create-a-snapshot/) of the volume using the **unified** snapshot type.
+2. [Create a new block volume](/storage/block/how-to/create-a-volume) from the previous unified snapshot.
+3. [Create and start](/compute/instances/how-to/create-an-instance/) a new Instance using its own boot volume in local boot mode.
+4. [Attach](/storage/block/how-to/attach-a-volume/) the block volume to the new Instance.
+5. Once logged into the Instance, [mount the partition](/storage/block/how-to/mount-and-use-volume/) available in the block volume and access your data.
+6. Delete the old Instance that was using a bootscript once the migration is completed.
+
+#### Option 2: Create a snapshot of the volume(s) and export it to S3 to retrieve the data
+
+1. [Create a snapshot](/compute/instances/how-to/create-a-snapshot/) of the volume using the **unified** or **l_ssd** type of snapshot.
+2. [Export](/compute/instances/how-to/snapshot-import-export-feature) the snapshot to an S3 bucket in the same region as the Instance.
+3. Retrieve your data from the Object Storage bucket and reuse it at your convenience.
+4. Delete the old Instance that was using a bootscript once you have recovered your data.
+
+#### Option 3: Create a new Instance using the local boot method and manually copy data from the old Instance to the new one.
+
+Migrate the data of your old Instance manually. For example, you can do this by using FTP, SCP, or Rsync.
+
+### Instances using the bootscript method and an OS image with UEFI
+
+#### Option 4: Change the boot type of the Instance to local boot
+
+**This section only applies if your Instance supports UEFI boot.** To continue using your current Instance, [change the boot type](/compute/instances/how-to/use-boot-modes/#how-to-use-local-boot) of the Instance to **Local boot** :
+
+1. [Stop](/compute/instances/how-to/power-off-instance/) or [pause](/compute/instances/how-to/use-standby-mode/) the Instance.
+2. [Change the boot type](/compute/instances/how-to/use-boot-modes/#how-to-use-local-boot) to local boot.
+3. Start or resume execution of the Instance.
+4. Check that the Instance is booting correctly with the local boot method and that its services are behaving correctly.
+
+<Message type="tip">
+  If changing the boot type from bootscript to local boot is not successfully achieved via option 4, you can always use option 1, 2 or 3 to migrate your Instance data to a new one.
+</Message>
+
+<Message type="tip">
+  If you are a **STARDUST1** user, we recommend that you put your VM into [standby mode](/compute/instances/how-to/use-standby-mode/). This ensures your Instance will not lose its slot in the case of availability shortages.
+</Message>

@@ -1,0 +1,654 @@
+---
+meta:
+title: Deploying Your First Scaleway Functions using Pulumi
+description: This page explains how to write and deploy your first Scaleway Functions using Pulumi.
+content:
+h1: Deploying Your First Scaleway Functions using Pulumi
+paragraph: This page explains how to write and deploy your first Scaleway Functions using Pulumi.
+categories:
+  - compute
+tags: pulumi scaleway-infrastructure functions serverless
+hero: assets/scaleway_pulumi.webp
+dates:
+validation: 2023-02-23
+posted: 2023-02-23
+---
+
+In this tutorial, we will deploy two simple functions using Pulumi. To complete the tutorial, we will deploy an SQS/SNS message queue.
+
+One function will write a message to the queue, and the other function will read the message from the queue.
+
+<Macro id="iam-requirements"/>
+
+<Message type="requirement">
+    - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+    - You have [created your API key](/identity-and-access-management/iam/how-to/create-api-keys/)
+    - You have Pulumi installed and configured on your machine.
+    - You have [k6](https://k6.io/docs/get-started/installation/) installed on your machine.
+</Message>
+
+## Installing and Configuring Pulumi
+
+As we already covered this topic in the [Deploying Your First Scaleway Kubernetes Kapsule using Pulumi](/tutorials/pulumi-quickstart/) tutorial, we will not go into details here.
+Feel free to refer to the previous tutorial if you need more information.
+
+## Deploying the SQS/SNS Message Queue Infrastructure
+
+We will start by creating a new directory and initializing a new Pulumi project. For this tutorial, we will only use `Go`, for the infrastructure code and for the functions itself. You can use any language supported by Pulumi for the infrastructure code, but we will stick to `Go` for now.
+
+1. Create a new directory and initialize a new Pulumi project:
+    ```bash
+    mkdir pulumi-scaleway-functions && cd pulumi-scaleway-functions
+    ```
+2. Initialize a new Pulumi project:
+    ```bash
+    pulumi new go
+    This command will walk you through creating a new Pulumi project.
+
+    Enter a value or leave blank to accept the (default), and press <ENTER>.
+    Press ^C at any time to quit.
+
+    project name: scaleway-functions
+    project description: (A minimal Go Pulumi program)
+    Created project 'scaleway-functions'
+
+    Please enter your desired stack name.
+    To create a stack in an organization, use the format <org-name>/<stack-name> (e.g. `acmecorp/dev`).
+    stack name: (dev)
+    Created stack 'dev'
+
+    Installing dependencies...
+
+    Finished installing dependencies
+
+    Your new project is ready to go! ✨
+
+    To perform an initial deployment, run `pulumi up`
+    ```
+
+3. Add the Pulumi Scaleway provider:
+    ```bash
+    go get github.com/lbrlabs/pulumi-scaleway/sdk
+    ```
+4. Add the Scaleway Credentials with the following commands to the Pulumi config:
+    ```
+    pulumi config set scaleway:access_key YYYY --secret
+    pulumi config set scaleway:secret_key ZZZZ --secret
+    pulumi config set scaleway:project_id ZZZZ
+    ```
+
+    Alternatively, you can set the API credentials via the environment variables:
+
+    ```
+    export SCW_ACCESS_KEY=YYYY
+    export SCW_SECRET_KEY=ZZZZ
+    export SCW_PROJECT_ID=ZZZZ
+    ```
+
+    <Message type="tip">
+        The `--secret` flag is used to ensure that the credentials are encrypted and not stored in plaintext in the Pulumi state file.
+    </Message>
+
+5. Add the `pulumi/pulumi-aws` package to the project:
+    ```bash
+    go get github.com/pulumi/pulumi-aws/sdk/v5
+    ```
+   Scaleway SNQS/SNS message queue is compatible with the AWS SQS/SNS message queue. Due to this compatibility, we can use the `pulumi-aws` provider to create the message queue.
+
+   We will create manually the provider but will make sure to use the Scaleway endpoint for the SQS/SNS message queue. The credentials for the provider will be the ones we created for the SNQS/SNS message queue.
+
+   You will see more details about the message queue and the provider in the next section.
+
+6. Add this code to your `main.go` file, to enable the SQS/SNS message queue and initialize the Pulumi AWS provider:
+    ```go
+    package main
+
+    import (
+        "crypto/sha256"
+        "encoding/hex"
+        "fmt"
+        "io"
+        "os"
+
+        "github.com/lbrlabs/pulumi-scaleway/sdk/go/scaleway"
+        "github.com/pulumi/pulumi-aws/sdk/v5/go/aws"
+        "github.com/pulumi/pulumi-aws/sdk/v5/go/aws/sqs"
+        "github.com/pulumi/pulumi/sdk/v3/go/pulumi"
+    )
+
+    func main() {
+        pulumi.Run(func(ctx *pulumi.Context) error {
+            // Create a Scaleway MNQ Namespace
+			mnqNamespace, err := scaleway.NewMnqNamespace(ctx, "mnq-namespace", &scaleway.MnqNamespaceArgs{
+                Name:     pulumi.String("mnq-namespace"),
+                Protocol: pulumi.String("sqs_sns"),
+            })
+            if err != nil {
+                return err
+            }
+			// Create the Scaleway MNQ Credential with the permissions to manage, publish and receive messages
+            mnqCredential, err := scaleway.NewMnqCredential(ctx, "mnq-credential", &scaleway.MnqCredentialArgs{
+                NamespaceId: mnqNamespace.ID(),
+                Name:        pulumi.String("mnq-credential"),
+                SqsSnsCredentials: &scaleway.MnqCredentialSqsSnsCredentialsArgs{
+                    Permissions: scaleway.MnqCredentialSqsSnsCredentialsPermissionsArgs{
+                        CanPublish: pulumi.Bool(true),
+                        CanReceive: pulumi.Bool(true),
+                        CanManage:  pulumi.Bool(true),
+                    },
+                },
+            })
+            if err != nil {
+                return err
+            }
+
+			// Create the Pulumi AWS provider
+			// We will use the Scaleway endpoint for the SQS/SNS message queue
+			// SkipCredentialsValidation, SkipRegionValidation, SkipMetadataApiCheck and SkipRequestingAccountId are required to use the Scaleway endpoint
+			// The Region is not used, but required
+			// The AccessKey and SecretKey are the ones we created for the SNQS/SNS message queue
+            awsProvider, err := aws.NewProvider(ctx, "aws-provider", &aws.ProviderArgs{
+                Endpoints: aws.ProviderEndpointArray{
+                    aws.ProviderEndpointArgs{
+                        Sqs: mnqNamespace.Endpoint,
+                        Sns: mnqNamespace.Endpoint,
+                    },
+                },
+                Region:                    pulumi.String("eu-west-3"), // This is not used, but required
+                AccessKey:                 mnqCredential.SqsSnsCredentials.AccessKey(),
+                SkipCredentialsValidation: pulumi.Bool(true),
+                SkipRegionValidation:      pulumi.Bool(true),
+                SkipMetadataApiCheck:      pulumi.Bool(true),
+                SkipRequestingAccountId:   pulumi.Bool(true),
+                SecretKey:                 mnqCredential.SqsSnsCredentials.SecretKey(),
+            })
+            if err != nil {
+                return err
+            }
+
+			// Create the SQS/SNS message queue
+            queue, err := sqs.NewQueue(ctx, "sqs-queue", &sqs.QueueArgs{
+                Name: pulumi.String("sqs-queue"),
+            }, pulumi.Provider(awsProvider))
+            if err != nil {
+                return err
+            }
+
+            ctx.Export("queue-url", queue.Url)
+            ctx.Export("mnq-namespace-access-key", mnqCredential.SqsSnsCredentials.AccessKey())
+            ctx.Export("mnq-namespace-secret-key", mnqCredential.SqsSnsCredentials.SecretKey())
+            return nil
+        })
+    }
+    ```
+
+    I added comments to explain what each part of the code does.
+
+## Create the Scaleway Functions
+
+Now with the message queue created, we can create our Scaleway Functions. We will create two functions, one to publish a message to the message queue and one to receive the message from the message queue.
+
+First we create a `functions` folder as this is where we will store our functions.
+
+```bash
+mkdir functions
+```
+
+<Message type="note">
+    It is important to export the main function in the `main.go` file. In this tutorial, the name of the function is `Handle`.
+</Message>
+
+### Publish a message to the message queue
+
+In the `functions` folder, create a `write-sqs-function` and run the following commands to initialize the function:
+
+```bash
+go mod init write
+```
+
+This will create a `go.mod` file in the `write-sqs-function` folder. As we need the AWS Go SDK to publish a message to the message queue, we will add the `github.com/aws/aws-sdk-go` package to the `go.mod` file.
+
+```bash
+go get github.com/aws/aws-sdk-go
+```
+
+Finally, we will add the following code to the `main.go` file:
+
+```go
+package write
+
+import (
+	"fmt"
+	"io"
+	"net/http"
+	"os"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/sqs"
+)
+
+// Handle - Handle event
+func Handle(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodPost:
+		awsSession := session.Must(session.NewSession(&aws.Config{
+			Region:   aws.String(os.Getenv("REGION")),
+			Endpoint: aws.String(os.Getenv("ENDPOINT")),
+			Credentials: credentials.NewCredentials(&credentials.StaticProvider{
+				Value: credentials.Value{
+					AccessKeyID:     os.Getenv("ACCESS_KEY"),
+					SecretAccessKey: os.Getenv("SECRET_KEY"),
+					SessionToken:    "",
+					ProviderName:    "anonymous",
+				},
+			}),
+		}))
+		var bodyBytes []byte
+		if r.Body != nil {
+			bodyBytes, _ = io.ReadAll(r.Body)
+		}
+		awsSqs := sqs.New(awsSession)
+
+		_, err := awsSqs.SendMessage(&sqs.SendMessageInput{
+			MessageBody: aws.String(fmt.Sprintf("%s", bodyBytes)),
+			QueueUrl:    aws.String(os.Getenv("QUEUE_URL")),
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		} else {
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(fmt.Sprintf("Message successfully added to queue")))
+		}
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte("Method not allowed"))
+	}
+}
+```
+The code above is a simple function that will publish a message to the message queue. The function will receive the message in the body of the request and publish it to the message queue. We pass the message queue URL, the Scaleway MNQ Namespace endpoint, the Scaleway MNQ Namespace access key and the Scaleway MNQ Namespace secret key as environment variables to the function.
+
+We will see how to pass the environment variables to the function in the next section and take care to not expose the Scaleway MNQ Namespace access key and the Scaleway MNQ Namespace secret key.
+
+<Message type="note">
+    Scaleway separates unencrypted and encrypted environment variables. This means that if you want to pass the Scaleway MNQ Namespace access key and the Scaleway MNQ Namespace secret key to the function.
+</Message>
+
+With this function created, we can now create the read function.
+
+### Read a message from the message queue
+
+In the `functions` folder, create a `read-sqs-function` and run the following commands to initialize the function:
+
+```bash
+go mod init read
+```
+
+As we did for the write function, we will add the `github.com/aws/aws-sdk-go` package to the `go.mod` file.
+
+```bash
+go get github.com/aws/aws-sdk-go
+```
+
+Add this code to the `main.go` file of the `read-sqs-function`:
+
+```go
+package read
+
+import (
+	"fmt"
+	"net/http"
+	"os"
+
+	"github.com/aws/aws-sdk-go/aws"
+	"github.com/aws/aws-sdk-go/aws/credentials"
+	"github.com/aws/aws-sdk-go/aws/session"
+	"github.com/aws/aws-sdk-go/service/sqs"
+)
+
+// Handle - Handle event
+func Handle(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		awsSession := session.Must(session.NewSession(&aws.Config{
+			Region:   aws.String(os.Getenv("REGION")),
+			Endpoint: aws.String(os.Getenv("ENDPOINT")),
+			Credentials: credentials.NewCredentials(&credentials.StaticProvider{
+				Value: credentials.Value{
+					AccessKeyID:     os.Getenv("ACCESS_KEY"),
+					SecretAccessKey: os.Getenv("SECRET_KEY"),
+					SessionToken:    "",
+					ProviderName:    "anonymous",
+				},
+			}),
+		}))
+
+		awsSqs := sqs.New(awsSession)
+
+		receiveMessageResponse, err := awsSqs.ReceiveMessage(&sqs.ReceiveMessageInput{
+			QueueUrl: aws.String(os.Getenv("QUEUE_URL")),
+		})
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+		} else {
+			message := *receiveMessageResponse.Messages[0].Body
+			_, err := awsSqs.DeleteMessage(&sqs.DeleteMessageInput{
+				QueueUrl:      aws.String(os.Getenv("QUEUE_URL")),
+				ReceiptHandle: receiveMessageResponse.Messages[0].ReceiptHandle,
+			})
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				w.Write([]byte(err.Error()))
+			}
+			w.WriteHeader(http.StatusOK)
+			w.Write([]byte(fmt.Sprintf("Message: %s", message)))
+		}
+	default:
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		w.Write([]byte("Method not allowed"))
+	}
+}
+```
+
+That's it! We have now created the two functions that will write and read messages from the message queue.
+
+## Time for the Scaleway functions
+
+We are nearly done! We will now deploy the functions infrastructure and the functions themselves. Return to the `main.go` file and add the following code to the existing code:
+
+```go
+func calcSHA256ForFile(path string) (*string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		panic(err)
+	}
+	defer f.Close()
+
+	buf := make([]byte, 1024*1024)
+	h := sha256.New()
+
+	for {
+		bytesRead, err := f.Read(buf)
+		if err != nil {
+			if err != io.EOF {
+				return nil, err
+			}
+			break
+		}
+		h.Write(buf[:bytesRead])
+	}
+	hash := hex.EncodeToString(h.Sum(nil))
+	fmt.Printf("checksum: %s\n", hash)
+	return &hash, nil
+}
+
+func createFunction(ctx *pulumi.Context, name string, fnNameSpaceID pulumi.IDOutput, region, endpoint, queueURL pulumi.StringOutput, credentials pulumi.StringArrayOutput) error {
+	fileName := fmt.Sprintf("%s.zip", name)
+	hash, err := calcSHA256ForFile(fileName)
+	if err != nil {
+		return err
+	}
+
+	fn, err := scaleway.NewFunction(ctx, name, &scaleway.FunctionArgs{
+		Name:        pulumi.String(name),
+		NamespaceId: fnNameSpaceID,
+		Runtime:     pulumi.String("go119"),
+		Handler:     pulumi.String("Handle"),
+		Privacy:     pulumi.String("public"),
+		ZipFile:     pulumi.String(fileName),
+		ZipHash:     pulumi.String(*hash),
+		Deploy:      pulumi.Bool(true),
+		SecretEnvironmentVariables: pulumi.StringMap{
+			"ACCESS_KEY": credentials.Index(pulumi.Int(0)),
+			"SECRET_KEY": credentials.Index(pulumi.Int(1)),
+			"QUEUE_URL":  queueURL,
+		},
+		EnvironmentVariables: pulumi.StringMap{
+			"ENDPOINT": endpoint,
+			"REGION":   region,
+		},
+	})
+	if err != nil {
+		return err
+	}
+	ctx.Export(fmt.Sprintf("%s-name", name), pulumi.Sprintf("https://%s", fn.DomainName))
+	return nil
+}
+```
+This code will provide a function to calculate the hash of the zip file, to avoid uploading the file if it has not changed. The second function is the one that will create the function. As we going to create two functions, we will call this function twice, once for the write function and once for the read function.
+
+It takes the function name, the namespace ID, the region, the endpoint, the queue URL and the credentials as parameters.
+
+Now, we can agument the `main` function to create the function namespace and call the `createFunction` function.
+
+```go
+func main() {
+	pulumi.Run(func(ctx *pulumi.Context) error {
+		// see code above
+
+        // Create the function namespace
+		fnNameSpace, err := scaleway.NewFunctionNamespace(ctx, "functions-namespace", &scaleway.FunctionNamespaceArgs{
+			Name:        pulumi.String("functions-namespace"),
+			Description: pulumi.String("This is a namespace for Scaleway functions"),
+		})
+		if err != nil {
+			return err
+		}
+
+		// Extract the credentials from the message queue namespace and store them in variable of type pulumi.StringArrayOutput
+		sqsCredentials := pulumi.All(mnqCredential.SqsSnsCredentials.AccessKey(), mnqCredential.SqsSnsCredentials.SecretKey()).ApplyT(func(args []interface{}) []string {
+			accessKey := args[0].(*string)
+			secretKey := args[1].(*string)
+			return []string{*accessKey, *secretKey}
+		}).(pulumi.StringArrayOutput)
+
+		// Call the createFunction function twice to create the write and read functions.
+		createFunction(ctx, "write-sqs-function", fnNameSpace.ID(), mnqNamespace.Region, mnqNamespace.Endpoint, queue.Url, sqsCredentials)
+		createFunction(ctx, "read-sqs-function", fnNameSpace.ID(), mnqNamespace.Region, mnqNamespace.Endpoint, queue.Url, sqsCredentials)
+
+        // export the queue URL
+		ctx.Export("queue-url", queue.Url)
+		return nil
+	})
+}
+```
+
+### Makefile
+
+Scaleway expects that the functions are bundled in a zip file. We will use a Makefile to automate the process of creating the zip file and calling the `pulumi up` command. It wil be a very simple Makefile, but it will make our life easier.
+
+Create a file called `Makefile` and add the following code:
+
+```makefile
+zip-write-sqs-function::
+		cd functions/write-sqs-function && \
+		rm -rf write-sqs-function.zip && \
+		zip -jr ../../write-sqs-function.zip .
+
+zip-read-sqs-function::
+		cd functions/read-sqs-function && \
+		rm -rf read-sqs-function.zip && \
+		zip -jr ../../read-sqs-function.zip .
+
+pulumi-up: zip-write-sqs-function zip-read-sqs-function
+	pulumi up -y -f
+
+pulumi-destroy:
+	pulumi destroy -y -f
+
+pulumi-preview: zip-write-sqs-function zip-read-sqs-function
+	pulumi preview
+
+.default: pulumi-up
+
+.PHONY: pulumi-up
+```
+
+## Deploy the infrastructure
+
+Now we are finally ready to deploy the infrastructure. Run the following command:
+
+```bash
+make pulumi-up
+```
+
+This will create the infrastructure and deploy the functions. It will take a few minutes. When it is done, you will see the following output:
+
+```bash
+make pulumi-up
+cd functions/write-sqs-function && \
+                rm -rf write-sqs-function.zip && \
+                zip -jr ../../write-sqs-function.zip .
+updating: handler.go (deflated 53%)
+updating: go.mod (deflated 25%)
+updating: go.sum (deflated 50%)
+cd functions/read-sqs-function && \
+                rm -rf read-sqs-function.zip && \
+                zip -jr ../../read-sqs-function.zip .
+updating: handler.go (deflated 59%)
+updating: go.mod (deflated 23%)
+updating: go.sum (deflated 50%)
+pulumi up -y -f
+Updating (dev)
+
+View Live: https://app.pulumi.com/dirien/pulumi-scaleway-functions/dev/updates/93
+
+     Type                                 Name                           Status
+ +   pulumi:pulumi:Stack                  pulumi-scaleway-functions-dev  created (162s)
+ +   ├─ scaleway:index:MnqNamespace       mnq-namespace                  created (1s)
+ +   ├─ scaleway:index:MnqCredential      mnq-credential                 created (0.41s)
+ +   ├─ pulumi:providers:aws              aws-provider                   created (0.68s)
+ +   ├─ aws:sqs:Queue                     sqs-queue                      created (26s)
+ +   ├─ scaleway:index:FunctionNamespace  functions-namespace            created (5s)
+ +   ├─ scaleway:index:Function           write-sqs-function             created (119s)
+ +   └─ scaleway:index:Function           read-sqs-function              created (123s)
+
+
+Outputs:
+    queue-url               : "https://sqs.mnq.fr-par.scw.cloud/AD3BQYGKORPWN4BF3XXHEDVXMA42HZEIGPEJOYQD4DDUGYI7VCQWAHBY/sqs-queue"
+    read-sqs-function-name  : "https://functionsnamespacewtwmjhu4-read-sqs-function.functions.fnc.fr-par.scw.cloud"
+    write-sqs-function-name : "https://functionsnamespacewtwmjhu4-write-sqs-function.functions.fnc.fr-par.scw.cloud"
+
+Resources:
+    + 8 created
+
+Duration: 2m45s
+```
+
+You can head over to the Scaleway console and see the infrastructure that was created.
+
+<Lightbox src="mqn.webp" alt="" />
+
+<Lightbox src="functions.webp" alt="" />
+
+## Test the infrastructure
+
+Now that the infrastructure is deployed, we can test it. We could use the `curl` command to test the functions, but we use the opertunity to create a load test using the `k6` tool.
+
+### Write the load test
+
+Create a file called `load-test.js` and add the following code:
+
+```javascript
+import http from 'k6/http';
+import {check, group, sleep} from 'k6';
+
+export const options = {
+    stages: [
+        {duration: '30s', target: 20}, // simulate ramp-up of traffic from 1 to 100 users over 30 seconds.
+        {duration: '1m', target: 20}, // stay at 100 users for 1 minutes
+        {duration: '30s', target: 0}, // ramp-down to 0 users
+    ],
+    thresholds: {
+        'http_req_duration': ['p(90)<1500'], // 99% of requests must complete below 1.5s
+    },
+};
+
+export default () => {
+    http.post(`<write-url>`, {
+        hello: 'world',
+    });
+
+
+    const res = http.get(`<read-url>`);
+    check(res, {
+        'check body': (res) => res.body === 'Message: hello=world',
+    });
+
+    sleep(1);
+};
+```
+
+This will simulate a load test with 20 users for 1 minute. The load test will send a message to the SQS queue and read the message from the queue. The load test will fail if the response time is higher than 1.5 seconds or if the response body is not equal to `Message: hello=world`.
+
+### Run the load test
+
+To run the load test, we call the `k6` command:
+
+```bash
+k6 run load-test.js
+```
+
+The output will look like this:
+
+```bash
+
+          /\      |‾‾| /‾‾/   /‾‾/
+     /\  /  \     |  |/  /   /  /
+    /  \/    \    |     (   /   ‾‾\
+   /          \   |  |\  \ |  (‾)  |
+  / __________ \  |__| \__\ \_____/ .io
+
+  execution: local
+     script: load-test.js
+     output: engine
+
+  scenarios: (100.00%) 1 scenario, 20 max VUs, 2m30s max duration (incl. graceful stop):
+           * default: Up to 20 looping VUs for 2m0s over 3 stages (gracefulRampDown: 30s, gracefulStop: 30s)
+
+
+     ✓ check body
+
+     checks.........................: 100.00% ✓ 1334      ✗ 0
+     data_received..................: 496 kB  4.1 kB/s
+     data_sent......................: 179 kB  1.5 kB/s
+     http_req_blocked...............: avg=1.24ms   min=0s      med=1µs      max=161.44ms p(90)=3µs      p(95)=3µs
+     http_req_connecting............: avg=531.59µs min=0s      med=0s       max=44.37ms  p(90)=0s       p(95)=0s
+   ✓ http_req_duration..............: avg=183.26ms min=61.91ms med=121.44ms max=7.47s    p(90)=210.66ms p(95)=292.58ms
+       { expected_response:true }...: avg=183.26ms min=61.91ms med=121.44ms max=7.47s    p(90)=210.66ms p(95)=292.58ms
+     http_req_failed................: 0.00%   ✓ 0         ✗ 2668
+     http_req_receiving.............: avg=103.8µs  min=10µs    med=90µs     max=1.54ms   p(90)=161µs    p(95)=191µs
+     http_req_sending...............: avg=304.72µs min=27µs    med=183µs    max=13.2ms   p(90)=610µs    p(95)=718.64µs
+     http_req_tls_handshaking.......: avg=657.83µs min=0s      med=0s       max=54.23ms  p(90)=0s       p(95)=0s
+     http_req_waiting...............: avg=182.86ms min=61.4ms  med=121.2ms  max=7.47s    p(90)=210.4ms  p(95)=292.41ms
+     http_reqs......................: 2668    22.130819/s
+     iteration_duration.............: avg=1.37s    min=1.17s   med=1.23s    max=10.17s   p(90)=1.39s    p(95)=1.55s
+     iterations.....................: 1334    11.06541/s
+     vus............................: 1       min=1       max=20
+     vus_max........................: 20      min=20      max=20
+
+
+running (2m00.6s), 00/20 VUs, 1334 complete and 0 interrupted iterations
+default ✓ [======================================] 00/20 VUs  2m0s
+```
+
+You can also head over to the Scaleway console and check the metrics of the two functions under the `Metrics` tab.
+
+<Lightbox src="write-metric.webp" alt="" />
+
+<Lightbox src="read-metric.webp" alt="" />
+
+## Housekeeping
+
+To remove the infrastructure, we can use the `Makefile` again:
+
+```bash
+make pulumi-destroy
+```
+
+## Conclusion
+
+Congratulations! You have successfully deployed a serverless infrastructure using Pulumi and Scaleway Functions. There are many more aspects to discover. Check the official Pulumi [documentation](https://www.pulumi.com/docs/) to find out more.

@@ -6,29 +6,27 @@ content:
   h1: Setup a Nomad cluster on Scaleway
   paragraph: This tutorial will guide you you through deploying a Nomad cluster with [access control lists (ACLs)](https://developer.hashicorp.com/nomad/tutorials/access-control/access-control) on Scaleway.
 tags: compute orchestration nomad cluster consul packer terraform
+author: 
+    fullname: Nathanael Demacon
+    url: ''
 categories:
   - compute
 dates:
-  validation: 2023-03-10
-  posted: 2023-03-10
+  validation: 2023-03-20
+  posted: 2023-03-20
 ---
 
-The tutorial will guide you through the following steps:
+<Macro id="iam-requirements" />
+ 
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured an API key](/identity-and-access-management/iam/how-to/create-api-keys/)
+  - Packer 1.7.7 or later [installed locally](https://developer.hashicorp.com/packer/tutorials/docker-get-started/get-started-install-cli)
+  - Terraform 1.2.0 or later [installed locally](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli)
+  - Nomad 1.3.3 or later [installed locally](https://developer.hashicorp.com/nomad/tutorials/get-started/get-started-install)
+</Message>
 
-0. [Setup](#0-setup) - Setting up the environment
-1. [Building the Nomad instance image](#1-building-the-nomad-instance-image) - Building the Nomad instance image
-
-## Prerequisites
-
-- Packer 1.7.7 or later [installed locally](https://developer.hashicorp.com/packer/tutorials/docker-get-started/get-started-install-cli).
-- Terraform 1.2.0 or later [installed locally](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli).
-- Nomad 1.3.3 or later [installed locally](https://developer.hashicorp.com/nomad/tutorials/get-started/get-started-install).
-
-- A Scaleway account with an [credentials](https://www.scaleway.com/en/docs/identity-and-access-management/iam/how-to/create-api-keys/) setup in your local environment variables (`SCW_ACCESS_KEY` and `SCW_SECRET_KEY` respectively).
-
-## 0. Setup
-
-### Clone the repository
+## Clone the repository
 
 We have created a GitHub repository that should contain all the code you need to deploy a Nomad cluster on Scaleway. Clone the repository to your local machine using the following command:
 
@@ -42,7 +40,7 @@ Go to the `learn-nomad-cluster-setup/scaleway` directory to continue with the tu
 cd learn-nomad-cluster-setup/scaleway
 ```
 
-### Configuration
+### Files and directories
 
 In the `scaleway` directory, you will find the following files:
 
@@ -58,7 +56,9 @@ We will be using the `variables.hcl.example` file to configure the Nomad cluster
 cp variables.hcl.example variables.hcl
 ```
 
-### Configuring Consul tokens
+---
+
+## Configure the Nomad token
 
 Open the `variables.hcl` file in your favorite text editor and update the following variables:
 
@@ -83,11 +83,11 @@ terraform console
 
 We will configure the `instance_image` variable in the next step. You can uncomment and configure the rest of the variables as you wish or leave them as they are.
 
-## 1. Building the Nomad instance image
+---
 
-The first step is to build a Nomad instance image using Packer. The image will be built using the [Scaleway Packer builder](https://www.packer.io/docs/builders/scaleway/).
+## Build the Nomad instance image
 
-Build the image using the following command:
+Build the Nomad instance image using Packer using the following command:
 
 ```shell
 packer build -var-file=variables.hcl image.pkr.hcl
@@ -104,11 +104,10 @@ Build 'scaleway.hashistack' finished after 2 minutes 54 seconds.
 --> scaleway.hashistack: An image was created: 'hashistack-[random-number]' ...
 ```
 
-### Update the variables file for Terraform
+Copy the image name from the output and paste it in the `variables.hcl` file to configure the `instance_image` variable.
 
-Use the image name to configure the `instance_image` variable in the `variables.hcl` file.
 
-### Example variables.hcl
+**Example variables.hcl:**
 
 At this step your `variables.hcl` file should look like the following **(don't take the same Consul token ID and secret)**:
 
@@ -144,19 +143,17 @@ instance_image            = "hashistack-20230310141424"
 # client_count                  = "3"
 ```
 
-## 2. Deploying the Nomad cluster
+---
 
-Now that we have built the Nomad instance image, we can deploy the Nomad cluster using Terraform.
+## Deploy the Nomad cluster
 
-### Initialize Terraform
+Now that we have built the Nomad instance image and configuring our variables, we can deploy the Nomad cluster using Terraform.
 
 Initialize Terraform using the following command:
 
 ```shell
 terraform init
 ```
-
-### Deploy the Nomad cluster
 
 Deploy the Nomad cluster using the following command:
 
@@ -187,9 +184,11 @@ consul_bootstrap_token_secret = "6ae9f6f7-b6f1-4d3a-ea82-bcbea392daa0"
 lb_address_consul_nomad = "http://163.172.146.151"
 ```
 
-### Accessing the Nomad cluster
+---
 
-To setup your local environment to access the Nomad cluster, run the `post-setup.sh` script:
+## Use the Nomad CLI
+
+To setup your local environment to use the Nomad CLI, run the `post-setup.sh` script:
 
 ```shell
 ./post-setup.sh
@@ -208,4 +207,17 @@ export NOMAD_TOKEN=$(cat nomad.token)
 
 The Nomad UI can be accessed at http://163.172.146.151:4646/ui
 with the bootstrap token: 192049fd-52f7-4fa7-7797-b28b78bfcf84
+```
+
+Execute the commands to setup the environment variables:
+
+```shell
+export NOMAD_ADDR=$(terraform output -raw lb_address_consul_nomad):4646
+export NOMAD_TOKEN=$(cat nomad.token)
+```
+
+You can now use the Nomad CLI to interact with the Nomad cluster:
+
+```shell
+nomad node status
 ```

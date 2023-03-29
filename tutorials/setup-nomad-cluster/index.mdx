@@ -1,0 +1,250 @@
+---
+meta:
+  title: Setting up a Nomad cluster with Scaleway ACLs
+  description: This tutorial shows you how to deploy a Nomad cluster with access control lists (ACLs) on Scaleway.
+content:
+  h1: Setting up a Nomad cluster with Scaleway ACLs
+  paragraph: This tutorial shows you how to deploy a Nomad cluster with access control lists (ACLs) on Scaleway.
+tags: compute orchestration nomad cluster consul packer terraform
+categories:
+  - compute
+dates:
+  validation: 2023-03-23
+  posted: 2023-03-23
+---
+
+<Macro id="iam-requirements" />
+ 
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured an API key](/identity-and-access-management/iam/how-to/create-api-keys/)
+  - You have [installed Packer 1.7.7 or a later version](https://developer.hashicorp.com/packer/tutorials/docker-get-started/get-started-install-cli)
+  - You have [installed Terraform 1.2.0 or a later version](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli)
+  - You have [installed Nomad 1.3.3 or a later version](https://developer.hashicorp.com/nomad/tutorials/get-started/gs-install)
+</Message>
+
+## Clone the GitHub repository
+
+We have created a [GitHub repository](https://github.com/scaleway/learn-nomad-cluster-setup.git) that contains all the code you need to deploy a Nomad cluster on Scaleway. Clone the repository to your local machine using the following command:
+
+```shell
+git clone https://github.com/scaleway/learn-nomad-cluster-setup.git
+```
+
+Run the following command to access the `learn-nomad-cluster-setup/scaleway` directory:
+
+```shell
+cd learn-nomad-cluster-setup/scaleway
+```
+
+### Files and directories
+
+In the `scaleway` directory, you will find the following files:
+
+- `image.pkr.hcl` - The Packer configuration file used to build the Nomad instance image.
+- `main.tf` - The Terraform configuration file used to deploy the Nomad cluster.
+- `variables.tf` - The Terraform variables file used to configure the Nomad cluster.
+- `post-setup.sh` - The script used to bootstrap the Nomad cluster.
+- `variables.hcl.example` - An example file of variables used to configure the Nomad cluster.
+
+We will be using the `variables.hcl.example` file to configure the Nomad cluster. Copy the example file to a new file called `variables.hcl` using the following command:
+
+```shell
+cp variables.hcl.example variables.hcl
+```
+
+---
+
+## Configure the Nomad token
+
+Open the `variables.hcl` file in your text editor of choice and update the following variables:
+
+- `project_id`: the ID of your [Project of choice](https://console.scaleway.com/project/settings).
+- `nomad_consul_token_id`: the Consul token ID used to bootstrap the Nomad cluster.
+- `nomad_consul_token_secret`: the Consul token secret used to bootstrap the Nomad cluster.
+
+These variables need to be UUIDs. You can generate an UUID using the following command:
+
+```shell
+uuidgen | tr "[:upper:]" "[:lower:]"
+```
+
+You can also generate UUIDs through Terraform console's `uuid()` function:
+
+```shell
+terraform console
+> uuid()
+"4fda5224-6d40-20dd-5dd4-4ce95c1026fb"
+> uuid()
+"46c99dc9-3536-9a30-8175-92f0b220f688"
+```
+
+We will configure the `instance_image` variable in the next step. You can uncomment and configure the rest of the variables as you wish or leave them as they are.
+
+---
+
+## Build the Nomad Instance image
+
+Run the following command to initialize Packer:
+
+```shell
+packer init image.pkr.hcl
+```
+
+Run the following command to build the Nomad Instance image:
+
+```shell
+packer build -var-file=variables.hcl image.pkr.hcl
+```
+
+The following output should display once the build finishes:
+
+```shell
+Build 'scaleway.hashistack' finished after 2 minutes 54 seconds.
+
+==> Wait completed after 2 minutes 54 seconds
+
+==> Builds finished. The artifacts of successful builds are:
+--> scaleway.hashistack: An image was created: 'hashistack-[random-number]' ...
+```
+
+Copy the image name from the output.
+
+Run `nano variables.hcl` to open the `variables.hcl` file.
+
+Paste the image name next to the `instance_image` variable to configure your image and press `CTRL O` and `CTRL X` to save and exit.
+
+
+**Example variables.hcl:**
+
+At this step your `variables.hcl` file should look like the following. Make sure you replace `nomad_consul_token_id` and `nomad_consul_token_secret` with your own Consul token ID and secret.
+
+```hcl
+# Packer variables (all are required)
+zone = "fr-par-1"
+
+# Terraform variables (all are required)
+nomad_consul_token_id     = "4fda5224-6d40-20dd-5dd4-4ce95c1026fb"
+nomad_consul_token_secret = "6ae9f6f7-b6f1-4d3a-ea82-bcbea392daa0"
+instance_image            = "hashistack-20230310141424"
+
+# The project ID will default to the value of the
+# SCW_DEFAULT_PROJECT_ID environment variable or the
+# default project ID configured with the Scaleway CLI
+# project_id                    = "123e4567-e89b-12d3-a456-426614174000"
+
+# The retry join allows Consul to automatically
+# discover other nodes in the cluster. An IAM key will
+# be created in Terraform and appended to the retry_join
+# variable
+# retry_join                    = "provider=scaleway tag_name=consul-auto-join"
+
+# These variables will default to the values shown
+# and do not need to be updated unless you want to
+# change them
+# allowlist_ip                  = "0.0.0.0/0"
+# name                          = "nomad"
+# server_instance_type          = "PLAY2-NANO"
+# server_count                  = "3"
+# server_root_block_device_size = 20
+# client_instance_type          = "PLAY2-NANO"
+# client_count                  = "3"
+```
+
+---
+
+## Deploy the Nomad cluster
+
+Now that we have built the Nomad Instance image and configured our variables, we can deploy the Nomad cluster using Terraform.
+
+Use the following command to initialize Terraform:
+
+```shell
+terraform init
+```
+
+Use the following command to deploy the Nomad cluster:
+
+```shell
+terraform apply -var-file=variables.hcl
+```
+
+Type `yes` when asked if you want to perform these actions, then click enter.
+
+The following output should display once the deployment process finishes:
+
+```shell
+Apply complete! Resources: 1 added, 7 changed, 2 destroyed.
+
+Outputs:
+
+IP_Addresses = <<EOT
+
+Client public IPs: 163.172.187.210, 163.172.167.58, 163.172.177.35
+
+Server public IPs: 163.172.146.151, 212.47.247.102, 51.15.229.185
+
+Server public IPs: 2
+
+The Consul UI can be accessed at http://163.172.146.151:8500/ui
+with the bootstrap token: 6ae9f6f7-b6f1-4d3a-ea82-bcbea392daa0
+
+EOT
+consul_bootstrap_token_secret = "6ae9f6f7-b6f1-4d3a-ea82-bcbea392daa0"
+lb_address_consul_nomad = "http://163.172.146.151"
+```
+
+---
+
+## Use the Nomad CLI
+
+Run the `post-setup.sh` script to setup your local environment to use the Nomad CLI:
+
+```shell
+./post-setup.sh
+```
+The following output displays:
+
+```shell
+***
+The nomad.token file already exists - not overwriting. If this is a new run, delete it first.
+***
+```
+
+Delete the `nomad.token` file and run `./post-setup.sh` again.
+
+The script gives you the commands to use to setup `NOMAD_ADDR` and `NOMAD_TOKEN` environment variables:
+
+```shell
+The Nomad user token has been saved locally to nomad.token and deleted from the Consul KV store.
+
+Set the following environment variables to access your Nomad cluster with the user token created during setup:
+
+export NOMAD_ADDR=$(terraform output -raw lb_address_consul_nomad):4646
+export NOMAD_TOKEN=$(cat nomad.token)
+
+
+The Nomad UI can be accessed at http://163.172.146.151:4646/ui
+with the bootstrap token: 192049fd-52f7-4fa7-7797-b28b78bfcf84
+```
+
+Run the following commands to setup the environment variables:
+
+```shell
+export NOMAD_ADDR=$(terraform output -raw lb_address_consul_nomad):4646
+export NOMAD_TOKEN=$(cat nomad.token)
+```
+
+You can now use the Nomad CLI to interact with the Nomad cluster:
+
+```shell
+nomad node status
+```
+An output displays with your cluster's information:
+
+```shell
+ID        DC   Name            Class   Drain  Eligibility  Status
+ab8c236e  dc1  nomad-client-0  <none>  false  eligible     ready
+b21e1d6e  dc1  nomad-client-2  <none>  false  eligible     ready
+f1a6022a  dc1  nomad-client-1  <none>  false  eligible     ready
+```

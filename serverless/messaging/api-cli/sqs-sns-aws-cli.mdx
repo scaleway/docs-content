@@ -1,0 +1,213 @@
+---
+meta:
+  title: Using SNS and SQS with the AWS-CLI
+  description: This page explains how to use SNS and SQS for creating queues and sending and receiving messages with the AWS CLI
+content:
+  h1: Using SNS and SQS with the AWS-CLI
+  paragraph: This page explains how to use SNS and SQS for creating queues and sending and receiving messages with the AWS CLI
+tags: messaging sns sqs aws-cli cli aws queues messages subscribe publish
+categories: 
+  - messaging
+dates:
+  validation: 2023-04-04
+  posted: 2023-04-04
+---
+
+The AWS-CLI is an open-source tool built on top of the AWS SDK for Python (Boto) that provides commands for interacting with AWS services. Once you have [connected your Scaleway Messaging and Queuing SQS/SNS namespace to the AWS-CLI](/serverless/messaging/api-cli/connect-aws-cli/) can start creating, listing and managing your queues and topics, sending messages and much more, all from your command line.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)  
+  - You have [created an SNS/SQS Messaging namespace](/serverless/messaging/how-to/create-namespace/)
+  - You have [generated credentials](/serverless/messaging/how-to/create-credentials/) for your SNS/SQS Messaging and Queuing namespace
+  - You have [connected your SQS/SNS namespace to the AWS-CLI](/serverless/messaging/api-cli/connect-aws-cli/)
+  - You have [jq](https://stedolan.github.io/jq/download/) installed on your machine
+</Message>
+
+
+## Getting started with SQS
+
+1. Use the following command to create a queue:
+
+    ```sh
+    aws sqs create-queue --queue-name MyQueue | tee my-queue.json
+    ```
+
+2. Use the following command to list existing queues:
+
+    ```sh
+    aws sqs list-queues
+    ```
+
+3. Use the following command to send messages to a queue:
+
+    ```sh
+    aws sqs send-message --queue-url $(jq -r .QueueUrl my-queue.json) --message-body "Hello world!"
+
+    aws sqs send-message --queue-url $(jq -r .QueueUrl my-queue.json) --message-body "Second Message."
+    ```
+
+4. Use the following command to recieve messages:
+
+    ```sh
+    aws sqs receive-message --queue-url $(jq -r .QueueUrl my-queue.json) | tee message1.json
+
+    aws sqs receive-message --queue-url $(jq -r .QueueUrl my-queue.json) | tee message2.json
+    ```
+
+5. Use the following command to delete messages. This is necessary as once a message has been processed on your consumer side (typically by a worker), it will be re-queued unless it is explicitly deleted.
+
+    ```sh
+    aws sqs delete-message --queue-url $(jq -r .QueueUrl my-queue.json) --receipt-handle $(jq -r .Messages[0].ReceiptHandle message1.json)
+
+    aws sqs delete-message --queue-url $(jq -r .QueueUrl my-queue.json) --receipt-handle $(jq -r .Messages[0].ReceiptHandle message2.json)
+    ```
+
+6. Use the following command to delete the queue itself:
+
+    ```sh
+    aws sqs delete-queue --queue-url $(jq -r .QueueUrl my-queue.json)
+    ```
+
+## Getting started with SNS
+
+1. Use the following command to create a topic:
+
+    ```sh
+    aws sns create-topic --name MyTopic | tee my-topic.json
+    ```
+
+2. Use the following command to list existing topics:
+
+    ```sh
+    aws sns list-topics
+    ```
+
+### Preparing and subscribing to an SQS target for SNS messages
+
+1. Use the following command to create a queue, which must be in the same namespace as the SNS topic:
+
+    ```sh
+    aws sqs create-queue --queue-name MyQueue | tee my-queue.json
+    ```
+
+2. Use the following command to get the queue ARN:
+
+    ```sh
+    aws sqs get-queue-attributes --queue-url $(jq -r .QueueUrl my-queue.json) --attribute-name QueueArn | tee my-queue-arn.json
+    ```
+
+3. Use the following command to configure a subscription to push each new message sent on this topic to the queue:
+
+    ```sh
+    aws sns subscribe --topic-arn $(jq -r .TopicArn my-topic.json) --protocol sqs --notification-endpoint $(jq -r .Attributes.QueueArn my-queue-arn.json) | tee my-subscription.json
+    ```
+
+### Preparing and subscribing to an HTTP/HTTPS target for SNS messages
+
+1. Get the public endpoint of the HTTP server you want to forward your messages to.
+
+2. Use the following command to configure a subscription to push each new message sent on the topic to the HTTP server:
+
+    ```sh
+    aws sns subscribe --topic-arn $(jq -r .TopicArn my-topic.json) --protocol http --notification-endpoint <YOUR-HTTP-ENDPOINT> | tee my-subscription.json
+    ```
+
+3. Find the HTTP request received by the HTTP server. It should have a body in json matching the following format. It contains information necessary to complete the subscription process:
+
+    ```json
+    {
+        "Type": "SubscriptionConfirmation",
+        "Token": "<REDACTED-CONFIRMATION-TOKEN>",
+        "MessageId": "<REDACTED-MESSAGE-ID>",
+        "TopicArn": "arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic",
+        "Message": "You have chosen to subscribe to the topic arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic.\nTo confirm the subscription, visit the SubscribeURL included in this message.",
+        "Timestamp": "2022-06-29T10:03:34Z",
+        "SignatureVersion": "1",
+        "Signature": "<REDACTED-SIGNATURE>",
+        "SigningCertURL": "http://<REDACTED-URL>/SNStest.crt",
+        "SubscribeURL": "<THE-CONFIRMATION-LINK>" // Get the confirmation link located here
+    }
+    ```
+
+4. Use the following command to confirm the subscription:
+
+    ```sh
+    curl "<THE-CONFIRMATION-LINK>"
+    ```
+
+### Preparing and subscribing to an lambda (Scaleway Serverless Functions) target for SNS messages
+
+1. Create the function following the steps detailed in the [Scaleway Functions Quickstart](https://www.scaleway.com/en/docs/compute/functions/quickstart/).
+
+2. Get the function endpoint from the [Scaleway console](https://console.scaleway.com/functions) under "Functions" -> "[YOUR-FUNCTION-NAMESPACE]" -> "[YOUR-FUNCTION-NAME]" -> "Function Settings" tab -> "Function Endpoint"
+
+    <Message type="important">
+    Only the main generated Endpoint of the function will work, not the aliases. The endpoint should match the following format:
+
+    ```sh
+    https://<GENERATED-NAMESPACE-ENDPOINT>-<YOUR-FUNCTION-NAME>.functions.fnc.fr-par.scw.cloud
+    example: "https://mynamespacexxxxxxxx-myfunction.functions.fnc.fr-par.scw.cloud)"
+    ```
+    </Message>
+
+3. Use the following command to configure a subscription to push each new message sent on this topic to the function
+
+    ```sh
+    aws sns subscribe --topic-arn $(jq -r .TopicArn my-topic.json) --protocol lambda --notification-endpoint <YOUR-FUNCTION-ENDPOINT> | tee my-subscription.json
+
+    ```
+    
+## Continuing with SNS
+
+1. Use the following command to list subscriptions:
+
+    ```sh
+    aws sns list-subscriptions
+    ```
+
+2. Use the following command to publish a message on the topic
+
+    ```sh
+    aws sns publish --topic-arn $(jq -r .TopicArn my-topic.json) --message "Hello world!" --message-deduplication-id $(date +%s)
+    ```
+
+3. Use the following command to read the message received on an **SQS** target.
+
+    <Message type ="note">
+        - For **HTTP**/**HTTPS** targets, you should have received the message on your server
+        - For **lambda** targets, your function should have been called with the message as argument
+    </Message>
+
+    ```sh
+    aws sqs receive-message --queue-url $(jq -r .QueueUrl my-queue.json) | tee message1.json
+    ```
+
+4. Use the following command to delete the message received on an **SQS** target. This is necessary to prevent it from being re-queued:
+
+    ```sh
+    aws sqs delete-message --queue-url $(jq -r .QueueUrl my-queue.json) --receipt-handle $(jq -r .Messages[0].ReceiptHandle message1.json)
+    ```
+
+5. Use the following command to delete the subscription:
+
+    ```sh
+    aws sns unsubscribe --subscription-arn $(jq -r .SubscriptionArn my-subscription.json)
+    ```
+
+6. Use the following command to delete the **SQS** queue (if you had an SQS target):
+
+    ```sh
+    aws sqs delete-queue --queue-url $(jq -r .QueueUrl my-queue.json)
+    ```
+
+    <Message type="tip">
+    For **lambda**, delete the function (if necessary), using the [Scaleway Console](https://console.scaleway.com/functions)
+    </Message>
+
+7. Use the following command to delete the topic
+
+    ```sh
+    aws sns delete-topic --topic-arn $(jq -r .TopicArn my-topic.json)
+    ```

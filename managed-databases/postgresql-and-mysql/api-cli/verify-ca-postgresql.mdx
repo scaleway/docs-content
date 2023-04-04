@@ -1,0 +1,256 @@
+---
+meta:
+  title: Verifying Servers' Certificate Authority on PostgreSQL
+  description: This page explains how to verify a server's certificate authority on Managed Database for PostgreSQL.
+content:
+  h1: Verifying Servers' Certificate Authority on PostgreSQL
+  paragraph: This page explains how to verify a server's certificate authority on Managed Database for PostgreSQL.
+tags: verify-ca verify certificate authority postgresql
+dates:
+  validation: 2023-04-01
+  posted: 2023-04-01
+categories:
+  - managed-databases
+---
+
+The creation and management of TLS certificates is included in the Managed Database for PostgreSQL offers.
+
+A TLS certificate is generated automatically for your Database Instance upon its creation.
+
+You can renew your certificates at any time (e.g., when you add a new endpoint).
+
+PostgreSQL natively supports SSL connections that enhance the security of client/server communications with TLS protocols. PostgreSQL does not, however, verify server certificates by default.
+
+In this page, we show you two types of protection modes you can use to verify whether the servers connecting to your client are properly encrypted.
+
+We also show you how to run the verification using different languages, such as `psql`, `python`, `go`, and `js`.
+
+## Using verify-ca
+
+This option will verify that a server is trustworthy by checking the certificate chain up to the root certificate stored on the client.
+
+### With psql
+
+```sql
+PGSSLROOTCERT=<SSL_CERTIFICATE> psql "host=<IP> port=<PORT> user=<USERNAME> sslmode=verify-ca dbname=<DB_NAME>"
+```
+
+### With Python
+
+```python
+import psycopg2
+
+connectionInfos = {
+    'host': <IP or HOSTNAME>,
+    'port': <PORT>,
+    'user': <USERNAME>,
+    'password': <PASSWORD>,
+    'sslmode': 'verify-ca',
+    'sslrootcert': <PATH_TO_SSL_CERTIFICATE>,
+    'dbname': <DB_NAME>
+}
+
+try:
+    connection = psycopg2.connect(**connectionInfos)
+    print("connected successfully")
+except psycopg2.Error as e:
+    print(e)
+```
+
+### With Go
+
+```go
+import (
+  "database/sql"
+  "fmt"
+
+  _ "github.com/lib/pq"
+)
+
+const (
+  host          = <IP or HOSTNAME>
+  port          = <PORT>
+  user          = <USERNAME>
+  password      = <PASSWORD>
+  dbname        = <DB_NAME>
+  sslrootcert   = <PATH_TO_SSL_CERTIFICATE>
+  sslmode       = 'verify-ca'
+)
+
+func main() {
+  psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
+    "password=%s dbname=%s sslmode=%s sslrootcert=%s" ,
+    host, port, user, password, dbname, sslmode, sslrootcert)
+  db, err := sql.Open("postgres", psqlInfo)
+  if err != nil {
+    panic(err)
+  }
+  defer db.Close()
+
+  err = db.Ping()
+  if err != nil {
+    panic(err)
+  }
+
+  fmt.Println("Successfully connected!")
+}
+```
+
+### With JS
+
+```js
+import fs from 'fs'
+
+const config = {
+    user: <USERNAME>,
+    password: <PASSWORD>,
+    database: <DB_NAME>,
+    port: <PORT>,
+    host: <IP or HOSTNAME>,
+    ssl: {
+        rejectUnauthorized: false,
+        cert: fs.readFileSync(<PATH_TO_SSL_CERTIFICATE>).toString(),
+        mode: 'verify-ca'
+    },
+}
+import pkg from 'pg';
+const { Client, Pool } = pkg;
+
+const client = new Client(config)
+client.connect(err => {
+    if (err) {
+        console.error('error connecting', err.stack)
+    } else {
+        console.log('connected')
+        client.end()
+    }
+})
+
+const pool = new Pool(config)
+pool
+    .connect()
+    .then(client => {
+        console.log('connected')
+        client.release()
+    })
+    .catch(err => console.error('error connecting', err.stack))
+    .then(() => pool.end())
+```
+
+
+## Using verify-full
+
+This option will verify that a server is trustworthy by checking the certificate chain up to the root certificate stored on the client. It will also verify whether the hostname specified in the server certificate matches the hostname of the server.
+
+<Message type="important">
+  `verify-full` is supported only for certificates created or renewed after 1st February 2023. The `verify-full` option does not work for certificates created before this date. If you want to use this option, you can [renew the certificate](/managed-databases/postgresql-and-mysql/how-to/renew-tls-certificate).
+</Message>
+
+
+### With psql
+
+```sql
+PGSSLROOTCERT=<PEM CERTIFICATE> psql "host=rw-${instance_id}.rdb.${region}.scw.cloud port=<PORT> user=<USERNAME> sslmode=verify-full dbname=<DB_NAME>"
+```
+
+### With Python
+
+```python
+import psycopg2
+
+connectionInfos = {
+    'host': <IP or HOSTNAME>,
+    'port': <PORT>,
+    'user': <USERNAME>,
+    'password': <PASSWORD>,
+    'sslmode': 'verify-full',
+    'sslrootcert': <PATH_TO_SSL_CERTIFICATE>,
+    'dbname': <DB_NAME>
+}
+
+try:
+    connection = psycopg2.connect(**connectionInfos)
+    print("connected successfully")
+except psycopg2.Error as e:
+    print(e)
+```
+
+### With Go
+
+```go
+import (
+    "database/sql"
+    "fmt"
+
+    _ "github.com/lib/pq"
+)
+
+const (
+  host          = <IP or HOSTNAME>
+  port          = <PORT>
+  user          = <USERNAME>
+  password      = <PASSWORD>
+  dbname        = <DB_NAME>
+  sslrootcert   = <PATH_TO_SSL_CERTIFICATE>
+  sslmode        = "verify-full"
+)
+
+func main() {
+    psqlInfo := fmt.Sprintf("host=%s port=%d user=%s "+
+        "password=%s dbname=%s sslrootcert=%s sslmode=%s ",
+        host, port, user, password, dbname, sslrootcert, sslmode)
+    db, err := sql.Open("postgres", psqlInfo)
+    if err != nil {
+        panic(err)
+    }
+    defer db.Close()
+
+    err = db.Ping()
+    if err != nil {
+        panic(err)
+    }
+
+    fmt.Println("Successfully connected!")
+}
+```
+
+### With JS
+
+```js
+import fs from 'fs'
+
+const config = {
+    user: <USERNAME>,
+    password: <PASSWORD>,
+    database: <DB_NAME>,
+    port: <PORT>,
+    host: <IP or HOSTNAME>,
+    ssl: {
+        rejectUnauthorized: false,
+        cert: fs.readFileSync(<PATH_TO_SSL_CERTIFICATE>).toString(),
+        mode: 'verify-full'
+    },
+}
+import pkg from 'pg';
+const { Client, Pool } = pkg;
+
+const client = new Client(config)
+client.connect(err => {
+    if (err) {
+        console.error('error connecting', err.stack)
+    } else {
+        console.log('connected')
+        client.end()
+    }
+})
+
+const pool = new Pool(config)
+pool
+    .connect()
+    .then(client => {
+        console.log('connected')
+        client.release()
+    })
+    .catch(err => console.error('error connecting', err.stack))
+    .then(() => pool.end())
+```

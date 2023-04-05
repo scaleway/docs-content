@@ -37,6 +37,70 @@ This feature enables you to add your librairies or static files to your function
 8. Configure your function.
 9. Click **Create function** to finish.
 
+
+## How to upload your zip file by using the Scaleway API
+
+
+<Message type="note">
+  These steps only apply if you use a [Scaleway runtime](/serverless/functions/reference-content/functions-runtimes-configuration/). 
+</Message>
+
+In this section, you will upload your code to a S3 bucket, which we will package and build into a container image. The created container image will then be available in a registry namespace associated to your functions namespace.
+
+1. Set a environment variable for to name the ZIP file automatically. 
+  ```bash
+  export FUNCTION_ARCHIVE="function-$SCW_FUNCTION_ID.zip"
+  ```
+
+2. Create a zip archive with your code:
+  ```bash
+  zip $FUNCTION_ARCHIVE handler.js
+  ```
+
+  <Message type="note">
+    If you wish to use external dependencies, you will have to package them inside the zip archive as well**:
+
+    ```bash
+    zip -r $FUNCTION_ARCHIVE package.json handler.js node_modules
+    ```
+  </Message>
+
+3. Get the size of your archive in bytes, in order to ask for a presigned URL to upload your source code:
+  ```bash
+  ls -lh
+  -rw-r--r--  1 user  group   675 Apr 18 15:42 $FUNCTION_ARCHIVE
+
+  export ARCHIVE_SIZE=675
+  ```
+
+4. Get the presigned URL from the API.
+  ```bash
+  curl -X GET -H "X-Auth-Token: $SCW_ACCESS_KEY" "https://api.scaleway.com/functions/v1beta1/regions/$SCW_DEFAULT_REGION/functions/$SCW_FUNCTION_ID/upload-url?content_length=$ARCHIVE_SIZE"
+
+  ## Example of response from our API
+  {"url":"https://s3.fr-par.scw.cloud/scw-database-srvless-prod/uploads/function-b0525a73-947d-4ba4-92de-17f267a7ec5a.zip?X-Amz-Algorithm=AWS4-HMAC-SHA256\u0026X-Amz-Credential=SCW6Z6VKJVG81FQZVB14%2F20190627%2Ffr-par%2Fs3%2Faws4_request\u0026X-Amz-Date=20190627T092839Z\u0026X-Amz-Expires=3600\u0026X-Amz-SignedHeaders=content-length%3Bcontent-type%3Bhost\u0026X-Amz-Signature=e9f3e22f39638dac047f0f4e9ab521c7971cacb01f61f523cb948baa328a0eff","headers":{"content-length":["347"],"content-type":["application/octet-stream"]}}
+  ```
+
+  <Message type="important">
+    As you can see, the URL is not properly formatted (\u0026...), in order to use it properly to upload your code, you must
+    copy the full URL with quotes (otherwise your terminal might add unwanted \ in the url string):
+
+    ```bash
+    export FUNCTION_ARCHIVE_URL=$(echo -n "<your-url>")
+    ```
+  </Message>
+
+  <Message type="note">
+    You will get an error in the following step if you do not Copy the url with wrapping quotes and save inside a variable using echo -n to replace \u0026 expressions
+  </Message>
+
+  If you use postman, you can usually export the presigned url as it is, as long as you copy/paste the quotes too.
+
+5. Run the following code and upload your code to the presigned URL:
+  ```bash
+  curl -H "Content-Type: application/octet-stream" --upload-file $FUNCTION_ARCHIVE -H "Content-Length: $ARCHIVE_SIZE" $FUNCTION_ARCHIVE_URL
+  ```
+
 ## How to configure your package using Python
 
 ### Handler

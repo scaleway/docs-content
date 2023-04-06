@@ -307,87 +307,89 @@ for subs in topic.subscriptions.all():
 
 ### Connect to SNS
 
-The following code sample shows how to connect to SQS:
+The following code sample shows how to connect to SNS:
 
 ```javascript
-var sns = new AWS.SNS({
-    apiVersion: '2010-03-31',
-    endpoint: '',
-    accessKeyId:'',
-    secretAccessKey:'',
-    region: 'fr-par'
-    });
+import { 
+    CreateTopicCommand,
+    DeleteTopicCommand,
+    GetTopicAttributesCommand,
+    ListSubscriptionsByTopicCommand,
+    ListSubscriptionsCommand,
+    ListTopicsCommand,
+    PublishCommand,
+    SNSClient,
+    SubscribeCommand,
+    UnsubscribeCommand,
+ } from "@aws-sdk/client-sns";
+
+var snsClient = new SNSClient({
+    credentials : {
+        accessKeyId : "",
+        secretAccessKey: ""
+    },
+    region: "par",
+    endpoint: "https://sqs-sns.mnq.fr-par.scw.cloud",
+    
+})
+
 ```
 
 <Message type="note">
   The `endpoint_url` for Scaleway Messaging and Queuing is `https://sqs-sns.mnq.fr-par.scw.cloud`. For the access and secret key values, use the credentials you [generated](/serverless/messaging/how-to/create-credentials/) for your SNS/SQS namespace.
 </Message>
 
-Once connected to the SNS service, you can use any of the SDK's available functions. However, some functions are not [supported by Scaleway Messaging and Queuing](/serverless/messaging/reference-content/sns-support), so do check the link to make sure. See the [official SDK documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/SQS.html) for more information, or keep reading for some code examples.
+Once connected to the SNS service, you can use any of the SDK's available functions. However, some functions are not [supported by Scaleway Messaging and Queuing](/serverless/messaging/reference-content/sns-support), so do check the link to make sure. See the [official SDK documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-sns/) for more information, or keep reading for some code examples.
 
 ### Create topic
 
-You can find all available parameters for `createTopic` in the [AWS documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/SNS.html#createTopic-property).
+You can find all available parameters for `createTopic` in the [AWS documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-sns/classes/createtopiccommand.html).
 
 ```javascript
 var params = {
-  Protocol: 'sqs', /* required */
-  TopicArn: {SNS Topic Arn}, /* required */
-  // Attributes: {
-  //   '<attributeName>': 'STRING_VALUE',
-  //   /* '<attributeName>': ... */
-  // },
-  Endpoint: {SQS ARN},
-  ReturnSubscriptionArn: true
-};
+    Name: "My Topic"
+  };
+const command = new CreateTopicCommand(params);
+const rest = await snsClient.send(command);
+const topicARN= rest.TopicArn;
+console.log(topicARN);
 ```
 
 ### Publish messages to this topic
 
 Be careful: messages sent to topics with no subscriptions are automatically deleted.
 
-This code sample demonstrates how to send a message with `MessageAttributes`. For more information on MessageAttributes, refer to [the official documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/SNS.html#publish-property).
+This code sample demonstrates how to send a message with `MessageAttributes`. For more information on MessageAttributes, refer to [the official documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-sns/classes/publishcommand.html).
 
 ```javascript
 var params = {
-  Message: 'Test Message', /* required */
-  MessageAttributes: {
-    'Name': {
-      DataType: 'String', /* required */
-      StringValue: 'John'
-    }
-  },
-  Subject: 'Test',
-  TopicArn: ''
-};
-sns.publish(params, function (err, data) {
-  if (err) console.log(err, err.stack); // an error occurred
-  else console.log(data);           // successful response
-});
+    Message: 'MyMessage', 
+    Subject: 'MySubject',
+    TopicArn: topicARN,
+  };
+const command = new PublishCommand(params);
+const rest = await snsClient.send(command);
+console.log(rest.MessageId);
 ```
 
 ### Subscribe to a topic
 
-You can find all available parameters for the subscribe operation in the AWS documentation (https://docs.aws.amazon.com/AWSJavaScriptSDK/latest/AWS/SNS.html#subscribe-property)
+You can find all available parameters for the subscribe operation in the [AWS documentation] (https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-sns/classes/subscribecommand.html)
 
 #### Subscribe to an SQS queue from the same namespace
 
 ```javascript
+const queueARN = 'YOUR QUEUE ARN';
 var params = {
-  Protocol: 'sqs', /* required */
-  TopicArn: [SNS Topic Arn], /* required */
-  // Attributes: {
-  //   '<attributeName>': 'STRING_VALUE',
-  //   /* '<attributeName>': ... */
-  // },
-  Endpoint: [SQS Queue Arn],
-  ReturnSubscriptionArn: true
-};
+    Protocol: 'sqs', /* required */
+    TopicArn: topicARN, /* required */
+    Endpoint: queueARN,
+    ReturnSubscriptionArn: true 
+  };
+  const command = new SubscribeCommand(params);
+  const rest = await snsClient.send(command);
+  console.log(rest.SubscriptionArn);
 
-sns.subscribe(params, function(err, data) {
-  if (err) console.log(err, err.stack); // an error occurred
-  else     console.log(data);           // successful response
-});
 ```
 
 #### Subscribe to a public Scaleway function
@@ -398,45 +400,46 @@ You can find the value for `[Function URL]` in the [Scaleway console](https://co
 
 ```javascript
 var params = {
-  Protocol: 'lambda', /* required */
-  TopicArn: [SNS Topic Arn], /* required */
-  Endpoint: [Scaleway Serverless Function or Container URL],
-  ReturnSubscriptionArn: true
-};
-
-sns.subscribe(params, function(err, data) {
-  if (err) console.log(err, err.stack); // an error occurred
-  else     console.log(data);           // successful response
-});
+    Protocol: 'lambda', 
+    TopicArn: topicARN, 
+    Endpoint: 'YOUR FUNCTION ENDPOINT',
+    ReturnSubscriptionArn: true 
+  };
+const command = new SubscribeCommand(params);
+const rest = await snsClient.send(command);
+console.log(rest.SubscriptionArn);
 ```
 
 You can also set up an SQS queue from the same namespace, as a [Dead Letter Queue](/serverless/messaging/concepts/#dead-letter-queue):
 
 ```javascript
 var params = {
-  Protocol: 'lambda', /* required */
-  TopicArn: [SNS Topic Arn], /* required */
-  Attributes: {
-    'RedrivePolicy': '{\'deadLetterTargetArn\':\'[SQS Queue Arn]'}',
-  },
-  Endpoint: 'https://demodayndhiixus-logall.functions.fnc.fr-par.scw.cloud',
-  ReturnSubscriptionArn: true
-};
-
-sns.subscribe(params, function(err, data) {
-  if (err) console.log(err, err.stack); // an error occurred
-  else     console.log(data);           // successful response
-});
+    Protocol: 'lambda', 
+    TopicArn: topicARN, 
+    Endpoint: 'YOUR FUNCTION ENDPOINT',
+    Attributes: {
+    'RedrivePolicy': '{\'deadLetterTargetArn\':\'SQS Queue Arn'}',
+    },
+    ReturnSubscriptionArn: true 
+  };
+const command = new SubscribeCommand(params);
+const rest = await snsClient.send(command);
+console.log(rest.SubscriptionArn);
 ```
 
 #### Subscribe to an HTTP/S endpoint
 
 ```javascript
-subscription = topic.subscribe(
-    Protocol='http', //or https
-    Endpoint=url,
-    ReturnSubscriptionArn=True
-)
+var params = {
+    Protocol: 'https', 
+    TopicArn: topicARN, 
+    Endpoint: 'YOUR SERVER ENDPOINT',
+    ReturnSubscriptionArn: true 
+  };
+const command = new SubscribeCommand(params);
+const rest = await snsClient.send(command);
+console.log(rest.SubscriptionArn);
+
 ```
 The HTTP server receives an HTTP request with a `json` body matching the following format:
 
@@ -463,20 +466,23 @@ The following code sample deletes all subscriptions to a topic.
 
 ```javascript
 var params = {
-  TopicArn: '', /* required */
-};
+    TopicArn: topicARN, 
+  };
+const command = new ListSubscriptionsByTopicCommand(params);
+const rest = await snsClient.send(command);
+const subscriptionsList = rest.Subscriptions;
+subscriptionsList.forEach(async function (element) {
+try {
+    var params = {
+        SubscriptionArn: element.SubscriptionArn 
+      };
+      const command = new UnsubscribeCommand(params)
+      const rest = await snsClient.send(command)
+      console.log("Unsubscribing : ",rest.$metadata.httpStatusCode)
 
-sns.listSubscriptionsByTopic(params, function (err, data) {
-  if (err) console.log(err, err.stack); // an error occurred
-  else
-    data.Subscriptions.forEach(function (element) {
-      var params = {
-        SubscriptionArn: element.SubscriptionArn
-      }
-      sns.unsubscribe(params, function (err, data) {
-        if (err) console.log(err, err.stack); // an error occurred
-        else console.log(params.SubscriptionArn, "Deleted");           // successful response
-      });
-    })
-})
+} catch (e) {
+  throw new Error(e.message)
+}
+});
+
 ```

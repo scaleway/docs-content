@@ -1,9 +1,9 @@
 ---
 meta:
-  title: How to package your function dependencies and upload it as a zip-file
+  title: How to package your function and dependencies to a zip file and upload it
   description: This page explains how to package your code and upload it as a zip to Serverless Functions Console
 content:
-  h1: How to package your function dependencies and upload it as a zip-file
+  h1: How to package your function and dependencies to a zip file and upload it
   paragraph: This page explains how to package your code and upload it as a zip to Serverless Functions Console
 tags: functions zip-file 
 dates:
@@ -13,8 +13,8 @@ categories:
   - serverless
 ---
 
-This page explains how to upload your functions dependencies as a ZIP file using the Scaleway Console.
-This feature enables you to add your librairies or static files to your function. 
+This page explains how to upload your functions and its dependencies as a ZIP file using the Scaleway Console.
+This feature can help you to add your libraries or static files to your function.
 
 <Macro id="iam-requirements" />
 
@@ -24,18 +24,108 @@ This feature enables you to add your librairies or static files to your function
   - You know how to [create a Function](/serverless/functions/how-to/create-a-function/)
 </Message>
 
+There are [different methods to deploy functions](/serverless/functions/reference-content/deploy-function/) and some of them require
+the function to be packaged into a `zip` file.
+
+## How to package a function into zip file
+
+To match the Scaleway build pipelines requirements, functions zip files must contain the content of the root folder you want to publish.
+
+✅ Example of a good archive:
+``` myFunc.zip contains:
+- handler.js
+```
+
+❌ Example of a bad archive:
+``` myFunc.zip contains
+└── myFunc (a folder)
+    └── handler.js
+```
+
+To create an archive of folder content, you can use the `zip` command:
+
+```sh
+zip -r handler.zip handler/
+```
+
+To check if your archive is well formed, ensure you have your function code as soon as you `unzip` it.
+
 ## How to upload your zip file to the Scaleway Console
 
-1. Package your dependencies on your local computer, as explained in the [Configure your package](/serverless/functions/how-to/package-function-dependencies-in-zip/#how-to-configure-your-package-using-python) section.
+1. Package your dependencies on your local computer, as explained in the [Configure your package](/serverless/functions/how-to/package-function-dependencies-in-zip/#how-to-zip-your-function) section.
 2. Create a **Zip** archive containing the files and folders you need.
 3. Go to the [Functions](https://console.scaleway.com/functions/namespaces) section of the Scaleway console and click on the function namespace you want to configure.
 4. Click **+ Create function**. The function creation page displays.
 5. On the function creation page, select **Upload a Zip** as **Code entry type**:
-    <Lightbox src="scaleway_upload_zip.webp" alt="" />
+    <Lightbox src="scaleway_upload_zip.webp" alt=""/>
 6. Drop your ZIP in the reserved field.
 7. Specify your **handler path**.
 8. Configure your function.
 9. Click **Create function** to finish.
+
+
+## How to upload your zip file using the Scaleway API
+
+
+<Message type="note">
+  These steps only apply if you use a [Scaleway runtime](/serverless/functions/reference-content/functions-runtimes-configuration/). 
+</Message>
+
+In this section, you will upload your code to a S3 bucket, which we will package and build into a container image. The created container image will then be available in a registry namespace associated to your functions namespace.
+
+1. Set an environment variable to name the ZIP file automatically. 
+  ```bash
+  export FUNCTION_ARCHIVE="function-$SCW_FUNCTION_ID.zip"
+  ```
+
+2. Create a zip archive with your code:
+  ```bash
+  zip $FUNCTION_ARCHIVE handler.js
+  ```
+
+  <Message type="note">
+    If you wish to use external dependencies, you will have to package them inside the zip archive as well:
+
+    ```bash
+    zip -r $FUNCTION_ARCHIVE package.json handler.js node_modules
+    ```
+  </Message>
+
+3. Get the size of your archive in bytes, in order to ask for a presigned URL to upload your source code:
+  ```bash
+  ls -lh
+  -rw-r--r--  1 user  group   675 Apr 18 15:42 $FUNCTION_ARCHIVE
+
+  export ARCHIVE_SIZE=675
+  ```
+
+4. Get the presigned URL from the API.
+  ```bash
+  curl -X GET -H "X-Auth-Token: $SCW_ACCESS_KEY" "https://api.scaleway.com/functions/v1beta1/regions/$SCW_DEFAULT_REGION/functions/$SCW_FUNCTION_ID/upload-url?content_length=$ARCHIVE_SIZE"
+
+  ## Example of response from our API
+  {"url":"https://s3.fr-par.scw.cloud/scw-database-srvless-prod/uploads/function-b0525a73-947d-4ba4-92de-17f267a7ec5a.zip?X-Amz-Algorithm=AWS4-HMAC-SHA256\u0026X-Amz-Credential=SCW6Z6VKJVG81FQZVB14%2F20190627%2Ffr-par%2Fs3%2Faws4_request\u0026X-Amz-Date=20190627T092839Z\u0026X-Amz-Expires=3600\u0026X-Amz-SignedHeaders=content-length%3Bcontent-type%3Bhost\u0026X-Amz-Signature=e9f3e22f39638dac047f0f4e9ab521c7971cacb01f61f523cb948baa328a0eff","headers":{"content-length":["347"],"content-type":["application/octet-stream"]}}
+  ```
+
+  <Message type="important">
+    As you can see, the URL is not properly formatted (\u0026...). To use it properly to upload your code, you must
+    copy the full URL with quotes (otherwise your terminal might add unwanted \ in the url string):
+
+    ```bash
+    export FUNCTION_ARCHIVE_URL=$(echo -n "<your-url>")
+    ```
+  </Message>
+
+  <Message type="note">
+    If you do not copy the url with wrapping quotes and save a variable inside using echo -n to replace \u0026 expressions, you will get an error in the following step.
+  </Message>
+
+  If you use Postman, you can usually export the presigned URL as it is, as long as you also copy/paste the quotes.
+
+5. Run the following code to upload your code to the presigned URL:
+  ```bash
+  curl -H "Content-Type: application/octet-stream" --upload-file $FUNCTION_ARCHIVE -H "Content-Length: $ARCHIVE_SIZE" $FUNCTION_ARCHIVE_URL
+  ```
 
 ## How to configure your package using Python
 
@@ -45,51 +135,62 @@ The Handler name is a path to the handler file, suffixed with the function name 
 
 ```bash
 .
-└── src
-    └── handlers
-        ├── hello.py => def say_hello
-        └── world.py => def to_the_world
+└── handlers
+    ├── hello.py → def say_hello(event, context): ...
+    └── world.py → def to_the_world(event, context): ...
 ```
 
-1. Make sure to provide the right handler name, namely `src/handlers/hello.say_hello` and `src/handlers/world.to_the_world`
-2. Provide a custom handler name for each of these handlers. Each of your functions will know which handler file to run: `hello`→`src/handlers/hello.say_hello` and `world`→`src/handlers/world.to_the_world`.
+1. Package your functions. On Unix systems, you can use the `zip` utility:
+
+```console
+zip -r functions.zip handlers/
+```
+
+2. Upload the archive in the console.
+3. Provide a custom handler name for each of these handlers. Each of your functions will know which handler file to run: `hello`→`handlers/hello.say_hello` and `world`→`handlers/world.to_the_world`.
     <Message type="note">
       By default, the handler path is `handler.handle` (def handle in handler.py).
     </Message>
 
 ### Additional dependencies
-Additional dependencies must be included inside a package directory at the root of your archive or project. To do so, launch the following command:
 
-```bash
-# At the root of your archive
-mkdir package
-```
+Additional dependencies must be included inside a `package` directory at the root of your archive.
 
-Your project will look like this:
+Your directory structure should look like this:
 
 ```bash
 .
-└── src
-    ├── handlers
-    │   ├── handler.py
-    │   └── secondHandler.py
-    ├── package
-    │   └── requests
-    └── requirements.txt
+├── handlers
+│   ├── handler.py
+│   └── second_handler.py
+└── package → Your vendored Python dependencies
+    └── requests
+```
+
+To package your functions into an archive that can be uploaded to the console, you can use the `zip` utility:
+
+```console
+zip -r functions.zip handlers/ package/
 ```
 
 ### Standard dependencies
-In addition, you can install your dependencies in the package directory. To do so, launch the following command:
+
+In addition, you can install your dependencies in the package directory. To do so, run the following command:
+
 ```bash
 pip install requests --target ./package
 ```
+
 Or with a `requirements.txt` file:
+
 ``` bash
 pip install -r requirements.txt --target ./package
 ```
 
 ### Specific libraries (with needs for specific C compiled code)
+
 In some specific cases, you might need to install libraries that require specific `C` compiled code such as:
+
 - numpy
 - tensorflow
 - pandas
@@ -103,89 +204,88 @@ Run the following command from the root of your project to install your dependen
 ```bash
 PYTHON_VERSION=3.10 # or 3.7, 3.8, ...
 docker run --rm -v $(pwd):/home/app/function --workdir /home/app/function rg.fr-par.scw.cloud/scwfunctionsruntimes-public/python-dep:$PYTHON_VERSION pip install -r requirements.txt --target ./package
-``` 
+```
 
 This command will run `pip install` with the given `requirements.txt` file inside a docker container compatible with our function runtimes, and pull the installed dependencies locally to your package directory. As these dependencies have been installed on top of alpine Linux with our compatible system libraries, you will be able to upload your source code and deploy your function properly.
 
-<Message type="note">
-  The example above uses python3 runtime, but you can easily change the docker image from `rg.fr-par.scw.cloud/scwfunctionsruntimes-public/python-dep:3.10` to `rg.fr-par.scw.cloud/scwfunctionsruntimes/python-dep:2.7`, `rg.fr-par.scw.cloud/scwfunctionsruntimes/python-dep:3.8`, ...
-</Message>
-
-
 ## How to configure your package using Node
 
-### Handler 
+### Handler
 
-The Handler name is a path to the handler file, suffixed with the function name to use as a handler. In the following example, we use two handlers `hello.js` and `world.js` inside the `src/handlers` folder.
-
-<Message type="note">
-  Currently, a function handler must be a named exported component:
-  ``` javascript 
-  module.exports.myHandler = (event, context, callback) => {}
-  ``` 
-</Message>
-
-1. Make sure to provide the right handler name, namely `src/handlers/hello.sayHello` and `src/handlers/world.toTheWorld`.
+The Handler name is a path to the handler file, suffixed with the function name to use as a handler. In the following example, we use two handlers `hello.js` and `world.js` inside the `handlers` folder.
 
 ```bash
 .
-└── src
-    └── handlers
-        ├── hello.js => module.exports.sayHello
-        └── world.js => module.exports.toTheWorld
+└── handlers
+    ├── hello.js → export {sayHello}; function sayHello(...) {} 
+    └── world.js → export {toTheWorld}; function toTheWorld(...) {}
 ```
 
-2. Provide a custom handler name for each of these handlers. Each of your functions will know which handler file to run: `hello`→`src/handlers/hello.sayHello` and `world`→`src/handlers/world.toTheWorld`.
+1. Package your functions. On Unix systems, you can use the `zip` utility:
+
+```console
+zip -r functions.zip handlers/
+```
+
+2. Upload the archive in the console.
+3. Provide a custom handler name for each of these handlers. Each of your functions will know which handler file to run: `hello`→`handlers/hello.sayHello` and `world`→`handlers/world.toTheWorld`.
 
 ### Additional dependencies
 
 If you need to push external dependencies for your `node.js` functions, you must package your `node_modules` directory into your deployment archive. To do so, launch the following command:
+
 ```bash
 .
 ├── handler.js
 └── node_modules
     └── your_dependencies
 ```
+
 You can use tools such as [webpack](https://webpack.js.org/) or [NCC](https://www.npmjs.com/package/@vercel/ncc) a CLI tool to build `node.js executables`, which packages your code into separate files. Then, you will be able to upload your compiled handler file reducing the size of your bundle.
   For example:
   ```ncc handler.js -o build/handler.js # -> Builds dist/inde```
 
 Then, set up your function handler to be: `build/handler.js` if you package the whole build directory. Do not forget to point the function handler property to the path of your built handler in your archive (if `build/handler.myHandler` then `handler` must be `build/handler.js`)
 
-## How to configure your package using Golang 
+## How to configure your package using Golang
 
 ### Handler
-**Golang** is a compiled language. Therefore, you must provide Scaleway Function API with a handler name pointing to the function's directory. 
 
-1. Provide Scaleway Function API with a handler name:
-```bash 
+With **Golang** functions, the handler name should be the name of your exported handler function if your handler is at the root of your folder.
+If your handler is in a subdirectory, the handler name should be prefixed by the directory followed by the exported function name.
+
+```bash
 .
 ├── go.mod
-├── go.sum -> package main at the root of serverless project
-├── handler.go
-└── src
-    └── handlers
-        ├── hello
-        │   ├── go.mod
-        │   ├── go.sum
-        │   └── main.go -> package main in "handlers/hello" subdirectory
-        └── world
-            ├── go.mod
-            ├── go.sum
-            └── main.go -> package main in "handlers/world" subdirectory
+├── go.sum
+├── handler.go → package handler with func Handle()
+└── handlers
+    ├── hello
+    │   └── hello.go → package hello with func Hello(...)
+    └── world
+        └── world.go → package world with func ToTheWorld(...)
 ```
-2. Provide a custom handler name for each of these handlers. Each of your function will know which handler file to run: `hello`→`handlers/hello`, `world`→`handlers/world`, and for the `handler.go` at the root of the project→`.`
-    <Message type="note">
-      By default, the `handler path` is `.` (package main at the root of the archive).
-    </Message>
+
+1. Package your functions. On Unix systems, you can use the `zip` utility:
+
+```console
+zip -r functions.zip go.mod go.sum handler.go handlers/
+```
+
+2. Upload the archive in the console.
+3. Provide a custom handler name for each of these handlers. Each of your function will know which handler file to run:
+   - `hello` → `handlers/hello.Hello`
+   - `world` → `handlers/world.ToTheWorld`
+   - For the file `handler.go` at the root of the project → `Handle`
+
+  <Message type="note">
+    By default, the `handler path` is `Handle` (package main at the root of the archive).
+  </Message>
 
 ### Additional dependencies
-If you need **external dependencies** for your Golang handlers, you can provide these dependencies using Go Modules.
-Our runtimes automatically install your dependencies at **Build time** (once you start the function deployment). 
 
-<Message type="important">
-  Be careful to pack the code and its dependencies directly, not the folder where the project is stored.
-</Message>
+If you need **external dependencies** for your Golang handlers, you can provide these dependencies using Go Modules.
+Our runtimes automatically install your dependencies at **Build time** (once you start the function deployment).
 
 <Message type="note">
   Dependencies installation at the build-time results in longer builds.
@@ -196,9 +296,10 @@ Our runtimes automatically install your dependencies at **Build time** (once you
 ├── go.mod
 ├── go.sum
 └── handler.go
-
 ```
+
 Package your dependencies with the command `go mod vendor`, and provide your generated vendor directory to the function archive. This approach will save you some time during builds:
+
 ```bash
 .
 ├── go.mod
@@ -208,58 +309,60 @@ Package your dependencies with the command `go mod vendor`, and provide your gen
     └── your-dependencies
 ```
 
-## How to configure your package using PHP 
+## How to configure your package using PHP
 
 ### Handler
 
 The Handler name is a path to the handler file, suffixed with the function name to use as a handler. In the following example, we use the handler file `handler.php`.
 
-  ```
-├── composer.json -> optional
-└── handler.php -> handler function defined here
-  ```
+```bash
+.
+├── composer.json → optional
+└── handler.php → handler function defined here
+```
 
-* Make sure to provide the right handler name, in the previous folder tree : `handler.handle`
-* The `composer.json` file enables you to define dependencies that will be installed when deploying your functions, for more information, you can check the [official documentation](https://getcomposer.org/doc/04-schema.md/#package-links) of composer
-## How to configure your package using Rust 
+The `composer.json` file enables you to define dependencies that will be installed when deploying your functions, for more information, you can check the [official documentation](https://getcomposer.org/doc/04-schema.md/#package-links) of composer.
+
+1. Package your functions. On Unix systems, you can use the `zip` utility:
+
+```console
+zip -r function.zip composer.json handler.php
+```
+
+2. Upload the archive in the console.
+3. Make sure to provide the right handler name, with the previous directory structure: `handler.handle`
+
+## How to configure your package using Rust
 
 ### Handler
+
 The Handler name is a path to the handler file, suffixed with the function name to use as a handler. In the following example, we use the handler file `handler.rs` inside the `src` folder.
 
-  ``` bash
+``` bash
 .
 ├── Cargo.lock
 ├── Cargo.toml
 └── src
-    └── handler.rs -> Handle async function defined here
-  ```
+    └── handler.rs → pub async fn handle(...)
+```
 
 1. Specify the file to be executed in your `Cargo.toml` file
-    ```toml
-      [lib]
-      path = "src/handler.rs"
-    ```
-2. Make sure to provide the right handler name, namely `Handle`
 
+  ```toml
+    [lib]
+    path = "src/handler.rs"
+  ```
+
+2. Make sure to provide the right handler name, namely `handle`
 
 ### Additional dependencies
-If you need **external dependencies** for your Rust handlers, you can provide these dependencies in your `Cargo.toml`file.
-Our runtimes automatically install your dependencies at **Build time** (once you start the function deployment). 
+
+If you need **external dependencies** for your Rust handlers, you can provide these dependencies in your `Cargo.toml` file.
+Our runtimes automatically install your dependencies at **Build time** (once you start the function deployment).
 
 <Message type="note">
   Dependencies installation at the build-time results in longer builds.
 </Message>
-
-You can also package your dependencies with the command `cargo vendor`, and provide your generated vendor directory to the function archive. This approach will save you some time during builds:
-```bash
-.
-├── Cargo.lock
-├── Cargo.toml
-├── src
-│   └── handler.rs
-└── vendor
-    └── your-dependencies
-```
 
 <Navigation title="See Also">
   <PreviousButton to="/serverless/functions/how-to/create-a-function/">How to create a function</PreviousButton>

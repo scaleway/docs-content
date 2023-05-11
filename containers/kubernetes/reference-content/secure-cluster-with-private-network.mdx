@@ -1,0 +1,127 @@
+---
+meta:
+  title: Securing a cluster with a regional Private Network
+  description: This page explains how to secure a Kubernetes Kapsule cluster with a regional Private Network
+content:
+  h1: Securing a cluster with a regional Private Network
+  paragraph: This page explains how to secure a Kubernetes Kapsule cluster with a regional Private Network
+tags: kubernetes kubernetes-kapsule kapsule cluster vpc private-network private network
+dates:
+  validation: 2023-05-05
+  posted: 2023-05-05
+categories:
+  - kubernetes
+---
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created](/containers/kubernetes/how-to/create-cluster) a Kubernetes Kapsule cluster
+</Message>
+
+Scaleway Kubernetes Kapsule provides a managed environment to create, configure and run a cluster of preconfigured machines for containerized applications. This allows you to create Kubernetes clusters without the complexity of managing the infrastructure.
+
+All new Kubernetes clusters are deployed with a Scaleway [regional Private Network](https://www.scaleway.com/en/docs/network/vpc/concepts/#regional-private-networks). **We recommend migrating existing clusters to a regional Private Network as well, using the Scaleway console.**
+
+Currently, worker nodes are still shipped with public IP addresses.
+These IPs are used for outgoing traffic from your nodes towards the Internet only; no services are listening on them by default.
+Despite having public IP addresses for limited maintenance and operational reasons, you can be assured that your cluster remains fully secure. Find more details below.
+
+<Lightbox src="kubernetes-kapsule-on-pn-v2.webp" alt="Schema Kubernetes Kapsule on Private Networks" size="large" />
+
+## Why have a Private Network for your Kubernetes Kapsule cluster?
+
+A Private Network brings additional features to your cluster, such as:
+* Implementation of best practices in terms of security: all Scaleway resources can communicate securely (Instances, Load Balancers, Managed Databases), with less surface area for attack
+* Compliance with expectations from the market (enterprise customers)
+* Less manual configuration work such as security group configuration, IP range configuration etc.
+* Lower latency
+
+You can use the Scaleway console to both create new regional Private Networks, and add clusters to existing regional Private Networks. Each cluster is autoconfigured using a /22 IP subnet thanks to Scaleway’s IPAM.
+
+## Why do worker nodes still have public IPs?
+
+Public IP addresses are currently required to maintain the administration of your worker nodes and their control plane to ensure the full functionality of your clusters. 
+However, incoming traffic on these public IPs is blocked by default thanks to a security group set at DROP ALL, and only outgoing traffic necessary for Kubernetes to run (e.g., apt, Docker image pull, etc.) is allowed. 
+
+## Can I use a Public Gateway with my Private Network to exit all outgoing traffic from the nodes?
+
+At the moment, outgoing traffic is through the public IP of each node.
+Public Gateway will soon be compatible with IPAM and thus supported by Kapsule in a future release.
+
+## How can I migrate my existing clusters to regional Private Networks?
+
+You can use the Scaleway console to migrate all your previous clusters **(recommended)**.
+
+1. In the [Kubernetes section](https://console.scaleway.com/kubernetes/clusters) of the Scaleway console, locate your public clusters in the list.
+2. Click the cluster's name to navigate to your cluster information.
+3. Use the recommended migration action in your cluster information, or go to the Private Network tab to start the migration.
+    <Message type="note">
+    Migrating an existing cluster is only available for clusters with a Kubernetes version above `v1.22.0`. Note that once a cluster is migrated, you cannot roll back this change.
+    </Message>
+
+What will happen after starting the migration:
+
+1. Your control plane will restart for a first time: the Kubernetes API of your cluster will temporarily be unavailable.
+2. Your pools will be upgraded to migrate the nodes into the Private Network. All of your nodes will be rebooted according to the specified Upgrade Policy of your pools.
+3. Once all your nodes have rebooted, your control plane will be configured to use the Private Network and restarted: your Load Balancers will be reconfigured and migrated to the Private Network.
+4. The CNI of your cluster will be reconfigured and restarted to use the Private Network.
+    <Message type="important">
+      During step IV, the Pod network of your cluster will be temporarily unavailable for 1 to 10 minutes as all Pods of the CNI are restarted, depending on the size of your cluster and the CNI you are using.
+      Your Pods will be unable to communicate with each other during this step.
+    </Message>
+
+To further improve the security of your Kubernetes cluster, you can [configure a Security Group](/compute/instances/how-to/use-security-groups) to block inbound traffic on the public network interface of your nodes.
+However, be careful when updating the Security Group: if you currently use Kubernetes services with NodePorts, need SSH access, or need ICMP access, you must add a rule to allow this traffic.
+
+## Is Kosmos compatible with Private Networks?
+
+Only Kapsule can use a Private Network.
+Kosmos uses Kilo as a CNI, which uses Wireguard to create a VPN Mesh between nodes for communication between pods. Any node in Kosmos, either in Scaleway or outside, uses these VPN tunnels to communicate securely by construct.
+
+## What future options will there be for isolation?
+
+We are currently at the first phase of an isolated Kubernetes infrastructure. In the future, additional features are planned, such as:
+- compatibility with Scaleway Public Gateways, to be used as a single exit point for the cluster
+- extended VPC integration of Kubernetes Kapsule, with support of Multi-AZ features.
+- Isolation of the control plane on top of your worker nodes
+
+## Will the control plane also be located inside the Private Network?
+Currently, only worker nodes are located in the Private Network of your cluster. The communication between the nodes and the control plane uses the Public IP of the node.
+
+## Which IP ranges are used for the Private Network of my cluster?
+We automatically assign a /22 IP subnet from a Private Network to your cluster.
+
+## Are Managed Databases compatible with Kubernetes Kapsule on Private Network?
+
+Yes they are.
+You will have to create a new endpoint on your Database Instance, specifiying an automated configuration of your Private Network with Scaleway IPAM service.
+You can find an example below:
+```bash
+curl --request POST \
+  --url https://api.scaleway.com/rdb/v1/regions/$REGION/instances/$INSTANCE_ID/endpoints \
+  --header "Content-Type: application/json" \
+  --header "X-Auth-Token: $SCW_TOKEN" \
+  --data '{
+	"endpoint_spec": {
+		"private_network": {
+			"ipam_config": {},
+			"private_network_id": "$PRIVATE_NETWORK_ID"
+		}
+	}
+}'
+```
+Please refer to the [Managed Database for PostgreSQL and MySQL API documentation](https://www.scaleway.com/en/developers/api/managed-database-postgre-mysql/#path-endpoints-create-a-new-database-instance-endpoint) for further information.
+
+<Message type="note">
+  * This action replaces your current endpoint, which means you might need to update any environment configurations that point to the old endpoint.
+  * This feature is not yet provided in the Scaleway console.
+</Message>
+
+## Are Managed Load Balancers compatible with Kubernetes Kapsule Private Networks?
+
+Managed Load Balancers support Private Networks with private backends and public frontends, meaning the traffic is forwarded to your worker nodes through your clusters' Private Network.
+<Message type="note">
+  If you have a trusted IP configured on your ingress controller, note that the request will come from a private IP.
+</Message>

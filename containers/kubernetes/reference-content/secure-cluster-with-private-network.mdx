@@ -93,6 +93,80 @@ Currently, only worker nodes are located in the Private Network of your cluster.
 ## Which IP ranges are used for the Private Network of my cluster?
 We automatically assign a /22 IP subnet from a Private Network to your cluster.
 
+## How can I access my cluster via my nodes' public IPs for specific use cases?
+
+Once you create a cluster in Kapsule, all nodes, particularly those with the Private Network feature enabled, are protected by a security group named `kubernetes-<cluster-id>`. Any changes made to this security group will be applicable to all nodes in the cluster.
+
+If you wish to allow access to the nodes through a public IP using a specific port/protocol, you can modify the security group after creating the cluster by following these steps:
+
+### From the Scaleway console
+1. Go to the [Instances section](https://console.scaleway.com/instance/servers) of the Scaleway console.
+2. Click the **Security Groups** tab. A list of your existing security groups displays.
+3. Click the name of the security group that is configured for your Instance, which is named `kubernetes-<cluster-id>`.
+4. Click the **Rules** tab. A list of rules configured for this group displays.
+5. Click <Icon name="edit" /> to edit the security group rules.
+6. Click **Add inbound route** to configure a new rule and customize it according to your requirements.
+7. Apply your custom rules by clicking <Icon name="validate" />.
+
+### Using Terraform
+If you are using Terraform to create your cluster, you can create a security group resource after creating the cluster resource and before creating the pool resource.  
+You can find a Terraform configuration example below:
+  ```json
+  data "scaleway_k8s_version" "latest" {
+  name = "latest"
+  }
+
+  resource "scaleway_vpc_private_network" "kapsule" {
+    name = "pn_kapsule"
+    tags = ["kapsule"]
+  }
+
+  resource "scaleway_k8s_cluster" "kapsule" {
+    name                        = "open-pn-test"
+    version                     = data.scaleway_k8s_version.latest.name
+    cni                         = "cilium"
+    private_network_id          = scaleway_vpc_private_network.kapsule.id
+    delete_additional_resources = true
+    depends_on                  = [scaleway_vpc_private_network.kapsule]
+  }
+
+  resource "scaleway_instance_security_group" "kapsule" {
+    name                    = "kubernetes ${split("/", scaleway_k8s_cluster.kapsule.id)[1]}"
+    inbound_default_policy  = "drop"
+    outbound_default_policy = "accept"
+    stateful                = true
+    inbound_rule {
+      action   = "accept"
+      protocol = "UDP"
+      port     = "500"
+    }
+    depends_on              = [scaleway_k8s_cluster.kapsule]
+  }
+
+  resource "scaleway_k8s_pool" "default" {
+    cluster_id          = scaleway_k8s_cluster.kapsule.id
+    name                = "default"
+    node_type           = "DEV1-M"
+    size                = 1
+    autohealing         = true
+    wait_for_pool_ready = true
+    depends_on          = [scaleway_instance_security_group.kapsule]
+  }
+
+  resource "scaleway_rdb_instance" "main" {
+    name           = "pn-rdb"
+    node_type      = "DB-DEV-S"
+    engine         = "PostgreSQL-14"
+    is_ha_cluster  = true
+    disable_backup = true
+    user_name      = "username"
+    password       = "thiZ_is_v&ry_s3cret" # Obviously change password here or generate one at runtime through null_resource and display it via output.
+    private_network {
+      pn_id = scaleway_vpc_private_network.kapsule.id
+    }
+  }
+  ```
+
 ## Are Managed Databases compatible with Kubernetes Kapsule on Private Network?
 
 Yes they are.

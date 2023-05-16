@@ -9,7 +9,7 @@ categories:
   - compute
 tags: compute communication messaging Mattermost Slack
 dates:
-  validation: 2022-11-08
+  validation: 2023-05-15
   posted: 2019-01-22
 ---
 
@@ -20,133 +20,39 @@ dates:
 <Message type="requirement">
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key)
+  - You have a [Managed Database for PostgreSQL](/managed-databases/postgresql-and-mysql/quickstart/)
   -  You have [created an Instance](/compute/instances/how-to/create-an-instance) that runs Ubuntu Bionic 20.04 or later
 </Message>
 
-## Setting up MariaDB
-
-1. [Connect to your instance](/compute/instances/how-to/connect-to-instance/) via SSH.
-2. Update the APT packet cache and the software already installed on the instance.
-    ```
-    apt update && apt upgrade -y
-    ```
-3. Install the [MariaDB database server](/tutorials/mariadb-ubuntu-bionic).
-    ```
-    apt install mariadb-server
-    ```
-4. Launch the database server.
-    ```
-    mysql_secure_installation
-    ```
-5. Log in to mysql as root:
-    ```
-    mysql -u root -p
-    ```
-6. Create a database for Mattermost:
-    ```
-    create user 'mattermost'@'localhost' identified by 'a-secure-password';
-    ```
-    <Message type="important">
-      Replace `a-secure-password` with a [strong password](https://strongpasswordgenerator.com/), as it will be used to login to MariaDB
-    </Message>
-7. Create a database for Mattermost whilst being logged into the MariaDB shell:
-    ```
-    create database mattermost;
-    ```
-8. Grant access privileges to the user _mattermost_.
-    ```
-    grant all privileges on mattermost.* to 'mattermost'@'localhost';
-    ```
-9. Exit the MariaDB shell.
-    ```
-    exit
-    ```
-
 ## Installing Mattermost
 
-1. Download the [latest version](https://mattermost.com/deploy/) of the Mattermost server to your instance.
+1. Add the Mattermost Server PPA repository to your system by running the following command:
     ```
-    wget https://releases.mattermost.com/7.4.0/mattermost-7.4.0-linux-amd64.tar.gz
+    curl -o- https://deb.packages.mattermost.com/repo-setup.sh | sudo bash -s mattermost
     ```
-2. Extract the Mattermost server files.
+2. Update the `apt` packet manager to use the newly installed repository:
     ```
-    tar -xvzf mattermost*.gz
+    apt update
     ```
-3. Move the extracted files to the **/opt** directory.
+3. Install Mattermost using `apt`:
     ```
-    mv mattermost /opt
-    ```
-4. Create the storage directory for Mattermost.
-    ```
-    mkdir /opt/mattermost/data
-    ```
-    <Message type="important">
-      This directory will contain all data sent to your Mattermost instance (Messages, Images, Files etc.). Make sure that it has enough space available for the anticipated number of contents sent to your instance.
-    </Message>
-5. Set up a system user and group to be in charge of running the service and set the ownership and permissions as following:
-    - Create a system user and group called _mattermost_:
-
-    ```
-    useradd --system --user-group mattermost
+    apt install mattermost -y
     ```
 
-    - Set the ownership of the Mattermost files to the previously created user and group:
+4. Edit the configuration file. A sample configuration file is located at `/opt/mattermost/config/config.defaults.json`. Rename this configuration file with correct permissions:
+    ```
+    sudo install -C -m 600 -o mattermost -g mattermost /opt/mattermost/config/config.defaults.json /opt/mattermost/config/config.json
+    ```
+    Configure the following properties in this file using your favourite text editor:
 
-    ```
-    chown -R mattermost:mattermost /opt/mattermost
-    ```
+    * Set `DriverName` to `"postgres"`. PostgreSQL is the default and recommended database for all Mattermost installations.
+    * Set `DataSource` to `"postgres://mmuser:<mmuser-password>@<host-name-or-IP>:5432/mattermost?sslmode=disable&connect_timeout=10"` replacing `mmuser`, `<mmuser-password>`, `<host-name-or-IP>` and `mattermost` with your database name.
+    * Set `"SiteURL"`: The domain name for the Mattermost application (e.g. `https://mattermost.example.com`).
 
-    - Give write permissions to the _mattermost_ group.
-
+    Save the file and exit the text editor.
+5. Start the Mattermost server.
     ```
-    chmod -R g+w /opt/mattermost
-    ```
-6. Open the file `/opt/mattermost/config/config.json` with your favorite text editor and edit the database settings as following.
-    - Set the `"DriverName"` to `mysql`
-    - Configure `"DataSource"` as following, replacing `<a-secret-password>` with the password you have set for your database.
-
-    ```
-    "mattermost:<a-secret-password>@tcp(localhost:3306)/mattermost?charset=utf8mb4,utf8&readTimeout=30s&writeTimeout=30s"
-    ```
-7. Start the Mattermost server manually to check everything is working.
-    ```
-    sudo -u mattermost ./bin/mattermost
-    ```
-
-   During startup the database structure of Mattermost will be configured and you will see some log messages as well as a notice: `Server is listening on :8065`. This means your Mattermost server is now ready to be used. Stop the process by pushing **Control+C** on your keyboard.
-8. Open your favorite text editor and create the file `/lib/systemd/system/mattermost.service` with the following content to create a systemd script to run the application as-a-Service on your instance:
-    ```
-    [Unit]
-    Description=Mattermost
-    After=network.target
-    After=mysql.service
-    Requires=mysql.service
-
-    [Service]
-    Type=notify
-    ExecStart=/opt/mattermost/bin/mattermost
-    TimeoutStartSec=3600
-    Restart=always
-    RestartSec=10
-    WorkingDirectory=/opt/mattermost
-    User=mattermost
-    Group=mattermost
-    LimitNOFILE=49152
-
-    [Install]
-    WantedBy=mysql.service
-    ```
-9. Reload the systemd configuration.
-    ```
-    systemctl daemon-reload
-    ```
-10. Start the service.
-    ```
-    systemctl start mattermost.service
-    ```
-11. Enable the service to start Mattermost during the startup of the instance.
-    ```
-    systemctl enable mattermost.service
+    systemctl start mattermost
     ```
 
     You can now connect to your Mattermost server at `http://your_servers_ip:8065` and create your first user and do some initial configuration and setup.

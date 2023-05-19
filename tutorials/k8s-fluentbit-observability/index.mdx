@@ -1,0 +1,233 @@
+---
+meta:
+  title: Send Kapsule logs and metrics to the Observability Cockpit with FluentBit
+  description: In this tutorial you will learn to configure FluentBit on a Kapsule cluster to forward the containers logs and metrics to the Observability Cockpit and vizualize them in Grafana.
+content:
+  h1: Send Kapsule logs and metrics to the Observability Cockpit with FluentBit
+  paragraph: In this tutorial you will learn to configure FluentBit on a Kapsule cluster to forward the containers logs and metrics to the Observability Cockpit and vizualize them in Grafana.
+tags: fluentbit grafana kubernetes metrics logs
+categories:
+  - cockpit
+dates:
+  validation: 2023-05-20
+  posted: 2023-05-20
+---
+
+In this tutorial you will learn how to forward the applicative logs and the usage metrics of your [Kubernetes Kapsule](https://www.scaleway.com/en/kubernetes-kapsule/) containers into the [Observability Cockpit](https://www.scaleway.com/en/docs/observability/cockpit/quickstart/).
+
+This process will be done using [FluentBit](https://fluentbit.io/), a lightweight logs and metrics processor which acts as a gateway between containers and the Cockpit endpoints, when configured in a Kubernetes cluster.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [activated your Cockpit](/observability/cockpit/how-to/activate-cockpit/)
+  - You have [retrieved your Grafana credentials](/observability/cockpit/how-to/retrieve-grafana-credentials/)
+  - You have [created a Kapsule cluster](/containers/kubernetes/how-to/create-cluster/)
+  - [kubectl](/containers/kubernetes/how-to/connect-cluster-kubectl/) is working on your machine
+  - `helm`, the Kubernetes [package manager](https://helm.sh/), is installed on your local machine (version 3.2+)
+</Message>
+
+## Configuring the Fluent Bit service
+
+Fluent Bit will be installed as a Helm package configured to target your Kubernetes resources as inputs and your Observability cockpit as an output.
+
+As the installation will be done through Helm, add the Helm repository for Fluent Bit to your machine:
+
+```bash
+helm repo add fluent https://fluent.github.io/helm-charts
+helm repo update
+```
+
+Then, create a [values file for Helm](https://helm.sh/docs/chart_template_guide/values_files/) named `values.yaml` that we will use to configure Fluent Bit.
+
+In the `values.yaml` file, create a first section `config.service` to configure the Fluent Bit master process:
+
+```yaml
+config:
+  service: |
+    [SERVICE]
+        Flush                 1
+        Log_level             info
+        Daemon                off
+        Parsers_File          custom_parsers.conf
+        HTTP_Server           on
+        HTTP_Listen           0.0.0.0
+        HTTP_PORT             2020
+```
+
+- `Flush 1`: Collects logs every second.
+- `Log_level info`: Displays informational logs in the Fluent Bit pods.
+- `Daemon off`: Run Fluent Bit as the foreground process in its pods.
+- `Parsers_File custom_parsers.conf`: Loads additional log parsers that we will define later on.
+- `HTTP_Server on`: Enables Fluent Bit's built-in HTTP server.
+- `HTTP_Listen 0.0.0.0`: Listen on all interfaces exposed by your pod.
+- `HTTP_PORT 2020`: Listen to port 2020.
+
+<Message type="note">
+    Fluent Bit's HTTP server needs to be enabled in order to communicate with your Cockpit.
+</Message>
+
+## Configuring observability inputs
+
+We will configure Fluent Bit to retrieve the metrics (CPU, memory, disk usage...) from your Kubernetes nodes and the applicative logs from your running pods.
+
+In the `values.yaml` file, create a new section `config.inputs`:
+
+```yaml
+  inputs: |
+    [INPUT]
+        Name                  node_exporter_metrics
+        Tag                   node_metrics
+        Scrape_interval       2
+    [INPUT]
+        Name                  tail
+        Path                  /var/log/containers/*.log
+        Parser                docker
+        Tag                   logs.*
+```
+
+The first subsection adds an input to Fluent Bit to retrieve the usage metrics from your containers:
+- `Name node_exporter_metrics`: This input plugin is used to collect various system-level metrics from your nodes.
+- `Tag node_metrics`: The `Tag` parameter assigns a tag to the incoming data from the `node_exporter_metrics` plugin. In this case, the tag `node_metrics` is assigned to the collected metrics.
+- `Scrape_interval 2`: Metrics are collected every 2 seconds.
+
+The second subsection adds an input to Fluent Bit to retrieve the logs from your containers:
+- `Name tail`: The tail input plugin is used to read logs from files.
+- `Path /var/log/containers/*.log`: The tail plugin read logs from `/var/log/containers/*.log` which are the log dumps from your containers.
+- `Parser docker`: The `Parser` parameter specifies the parser to be used for parsing log records. The `docker` parser is a custom parser that will be defined below.
+- `Tag logs.*`: The `Tag` parameter assigns a tag to the incoming data from the tail plugin. The tag "logs.*" indicates that the collected logs will have a tag prefix of "logs" followed by any additional subtag.
+
+## Configuring logs processing
+
+The inputs collected by Fluent Bit should be structured before sending them to the Cockpit to enable further filtering and better visualisation.
+
+Following the `input` section, create a `config.customParsers` section to define the `docker` parser which is referenced by the log parsing input.
+
+```yaml
+  customParsers: |
+    [PARSER]
+        Name        docker
+        Format      json
+        Time_Key    time
+        Time_Format %Y-%m-%dT%H:%M:%S.%L
+```
+
+This parser expects log records in JSON format. It assumes that the timestamp information is located under the key "time" in the JSON log record, and the timestamp format is in ISO 8601 date format.
+
+Define a section named `config.filters` in order to filter incoming log files from the containers.
+
+```yaml
+  filters: |
+    [FILTER]
+        Name                  kubernetes
+        Match                 logs.*
+        Merge_Log             on
+        Keep_Log              off
+        K8S-Logging.Parser    on
+        K8S-Logging.Exclude   on
+```
+
+This sets up a filter plugin which will be applied to log records with tags starting with `logs.`. It enables log merging, extracts and parses Kubernetes log metadata, and allows log exclusion based on Kubernetes log metadata filters.
+
+Define a section named `config.extraFiles.'labelmap.json'`:
+
+```yaml
+  extraFiles:
+    labelmap.json: |
+      {
+        "kubernetes": {
+        "container_name": "container",
+        "host": "node",
+        "labels": {
+          "app": "app",
+          "release": "release"
+        },
+        "namespace_name": "namespace",
+        "pod_name": "instance"
+        },
+        "stream": "stream"
+      }
+```
+
+This defines a map for various Kubernetes labels and metadata to specific Fluent Bit field names in order to parse and structure the logs.
+
+## Configuring observability outputs
+
+The last step in the Fluent Bit configuration is to define where the logs and metrics will be pushed.
+
+First, generate a Cockpit token:
+1. Go to your Cockpit in the **API and Tokens tab**.
+2. Navigate to the **Token section** and click on **Generate a token**.
+3. Choose both Push permissions for metrics and logs.
+
+<Lightbox src="scaleway-cockpit-token-permissions.webp" alt="" />
+
+In the `values.yaml` file, create a section named `config.outputs`:
+
+```yaml
+  outputs: |
+    [OUTPUT]
+        Name                  prometheus_remote_write
+        Match                 node_metrics
+        Host                  <...>
+        Port                  443
+        Uri                   /api/v1/push
+        Header                Authorization Bearer <...>
+        Log_response_payload  false
+        Tls                   on
+        Tls.verify            on
+        Add_label             job kapsule-metrics
+    [OUTPUT]
+        Match                 logs.*
+        Name                  loki
+        Host                  <...>
+        Port                  443
+        Tls                   on
+        Tls.verify            on
+        Label_map_path        /fluent-bit/etc/labelmap.json
+        Auto_kubernetes_labels on
+        Http_user             nologin
+        Http_passwd           <...>
+```
+
+Fill the blanks as follows:
+1. `Host` from the first subsection: paste your Metrics API URL defined in the **API and Tokens tab** section from the Cockpit. Remove the `https://` protocol.
+2. `Header`: Next to `Bearer`, paste the token generated in the previous step.
+3. `Host` from the second subsection: paste your Logs API URL defined in the **API and Tokens tab** section from the Cockpit. Remove the `https://` protocol.
+4. `Http_passwd`: paste the token generated in the previous step.
+
+In the first subsection, the `prometheus_remote_write` plugin is used to send metrics to the [Prometheus](https://prometheus.io/) server of your Cockpit using the remote write protocol.
+In the second subsection, the `loki` plugin is used to send logs to the [Loki](https://grafana.com/oss/loki/) server of your Cockpit, using the field mapping from `labelmap.json` defined above.
+
+## Installing Fluent Bit
+
+In the same directory as your `values.yaml` file, run:
+
+```
+helm upgrade --install fluent-bit fluent/fluent-bit -f .\values.yaml
+```
+
+Fluent Bit has been installed in your Kapsule cluster. You should see a `DeamonSet` named `fluent-bit` with running pods on all of your nodes.
+
+## Visualizing Kapsule logs and metrics
+
+Logs and metrics from your Kubernetes cluster can now be found in your Cockpit's dashboard
+
+### Exploring metrics
+
+Grafana has a built-in dashboard for visualizing node metrics.
+1. Go to **Dashboards** in your Grafana instance
+2. Click on **New**, **Folder** and name it `Kapsule`
+3. Click on **New**, **Import** and paste the following URL in the **Import via grafana.com** field:
+    ```
+    https://grafana.com/grafana/dashboards/405-node-exporter-server-metrics/
+    ```
+4. After clicking **Load** you can access the new dashboard named **Node Exporter Server Metrics**.
+
+<Lightbox src="grafana-node-exporter-dashboard.webp" alt="" />
+
+### Exploring logs
+
+Your Kapsule logs index can be queried in the **Explore** section of your Cockpit's dashboard. In the data source selector, pick the **Logs** index. The Kubernetes labels are already mapped and can be used as filters in queries.
+

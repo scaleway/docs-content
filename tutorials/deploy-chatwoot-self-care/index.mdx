@@ -1,0 +1,135 @@
+---
+meta:
+  title: Deploying Chatwoot on Scaleway Production-Optimized Instances
+  description: How to deploy Chatwoot on Scaleway Production-Optimized Instances
+content:
+  h1: Deploying Chatwoot on Scaleway Production-Optimized Instances
+  paragraph: How to deploy Chatwoot on Scaleway Production-Optimized Instances
+tags: compute instances chatwoot customer self care self-care crm
+categories:
+  - compute
+  - instances
+dates:
+  validation: 2023-05-16
+  posted: 2023-05-16
+---
+
+Chatwoot is an open-source customer communication platform that enables businesses to engage with their customers through various communication channels such as live chat, email, and social media. It provides a centralized inbox for managing customer conversations, allowing businesses to respond to customer queries and support requests in a unified and efficient manner.
+
+With Chatwoot, businesses can set up multiple communication channels, integrate them into their websites or applications, and engage with customers in real-time. It offers features like conversation routing, canned responses, tagging, and team collaboration, which help streamline customer support processes and improve response times.
+
+As an open-source platform, Chatwoot allows businesses to customize and extend its functionality according to their specific requirements. The source code is freely available, empowering businesses to modify and adapt the software to suit their needs. This makes Chatwoot a flexible and cost-effective solution for companies looking to implement a customer communication system.
+
+Chatwoot is designed to enhance customer satisfaction and improve customer support efficiency by providing businesses with the tools they need to manage and track customer conversations across multiple channels in a single platform.
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key)
+  - You have [created a Production-Optimized Instance](/compute/instances/how-to/create-an-instance/) with at least 8GB RAM and 25GB Block Storage, running on Ubuntu 20.04 LTS
+  - You have [installed Ruby 3.2.2](/en/docs/tutorials/ruby-on-rails/) on the Instance
+  - You have a (sub-)domain pointed to the Instance's IP address
+</Message>
+
+1. [Log into your Instance using SSH](/compute/instances/how-to/connect-to-instance/).
+2. Update the `apt` package cache and upgrade the software already installed on the Instance to the latest version available in the distribution repositories.
+    ```
+    apt update && apy upgrade -y
+    ```
+3. Download the Chatwoot installation script and make it executable:
+    ```bsh
+    wget https://get.chatwoot.app/linux/install.sh
+    chmod +x install.sh
+    ```
+4. Check the version of Ruby installed on your Instance. Chatwoot requires Ruby 3.2.2.
+    ```bsh
+    ruby -v
+    ruby 3.2.2 (2023-03-30 revision e51014f9c0) [x86_64-linux]
+    ```
+    <Message type="tip">
+      If you are not using Ruby 3.2.2, you have to install it to avoid the installation failing. You can install it, using `rbenv`:
+      ```
+      rbenv install 3.2.2 #Installs Ruby 3.2.2
+      rbenv global 3.2.2 #Configures Ruby 3.2.2 to be used system-wide
+      ```
+    </Message>
+5. Run the Chatwoot installation script:
+    ```bsh
+    ./install.sh --install
+    ````
+    * The script asks you if you want to configure Chatwoot with a domain and SSL. Type `yes` and press enter.
+    * Type the domain name for Chatwoot (e.g. `chatwoot.domain.com`) and press enter.
+    * Type an email address for LetsEncrypt to send reminders when your SSL certificate is up for renewal and press enter.
+    * Confirm your choices by typing `yes` and press enter. 
+    * Type `yes` to install Postgres and Redis as database engines used by Chatwoot and press enter.
+    * The installation script will install the required dependencies, databases and Chatwoot.
+    * Once the installation has completed, the following message displays:
+        ```
+        ***************************************************************************
+        Woot! Woot!! Chatwoot server installation is complete.
+        The server will be accessible at https://chatwoot.domain.com
+
+        Join the community at https://chatwoot.com/community?utm_source=cwctl
+        ***************************************************************************
+        ```
+
+6. Point your web browser to the domain name of your Chatwoot Instance and create a first user by entering your email address and a password.
+7. Log into Chatwoot using your credentials. The Chatwoot dashboard displays and you can customize the application towards your needs.
+    <Lightbox src="scaleway-chatwoot-dashboard.webp" size="medium" alt="" />
+
+## Upgrading Chatwoot to a newer version
+
+Whenever a newer version of Chatwoot is released, you can upgrade your installation to stay up-to-date with the latest development and features added.
+
+1. [Log into your Instance as root using SSH](/compute/instances/how-to/connect-to-instance/).
+
+2. From the root login, change into Chatwoot user account to perform the upgrade.
+    ```bsh
+    sudo -i -u chatwoot
+    ```
+
+3. Navigate to the Chatwoot application directory.
+    ```bsh
+    cd /home/chatwoot/chatwoot
+    ```
+
+4. Use Git to pull the latest version of Chatwoot's master branch.
+    ```bsh
+    git checkout master && git pull
+    ```
+
+5. Update the required dependencies.
+    ```bsh
+    bundle
+    yarn
+    ```
+
+6. Use `rake` to recompile the assets.
+    ```bsh
+    rake assets:precompile RAILS_ENV=production
+    ```
+
+7. Migrate the database schema.
+    ```bsh
+    RAILS_ENV=production bundle exec rake db:migrate
+    ```
+8. Switch back to the `root` user account
+    ```bsh
+    exit
+    ```
+9. Copy the updated targets.
+    ```bsh
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-web.1.service /etc/systemd/system/chatwoot-web.1.service
+    cp /home/chatwoot/chatwoot/deployment/chatwoot-worker.1.service /etc/systemd/system/chatwoot-worker.1.service
+    cp /home/chatwoot/chatwoot/deployment/chatwoot.target /etc/systemd/system/chatwoot.target
+    ```
+
+10. Reload the `systemd` files.
+    ```bsh
+    systemctl daemon-reload
+    ```
+11. Restart the Chatwoot server to run the upgraded version.
+    ```bsh
+    systemctl restart chatwoot.target
+    ```
+
+You have now successfully installed Chatwoot on your Instance and have learned how to upgrade it to the latest version once there is a new release of the application. For more information about Chatwoot, refer to the official [Chatwoot User Guide](https://www.chatwoot.com/docs/product).

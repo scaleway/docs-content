@@ -63,7 +63,7 @@ Private Networks are LAN-like layer 2 ethernet networks. A new network interface
 
 ## How to configure the Private Network interface on your Instances
 
-Once you have added all the required Instances to a Private Network, you should configure the virtual network interface on each one.
+Once you have added all the required Instances to a Private Network, you should configure the virtual network interface on each one. It is also necessary to turn off the automatic DHCP scripts found on the Instance for the Scaleway Public Gateway, so that they do not conflict with the manual configuration we are creating. These steps are explained below.
 
 <Message type="note">
   While it is theoretically possible to use any IP range within your Private Network, it is not recommended to use any IP subnets that are publicly routed. Whilst the configuration may work for your Instances to communicate with each other, you might experience connectivity issues to machines on the public Internet within these ranges. 
@@ -75,7 +75,32 @@ Once you have added all the required Instances to a Private Network, you should 
 </Message> 
 
 1. Connect to the Instance using [SSH](/compute/instances/how-to/connect-to-instance/).
-2. Find the virtual interface corresponding to the Private Network using the `ip link show` command: 
+2. Delete the file `/lib/udev/rules.d/72-scw-vpc-iface.rules` to disable the automatic DHCP scripts:
+    ```bash
+    rm /lib/udev/rules.d/72-scw-vpc-iface.rules
+    ```
+
+    <Message type="tip">
+    If a Private Network was previous plugged into this Instance, you also need to delete the following files, according to your distribution:
+    <Tabs id="cleanup-pns">
+      <TabsTab label="Ubuntu (netplan)">
+        <br />
+        `/etc/netplan/60-*-vpc.yaml`
+      </TabsTab>
+
+      <TabsTab label="Debian (ifupdon)">
+        <br />
+        `/etc/network/interfaces.d/60-*-vpc`
+      </TabsTab>
+
+      <TabsTab label="Red Hat-based (networkmanager)">
+        <br />
+        `/etc/sysconfig/network-scripts/ifcfg-*` (excluding any for `ens2` or `eth0`)
+      </TabsTab>
+    </Tabs>
+    </Message>
+
+3. Find the virtual interface corresponding to the Private Network using the `ip link show` command: 
     ```sh
     root@virtual-instance:~# ip link show
     1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
@@ -90,13 +115,13 @@ Once you have added all the required Instances to a Private Network, you should 
     <Message type="note">
       The network interface names may be different, depending on the operating system and the release you use.
     </Message> 
-3. For convenience, give a more significant name (e.g. `priv0`) to the Private Network interface. Configure the new interface name as follows:
+4. For convenience, give a more significant name (e.g. `priv0`) to the Private Network interface. Configure the new interface name as follows:
     ```sh
     root@virtual-instance:~# ip link set down dev ens5
     root@virtual-instance:~# ip link set name priv0 dev ens5
     root@virtual-instance:~# ip link set up dev priv0
     ```
-4. Make these changes persistent at reboot to ensure the Private Networks interface always gets the same name based on its MAC address. This is done by adding the following rule to the `/etc/udev/rules.d/75-persistent-net-generator.rules` file:
+5. Make these changes persistent at reboot to ensure the Private Networks interface always gets the same name based on its MAC address. This is done by adding the following rule to the `/etc/udev/rules.d/75-persistent-net-generator.rules` file:
     ```sh
     SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="02:00:00:00:1a:ae", NAME="priv0"
     ```

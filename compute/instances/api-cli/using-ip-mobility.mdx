@@ -1,0 +1,610 @@
+---
+meta:
+  title: Using IP Mobility with the Scaleway API
+  description: This page explains how to use IP Mobility with Scaleway API
+content:
+  h1: Using IP Mobility with the Scaleway API
+  paragraph: This page explains how to use IP Mobility with Scaleway API
+tags: ip mobility cloud scaleway-api migration ip-mobility
+dates:
+  validation: 2023-05-17
+  posted: 2023-05-17
+categories:
+  - compute
+---
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway Console](https://console.scaleway.com/)
+  - You have generated your [API key](/identity-and-access-management/iam/how-to/create-api-keys/)
+</Message>
+
+## IP Mobility - Overview
+
+During the deployment of an Instance, a private IP address linked to the underlying node hosting the Instance is assigned to it. If the underlying physical node changes, the private IP address will also change accordingly.
+
+This change can occur when you stop and restart your Instance. This private network enables communication between Instances without the need for a public IP address.
+In addition, the public network is provided by a network component that manages a carrier-grade NAT (Network Address Translation), establishing a one-to-one mapping between the flexible IP and the private IP assigned to the Instance during provisioning.
+
+With IP Mobility, private IPs are no longer in use. Instead, traffic is routed directly to the flexible IP of the Instance. The main advantage of this approach is that your underlying IP remains unchanged when you stop and start the Instance or when it gets provisioned on another hypervisor. However, it also means that it will not have network access if you do not attach any flexible IP to your Instance.
+Another feature of IP Mobility is the ability to assign multiple flexible IP addresses to your Instance, allowing you to choose between IPv4 and IPv6 protocols.
+
+<Message type="note">
+   * Currently, IP Mobility is available in the `pl-waw-2` Availability Zone.
+   * [Dynamic IPs](/compute/instances/concepts/#dynamic-ip) are continue to be supported after migration to IP Mobility.
+</Message>
+
+## How to enable IP Mobility?
+
+<Message type="note">
+  Currently, IP Mobility is disabled by default. If you're interested in exploring its functionality, you need to explicitly enable it.
+</Message>
+
+In this section, we will guide you through the process of creating a new IP Mobility-enabled Instance. We will also provide instructions on migrating your existing legacy Instances.
+
+ * The following examples rely on [httpie](https://httpie.io/cli), you can easily adapt them with curl if you prefer.
+ * The `API_URL` variable contains the following value: https://api.scaleway.com/instance/v1/zones/pl-waw-2
+ * The `HEADERS` variable contains: `X-Auth-Token :<API secret key>`
+
+<Message type="important">
+    Keep in mind that once the migration to IP Mobility is complete, there is **no way to revert back**.
+</Message>
+
+## Creating an IP Mobility IP
+
+You can request IP Mobility compatible IP addresses using the Scaleway API. Available IP types are IPv4 and IPv6.
+
+<Tabs id="create-ip">
+    <TabsTab label="Request">
+        ```json
+        ❯ cat payloads/ip-data.json
+        {
+            "type": "routed_ipv4",
+            "project": "7ddae24a-ad61-4744-830c-079d1c66abe1"
+        }
+
+        ❯ http post $API_URL/ips $HEADERS <payloads/ip-data.json
+        ```
+        <Message type="tip">
+            If you want an IPv6 address instead, replace the type `routed_ipv4` with `routed_ipv6`.
+        </Message>
+    </TabsTab>
+    <TabsTab label="Response">
+        ```json
+        {
+            "ip": {
+                "address": "51.158.51.51",
+                "id": "01ac2664-699e-46b5-80be-9d43d477857f",
+                "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "prefix": null,
+                "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "reverse": null,
+                "server": null,
+                "state": "detached",
+                "tags": [],
+                "type": "routed_ipv4",
+                "zone": "pl-waw-2"
+            }
+        }
+        ```
+    </TabsTab>
+</Tabs>
+
+## Create a new Instance with IP Mobility
+
+Run the following command to create an Instance with the previously created IP address.
+
+<Tabs id="create-instance">
+    <TabsTab label="Request">
+        ```json
+        ❯ cat payloads/server-data.json
+        {
+            "name": "my-ipmobility-instance",
+            "commercial_type": "GP1-S",
+            "dynamic_ip_required": false,
+            "dynamic_ipv6_required": false,
+            "enable_ipv6": false,
+            "routed_ip_enabled": true,
+            "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+            "public_ip": "01ac2664-699e-46b5-80be-9d43d477857f",
+            "image": "2ce9f352-eed5-44e0-8bc2-a795f74aeb7a"
+        }
+
+        ❯ http post $API_URL/servers $HEADERS <payloads/server-data.json
+        ```
+        <Message type="tip">
+            In order to create a IP Mobility enabled Instance you have to add `"routed_ip_enabled": true` to your payload.
+        </Message>
+    </TabsTab>
+    <TabsTab label="Response">
+        ```json
+        {
+            "server": {
+                "allowed_actions": [
+                    "poweron",
+                    "backup"
+                ],
+                "arch": "x86_64",
+                "boot_type": "local",
+                "bootscript": {
+                    "architecture": "x86_64",
+                    "bootcmdargs": "LINUX_COMMON scaleway boot=local nbd.max_part=16",
+                    "default": true,
+                    "dtb": "",
+                    "id": "9246a9bb-896c-464c-b6bd-b7443cd72c23",
+                    "initrd": "http://10.195.3.9/initrd/initrd-Linux-x86_64-v3.14.6.gz",
+                    "kernel": "http://10.195.3.9/kernel/x86_64-mainline-lts-4.4-4.4.182-rev1/vmlinuz-4.4.182",
+                    "organization": "11111111-1111-4111-8111-111111111111",
+                    "project": "11111111-1111-4111-8111-111111111111",
+                    "public": true,
+                    "title": "x86_64 mainline 4.4.182 rev1",
+                    "zone": "pl-waw-2"
+                },
+                "commercial_type": "GP1-S",
+                "creation_date": "2023-02-05T21:30:31.779606+00:00",
+                "dynamic_ip_required": false,
+                "dynamic_ipv6_required": false,
+                "enable_ipv6": false,
+                "extra_networks": [],
+                "hostname": "my-ipmobility-instance",
+                "id": "7981f24a-1760-41b4-81ba-ec5d3868ccb4",
+                "image": {
+                    "arch": "x86_64",
+                    "creation_date": "2022-11-17T16:50:34.380145+00:00",
+                    "default_bootscript": null,
+                    "extra_volumes": {},
+                    "from_server": null,
+                    "id": "eb40f656-1923-49b6-bb1d-53fe3a7329a0",
+                    "modification_date": "2022-11-17T16:50:34.380145+00:00",
+                    "name": "Ubuntu 22.04 Jammy Jellyfish",
+                    "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                    "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                    "public": true,
+                    "root_volume": {
+                        "id": "ccc917ca-8250-4b7b-89a9-614f08b17826",
+                        "name": "Ubuntu 22.04 Jammy Jellyfish",
+                        "size": 10000000000,
+                        "volume_type": "unified"
+                    },
+                    "state": "available",
+                    "tags": [],
+                    "zone": "pl-waw-2"
+                },
+                "ipv6": null,
+                "location": null,
+                "mac_address": "de:00:00:01:c2:37",
+                "maintenances": [],
+                "modification_date": "2023-02-05T21:30:31.779606+00:00",
+                "name": "my-ipmobility-instance",
+                "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "placement_group": null,
+                "private_ip": null,
+                "private_nics": [],
+                "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "protected": false,
+                "public_ip": {
+                    "address": "51.158.52.52",
+                    "dynamic": false,
+                    "family": "inet",
+                    "gateway": "62.210.0.1",
+                    "id": "92873598-d8e6-4d98-9254-697b3e56ff6b",
+                    "netmask": "32",
+                    "provisioning_mode": "dhcp"
+                },
+                "public_ips": [
+                    {
+                        "address": "51.158.52.52",
+                        "dynamic": false,
+                        "family": "inet",
+                        "gateway": "62.210.0.1",
+                        "id": "92873598-d8e6-4d98-9254-697b3e56ff6b",
+                        "netmask": "32",
+                        "provisioning_mode": "dhcp"
+                    }
+                ],
+                "routed_ip_enabled": true,
+                "security_group": {
+                    "id": "f4627d3b-d6f7-499d-924d-9bee71d191fa",
+                    "name": "Default security group"
+                },
+                "state": "stopped",
+                "state_detail": "",
+                "tags": [],
+                "volumes": {
+                    "0": {
+                        "boot": false,
+                        "creation_date": "2023-02-05T21:30:31.779606+00:00",
+                        "export_uri": null,
+                        "id": "7981f24a-1760-41b4-81ba-ec5d3868ccb4",
+                        "modification_date": "2023-02-05T21:30:31.779606+00:00",
+                        "name": "Ubuntu 22.04 Jammy Jellyfish",
+                        "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                        "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                        "server": {
+                            "id": "c7f2eb0f-7537-43b1-be95-736087f81b54",
+                            "name": "my-ipmobility-instance"
+                        },
+                        "size": 300000000000,
+                        "state": "available",
+                        "tags": [],
+                        "volume_type": "l_ssd",
+                        "zone": "pl-waw-2"
+                    }
+                },
+                "zone": "pl-waw-2"
+            }
+        }
+        ```
+    </TabsTab>
+</Tabs>
+
+## Migrating existing Instances to IP Mobility
+
+You can use a specific server action to migrate an existing (legacy network) Instance to IP Mobility.
+
+<Tabs id="migrate-instance">
+    <TabsTab label="Request">
+        ```json
+        ❯ cat payloads/migrate-data.json
+        {
+                    "action": "enable_routed_ip"
+        }
+
+        ❯ http post $API_URL/servers/$SERVER_ID/action $HEADERS <payload/migrate-data.json
+        ```
+        <Message type="note">
+            Your instance *will* reboot during this action.
+        </Message>
+    </TabsTab>
+    <TabsTab label="Response">
+        ```json
+        {
+            "task": {
+                "description": "server_enable_routed_ip",
+                "href_from": "/servers/534c2d3c-5ce2-49dd-b82e-77f6e4eb0587/action",
+                "href_result": "/servers/534c2d3c-5ce2-49dd-b82e-77f6e4eb0587",
+                "id": "879f8362-2ee7-4aac-8df4-9a6cd9fdf7c5",
+                "started_at": "2023-05-16T15:57:39.793534+00:00",
+                "status": "pending",
+                "terminated_at": null
+            }
+        }
+        ```
+    </TabsTab>
+</Tabs>
+
+## Verifying if an IP is routed or NAT type
+
+You can verify if your IP is a routed IP or a NAT IP through the `/ips` endpoint:
+
+<Tabs id="verify-ip">
+    <TabsTab label="Request">
+        ```json
+        ❯ http $API_URL/ips/201f52df-3c83-4eeb-aff4-038bb15f918d $HEADERS
+        ```
+    </TabsTab>
+    <TabsTab label="Response - NAT">
+        Response for an Instance with IP type **NAT**:
+        ```json
+        {
+            "ip": {
+                "address": "51.159.123.5",
+                "id": "201f52df-3c83-4eeb-aff4-038bb15f918d",
+                "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "prefix": null,
+                "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "reverse": null,
+                "server": {
+                    "id": "9515993f-f596-4b51-84e8-9e48f2d49eb8",
+                    "name": "cli-srv-youthful-cerf"
+                },
+                "state": "attached",
+                "tags": [],
+                "type": "nat",
+                "zone": "pl-waw-2"
+            }
+        }
+        ```
+    </TabsTab>
+    <TabsTab label="Response - IP Mobility">
+        In comparision to the previous response, an Instance with IP Mobility would have a different `type`:
+        ```json
+        {
+            "ip": {
+                "address": "51.158.38.9",
+                "id": "7a3f042d-6da4-42cd-b618-fae08348c8fe",
+                "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "prefix": null,
+                "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "reverse": null,
+                "server": null,
+                "state": "detached",
+                "tags": [],
+                "type": "routed_ipv4",
+                "zone": "pl-waw-2"
+            }
+        }
+        ```
+    </TabsTab>
+</Tabs>
+
+## Verifying if IP Mobility is enabled for your Instance
+
+You can verify if your server is IP Mobility enabled through the `/servers` endpoint:
+
+<Tabs id="create">
+    <TabsTab label="Request">
+        ```json
+        ❯ http $API_URL/servers/9515993f-f596-4b51-84e8-9e48f2d49eb8 $HEADERS
+        ```
+    </TabsTab>
+    <TabsTab label="Response - NAT">
+        Response for an Instance with IP type **NAT**:
+        ```json
+        {
+            "server": {
+                "allowed_actions": [
+                    "poweroff",
+                    "terminate",
+                    "reboot",
+                    "stop_in_place",
+                    "backup",
+                    "enable_routed_ip"
+                ],
+                "arch": "x86_64",
+                "boot_type": "local",
+                "bootscript": {
+                    "architecture": "x86_64",
+                    "bootcmdargs": "LINUX_COMMON scaleway boot=local nbd.max_part=16",
+                    "default": true,
+                    "dtb": "",
+                    "id": "9246a9bb-896c-464c-b6bd-b7443cd72c23",
+                    "initrd": "http://10.195.3.9/initrd/initrd-Linux-x86_64-v3.14.6.gz",
+                    "kernel": "http://10.195.3.9/kernel/x86_64-mainline-lts-4.4-4.4.182-rev1/vmlinuz-4.4.182",
+                    "organization": "11111111-1111-4111-8111-111111111111",
+                    "project": "11111111-1111-4111-8111-111111111111",
+                    "public": true,
+                    "title": "x86_64 mainline 4.4.182 rev1",
+                    "zone": "pl-waw-2"
+                },
+                "commercial_type": "POP2-2C-8G",
+                "creation_date": "2023-05-11T12:54:57.008745+00:00",
+                "dynamic_ip_required": true,
+                "enable_ipv6": false,
+                "extra_networks": [],
+                "hostname": "cli-srv-youthful-cerf",
+                "id": "9515993f-f596-4b51-84e8-9e48f2d49eb8",
+                "image": {
+                    "arch": "x86_64",
+                    "creation_date": "2023-04-25T12:13:53.502807+00:00",
+                    "default_bootscript": null,
+                    "extra_volumes": {},
+                    "from_server": null,
+                    "id": "182b1177-7828-46db-a688-55e2e2dfac8f",
+                    "modification_date": "2023-04-25T12:13:53.502807+00:00",
+                    "name": "Ubuntu 22.04 Jammy Jellyfish",
+                    "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                    "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                    "public": true,
+                    "root_volume": {
+                        "id": "72d9e5b6-60c6-499b-be03-03c9fb07daa3",
+                        "name": "Ubuntu 22.04 Jammy Jellyfish",
+                        "size": 10000000000,
+                        "volume_type": "unified"
+                    },
+                    "state": "available",
+                    "tags": [],
+                    "zone": "pl-waw-2"
+                },
+                "ipv6": null,
+                "location": {
+                    "cluster_id": "97",
+                    "hypervisor_id": "301",
+                    "node_id": "1",
+                    "platform_id": "50",
+                    "zone_id": "pl-waw-2"
+                },
+                "mac_address": "de:00:00:04:b8:89",
+                "maintenances": [],
+                "modification_date": "2023-05-11T13:57:30.645561+00:00",
+                "name": "cli-srv-youthful-cerf",
+                "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "placement_group": null,
+                "private_ip": "10.195.16.1",
+                "private_nics": [],
+                "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "protected": false,
+                "public_ip": {
+                    "address": "51.159.123.5",
+                    "dynamic": false,
+                    "family": "inet",
+                    "gateway": null,
+                    "id": "201f52df-3c83-4eeb-aff4-038bb15f918d",
+                    "netmask": "32",
+                    "provisioning_mode": "dhcp"
+                },
+                "public_ips": [
+                    {
+                        "address": "51.159.123.5",
+                        "dynamic": false,
+                        "family": "inet",
+                        "gateway": null,
+                        "id": "201f52df-3c83-4eeb-aff4-038bb15f918d",
+                        "netmask": "32",
+                        "provisioning_mode": "dhcp"
+                    }
+                ],
+                "routed_ip_enabled": false,
+                "security_group": {
+                    "id": "4867a63e-0021-42d0-8d31-b3c853f91c37",
+                    "name": "Default security group"
+                },
+                "state": "running",
+                "state_detail": "booted",
+                "tags": [],
+                "volumes": {
+                    "0": {
+                        "boot": false,
+                        "creation_date": "2023-05-11T12:54:57.008745+00:00",
+                        "export_uri": null,
+                        "id": "0afc1da9-d331-40b6-a7af-55af4cab1e22",
+                        "modification_date": "2023-05-11T12:54:57.008745+00:00",
+                        "name": "Ubuntu 22.04 Jammy Jellyfish",
+                        "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                        "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                        "server": {
+                            "id": "9515993f-f596-4b51-84e8-9e48f2d49eb8",
+                            "name": "cli-srv-youthful-cerf"
+                        },
+                        "size": 10000000000,
+                        "state": "available",
+                        "tags": [],
+                        "volume_type": "b_ssd",
+                        "zone": "pl-waw-2"
+                    }
+                },
+                "zone": "pl-waw-2"
+            }
+        }
+        ```
+    </TabsTab>
+    <TabsTab label="Response - IP Mobility">
+        In comparision to the previous response, an Instance with IP Mobility would have the `routed_ip_enabled` flag set to `true`:
+        ```json
+        {
+            "server": {
+                "allowed_actions": [
+                    "poweroff",
+                    "terminate",
+                    "reboot",
+                    "stop_in_place",
+                    "backup"
+                ],
+                "arch": "x86_64",
+                "boot_type": "local",
+                "bootscript": {
+                    "architecture": "x86_64",
+                    "bootcmdargs": "LINUX_COMMON scaleway boot=local nbd.max_part=16",
+                    "default": true,
+                    "dtb": "",
+                    "id": "9246a9bb-896c-464c-b6bd-b7443cd72c23",
+                    "initrd": "http://10.195.3.9/initrd/initrd-Linux-x86_64-v3.14.6.gz",
+                    "kernel": "http://10.195.3.9/kernel/x86_64-mainline-lts-4.4-4.4.182-rev1/vmlinuz-4.4.182",
+                    "organization": "11111111-1111-4111-8111-111111111111",
+                    "project": "11111111-1111-4111-8111-111111111111",
+                    "public": true,
+                    "title": "x86_64 mainline 4.4.182 rev1",
+                    "zone": "pl-waw-2"
+                },
+                "commercial_type": "GP1-S",
+                "creation_date": "2023-02-06T09:50:57.923789+00:00",
+                "dynamic_ip_required": false,
+                "enable_ipv6": false,
+                "extra_networks": [],
+                "hostname": "scw-ipmob-demo2",
+                "id": "aab4f033-2219-4937-b0e1-5b78c17f97bf",
+                "image": {
+                    "arch": "x86_64",
+                    "creation_date": "2022-11-17T16:50:34.380145+00:00",
+                    "default_bootscript": null,
+                    "extra_volumes": {},
+                    "from_server": null,
+                    "id": "eb40f656-1923-49b6-bb1d-53fe3a7329a0",
+                    "modification_date": "2022-11-17T16:50:34.380145+00:00",
+                    "name": "Ubuntu 22.04 Jammy Jellyfish",
+                    "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                    "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                    "public": true,
+                    "root_volume": {
+                        "id": "93dbf1e9-cd13-4f60-b427-6fa6b2ad5f99",
+                        "name": "Ubuntu 22.04 Jammy Jellyfish",
+                        "size": 10000000000,
+                        "volume_type": "unified"
+                    },
+                    "state": "available",
+                    "tags": [],
+                    "zone": "pl-waw-2"
+                },
+                "ipv6": null,
+                "location": {
+                    "cluster_id": "1",
+                    "hypervisor_id": "201",
+                    "node_id": "5",
+                    "platform_id": "50",
+                    "zone_id": "pl-waw-2"
+                },
+                "mac_address": "de:00:00:01:c4:b7",
+                "maintenances": [],
+                "modification_date": "2023-02-24T14:12:38.456780+00:00",
+                "name": "scw-ipmob-demo2",
+                "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "placement_group": null,
+                "private_ip": null,
+                "private_nics": [],
+                "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                "protected": false,
+                "public_ip": {
+                    "address": "2001:bc8:4e10:6:dc00:00ff:dc00:1234",
+                    "dynamic": false,
+                    "family": "inet6",
+                    "gateway": "fe80::dc00:00ff:fe01:c4b8",
+                    "id": "e73c1b43-cd4b-4892-bd6f-fbd84a432a7b",
+                    "netmask": "64",
+                    "provisioning_mode": "slaac"
+                },
+                "public_ips": [
+                    {
+                        "address": "2001:bc8:4e10:6:dc00:00ff:dc00:1234",
+                        "dynamic": false,
+                        "family": "inet6",
+                        "gateway": "fe80::dc00:00ff:fe01:c4b8",
+                        "id": "e73c1b43-cd4b-4892-bd6f-fbd84a432a7b",
+                        "netmask": "64",
+                        "provisioning_mode": "slaac"
+                    },
+                    {
+                        "address": "51.159.123.86",
+                        "dynamic": false,
+                        "family": "inet",
+                        "gateway": "62.210.0.1",
+                        "id": "dd2ea413-d12b-44da-b3c8-2f0f4c4db242",
+                        "netmask": "32",
+                        "provisioning_mode": "dhcp"
+                    }
+                ],
+                "routed_ip_enabled": true,
+                "security_group": {
+                    "id": "4867a63e-0021-42d0-8d31-b3c853f91c37",
+                    "name": "Default security group"
+                },
+                "state": "running",
+                "state_detail": "booted",
+                "tags": [],
+                "volumes": {
+                    "0": {
+                        "boot": false,
+                        "creation_date": "2023-02-06T09:50:57.923789+00:00",
+                        "export_uri": null,
+                        "id": "bc44ee3a-dd25-459a-bbd5-b7e604e8f9cf",
+                        "modification_date": "2023-02-06T09:50:57.923789+00:00",
+                        "name": "Ubuntu 22.04 Jammy Jellyfish",
+                        "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                        "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
+                        "server": {
+                            "id": "aab4f033-2219-4937-b0e1-5b78c17f97bf",
+                            "name": "scw-ipmob-demo2"
+                        },
+                        "size": 300000000000,
+                        "state": "available",
+                        "tags": [],
+                        "volume_type": "l_ssd",
+                        "zone": "pl-waw-2"
+                    }
+                },
+                "zone": "pl-waw-2"
+            }
+        }
+        ```
+    </TabsTab>
+</Tabs>

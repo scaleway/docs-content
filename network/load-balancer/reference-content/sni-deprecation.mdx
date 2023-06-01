@@ -1,0 +1,185 @@
+---
+meta:
+  title: Deprecation of SNI routes with HTTP backends
+  description: Learn more about the deprecation of SNI routes with HTTP backends for Scaleway Load Balancers
+content:
+  h1: Deprecation of SNI routes with HTTP backends
+  paragraph: Learn more about the deprecation of SNI routes with HTTP backends for Scaleway Load Balancers
+tags: load-balancer sni http routes backend
+categories: 
+  - load-balancer
+  - network
+---
+
+## What's being deprecated
+
+We are removing the ability to create SNI based [routes](/network/load-balancer/how-to/create-manage-routes/) to HTTP backends in Scaleway Load Balancer:
+
+- SNI routes are still available and supported for TCP backends.
+- For HTTP backends, SNI routes are replaced with the new **HTTP Host header**-based routes.
+
+## Deprecation planning
+
+SNI routes with HTTP backends are **deprecated** from March 1st 2023. This means:
+
+- The feature will no longer be available via the Scaleway console: it will be impossible to create an SNI route to an HTTP backend.
+- The feature will still be available via the Scaleway API, CLI and Terraform interfaces. This is to avoid breaking changes with configuration automation tools.
+- The feature is still supported.
+
+SNI routes with HTTP backends are **removed** on June 1st 2023. This means:
+
+- The feature will no longer be available via the Scaleway console, nor from the API, CLI or Terraform interfaces.
+- Any existing and remaining SNI routes to an HTTP backend will be automatically converted to HTTP Host header routes.
+
+## Why are we deprecating this feature?
+
+SNI routes were originally introduced to enable routing with TCP backends when connections were encrypted with TLS. This enabled the forwarding of traffic to different backend server pools based on the "host" the client wanted to connect to.
+
+Since HTTPS relies on TLS, this feature also worked with HTTP backends, providing the SNI closely matched the HTTP Host header value. The problem came when clients started establishing long-living connections and connection reuse, which frequently happened with newer HTTP versions such as HTTP/2. SNI is only sent when initiating the TCP connection to the host (in our case, the Load Balancer). This is the moment when we identify the backend we need to forward the traffic to. As long as the TCP connection to the Load Balancer remains open, the SNI is not sent again and all subsequent requests will then follow the route that was established when the connection was initiated. 
+
+While this proves to be efficient since it avoids all the overhead related to TCP and TLS handshakes, it can be a problem when a client reuses the connection to send requests to a different host resolving to the same IP address. With the Load Balancer being a reverse proxy, this happens frequently. In such cases, the SNI (for the new host) is not sent again since the connection to the Load Balancer is already established, and the request gets forwarded to the original host based on the original SNI. This results in a request which arrives at a backend server that doesn't know how to process it.
+
+When using HTTP protocol to the backend servers, the best solution is then to terminate TLS at the Load Balancer, decrypt traffic, look at the HTTP host header value to select the appropriate backend, and then forward the request to selected backend with or without encryption based on your use case. Since the protocol to the backend is HTTP, the Load Balancer has access to all the HTTP protocol metadata. There is then no point to limiting it to TCP/TLS layer metadata. 
+
+This is why we have decided to remove the ability to create SNI based routes when the backend protocol is HTTP, and are now instead proposing HTTP Host header routes.
+
+## What's the impact?
+
+We do not expect this change to have an impact on your applications or services using Scaleway Load Balancer, since HTTP Host header routes will provide more accurate routing than SNI with HTTP backends.
+
+## Migration
+
+You can expect the following in terms of migration:
+
+### Before June 1st 2023
+  - No change to your Load Balancers and how they work, if you don't interact with them or change their configuration
+  - If you are creating new routes from the Scaleway console, you won't be able to create SNI routes with HTTP backend
+  - If you are editing a pre-existing SNI route to an HTTP backend from the console, the console will automatically convert it to an HTTP Host header route. You will not be able to change it back to an SNI route any more.
+  - If you are creating or editing routes from the API, the CLI or the Terraform interface, you will still be able to create SNI routes to HTTP backends along with HTTP host header routes. There will not be any breaking change
+
+### From June 1st 2023
+  - Scaleway will automatically convert all SNI routes to HTTP backends into HTTP Host header routes to these backends, with the same value for the HTTP Host header as the SNI. This configuration will be applied to your Load Balancer.
+  - You will not see any SNI routes on HTTP backends in the Scaleway console anymore. All such routes will be converted automatically on June 1st.
+  - You will only be able to create HTTP Host header routes (not SNI) to HTTP backends in the console.
+  - You will only be able to create HTTP Host header routes (not SNI) to HTTP backends via the API, the CLI or the Terraform interface.
+  - If your configuration automation system uses the API, the CLI or the Terraform provider to send configurations containing SNI routes to HTTP backends, it will receive an error from the Load Balancer and the configuration will not be applied.
+
+
+
+## Sample configurations
+
+Find below some sample configurations for HTTP Host header routes to HTTP backends. These should be used as a replacement for any old old SNI routes:
+
+<Tabs id="sample-route-config">
+  <TabsTab label="API">
+    **Route creation**
+
+    You are sending a POST request to `/lb/v1/zones/{zone}/routes`
+
+    Old payload code (assuming your backend protocol is HTTP):
+
+    ```json
+    {
+      "frontend_id": "your-frontend-id",
+      "backend_id": "your-backend-http-id",
+      "match": {
+        "sni": "www.company.com",
+      },
+    }
+    ```
+
+    Replacement payload code:
+
+    ```json
+    {
+      "frontend_id": "your-frontend-id",
+      "backend_id": "your-backend-http-id",
+      "match": {
+        "host_header": "www.company.com",
+      },
+    }
+    ```
+
+    **Route update**:
+
+    You are sending a PUT request to `/lb/v1/zones/{zone}/routes/{route_id}`:
+
+    Old payload code (assuming your backend protocol is HTTP):
+
+    ```json
+    {
+      "match": {
+        "sni": "www.company.com",
+      },
+    }
+    ```
+
+    Replacement payload code:
+
+    ```json
+    {
+      "match": {
+        "host_header": "www.company.com",
+      },
+    }
+    ```
+  </TabsTab>
+
+  <TabsTab label="CLI">
+    **Route creation**
+
+    **Route creation**:
+
+      Assuming you are creating a route to an HTTP backend and you used the following command:
+
+      ```bash
+      scw lb route create frontend-id=<your-frontend-id> backend-id=<your-http-backend-id> match.sni="www.company.com" zone=<your-lb-zone>
+      ```
+
+      ...you should now replace that command with the following one:
+
+      ```bash
+      scw lb route create frontend-id=<your-frontend-id> backend-id=<your-http-backend-id> match.host-header="www.company.com" zone=<your-lb-zone>
+      ```
+
+      **Route update**:
+
+      Assuming you are updating a route to an HTTP backend and you used the following command:
+
+      ```bash
+      scw lb route update route-id=<your-route-id> match.sni="www.company.com" zone=<your-lb-zone>
+      ```
+
+      ...you should now replace that command with the following one:
+
+      ```bash
+      scw lb route update route-id=<your-route-id> match.host-header="www.company.com" zone=<your-lb-zone>
+      ```
+  </TabsTab>
+
+  <TabsTab label="Terraform">
+    Assuming you are managing a route resource to a backend using HTTP protocol with the following resource definition:
+
+        ```bash
+        resource "scaleway_lb_route" "rt01" {
+          frontend_id = <your-frontend-id>
+          backend_id  = <your-http-backend-id>
+          match_sni   = "www.company.com"
+        }
+        ```
+
+      ...you should now declare your resource in the following way:
+
+      ```bash
+      resource "scaleway_lb_route" "rt01" {
+        frontend_id = <your-frontend-id>
+        backend_id  = <your-http-backend-id>
+       match_host_header   = "www.company.com"
+      }
+      ```
+  </TabsTab>
+</Tabs>
+
+<Message type="tip">
+If you experience any problems, please do not hesitate to [open a support ticket](/console/my-account/how-to/open-a-support-ticket/) or speak to us on the `#load-balancer` channel of our [Slack Community](/tutorials/scaleway-slack-community/)
+</Message>

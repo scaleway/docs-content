@@ -1,21 +1,22 @@
 ---
 meta:
-  title: Send Kapsule logs and metrics to the Observability Cockpit with FluentBit
-  description: In this tutorial you will learn to configure FluentBit on a Kapsule cluster to forward the containers logs and metrics to the Observability Cockpit and vizualize them in Grafana.
+  title: Send Kapsule logs and metrics to the Observability Cockpit with Fluent Bit
+  description: In this tutorial you will learn to configure Fluent Bit on a Kapsule cluster to forward the containers logs and metrics to the Observability Cockpit and vizualize them in Grafana.
 content:
-  h1: Send Kapsule logs and metrics to the Observability Cockpit with FluentBit
-  paragraph: In this tutorial you will learn to configure FluentBit on a Kapsule cluster to forward the containers logs and metrics to the Observability Cockpit and vizualize them in Grafana.
+  h1: Send Kapsule logs and metrics to the Observability Cockpit with Fluent Bit
+  paragraph: In this tutorial you will learn to configure Fluent Bit on a Kapsule cluster to forward the containers logs and metrics to the Observability Cockpit and vizualize them in Grafana.
 tags: fluentbit grafana kubernetes metrics logs
 categories:
+  - observability
   - cockpit
 dates:
-  validation: 2023-05-20
-  posted: 2023-05-20
+  validation: 2023-06-01
+  posted: 2023-06-01
 ---
 
 In this tutorial you will learn how to forward the applicative logs and the usage metrics of your [Kubernetes Kapsule](https://www.scaleway.com/en/kubernetes-kapsule/) containers into the [Observability Cockpit](https://www.scaleway.com/en/docs/observability/cockpit/quickstart/).
 
-This process will be done using [FluentBit](https://fluentbit.io/), a lightweight logs and metrics processor which acts as a gateway between containers and the Cockpit endpoints, when configured in a Kubernetes cluster.
+This process will be done using [Fluent Bit](https://fluentbit.io/), a lightweight logs and metrics processor which acts as a gateway between containers and the Cockpit endpoints, when configured in a Kubernetes cluster.
 
 <Macro id="iam-requirements" />
 
@@ -34,27 +35,26 @@ Fluent Bit will be installed as a Helm package configured to target your Kuberne
 
 1. Add the Helm repository for Fluent Bit to your machine:
 
-```bash
-helm repo add fluent https://fluent.github.io/helm-charts
-helm repo update
-```
+    ```bash
+    helm repo add fluent https://fluent.github.io/helm-charts
+    helm repo update
+    ```
 
 2. Create a [values file for Helm](https://helm.sh/docs/chart_template_guide/values_files/) named `values.yaml` that we will use to configure Fluent Bit.
-
 3. Create a first section `config.service` in the `values.yaml` file to configure the Fluent Bit master process:
 
-```yaml
-config:
-  service: |
-    [SERVICE]
-        Flush                 1
-        Log_level             info
-        Daemon                off
-        Parsers_File          custom_parsers.conf
-        HTTP_Server           on
-        HTTP_Listen           0.0.0.0
-        HTTP_PORT             2020
-```
+    ```yaml
+    config:
+      service: |
+        [SERVICE]
+            Flush                 1
+            Log_level             info
+            Daemon                off
+            Parsers_File          custom_parsers.conf
+            HTTP_Server           on
+            HTTP_Listen           0.0.0.0
+            HTTP_PORT             2020
+    ```
 
 - `Flush 1`: Collects logs every second.
 - `Log_level info`: Displays informational logs in the Fluent Bit pods.
@@ -65,14 +65,14 @@ config:
 - `HTTP_PORT 2020`: Listen to port 2020.
 
 <Message type="note">
-    Fluent Bit's HTTP server needs to be enabled in order to communicate with your Cockpit.
+  You need to enable Fluent Bit's HTTP server in order for it to communicate with your Cockpit.
 </Message>
 
 ## Configuring observability inputs
 
 We will configure Fluent Bit to retrieve the metrics (CPU, memory, disk usage...) from your Kubernetes nodes and the applicative logs from your running pods.
 
-In the `values.yaml` file, create a new section `config.inputs`:
+Create a new section `config.inputs` in the `values.yaml` file:
 
 ```yaml
   inputs: |
@@ -104,53 +104,53 @@ The inputs collected by Fluent Bit should be structured before sending them to t
 
 1. Create a `config.customParsers` section to define the `docker` parser which is referenced by the log parsing input:
 
-```yaml
-  customParsers: |
-    [PARSER]
-        Name        docker
-        Format      json
-        Time_Key    time
-        Time_Format %Y-%m-%dT%H:%M:%S.%L
-```
+    ```yaml
+      customParsers: |
+        [PARSER]
+            Name        docker
+            Format      json
+            Time_Key    time
+            Time_Format %Y-%m-%dT%H:%M:%S.%L
+    ```
 
-This parser expects log records in JSON format. It assumes that the timestamp information is located under the key "time" in the JSON log record, and the timestamp format is in ISO 8601 date format.
+    This parser expects log records in JSON format. It assumes that the timestamp information is located under the key "time" in the JSON log record, and the timestamp format is in ISO 8601 date format.
 
 2. Define a section named `config.filters` in order to filter incoming log files from the containers:
 
-```yaml
-  filters: |
-    [FILTER]
-        Name                  kubernetes
-        Match                 logs.*
-        Merge_Log             on
-        Keep_Log              off
-        K8S-Logging.Parser    on
-        K8S-Logging.Exclude   on
-```
+    ```yaml
+      filters: |
+        [FILTER]
+            Name                  kubernetes
+            Match                 logs.*
+            Merge_Log             on
+            Keep_Log              off
+            K8S-Logging.Parser    on
+            K8S-Logging.Exclude   on
+    ```
 
-This sets up a filter plugin which will be applied to log records with tags starting with `logs.`. It enables log merging, extracts and parses Kubernetes log metadata, and allows log exclusion based on Kubernetes log metadata filters.
+    This sets up a filter plugin which will be applied to log records with tags starting with `logs.`. It enables log merging, extracts and parses Kubernetes log metadata, and allows log exclusion based on Kubernetes log metadata filters.
 
 3. Define a section named `config.extraFiles.'labelmap.json'`:
 
-```yaml
-  extraFiles:
-    labelmap.json: |
-      {
-        "kubernetes": {
-        "container_name": "container",
-        "host": "node",
-        "labels": {
-          "app": "app",
-          "release": "release"
-        },
-        "namespace_name": "namespace",
-        "pod_name": "instance"
-        },
-        "stream": "stream"
-      }
-```
+    ```yaml
+      extraFiles:
+        labelmap.json: |
+          {
+            "kubernetes": {
+            "container_name": "container",
+            "host": "node",
+            "labels": {
+              "app": "app",
+              "release": "release"
+            },
+            "namespace_name": "namespace",
+            "pod_name": "instance"
+            },
+            "stream": "stream"
+          }
+    ```
 
-This defines a map for various Kubernetes labels and metadata to specific Fluent Bit field names in order to parse and structure the logs.
+    This defines a map for various Kubernetes labels and metadata to specific Fluent Bit field names in order to parse and structure the logs.
 
 ## Configuring observability outputs
 
@@ -158,35 +158,35 @@ The last step in the Fluent Bit configuration is to define where the logs and me
 
 1. [Generate a token](/observability/cockpit/how-to/create-token/) and select push permissions for both logs and metrics.
 
-<Lightbox src="scaleway-cockpit-token-permissions.webp" alt="" />
+    <Lightbox src="scaleway-cockpit-token-permissions.webp" alt="" />
 
 2. Create a section named `config.outputs` in the `values.yaml` file:
 
-```yaml
-  outputs: |
-    [OUTPUT]
-        Name                  prometheus_remote_write
-        Match                 node_metrics
-        Host                  <...>
-        Port                  443
-        Uri                   /api/v1/push
-        Header                Authorization Bearer <...>
-        Log_response_payload  false
-        Tls                   on
-        Tls.verify            on
-        Add_label             job kapsule-metrics
-    [OUTPUT]
-        Match                 logs.*
-        Name                  loki
-        Host                  <...>
-        Port                  443
-        Tls                   on
-        Tls.verify            on
-        Label_map_path        /fluent-bit/etc/labelmap.json
-        Auto_kubernetes_labels on
-        Http_user             nologin
-        Http_passwd           <...>
-```
+    ```yaml
+      outputs: |
+        [OUTPUT]
+            Name                  prometheus_remote_write
+            Match                 node_metrics
+            Host                  <...>
+            Port                  443
+            Uri                   /api/v1/push
+            Header                Authorization Bearer <...>
+            Log_response_payload  false
+            Tls                   on
+            Tls.verify            on
+            Add_label             job kapsule-metrics
+        [OUTPUT]
+            Match                 logs.*
+            Name                  loki
+            Host                  <...>
+            Port                  443
+            Tls                   on
+            Tls.verify            on
+            Label_map_path        /fluent-bit/etc/labelmap.json
+            Auto_kubernetes_labels on
+            Http_user             nologin
+            Http_passwd           <...>
+    ```
 
 3. Fill in the blanks as follows:
 -  `Host` from the first subsection: paste your Metrics API URL defined in the **API and Tokens tab** section from the Cockpit. Remove the `https://` protocol.
@@ -199,17 +199,17 @@ In the second subsection, the `loki` plugin is used to send logs to the [Loki](h
 
 ## Installing Fluent Bit
 
-Run the following command in the same directory as your `values.yaml` file:
+Run the following command in the same directory as your `values.yaml` file to install Fluent Bit:
 
 ```
 helm upgrade --install fluent-bit fluent/fluent-bit -f ./values.yaml
 ```
 
-Fluent Bit has been installed in your Kapsule cluster. You should see a `DeamonSet` named `fluent-bit` with running pods on all of your nodes.
+You should see a `DeamonSet` named `fluent-bit` with running pods on all of your nodes.
 
 ## Visualizing Kapsule logs and metrics
 
-Logs and metrics from your Kubernetes cluster can now be found in your Cockpit's dashboard
+You can find the logs and metrics from your Kubernetes cluster in your Cockpit's dashboard.
 
 ### Exploring metrics
 

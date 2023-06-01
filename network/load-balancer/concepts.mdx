@@ -37,20 +37,23 @@ The term "backend server" designates the final-destination backend servers which
 
 </Concept>
 
+<Concept>
+
+## Backend protection
+
+Backend protection is a set of configurable values that allow you to control how load is distributed to backend servers. You can use these settings to configure the **maximum number of simultaneous requests** to a given backend server before it is considered to be at maximum capacity. You can also configure a **queue timeout** value, which defines the maximum amount of time (in ms) to queue a request or connection for a particularl backend server when [stickiness](#sticky-session) is enabled. Once this value is reached, the request/connection will be directed to a different backend server.
+
+</Concept>
+
 <Concept opened>
 
 ## Balancing methods
 
-Load Balancers support three different modes of balancing the incoming load:
+Load Balancers support three different modes of balancing load (requests) between backend servers:
 
-TODO: use this info https://wohugb.gitbooks.io/haproxy/content/balance.html
-
-* **Round-robin**  
-  In round-robin mode, requests are queued and then each is assigned to a backend server in a defined sequence. The Load Balancer acts like a turnstile, forwarding requests to each backend server in turn as they come through the turnstile. This is the most frequently used balancing method, and the easiest to implement as it is well-suited to infrastructures that have identical backend servers.
-* **Least connections**  
-  In the least connection mode, each request is assigned to the server with the fewest active connections. This rule works best when each user connects at different times, and helps keep the servers well-balanced.
-* **First**  
-  In this mode, each request is directed towards the first backend server with available connection slots.
+* **Round-robin**: Requests are sent to each backend server in turn, with the Load Balancer acting like a turnstile. This is the most frequently used balancing method, and the easiest to implement. It is well-suited to infrastructures that have identical backend servers.
+* **Least connections**: Each request is assigned to the server with the fewest active connections. This method works best when it is expected that sessions will be long, e.g. LDAP, SQL TSE. It is less well suited to protocols with typically short sessions like HTTP.
+* **First available** : Each request is directed towards the first backend server with available connection slots. Once a server reaches its limit of maximum simultaneous connections, requests are directed to the next server. This method uses the smallest number of servers at any given time, which can be useful if, for example, you sometimes want to power off extra servers during off-peak hours.
 
   
 For more information about balancing rules, refer to our [blog post "What is a load balancer"](https://www.scaleway.com/en/blog/what-is-a-load-balancer/)
@@ -75,6 +78,22 @@ You can [add a  certificate](/network/load-balancer/how-to/add-certificate) to y
 
 <Concept>
 
+## Connection timeout
+
+Connection timeout is a configurable value for your Load Balancer's backend. It defines the maximum time (in ms) allowed to establish a connection between a client and a backend server.
+
+</Concept>
+
+<Concept>
+
+## First available
+
+See [balancing-methods](#balancing-methods).
+
+</Concept>
+
+<Concept>
+
 ## Frontends
 
 Each Load Balancer is configured with one or several frontends. Frontends listen on a configured port, and forward requests to one or several backends. You can [add and manage frontends via the console](/network/load-balancer/how-to/manage-frontends-and-backends/).
@@ -94,6 +113,14 @@ Flexible IP addresses are public IP addresses that you can hold independently of
 ## Health checks
 
 Load Balancers should only forward traffic to “healthy” backend servers. To monitor the health of a backend server, health checks regularly attempt to communicate with backend servers using the protocol and port defined by the forwarding rules to ensure that servers are listening. Various protocols for health checks are available, including HTTP, HTTPS, MYSQL, and more.
+
+Various advanced settings can be configured for health checks, including:
+- **Interval**: The interval between consecutive health checks.
+- **Timeout**: The maximum amount of time a backend server has to respond to a health check, before the health check is considered as failed.
+- **Unhealthy threshold**: The number of consecutive failed health checks after which a backend server is diagnosed as unhealthy, and its status is changed to `Down`. Requests/connections will no longer be forwarded to servers with a `down` status.
+- **Interval (transient state)**: The interval between two consecutive health checks when a server is in a transient state. Note that a backend server is in a transient state when:
+    - It is considered `up`, but then fails a health check. It stays in this transient state until the number of consecutive unsuccessful health checks goes above unhealthy threshold, at which point it switches to `down`.
+    - It is considered `down`, but then passes a health check. It stays in this transient state until the number of consecutive successful health checks goes above two, at which point it switches to `up`. 
 
 </Concept>
 
@@ -128,6 +155,14 @@ Read more about HTTP/2 and HTTP/3 and how they can be configured on Scaleway Loa
 
 <Concept>
 
+## Least connections
+
+See [balancing-methods](#balancing-methods).
+
+</Concept>
+
+<Concept>
+
 ## Load Balancers
 [Load Balancers](/network/load-balancer/how-to/create-load-balancer/) are highly available and fully managed instances that allow you to distribute workload across multiple servers. They ensure the scaling of all your applications while securing their continuous availability, even in the event of heavy traffic. They are commonly used to improve the performance and reliability of websites, applications, databases and other services.
 
@@ -148,6 +183,14 @@ A protocol is a standard format for communication over a network. When you confi
 ## Proxy protocol
 
 Proxy protocol is an internet protocol used to transfer connection information from the client (eg the client's IP address), through the Load Balancer and on to the destination server.
+
+</Concept>
+
+<Concept>
+
+## Round-robin
+
+See [balancing-methods](#balancing-methods).
 
 </Concept>
 
@@ -174,6 +217,14 @@ Routes allow you to specify, for a given frontend, which of its backends it shou
 SNI allows the server to host multiple [SSL/TLS certificates](#certificate) for multiple sites/applications on the same IP address and port number. It works as an extension to the [TLS](/network/load-balancer/concepts/#protocol) protocol: the client/browser specifies which hostname it is requesting at the start of the TLS handshake, allowing the server to respond appropriately.
 
 Scaleway Load Balancers can use SNI to define [routes](#routes) from a frontend to a specified TCP backend.
+
+</Concept>
+
+<Concept>
+
+## Server timeout
+
+Tunnel timeout is a configurable value for your Load Balancer's backend. It defines the maximum allowed time (in ms) that a backend server has to process a request.
 
 </Concept>
 
@@ -208,9 +259,17 @@ Scaleway Load Balancers can use SNI to define [routes](#routes) from a frontend 
 A sticky session enables the Load Balancer to bind a user's session to a specific server in the backend pool. This ensures that all subsequent sessions from the user are sent to the same backend server while there is at least one active session. Sticky sessions can be **cookie based** or **table based**. 
 
 - **Cookie-based** stickiness uses a HTTP cookie to identify a session, and the server in the backend pool that it will stick to. For each incoming request without a stickiness cookie, the Load Balancer creates a cookie and selects a backend for the session. Subsequent requests providing this cookie will land on the same backend. You can customize the name of the cookie.
-- **Table-based** stickiness uses the source (client) IP address to stick sessions to backends.
+- **Table-based** (aka **IP-based**) stickiness uses the source (client) IP address to stick sessions to backends.
 
 By default, when activating sticky sessions through the console, the cookie-based method is used when HTTP protocol is selected, and the table-based method is used when TCP protocol is selected. Use the [API](https://www.scaleway.com/en/developers/api/load-balancer/zoned-api/) if you want to select table-based stickiness with HTTP protocol.
+
+</Concept>
+
+<Concept>
+
+## Tunnel timeout
+
+Tunnel timeout is a configurable value for your Load Balancer's backend. It defines the maximum allowed tunnel inactivity time (in ms) between a client and a backend server after a Websocket is established. This value takes precedence over client and server timeout in determining when to close the connection.
 
 </Concept>
 

@@ -1,0 +1,123 @@
+---
+meta:
+  title: Backup your Kapsule Cluster on Object Stroage with Velero
+  description: In this tutorial you will learn to configure Velero to Backup your Kubernetes Kapsule Cluster on Object Storage.
+content:
+  h1: Backup your Kapsule Cluster on Object Stroage with Velero
+  paragraph: In this tutorial you will learn to configure Velero to Backup your Kubernetes Kapsule Cluster on Object Storage.
+tags: velero k8s kubernetes kapsule backup restore
+categories:
+  - containers
+  - kubernetes
+  - storage
+  - object
+dates:
+  validation: 2023-06-02
+  posted: 2023-06-02
+---
+
+Velero is an open-source tool that is used for backing up, restoring, and migrating Kubernetes cluster resources and persistent volumes on S3 compatible Object Storage. It was initially developed by Heptio, which was later acquired by VMware. Velero provides a simple and efficient way to protect your Kubernetes applications and data by taking periodic backups and enabling disaster recovery.
+
+With Velero, you can create scheduled or ad-hoc backups of your entire cluster or specific namespaces. These backups capture the state of all the resources in your cluster, including deployments, services, config maps, secrets, and persistent volumes. Velero also handles the associated metadata and labels, ensuring that the backups are comprehensive and can be restored accurately.
+
+In addition to backups, Velero provides the capability to restore your applications and data to the same or different Kubernetes clusters. This is useful in various scenarios, such as recovering from accidental deletions, migrating applications across clusters, or setting up disaster recovery strategies.
+
+The application integrates with Kubernetes using custom resource definitions (CRDs) and runs as a deployment within your cluster. Velero uses plugins to handle different aspects of backup and restore, allowing for extensibility and customization.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created an Object Storage bucket](/storage/object/how-to/create-a-bucket/)
+  - You have [created a Kapsule cluster](/containers/kubernetes/how-to/create-cluster/)
+  - You have set up [kubectl](/containers/kubernetes/how-to/connect-cluster-kubectl/) on your machine
+  - You have [configured an API key with sufficent IAM permissions](/identity-and-access-management/iam/how-to/create-api-keys/)
+</Message>
+
+## Installation of Velero
+
+Velero will be installed on your local PC or Mac.
+
+1. Download the latest velero release for your platform from [Veleros GitHib repository](https://github.com/vmware-tanzu/velero/releases/latest)
+
+2. Extract the tarball:
+    ```
+    tar -xvf <RELEASE-TARBALL-NAME>.tar.gz
+    ```
+3. Move the extracted `velero` binary to the desired location in your `$PATH` (`/usr/local/bin` for most users).
+    <Message type="tip">
+        On macOS, you can use [Homebrew](https://brew.sh/) to install the `velero` client:
+        ```
+        brew install velero
+        ```
+    </Message>
+
+## Configuration of Velero
+
+1. Create a credentials file for Velero, named `velero-credentials`:
+    ```
+    nano velero-credentials
+    ```
+2. Copy the following content in the file and set your access key and secret key. Then save the file and exit the text editor.
+    ```
+    [default]
+    aws_access_key_id=SCALEWAY_ACCESS_KEY
+    aws_secret_access_key=SCALEWAY_SECRET_KEY
+    ```
+
+3. Initialize Verlero. Make sure to replace `VELERO-BUCKET-NAME` with the name of the Object Storage bucket you want to use. Edit the backup location if your bucket is in a zone different than `fr-par`. 
+    ```
+    velero install \
+    --provider velero.io/aws \
+    --bucket k8s-velero-backup \
+    --plugins velero/velero-plugin-for-aws:v1.7.0 \
+    --backup-location-config s3Url=https://s3.fr-par.scw.cloud,region=fr-par \
+    --use-volume-snapshots=false \
+    --secret-file=./velero-credentials
+    ```
+
+    Verlero is being installed on your Kubernetes cluster. The following message displays, once the installation is complete:
+    ```
+    Velero is installed! ⛵ Use 'kubectl logs deployment/velero -n velero' to view the status.
+    ```
+
+## Making backups using Velero
+
+1. Create a backup of all namespcaes in the cluster:
+    ```
+    velero backup create full-backup --include-namespaces '*'
+    ```
+2. Check the status of the backup using the `velero get backup` command:
+    ```
+    $ velero get backup
+    NAME          STATUS      ERRORS   WARNINGS   CREATED                          EXPIRES   STORAGE LOCATION   SELECTOR
+    full-backup   Completed   0        0          2023-06-02 15:33:45 +0200 CEST   29d       default            <none>
+    ```
+    When you go to your Object Storage bucket in the [Scaleway console](https://console.scaleway.com/), you notice the `backup` folder created by velero:
+    <Lightbox src="scaleway-velero-backup-console.webp" alt="" />
+    <Message typ="tip">
+        You can also automate your backups using scheduled jobs, with exectution times defined by cron expressions.
+        ```
+        velero schedule create NAME --schedule="* * * * *" [flags]
+        ```
+        Refer to the [official Velero documentation](https://velero.io/docs/v1.11/backup-reference/) for more information.
+    </Message>
+
+For more information about the creation of backups using Velero, refer to the [Velero backup reference documentation](https://velero.io/docs/v1.11/backup-reference/).
+## Restoring using Verlero
+
+1. Create a restore job from the full backup made in the previous step:
+    ```
+    velero restore create full-restore --from-backup full-backup
+    ```
+
+2. Check the status of your restore: 
+    ```
+    velero restore describe full-restore
+    ```
+    When the `Phase` status changed to `Completed` your backup has been restored successfully:
+    ```
+    Phase:                       Completed
+    ```
+
+For more information about restoring your data using Velero, refer to the [Velero restore reference documentation](https://velero.io/docs/v1.11/restire-reference/).

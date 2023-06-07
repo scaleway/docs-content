@@ -1,0 +1,134 @@
+---
+meta:
+  title: Understanding Cockpit usage and pricing
+  description: This section provides information to understand Cockpit usage and pricing
+content:
+  h1: Understanding Cockpit usage and pricing
+  paragraph: This section provides information to understand Cockpit usage and pricing
+tags: observability cockpit retention metrics logs
+dates:
+  validation: 2023-06-07
+  posted: 2023-06-07
+categories:
+  - observability
+---
+
+# Control the rate, control the price
+
+## Introduction
+
+With Cockpit you can [push your own metrics](https://www.scaleway.com/en/docs/observability/cockpit/how-to/send-metrics-logs-to-cockpit/).
+The pricing is based on the number of samples that are ingested per month.
+It's 0.15€ per million samples ingested per month.
+
+## Importance of controlling the rate
+
+In order to have control on your bill, you need to be able to control the number of samples you are sending to Cockpit.
+
+This table show you a quick estimate of the pricing base on the sample push rate.
+
+Price: 0,00000015€ per sample
+
+| Sample ingestion rate per seconds | Sample ingested per day | Price per day | Sample ingested per month | Price per month |
+|:---------------------------------:|:-----------------------:|:-------------:|:-------------------------:|:---------------:|
+|                 1                 |         86 400          |   0,01296€    |         2 678 400         |     0,4017€     |
+|                10                 |         864 000         |    0,1296€    |        26 784 000         |     4,0176€     |
+|                100                |        8 640 000        |    1,296€     |        267 840 000        |     40,176€     |
+|               1000                |       86 400 000        |    12,96€     |       2 678 400 000       |     401,76€     |
+​
+## How to know my current ingestion rate ?
+​
+Within Cockpit Dashboard, you can look at the dashboard named "Cockpit Overview", and the panel named "Metrics ingestion rate". 
+​
+You will see ingestion rate for samples coming from Scaleway products, and yours in the name "Other Metrics".
+​
+If you are [using your own Grafana](https://www.scaleway.com/en/docs/tutorials/using-own-grafana/) to visualise metrics, here the query `sum(rate(observability_cockpit_ingestion_samples_total{is_from_scaleway="false"}[5m])) OR on() vector(0)`
+​
+## How to control the number of samples sent to Cockpit ?
+​
+### Control the interval between scrapes
+​
+A common good practice is to have a `scrape_interval` of 1 minute.
+​
+Let's say you have 1000 samples exposed and a `scrape_interval` of 10s, it mean that you will have a rate of 100 sample/s, so around 40€ per month.
+If you increase the `scrape_interval` to 60s, you will have a rate of 1,66 sample/s, so around 6,69€ per month.
+​
+#### Prometheus
+
+If you are using Prometheus to remote write metrics to your Cockpit, you can tweak the `scrape_interval`.
+
+        ```yaml
+        global:
+            scrape_interval: 60s
+        
+        scrape_configs:
+            ...
+
+        remote_write:
+            - url: https://metrics.cockpit.fr-par.scw.cloud/api/v1/push
+            headers:
+                "X-Token": <your-cockpit-token>
+        ```
+
+#### Grafana agent
+
+Here an example of a Grafana agent configuration file with a scrape interval of 60 seconds:
+
+        ```yaml
+        metrics:
+        global:
+            scrape_interval: 60s
+            remote_write:
+            - url: https://metrics.cockpit.fr-par.scw.cloud/api/v1/push
+            headers:
+                "X-Token": <your-cockpit-token>
+        integrations:
+        ...
+        ```
+### Control the metrics you are sending
+
+A good practice to send only metrics that you want into your Cockpit.
+
+In order to do that you can filter what are send to cockpit.
+
+Here an example with Prometheus:
+
+        ```yaml
+        ...
+
+        remote_write:
+            - url: https://metrics.cockpit.fr-par.scw.cloud/api/v1/push
+            headers:
+                "X-Token": <your-cockpit-token>
+            write_relabel_configs:
+                - source_labels: [__name__]
+                    regex: 'my_app_metrics(.*)'
+                    action: keep
+        ```
+
+This configuration will only send metrics starting with `my_app_metrics` to your Cockpit.
+
+Refer to the [Prometheus documentation]( https://prometheus.io/docs/prometheus/latest/configuration/configuration/#relabel_config) to go further.
+
+### Learn about the agents you are using
+
+Many agents, such as `cadvisor` and `node_exporter` expose a lot of metrics by default.
+
+The [following metrics collectors](https://github.com/prometheus/node_exporter#enabled-by-default) are enabled by default on a node_exporter. You can configure them to filter what is sent. 
+
+You can use the following configuration example for a Grafana agent with the `node_exporter` integration:
+
+        ```yaml
+        ...
+        integrations:
+        node_exporter:
+            enabled: true
+            # Anything not provided in the list below will be disabled by default
+            set_collectors:
+            - uname
+            - cpu
+            - loadavg
+            - meminfo
+            - filesystem
+            - netstat
+        ```

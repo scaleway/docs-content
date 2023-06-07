@@ -1,0 +1,167 @@
+---
+meta:
+  title: Using the GitLab Kubernetes extension
+  description: Learn how to build, test, deploy, and run your app at scale using the GitLab Kubernetes integration
+content:
+  h1: Using the GitLab Kubernetes extension
+  paragraph: Learn how to build, test, deploy, and run your app at scale using the GitLab Kubernetes integration
+tags: compute object-storage reverse proxy application GitLab Kubernetes
+categories:
+  - compute
+  - kubernetes
+  - instances
+dates:
+  validation: 2023-05-29
+  posted: 2020-06-09
+---
+
+## GitLab Kubernetes integration - Overview
+
+GitLab provides a built-in Kubernetes integration that allows you to build, test, deploy, and run your app at scale.
+
+In this tutorial you will learn how to use the `gitlab` Kubernetes integration using a [Scaleway Instance](https://www.scaleway.com/en/virtual-instances/).
+The instance will be deployed using the Scaleway `gitlab` InstantApp.
+
+<Macro id="iam-requirements" />
+ 
+<Message type="requirement">
+  - You have [created an Instance running the `gitlab` InstantApp](/tutorials/gitlab-instant-app).
+  - You have [created a Kapsule cluster](/containers/kubernetes/how-to/create-cluster/).
+  - You have downloaded the corresponding [kubeconfig](/containers/kubernetes/how-to/edit-cluster/) file and [kubectl](/containers/kubernetes/how-to/connect-cluster-kubectl/) is working
+  - You have the [Helm client](https://helm.sh/docs/intro/install/) installed
+</Message>
+
+## Configuring GitLab runner using Helm charts
+
+### Installing helm
+
+In this tutorial we use `helm` to deploy a `gitlab` runner on a `Kapsule` cluster.
+If you do not know how to install `helm`, please follow the [tutorial](https://helm.sh/docs/intro/install/) on the official `helm` website.
+On the example below we have successfully installed `helm` version 3.2.0
+
+```
+helm version
+version.BuildInfo{Version:"v3.2.0", GitCommit:"e11b7ce3b12db2941e90399e874513fbd24bcb71", GitTreeState:"clean", GoVersion:"go1.13.10"}
+```
+
+The `helm` charts are provided through repositories. By default `helm` 3 does not have any repository configured.
+We will add the `gitlab` repository, as it provides the necessary chart to install the runner.
+
+```
+helm repo add gitlab https://charts.gitlab.io
+"gitlab" has been added to your repositories
+helm repo update
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "gitlab" chart repository
+Update Complete. ⎈ Happy Helming!⎈
+```
+
+### Installing GitLab runners using Helm
+
+A `helm` chart is always shipped with a `value.yaml` file. It can be edited to customize the deployement of the application.
+In this part of the tutorial we customize the `value.yaml` to fit our needs and deploy the runner on `kapsule`.
+
+1. Get the value.yaml :
+    ```
+    wget https://gitlab.com/gitlab-org/charts/gitlab-runner/-/raw/main/values.yaml
+    ```
+
+    Each `gitlab` runner needs a registration token to register on the `gitlab` server.
+    Retrieve the registration token from the GitLab web interface ("Admin Area" > "Runners"):
+
+    <Lightbox src="scaleway-token.webp" alt="" />
+
+    <Lightbox src="scaleway-token.webp" alt="" />
+2. Fill the `value.yaml` with :
+    - the gitlabUrl (in our case `http://212.47.237.92/`)
+    - the registration token
+    - enable `rbac`
+
+    <Message type="note">
+      By default, the gitlabUrl and the registration token lines are written out as a comment in the `values.yaml`file. Make sure you have deleted the `#` before saving.
+    </Message>
+
+    ```yaml
+    [..]
+    gitlabUrl: http://212.47.237.92/
+    runnerRegistrationToken: "t7u_qjh3EFJX2-yPypkz"
+    rbac:
+      create: true
+      [..]
+      serviceAccountName: default
+    ```
+
+    We will use a dedicated [namespace](https://kubernetes.io/docs/concepts/overview/working-with-objects/namespaces/).
+3. To install the `gitlab` runner, create it on your `Kapsule` cluster:
+    ```
+    kubectl create ns gitlab-runner
+    namespace/gitlab-runner created
+    ```
+
+    The default service account should use a new kubernetes [role](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#role-example), and [rolebinding](https://kubernetes.io/docs/reference/access-authn-authz/rbac/#rolebinding-example).
+4. Use the following example to create a role and role binding and associate it to the default service account in the `gitlab-runner` namespace :
+    ```
+    cat <<EOF | kubectl create -f -
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: gitlab-runner
+      namespace: gitlab-runner
+    rules:
+      - apiGroups: [""]
+        resources: ["pods"]
+        verbs: ["list", "get", "watch", "create", "delete"]
+      - apiGroups: [""]
+        resources: ["pods/exec"]
+        verbs: ["create"]
+      - apiGroups: [""]
+        resources: ["pods/log"]
+        verbs: ["get"]
+    EOF
+    kubectl create rolebinding --namespace=gitlab-runner gitlab-runner-binding --role=gitlab-runner --serviceaccount=gitlab-runner:default
+    ```
+5. Use the `helm` command to install the runner (note that you specify in this command line the `values.yaml` file) :
+    ```
+    helm install --namespace gitlab-runner  gitlab-runner -f ./values.yaml gitlab/gitlab-runner
+    NAME: gitlab-runner
+    LAST DEPLOYED: Wed May  6 15:48:20 2020
+    NAMESPACE: gitlab-runner
+    STATUS: deployed
+    REVISION: 1
+    TEST SUITE: None
+    NOTES:
+    Your GitLab Runner should now be registered against the GitLab instance reachable at: "http://212.47.237.92/"
+    ```
+
+    You can check the runner is working in the `gitlab` console ("admin area" > runners):
+    <Lightbox src="scaleway-runnerok.webp" alt="" />
+
+## Running a pipepline in the runner using a test app
+
+To demonstrate that the runner is working, we [create a repository](https://docs.gitlab.com/ee/user/project/repository/#create-a-repository) with a "hello world" piece of code written in python.
+
+1. Create the files using a text editor of your choice (e.g. `nano` or `vim`). In this tutorial, we use `nano`.
+    ```bash
+    nano helloworld.py
+    ```
+2. Create the content of the file as follows, save and exit:
+    ```python
+    print("Hello, World!")
+    ```
+3. Create an associated gitlab-ci file to check it is running in the runner we just deployed:
+    ```bash
+    nano .gitlab-ci.yaml
+    ```
+4. Create the content of the file as follows, save and exit:
+    ```yaml
+    image: ubuntu
+    hello-test:
+      script:
+        - apt-get update && apt-get install python3
+        - python3 helloworld.py
+    ```
+5. Push the repository and an ubuntu container is launched. At first `apt` is updated and `python3` is installed, and then the “hello, world” script is launched in the terminal.
+    <Lightbox src="scaleway-job1.webp" alt="" />
+    <Lightbox src="scaleway-job2.webp" alt="" />
+
+If you want to learn more about running a `gitlab` runner on Kubernetes you can also check the `gitlab-ci` official [documentation](https://docs.gitlab.com/runner/install/kubernetes.html)

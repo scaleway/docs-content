@@ -29,7 +29,7 @@ Any PRs which do not comply with the rules below will be rejected.
 
 ## Use repository locally
 
-You have to clone the project locally to work on it.
+You have to clone the project locally to work on it. If you need to fork the repository, [follow this link](https://docs.github.com/en/get-started/quickstart/fork-a-repo) to find out how.
 
 ### Requirements
 

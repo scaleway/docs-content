@@ -8,11 +8,11 @@ content:
 tags: Serverless Functions Faas Containers Object-Storage
 categories:
   - serverless
-  - functions 
+  - functions
   - storage
   - object-storage
 dates:
-  validation: 2022-09-29
+  validation: 2023-04-12
   posted: 2021-10-26
 ---
 
@@ -33,20 +33,31 @@ This project contains two functions where:
   - You have created a [Serverless Function namespace](/serverless/functions/how-to/create-a-functions-namespace/)
   - You have created two [Object Storage buckets](/storage/object/how-to/create-a-bucket/) (one which contains the source pictures and the other for the destination pictures)
   - You have generated your [Scaleway API keys](/identity-and-access-management/iam/how-to/create-api-keys/)
-  - **(Optional)** You have installed the [Serverless Framework](https://serverless.com/) with Scaleway's Serverless Plugin
+  - **(Recommended)** You have installed the [Serverless Framework](https://serverless.com/) with [Scaleway's Serverless Plugin](https://github.com/scaleway/serverless-scaleway-functions)
 </Message>
 
-## Creating the BucketScan function
+## Project set up (for Serverless Framework)
 
-1. Set the following environment variables at the function level:
+1. Using the `serverless` command import the project from our Github example repository:
+  ```bash
+  serverless create --path nodetransform --template-url https://github.com/scaleway/serverless-examples/tree/main/functions/image-transform-node
+  ```
+2. Install the npm module using
+  ```npm install```
+3. Fill the `serverless.yml` file with your Scaleway credentials
+4. Set the following environment variables at the namespace level (provider section in `serverless.yml`):
     * `SOURCE_BUCKET`: Name of your source bucket
     * `S3_ENDPOINT_URL`: Scaleway’s Object Storage URL (`http://s3.{region}.scw.cloud`)
     * `SECRET_KEY_ID`: Your Scaleway API key ID
-    * `SECRET_KEY:` Your Scaleway API key 
+    * `SECRET_KEY:` Your Scaleway secret key
     * `TRANSFORM_URL`: URL of the function used to transform the images (generated when you deploy your functions)
-2. Create the BucketScan function:
-    * Import dependencies: 
-    ```js 
+
+## Creating the BucketScan function
+
+
+1. Create the `BucketScan.js` file:
+    * Import dependencies:
+    ```js
     const AWS = require("aws-sdk");
     const https = require("https");
     ```
@@ -58,9 +69,9 @@ This project contains two functions where:
     const SECRET = process.env.SECRET_KEY;
     const TRANSFORM_URL = process.env.TRANSFORM_URL;
     ```
-    * Connect to Object Storage: 
-    ```js 
-    // Create S3 service object
+    * Connect to Object Storage:
+    ```js
+    // Create a S3 service object
     const s3 = new AWS.S3({
       endpoint: S3_ENDPOINT_URL,
       credentials: {
@@ -73,7 +84,7 @@ This project contains two functions where:
       Bucket: SOURCE_BUCKET
     };
     ```
-    * Initiate your function
+    * Initiate your function, the `handle` function will be the one called when your function is invoked
     ```js
     exports.handle = async (event, context, callback) => {
     ```
@@ -112,8 +123,8 @@ This project contains two functions where:
       }
     });
     ```
-    * Return http call results:
-    ```js 
+    * Return HTTP call results:
+    ```js
     return {
       statusCode: 200,
       body: JSON.stringify({
@@ -134,14 +145,9 @@ The following steps are adapted from the [AWS lambda](https://docs.aws.amazon.co
     ```bash
     npm install --platform=linuxmusl --arch=x64 sharp --ignore-script=false --save
     ```
-2. Set the following environment variables at the function level: 
-    * `SOURCE_BUCKET`: Name of your source bucket
-    * `S3_ENDPOINT_URL`: Scaleway’s Object Storage URL (`http://s3.{region}.scw.cloud`)
-    * `SECRET_KEY_ID`: Your API key ID
-    * `SECRET_KEY`: Your API Key 
-    * `DESTINATION_BUCKET`: Key of the destination bucket
+2. Set the following environment variables at the function level:
     * `RESIZED_WIDTH`: Desired width of the resized image
-3. Create the ImageTransformation function:
+3. Create the `ImageTransformation.js` file:
     * Import dependencies
     ```js
     const AWS = require("aws-sdk");
@@ -160,7 +166,7 @@ The following steps are adapted from the [AWS lambda](https://docs.aws.amazon.co
       width = 200;
     }
     ```
-    * Connect to Object Storage: 
+    * Connect to Object Storage:
     ```js
     const s3 = new AWS.S3({
     endpoint: S3_ENDPOINT_URL,
@@ -211,7 +217,7 @@ The following steps are adapted from the [AWS lambda](https://docs.aws.amazon.co
       }
     ```
     * Transform the image based on the information specified in the environment variable:
-    ```js 
+    ```js
       try {
       var buffer = await sharp(origimage.Body)
           .resize({ width, withoutEnlargement: true })
@@ -222,7 +228,7 @@ The following steps are adapted from the [AWS lambda](https://docs.aws.amazon.co
       }
     ```
     * Push the image to the destination bucket:
-    ```js 
+    ```js
       try {
           const destparams = {
               Bucket: dstBucket,
@@ -235,7 +241,6 @@ The following steps are adapted from the [AWS lambda](https://docs.aws.amazon.co
           console.log(error);
           return;
       }
-    
     ```
     * Log Success transformation and end the function
     ```js
@@ -266,240 +271,8 @@ The following steps are adapted from the [AWS lambda](https://docs.aws.amazon.co
     };
     ```
 
-## Pushing the two functions to Scaleway Serverless 
+## Pushing the two functions to Scaleway Serverless
 
-Please refer to the Serverless Documentation to learn how to package and deploy your functions using [Serverless Framework](/serverless/functions/api-cli/fun-uploading-with-serverless-framework/) or a [zip-file](/serverless/functions/how-to/package-function-dependencies-in-zip/).
-Once the `ImageTransform` function is deployed, copy its URL (from the settings tab in the console or in the Serverless Framework logs) into the `BucketScan` environment variable. 
-Once everything is deployed, test the BucketSan functions using its URL.
+Read our documentation for more information on [ways to deploy functions](/serverless/functions/reference-content/deploy-function) to deploy this project. 
 
-## Appendix
-
-### Serverless Framework yaml file
-Below you can find a `Serverless.yml` configuration file to use with the Serverless Framework: 
-
-```yaml
-service: fileupload
-configValidationMode: off
-
-provider:
-  name: scaleway
-  runtime: node16
-  # Global Environment variables - used in every function
-  env:
-    SECRET_KEY: {Scaleway API key related to source and destination buckets}
-    SECRET_KEY_ID: {Scaleway API key ID}
-    SOURCE_BUCKET: {source bucket key}
-    DESTINATION_BUCKET: {destination bucket key}
-    S3_ENDPOINT_URL: http://s3.fr-par.scw.cloud
-    TRANSFORM_URL: https://{your function}.functions.fnc.fr-par.scw.cloud
-  # the path to the credentials file needs to be absolute
-  scwToken: {Scaleway API token related to the Project ID}
-  scwProject: {Scaleway Project ID}
-
-plugins:
-- serverless-scaleway-functions
-
-patterns:
-  - '!.gitignore'
-  - '!.git/**'
-
-functions:
-imagetransform:
-  handler: ImageTransform.handle
-  memoryLimit: 1024
-  minScale: 1
-  env:
-    RESIZED_WIDTH: '60'
-bucketscan:
-  handler: BucketScan.handle
-  memoryLimit: 1024
-  minScale: 0
-```
-### BucketScan.js
-```js
-const AWS = require("aws-sdk");
-const https = require("https");
-const { isNull } = require("util");
-
-// get info from env variable
-
-const SOURCE_BUCKET = process.env.SOURCE_BUCKET;
-const S3_ENDPOINT_URL = process.env.S3_ENDPOINT_URL;
-const ID = process.env.SECRET_KEY_ID;
-const SECRET = process.env.SECRET_KEY;
-const TRANSFORM_URL = process.env.TRANSFORM_URL;
-
-// Create S3 service object
-const s3 = new AWS.S3({
-  endpoint: S3_ENDPOINT_URL,
-  credentials: {
-    accessKeyId: ID,
-    secretAccessKey: SECRET,
-  },
-});
-//configure parameters for the listObjectsV2 method
-const params = {
-  Bucket: SOURCE_BUCKET,
-};
-
-exports.handle = async (event, context, callback) => {
-  s3.listObjectsV2(params, function (err, data) {
-    if (err) {
-      console.log(err, err.stack); // an error occurred
-    } else {
-      let counter = 0;
-      const contents = data.Contents;
-      const total = contents.length;
-      contents.forEach(function (content) {
-        // Infer the image type from the file suffix.
-        const srcKey = content.Key;
-        const typeMatch = srcKey.match(/\.([^.]*)$/);
-        if (!typeMatch) {
-          return console.log("Could not determine the image type.");
-        }
-        const imageType = typeMatch[1].toLowerCase();
-        // Check that the image type is supported
-        if (["jpeg", "jpg", "png"].includes(imageType) !== true) {
-          return console.log(`Unsupported image type: ${imageType}`);
-        }
-        try {
-          console.log(TRANSFORM_URL + "?key=" + srcKey);
-          https.get(TRANSFORM_URL + "?key=" + srcKey);
-          counter += 1;
-        } catch (error) {
-          console.log(error);
-        }
-      });
-      if (data.IsTruncated) {
-        params.ContinuationToken = data.NextContinuationToken;
-        return {
-          statusCode: 200,
-          body: JSON.stringify({
-            status: "Too many items",
-            message: "There are more files in your bucket that we can handle",
-          }),
-          headers: {
-            "Content-Type": "application/json",
-          },
-        };
-      }
-      return {
-        statusCode: 200,
-        body: JSON.stringify({
-          status: "Done",
-          message: `${counter} images from the bucket have been processed over ${total} files in the bucket`,
-        }),
-        headers: {
-          "Content-Type": "application/json",
-        },
-      }
-    }
-  });
-};
-```
-### ImageTransform.js
-
-```js
-// dependencies
-const AWS = require("aws-sdk");
-const sharp = require("sharp");
-
-// get references;
-const srcBucket = process.env.SOURCE_BUCKET;
-const S3_ENDPOINT_URL = process.env.S3_ENDPOINT_URL;
-const ID = process.env.SECRET_KEY_ID;
-const SECRET = process.env.SECRET_KEY;
-const dstBucket = process.env.DESTINATION_BUCKET;
-let width = parseInt(process.env.RESIZED_WIDTH, 10);
-if (width < 1 || width > 1000) {
-  width = 200;
-}
-
-// Create S3 service object
-const s3 = new AWS.S3({
-  endpoint: S3_ENDPOINT_URL,
-  credentials: {
-    accessKeyId: ID,
-    secretAccessKey: SECRET,
-  },
-});
-
-// Handler
-exports.handle = async (event, context, callback) => {
-  // Read options from the event parameter.
-  console.log("Reading options from event");
-  // Object key may have spaces or unicode non-ASCII characters.
-  const srcKey = event.queryStringParameters.key;
-  console.log(srcKey);
-  const dstKey = "resized-" + srcKey;
-  // Infer the image type from the file suffix.
-  const typeMatch = srcKey.match(/\.([^.]*)$/);
-  if (!typeMatch) {
-    console.log("Could not determine the image type.");
-    return;
-  }
-  // Check that the image type is supported
-  const imageType = typeMatch[1].toLowerCase();
-  if (["jpeg", "jpg", "png"].includes(imageType) !== true) {
-    console.log(`Unsupported image type: ${imageType}`);
-    return;
-  }
-  // Download the image from the S3 source bucket.
-  try {
-    const params = {
-      Bucket: srcBucket,
-      Key: srcKey,
-    };
-    var origimage = await s3.getObject(params).promise();
-  } catch (error) {
-    console.log(error);
-    return;
-  }
-  // Use the sharp module to resize the image and save in a buffer.
-  try {
-    var buffer = await sharp(origimage.Body)
-      .resize({ width, withoutEnlargement: true })
-      .toBuffer();
-  } catch (error) {
-    console.log(error);
-    return;
-  }
-  // Upload the image to the destination bucket
-  try {
-    const destparams = {
-      Bucket: dstBucket,
-      Key: dstKey,
-      Body: buffer,
-      ContentType: "image",
-    };
-    const putResult = await s3.putObject(destparams).promise();
-  } catch (error) {
-    console.log(error);
-    return;
-  }
-  console.log(
-    "Successfully resized " +
-      srcBucket +
-      "/" +
-      srcKey +
-      " and uploaded to " +
-      dstBucket +
-      "/" +
-      dstKey
-  );
-  return {
-    statusCode: 201,
-    body: JSON.stringify({
-      status: "ok",
-      message:
-        "Image : " +
-        srcKey +
-        " has successfully been resized and pushed to the bucket " +
-        dstBucket,
-    }),
-    headers: {
-      "Content-Type": "application/json",
-    },
-  };
-};
-```
+For the full project and deployment using Serverless Framework refer to our [serverless-examples project](https://github.com/scaleway/serverless-examples/tree/main/functions/image-transform-node)

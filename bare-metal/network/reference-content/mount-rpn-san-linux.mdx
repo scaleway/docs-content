@@ -1,0 +1,114 @@
+---
+meta:
+  title: How to mount an RPN SAN volume on Linux
+  description: This page explains how to mount an RPN SAN volume on Linux
+content:
+  h1: How to mount an RPN SAN volume on Linux
+  paragraph: This page explains how to mount an RPN SAN volume on Linux
+tags: rpn san rpn-san volume linux dedibox open iscsi 
+dates:
+  validation: 2023-01-26
+  posted: 2021-11-10
+categories:
+  - dedibox-network
+---
+
+You can mount RPN SAN volumes on Linux machines using Open-iSCSI. 
+
+<Message type="requirement">
+  * You have an account and are logged into the [Dedibox Console](https://console.online.net)
+  * You have a [Dedibox dedicated server](https://www.scaleway.com/en/dedibox/)
+  * You have an [RPN SAN](https://www.scaleway.com/en/dedibox/storage/rpn-san/) 
+</Message>
+
+## How to install and configure Open-iSCSI
+
+1. Update the apt package cache and install Open-iSCSI:
+    ```
+    apt update && apt install -y open-iscsi
+    ```
+2. Open the file `/etc/iscsi/iscsid.conf` in a text editor:
+    ```
+    nano /etc/iscsi/iscsid.conf
+    ```
+3. Add the following configuration lines: 
+    ```
+    node.conn[0].timeo.noop_out_interval = 0
+    node.conn[0].timeo.noop_out_timeout = 0
+    node.session.timeo.replacement_timeout = 86400
+    ```
+
+    The purpose of this modification is to prevent your file system from becoming read-only if the link is interrupted for more than two minutes (by default) between your server and the storage server.
+4. Adjust the setting for automatic reconnection of targets
+    ```
+    node.startup = automatic
+    ````
+    5. Change the following settings to benefit from the data integrity check, if available:
+    ```
+    node.conn[0].iscsi.HeaderDigest = CRC32C,None
+    node.conn[0].iscsi.DataDigest = CRC32C,None
+    ```
+
+## How to discover and connect to targets
+
+1. Run the following command to obtain the list of available targets: 
+    ```
+    iscsiadm -m discovery -t sendtargets -p SAN_SERVER
+    ```
+
+    <Message type="note">
+      The `SAN_SERVER` address is displayed in your Dedibox console.
+    </Message>
+
+    The target name should look like the following example: 
+    ```
+    X.X.X.X:3260,1 iqn.2013-01.net.online:XXXXXXXXXXX
+    ```
+2. Connect to the target by typing the following command: 
+    ```
+    iscsiadm -m node -T iqn.2013-01.net.online:XXXXXXXXXXX --login
+    ```
+3. Type `dmesg` to see the kernel logs. You should see some lines like in the following example
+    ```
+    scsi25 : iSCSI Initiator over TCP/IP
+    scsi 25:0:0:0: Direct-Access     IET      VIRTUAL-DISK     0    PQ: 0 ANSI: 4
+    sd 25:0:0:0: Attached scsi generic sg4 type 0
+    sd 25:0:0:0: [sdd] 2147483648 512-byte logical blocks: (1.09 TB/1.00 TiB)
+    sd 25:0:0:0: [sdd] Write Protect is off
+    sd 25:0:0:0: [sdd] Mode Sense: 77 00 00 08
+    sd 25:0:0:0: [sdd] Write cache: disabled, read cache: enabled, doesn't support DPO or FUA
+    sdd: sdd1
+    sd 25:0:0:0: [sdd] Attached SCSI disk
+    ```
+    In the example above, the disk detected is `sdd`, available at `/dev/sdd`. 
+
+    <Message type="note"> 
+      The assigned device name may be different, depending on your configuration.
+    </Message>
+
+    You can now use your SAN disk like you would any other disk.
+
+## Important recommendations for use
+
+As seen in the example above, the disk is available as `/dev/sdd.` It is not guaranteed that at the next reboot the same drive letter will be used, especially if you add other targets, or if your hardware configuration changes. It is therefore recommended not to use the names `/dev/sdX` in your configuration files.
+
+### How to address devices when using LVM
+LVM automatically uses UUIDs to recognize the partitions it uses. In this case, no problems should arise.
+
+### How to address devices when using direct disk formatting
+
+<Message type="note">
+  This method is not recommended, because aggregates several RPN SAN storage spaces, and does not allow you to make changes afterwards.
+</Message>
+
+If you format the device or one of its partitions directly, use the link created by the system in `/dev/disk/by-uuid/` or the fstab notation `UUID=XXX-XXX...` for addressing purposes.
+
+### How to address devices directly by their UUID
+
+If (unlike LVM) your application does not support the auto-detection of the partitions associated with it via the UUID, it is recommended to use the link in `/dev/disk/by-id/`.
+
+
+<Navigation title="See Also">
+  <PreviousButton to="/dedibox-network/rpn/how-to/connect-rpn-san/">How to connect to an RPN SAN</PreviousButton>
+  <NextButton to="/dedibox-network/rpn/how-to/use-rpn-san-esxi/">How to configure RPN SAN on ESXi</NextButton>
+</Navigation>

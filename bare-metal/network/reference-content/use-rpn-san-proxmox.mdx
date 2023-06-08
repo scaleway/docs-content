@@ -1,0 +1,107 @@
+---
+meta:
+  title: How to mount an RPN SAN volume on Proxmox
+  description: This page explains how to mount an RPN SAN volume on Proxmox
+content:
+  h1: How to mount an RPN SAN volume on Proxmox
+  paragraph: This page explains how to mount an RPN SAN volume on Proxmox
+tags: dedibox rpn san proxmox 
+dates:
+  validation: 2023-01-26
+  posted: 2021-11-10
+categories:
+  - dedibox-network
+---
+
+<Message type="requirement">
+  * You have an account and are logged into the [Dedibox Console](https://console.online.net)
+  * You have a [Dedibox dedicated server](https://www.scaleway.com/en/dedibox/)
+  * You have an [RPN SAN](https://www.scaleway.com/en/dedibox/storage/rpn-san/) 
+</Message>
+
+## Configuration of Proxmox to use the RPN
+
+1. Log in to your server as `root` using SSH:
+    ```
+    ssh root@sd-XXX.dedibox.fr
+    ```
+2. Edit the `/etc/network/interfaces` file, and replace the lines mentioning `eth1` by these ones:
+    ```
+    auto eth1
+    iface eth1 inet dhcp
+    ```
+
+    <Message type="tip">
+      The interface may be named differently depending on your configuration. You can identify the RPN interface by running `ifconfig` which allows you to check the MAC address of the interface which is available in your Dedibox console.
+    </Message>
+3. Reboot your Proxmox server to complete the RPN configuration.
+
+## Open-iSCSI installation and configuration
+
+Proxmox requires the Open-iSCSI software to support mounting of iSCSI volumes. It may not be installed by default in your system.
+
+1. Log in to your server as root using SSH.
+    ```
+    ssh root@sd-XXX.dedibox.fr
+    ```
+2. Install `open-iscsi` using the APT package manager.
+    ```
+    apt install open-iscsi
+    ```
+3. Open the file `/etc/iscsi/iscsid.conf` in a text editor, for example `nano`.
+    ```
+    vi /etc/iscsi/iscsid.conf
+    ```
+
+    * Adjust the following configuration directives:
+    ```
+    node.conn[0].timeo.noop_out_interval = 0
+    node.conn[0].timeo.noop_out_timeout = 0
+    node.session.timeo.replacement_timeout = 86400
+    ```
+    The purpose of this change is to prevent your file system from becoming read-only if the link is interrupted for more than two minutes (by default) between your server and the storage server, which can happen during maintenance periods.
+
+    * Configure the setting for automatic reconnection of targets:
+    ```
+    node.startup = automatic
+    ```
+
+    * Change the following settings to take advantage of the data integrity check, if available:
+    ```
+    node.conn[0].iscsi.HeaderDigest = CRC32C,None
+    node.conn[0].iscsi.DataDigest = CRC32C,None
+    ```
+    * Then save your configuration and quit the text editor. 
+7. Reboot your server. 
+    ```
+    reboot 
+    ```
+
+## Discover and connect to targets in Proxmox
+
+1. In the **Server View**, click **Datacenter**, then **Storage**.
+2. Click **Add** and then **iSCSI Target**. Fill in the form:
+    * **ID:** any identifier used to name this RPN SAN volume
+    * **Portal:** the server on which your space is available (ex: san-1.rpn.online.net)
+    * **Target:** click on the small arrow, and the list of available targets will be displayed (if it is not the case, no need to go further, there is a problem)
+    * **Nodes:** the nodes that can access this target
+    * **Enable:** check the box
+    * **Use LUNs directly:** do not check if you want to create a LVM Group above (recommended, see next step). Check if you want to use the LUN directly
+    * **Shared:** Leave the default option 
+    * Add the LVM Group (Optional)
+    This step only applies if you want to create a LVM Group to store VM images.
+3. Click **Add** and then **LVM** or **LVM-Thin**. Fill in the form:
+    * **ID:** any identifier to name this LVM Group
+    * **Base Storage:** click on the small arrow, and select the previously mounted storage space
+    * **Base Volume:** click on the small arrow, and select the line that appears
+    * **Volume Group** an identifier of your choice to name the volume group in the system
+    * **Nodes** the nodes that will be able to access this space
+    * **Enable** check the box
+
+Your RPN SAN is available for use.
+
+
+<Navigation title="See Also">
+  <PreviousButton to="/dedibox-network/rpn/how-to/use-rpn-san-esxi-v7/">How to configure an RPN SAN on ESXi 7</PreviousButton>
+  <NextButton to="/dedibox-network/rpn/how-to/connect-rpn-san-windows/">How to connect a Windows Server to an RPN SAN</NextButton>
+</Navigation>

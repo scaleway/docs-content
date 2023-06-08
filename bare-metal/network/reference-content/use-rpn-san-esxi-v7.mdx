@@ -1,0 +1,143 @@
+---
+meta:
+  title: How to mount an RPN SAN volume in VMware ESXi 7 and later
+  description: This page explains how to mount an RPN SAN volume in VMware ESXi 7 and later
+content:
+  h1: How to mount an RPN SAN volume in VMware ESXi 7 and later
+  paragraph: This page explains how to mount an RPN SAN volume in VMware ESXi 7 and later
+tags: dedibox rpn san vmware esxi esxi7 
+dates:
+  validation: 2023-01-26
+  posted: 2021-11-10
+categories:
+  - dedibox-network
+---
+
+<Message type="requirement">
+  * You have an account and are logged into the [Dedibox Console](https://console.online.net)
+  * You have a [Dedibox dedicated server](https://www.scaleway.com/en/dedibox/)
+  * You have an [RPN SAN](https://www.scaleway.com/en/dedibox/storage/rpn-san/) 
+</Message>
+
+<Message type="important">
+  This documentation covers **VMWare ESXi version 7** and later. Follow [this link](/dedibox-network/rpn/how-to/use-rpn-san-esxi/) to see the documentation for ESXi 5.0/5.1/5.5 and 6.0.
+</Message>
+
+## How to configure VMWare ESXi to use RPN
+
+### Enable SSH on your ESXi
+
+1. Log into the ESXi web interface at `https://YOUR_ESXI_HOST_IP`.
+    <Message type="tip">
+      Use the `root` user and the password set during installation of the machine to log in. 
+    </Message>
+
+    Once logged in, the ESXi dashboard displays.
+
+    <Lightbox src="scaleway-esxi7-dashboard.webp" alt="" />
+2. Click **Manage** in the menu on the left. Then click the **Services** tab to display a list of available services.
+3. Select **TSM-SSH**, then click **Start** to activate the SSH service. 
+    <Lightbox src="scaleway-esxi7-ssh.webp" alt="" />
+
+### Configure ESXi to access the RPN
+
+#### Configuration in the ESXi interface
+
+1. Connect to your Dedibox server by typing the server's IP address in a web browser. The ESXi login displays. Enter your credentials to log in.
+2. Click **Actions** > **Services** > **Enable Secure Shell (SSH)**:
+    <Lightbox src="scaleway-enable_ssh.webp" width="600" alt="" />
+
+  The following warning displays once SSH is enabled: **SSH is enabled on this host. You should disable SSH unless it is necessary for administrative purposes.**
+3. Create a new **Virtual Switch** by clicking on **Networking** > **Virtual Switches** > **Add Standard Virtual Switch**. Configure it as shown in the following example:
+    <Lightbox src="scaleway-rpn_switch.webp" width="400" alt="" />
+4. Create a new **VMkernel NIC** by clicking on **Networking** > **VMkernel NICs** > **Add VMkernel NIC** and configure it as follows. 
+    <Lightbox src="scaleway-vmkernel_nic.webp" width="400" alt="" />
+
+    <Message type="note">
+      Make sure to configure Jumboframes (MTU 9000) both for the switch and the NIC.
+    </Message>
+5. Connect to your server using SSH. The SSH credentials are identical to those for the web interface.
+6. Locate the MAC address of the network card connected to the RPN (MTU 9000):
+    ```
+    esxcfg-nics -l
+    ```
+7. Export the current VMkernel NIC configuration:
+    ```
+    configstorecli config current get -c esx -g network -k vmknics > vmknics.json
+    ```
+8. Open the VMkernel NIC configuration file in a text editor:
+    ```
+    vi vmknics.json
+    ```
+9. Replace the MAC address of your RPN VMkernel NIC with your [virtual MAC](/dedibox-network/ip-failover/how-to/create-virtual-mac/).
+    <Lightbox src="scaleway-esxi7-vmnic.webp" />
+10. Import the new configuration:
+    ```
+    configstorecli config current set -c esx -g network -k vmknics -i vmknics.json --overwrite
+    ```
+11. Reboot the machine to activate the new configuration.
+### Setting RPN routes
+
+1. Enter the ESXi web interface, click **Networking** > **Virtual Switches** > **RPN Switch** and check the IP address of the VMkernel NIC. It now has the RPN IP auto assigned to the interface via DHCP:
+    <Lightbox src="scaleway-rpn_switch_connected.webp" width="800" alt="" />
+2. Reactivte the SSH service and connect to the machine via SSH.
+3. Run the following command to add the RPN route:
+    ```
+    esxcfg-route -a 10.88.0.0/13 [YOUR_RPN_GATEWAY_IP]
+    ```
+
+    <Message type="tip"> 
+      You can find the RPN gateway either on your server's overview page in the Dedibox console or by following [this guide](/dedibox-network/rpn/how-to/find-rpn-gateway/).
+    </Message>
+4. Ping the RPN-SAN to check if the RPN connection is working properly:
+    ```
+    ping san-1.rpn.online.net
+    ```
+5. Open the file `/etc/rc.local.d/local.sh` in a text editor and add the following lines to it to configure the RPN route automatically during boot:
+    ```
+    esxcfg-route -a 10.88.0.0/13 [YOUR_RPN_GATEWAY_IP]
+    exit 0
+    ```
+
+### Connecting the RPN-SAN
+
+To be able to communicate with the RPN-SAN, you need to allow your servers to access it.
+
+1. Connect to the Dedibox Console and click **Storage** > **RPN-SAN**.
+2. Select the SAN you want to configure and click **Manage**.
+3. Add the server(s) you want to access your SAN services to the list. Optionally you can add RPN subnet IPs.
+    <Message type="note">
+      If you use RPNv2, an [additional configuration](/dedibox-network/rpn/how-to/configure-rpnv1-gateway/) is required to access the RPN-SAN.
+    </Message>
+
+    <Message type="important">
+    While it is technically possible, it is not recommended to allow more than one server at a time to communicate with the SAN. The iSCSI protocol does not handle concurrency: you may lose all your data if you allow more than one server to access this storage.
+    </Message>
+4. Click **Save** to validate the new configuration of the SAN.
+5. Connect to the ESXi web interface of your server.
+6. Click **Storage** > **Adapters** > **Software iSCSI**. A configuration pop-up displays.
+7. **Enable** the service. Click **Add port binding** and add the RPN Network. Then click **Add dynamic target** and enter the address of your SAN. Finally click **Save configuration**:
+    <Lightbox src="scaleway-configure_iscsi.webp" width="600" alt="" />
+
+ESXi rescans for devices and you can see the new iSCSI disk in the **Devices** tab of the storage section.
+
+## Adding a new Datastore
+
+To use the RPN-SAN with ESXi, you need to create a new datastore. To to so, follow these steps:
+
+1. Connect to the ESXi web interface, then click **Storage** > **Datastores** > **New Datastore**.
+2. Select **Create new VMFS datastore** and click **Next**.
+3. Enter a name for the new datastore and select the RPN-SAN iSCSI disk from the list of available devices. Then click **Next**:
+    <Lightbox src="scaleway-datastore_device.webp" width="600" alt="" />
+4. Configure the partitioning of the datastore. Then click **Next**. A summary displays. 
+5. Validate all given information and click **Finish** to format the device.
+    <Message type="important">
+      Be careful, formatting the device deletes all data you may have stored on it.
+    </Message>
+6. The newly created datastore displays in the datastore list and is ready for use:
+    <Lightbox src="scaleway-datastore_list.webp" width="800" alt="" />
+
+<Navigation title="See Also">
+  <PreviousButton to="/dedibox-network/rpn/how-to/use-rpn-san-esxi/">How to mount an RPN SAN on ESXi 5 and 6</PreviousButton>
+  <NextButton to="/dedibox-network/rpn/how-to/use-rpn-san-proxmox/">How to configure an RPN SAN on Proxmox</NextButton>
+</Navigation>

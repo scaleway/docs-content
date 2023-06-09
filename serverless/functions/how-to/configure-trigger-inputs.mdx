@@ -1,0 +1,60 @@
+---
+meta:
+  title: How to configure event retention for trigger inputs
+  description: This page explains how to configure event retention for trigger inputs
+content:
+  h1: How to configure event retention for trigger inputs
+  paragraph: This page explains how to configure event retention for trigger inputs
+tags: functions
+dates:
+  validation: 2023-06-09
+  posted: 2023-06-09
+categories:
+  - serverless
+  - functions
+---
+
+<Message type="important">
+  This feature is currently in beta and only allows a max of 10 inflight requests, so functions that are configure to have more than 10 replicas won't be used at full. In the future this limit will be removed. Please, take that into consideration while using the following formulas.
+</Message>
+
+Triggers get events from an input, such as a SQS queue, and forward them to a function, which will scale up according to its settings to accommodate the workload. This process uses back pressure, so that no new events are read if the function instances have not yet finished processing the previous ones. It is important to note that triggers only keep a buffer of the messages that are inflight, and they DO NOT drain all the messages of the input in advance.
+
+As a result, in some scenarios such as event bursts or slow computations, events may stay in the input buffer for a while before being consumed. If there is some kind of message-level timeout in the input, as in the case of [MessageRetentionPeriod](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SetQueueAttributes.html) in SQS queues, this may lead to events being deleted before triggering the function.
+
+The implementation of the core trigger behavior strives to be input agnostic, so it is the responsibility of users to configure the input buffers according to their use case to avoid losing events. Also, some users may be okay with old messages being automatically deleted if they haven't been processed in time.
+
+
+## Useful formulas to calculate input retention
+
+The following formulas may help to choose the retention values in scenarios where every message should be eventually processed.
+
+The first thing to calculate is the amount of messages that can be consumed by the function every second, or throughput. This value can be derived from how long it takes for it to complete when inkoked and the max number of instances it may scale up to.
+
+```
+Function throughput = ( 1 / process time ) * max instances
+```
+
+For example, a function that takes 0.1 seconds to complete and has a max of 10 replicas has a throughput of `( 1 / 0.1 ) * 10 = 100` messages per second.
+
+As long as the number of events sent to the input per second is lower than the function throughput, the events should be consumed almost immediately. However, if there is a burst of events higher than that value, they will be throttled and buffered in the input while they are consumed.
+
+The time that will take for all the burst messages to be consumed can be calculated with the following formula:
+
+```
+Delay = burst size / function throughput
+```
+
+For example, a function with a throughput of 100 messages per second that receives a burst of 200 messages will take `200 / 100 = 2` seconds to process them.
+
+These formulas so far assume that the function is completely scaled up at the moment of receiving the events, but it may happen that it is only partially scaled or that it has to scale from zero. This will probably be the case if the workload is not constant over time. In these scenarios, the cold-start latency of the new instances should be taken into consideration.
+
+As a result, the minimum retention period in the input buffer can be estimated with the following formula:
+
+```
+minimum retention = max expected burst size / ( ( 1 / process time ) * max instances ) + cold start latency
+```
+
+For example, a function that takes 30 seconds to cold-start, takes 5 seconds to complete, has a max of 10 replicas and expects a max burst of 200 messages should have at least an input retention of `200 / ( ( 1 / 5 ) * 10 ) + 30 = 130` seconds.
+
+Note that this input retention value is just the bare minimum to process a single message burst, so the actual value used in production should be higher.

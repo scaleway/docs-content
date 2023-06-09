@@ -1,0 +1,91 @@
+---
+meta:
+  title: Resolving IPv6 connection issues
+  description: This page explains how to resolve IPv6 connection issues.
+content:
+  h1: Resolving IPv6 connection issues
+  paragraph: This page explains how to resolve IPv6 connection issues.
+tags: dedibox ipv6 
+dates:
+  validation: 2022-11-03
+  posted: 2021-08-03
+categories:
+  - dedibox-network
+---
+
+<Message type="requirement">
+  - You have an account and are logged into the [Dedibox console](https://console.online.net)
+  - You have [created](/dedibox/dedicated-servers/how-to/order-a-server) a Dedibox dedicated server
+  - You have [requested](/bare-metal/network/reference-content/request-prefix) a /48 IPv6 prefix
+  - You have configured the [DHCPv6 client](/bare-metal/network/reference-content/configure-dhcpv6)
+</Message>
+
+
+## How to debug IPv6 connection issues from rescue mode
+
+In case you experience IPv6 connection issues, you can test the network connectivity from [rescue mode](/dedibox/dedicated-servers/how-to/use-rescue-mode/).
+
+To test IPv6 connectivity on your server in rescue mode, reboot the server into a “Ubuntu rescue” mode. The `dhclient` is preinstalled in these images.
+
+1. Get the name of your Internet interface using the following command: 
+    ```
+    ip address show
+    ```
+2. Create a file which will contain your DUID. The DUID is a unique "key" allowing access to your IPv6 prefix. You can find your DUID in your console.
+    ```
+    sudo nano /etc/dhcp/dhclient6.conf
+    ```
+3. Paste the following code into the file and edit the interface name (here `eno1`) and the DUID (here `DUID`) before saving the file and exiting the editor:
+    ```
+    interface "eno1" {
+    send dhcp6.client-id DUID;
+    }
+    ```
+4. Start the DHCPv6 client using the previously created configuration file. Remember to replace `eno1` with the name of your Internet interface:
+    ```
+    dhclient -cf /etc/dhcp/dhclient6.conf -6 -P -v eno1 
+    ```
+5. Add an IPv6 address to your network interface. Remember to replace `eno1` with the name of your Internet interface and `IPV6ADDRESS/PREFIXLENGTH` with an IPv6 address from your prefix and the length of your prefix:
+    ```
+    /sbin/ifconfig eno1 inet6 add IPV6ADDRESS/PREFIXLENGTH
+    ```
+6. Use `ping6` to validate the IPv6 connectivity of your server:
+    ```
+    ping6 ipv6.google.com
+    ```
+
+## How to debug IPv6 connection issues in normal mode
+
+In case you experience IPv6 connection issues, start by verifying the Internet interface name in your configuration. You can check the names of your interfaces using the following command:
+
+```
+ip address show
+```
+
+In addition, your server needs to be configured to accept RA (Router Advertisement).
+By default, your server will not accept to forward packets from an interface to another if it is automatically configured (through DHCPv6).
+
+If you need to forward IPv6 packets and use an automated configuration, you will need to set your `net.ipv6.conf.all.accept_ra` to `2` in `/etc/sysctl.conf`. This is useful for hypervisor hosts such as Proxmox.
+
+This is useful for hypervisor hosts such as Proxmox.
+
+## How to avoid DHCPv6 floods 
+
+In certain cases, some DHCPv6 clients may unfortunately sends several requests per second (especially `dchp6c`).
+
+This triggers blocking of your server's network port by our automatic protection, as it will be seen as a source of an UDP flood.
+
+To avoid this problem, we invite you to limit the traffic sent from your dhclient6 directly in your firewall configuration.
+
+Following an example for IPTABLES:
+
+```
+ip6tables -A OUTPUT -p udp --dport 547 -m limit --limit 10/min --limit-burst 5 -j ACCEPT
+ip6tables -A OUTPUT -p udp --dport 547 -j DROP
+```
+
+
+<Navigation title="See Also">
+  <PreviousButton to="/bare-metal/network/reference-content/configure-ipv6-networkd/">How to configure IPv6 using networkd</PreviousButton>
+  <NextButton to="/bare-metal/network/reference-content/dedibox-network-info/">Dedibox network information</NextButton>
+</Navigation>

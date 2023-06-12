@@ -1,0 +1,196 @@
+---
+meta:
+  title: Adding a standalone Public Gateway to your regional Private Network
+  description: This page shows you how to add a standalone Public Gateway to your regional Private Network.
+content:
+  h1: Adding a standalone Public Gateway to your regional Private Network
+  paragraph: This page shows you how to add a standalone Public Gateway to your regional Private Network.
+dates:
+  validation: 2023-05-09
+  posted: 2023-05-09
+categories:
+  - network
+---
+
+Scaleway regional Private Networks currently support [Public Gateways](/network/public-gateways/concepts/#public-gateway): Instances attached to the regional Private Network can be automatically assigned an IP address via the gateway's managed DHCP functionality.
+
+However, it is not currently possible to automatically configure a "standalone" Public Gateway for a regional Private Network. By "standalone", we mean a gateway with no DHCP functionality, acting purely as a gateway for ingress and egress to/from the Private Network. Furthermore, Public Gateways do not have **IP** **A**ddress **M**anagement ([IPAM](https://en.wikipedia.org/wiki/IP_address_management)) functionality to assign IP address from a defined subnet of the Private Network. 
+
+This is achievable, however, via a manual configuration.
+
+As an overview: IPAM prevents the booking of four specific IPs in a subnet. For example, in the case of a regional Private Network with the subnet `192.168.1.0/24`, the following IP addresses are reserved and cannot be assigned to resources:
+
+- 192.168.1.0 (network address)
+- **192.168.1.1**
+- 192.168.1.254
+- 192.168.1.255 (broadcast address)
+
+In this case, we can attach a Public Gateway with no DHCP to a regional Private Network with the static address `192.168.1.1`. Every Instance in the Private Network can then be manually configured with a default route to `192.168.1.1`.
+
+In the steps below, we show how to **manually** configure a standalone Public Gateway via the [Scaleway CLI](https://github.com/scaleway/scaleway-cli) and set up IPAM to assign IP addresses to resources in the network.
+
+<Message type="important">
+This solution intended for testing purposes, given that VPC and regional Private Networks are currently in [Public Beta](https://www.scaleway.com/en/betas/).
+</Message>
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created an API key](/console/my-project/how-to/generate-api-key/)
+  - You have [installed the Scaleway CLI](https://github.com/scaleway/scaleway-cli), and it is up to date
+</Message>
+
+1. [Create a regional Private Network](/network/vpc/how-to/create-private-network/) and [attach at least two Instances](https://www.scaleway.com/en/docs/network/vpc/how-to/attach-resources-to-pn/) to it.
+
+2. [Fill out the form](https://scaleway.typeform.com/to/EmElSxRE) to ask us to enable DHCP on your regional Private Network. State your the ID of your regional Private Network in your email (this ID is displayed in the regional Private Network's **Overview** page in the Scaleway console).
+
+3. Retrieve the subnet of your regional Private Network:
+
+    ```bash
+    $ export PN_ID="your-regional-private-network-id"
+    
+    $ scw vpc private-network get $PN_ID
+    # Irrelevant output redacted
+    Subnets.0       172.16.12.0/22
+    
+    # The IPv4 subnet of your regional PN is: 172.16.12.0/22
+    # The IP of your Public Gateway will be: 172.16.12.1/22
+    
+    e$ xport PGW_ADDR="172.16.12.1"
+    $ export PGW_NET_ADDR="$PGW_ADDR/22"
+    ```
+
+4. Create a Public Gateway and attach it to the regional Private Network:
+
+    ```bash
+    $ export PROJECT_ID="scaleway-project-id"
+    $ scw vpc-gw gateway create project-id=$PROJECT_ID enable-bastion=true
+    # Irrelevant output redacted
+    ID                 your-pgw-id
+    
+    # Retrieve the ID of your PGW in the output
+    $ export PGW_ID="your-pgw-id"
+    
+    $ scw vpc-gw gateway-network create enable-masquerade=true enable-dhcp=false gateway-id=$PGW_ID private-network-id=$PN_ID address=$PGW_NET_ADDR
+    ```
+    
+    <Message type="important">
+    Ensure that you do **not** enable DHCP on the Public Gateway, as it will interfere with the manual configuration we are creating.
+    </Message>
+
+5. Connect to your Instance in your regional Private Network and look for your Private Network interface:
+
+    ```bash
+    $ ssh root@1.2.3.4
+    $ ip addr show
+    # Some information has been removed from the output to ease readability
+    # Your PN interface is the one configured with an IP in your subnet (172.16.12.0/22)
+    # In this case, it is ens4 as one of its IP is: 172.16.12.2/22
+    
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    2: ens2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    3: ens4: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+        link/ether 02:00:00:12:c6:ac brd ff:ff:ff:ff:ff:ff
+        altname enp0s4
+        inet 172.16.12.2/22 metric 50 brd 172.16.15.255 scope global dynamic ens4
+          valid_lft 1246sec preferred_lft 1246sec
+        inet6 fdd7:ad50:4eca:68b0:41b1:9e20:77ce:92b8/128 scope global dynamic noprefixroute
+          valid_lft 3408sec preferred_lft 2408sec
+        inet6 fe80::ff:fe12:c6ac/64 scope link
+          valid_lft forever preferred_lft forever
+    $ export PN_IFACE=ens4
+    ```
+
+6. Configure your Instance to add a default route to your Public Gateway on your Private Network interface. Choose the relevant set of instructions depending on your distribution:
+
+    <Tabs id="configure-instance-pgw-rpn">
+
+      <TabsTab label="Ubuntu">
+
+        ```bash
+        # Still on your Instance
+        $ cat > /etc/netplan/60-$PN_IFACE-vpc-default-route-pgw.yaml << EoF
+        network:
+          version: 2
+          ethernets:
+            $PN_IFACE:
+              routes:
+              - to: default
+                via: $PGW_ADDR
+                metric: 90
+        EoF
+        $ netplan apply
+        $ ip route
+        # Some information has been removed from the output to ease readability
+        # You should see a default route to your PGW IP through your PN interface (ens4) with a metric 90 (meaning, prior to metric 100)
+        # The other default route is the original one and indicates the public interface of your Instance (ens2)
+        
+        default via 172.16.12.1 dev ens4 proto static metric 90 onlink
+        default via 10.75.18.12 dev ens2 proto dhcp src 10.75.18.13 metric 100
+        
+        # You can now detach public IPv4/v6 from your Instance and connect to it through the bastion enabled on your PGW
+        ```
+      </TabsTab>
+
+      <TabsTab label="Debian">
+
+      ```bash
+      # Still on your Instance
+      $ cat > /etc/network/if-up.d/60-$PN_IFACE-vpc-default-route-pgw << EoF
+      #!/bin/bash
+
+      if [ "\$IFACE" = "$PN_IFACE" ]; then
+        /sbin/ip route replace default via $PGW_ADDR metric 90
+      fi
+      EoF
+      $ systemctl restart networking.service
+      $ ip route
+      # Some information have been removed from the output to ease readability
+      # You should see a default route to your PGW IP through your PN interface (ens4) with a metric 90 (meaning, prior to metric 100)
+      # The other default route is the original one and indicates the public interface of your Instance (ens2)
+
+      default via 172.16.12.1 dev ens4 metric 90
+      default via 10.75.1.10 dev ens2 metric 100
+
+      # You can now detach public IPv4/v6 from your Instance and connect to it through the bastion enabled on your PGW
+      ```
+      </TabsTab>
+
+      <TabsTab label="CentOS / RockyLinux">
+
+      ```bash
+      # Still on your Instance, update the following script: /etc/NetworkManager/dispatcher.d/pre-up.d/scw-update_vpc_metric.sh
+      # Below is an example of the changes you need to apply to the script
+      # In this example, we assume the following things:
+      #  * your PN interface is eth1
+      #  * your PGW IP is 172.16.12.1
+      
+      $ diff -c /etc/NetworkManager/dispatcher.d/pre-up.d/scw-update_vpc_metric.sh.orig /etc/NetworkManager/dispatcher.d/pre-up.d/scw-update_vpc_metric.sh
+      *** /etc/NetworkManager/dispatcher.d/pre-up.d/scw-update_vpc_metric.sh.orig     2023-05-03 09:41:42.965368079 +0000
+      --- /etc/NetworkManager/dispatcher.d/pre-up.d/scw-update_vpc_metric.sh  2023-05-03 09:43:22.279318391 +0000
+      ***************
+      *** 12,17 ****
+      --- 12,20 ----
+        then
+                logger -p info -t "$tag" "Configuring VPC connection $CONNECTION_ID"
+                nmcli connection modify "$CONNECTION_UUID" ipv4.route-metric 50
+      +         if [ "$DEVICE_IFACE" = "eth1" ]; then
+      +           nmcli connection modify "$CONNECTION_UUID" +ipv4.routes "0.0.0.0/0 172.16.12.1 90"
+      +         fi
+                nmcli connection up "$CONNECTION_UUID"
+                logger -p info -t "$tag" "Connection $CONNECTION_ID configured"
+        else
+      
+      $ nmcli networking off && nmcli networking on
+      $ ip route
+      # Some information have been removed from the output to ease readability
+      # You should see a default route to your PGW IP through your PN interface (eth1) with a metric 90 (meaning, prior to metric 100)
+      # The other default route is the original one and indicates the public interface of your Instance (eth0)
+      
+      default via 172.16.12.1 dev eth1 proto static metric 90
+      default via 10.75.18.6 dev eth0 proto dhcp src 10.75.18.7 metric 100
+      
+      # You can now detach public IPv4/v6 from your Instance and connect to it through the bastion enabled on your PGW
+      ```
+      </TabsTab>
+
+    </Tabs>

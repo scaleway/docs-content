@@ -1,0 +1,65 @@
+---
+meta:
+  title: Considerations to configure event retention for trigger inputs
+  description: This page explains how to configure event retention for trigger inputs
+content:
+  h1: Considerations to configure event retention for trigger inputs
+  paragraph: This page explains how to configure event retention for trigger inputs
+tags: functions
+dates:
+  validation: 2023-06-09
+  posted: 2023-06-09
+categories:
+  - serverless
+  - functions
+---
+
+<Message type="important">
+  This feature is currently in beta and only allows a maximum of 10 inflight requests. Functions that are configured with more than 10 replicas will not be used at full capacity. This limitation will be removed in the future.
+</Message>
+
+Triggers get events from an input, such as an SQS queue, and forward them to a function, which will scale up according to its settings to accommodate the workload. This process uses back pressure, so that no new events are read if the function instances have not yet finished processing the previous ones.
+
+<Message type="note">
+  Triggers only keep a buffer of the messages that are inflight, they do not drain all the messages of the input in advance.
+</Message>
+
+As a result, in some scenarios such as event bursts or slow computations, events may stay in the input buffer for a while before being consumed. If the input messages in the queue are set with a timeout, such as the  [MessageRetentionPeriod](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/APIReference/API_SetQueueAttributes.html) in SQS queues, events may be deleted before triggering the function.
+
+The implementation of the core trigger behavior is input agnostic, it is therefore your responsibility to configure the input buffers according to your use case to avoid losing events.
+
+## Useful formulas to calculate input retention
+
+The following formulas may help you choose the retention values in scenarios where every message must be processed.
+
+The first parameter to calculate is the **throughput**, which corresponds to the amount of messages that can be consumed by the function every second. This value can be obtained from the function's processing time when invoked and the maximum number of instances it can scale up to.
+
+```
+Function throughput = ( 1 / processing time ) * maximum instances
+```
+
+For example, a function that takes 0.1 second to complete with a maximum of 10 replicas has a throughput of `( 1 / 0.1 ) * 10 = 100` messages per second.
+
+As long as the number of events sent to the input per second is lower than the function throughput, the events will be consumed almost immediately. However, if there is a burst of events higher than this value, they will be throttled and buffered in the input while they are consumed.
+
+The time required for all the burst messages to be consumed can be calculated with the following formula:
+
+```
+Delay = burst size / function throughput
+```
+
+For example, a function with a throughput of 100 messages per second that receives a burst of 200 messages will take `200 / 100 = 2` seconds to process them.
+
+The previous formulas assume that the function is completely scaled up at the moment of receiving the events, but it may be only partially scaled or must be scaled from zero. This can be the case if the workload is not constant over time. In these scenarios, the cold-start latency of the new instances must be taken into consideration.
+
+As a result, the minimum retention period in the input buffer can be estimated with the following formula:
+
+```
+minimum retention = max expected burst size / ( ( 1 / processing time ) * max instances ) + cold start latency
+```
+
+For example, a function that takes 30 seconds to cold-start, takes 5 seconds to complete, has a maximum of 10 replicas and expects a maximum burst of 200 messages should have an input retention of at least `200 / ( ( 1 / 5 ) * 10 ) + 30 = 130` seconds.
+
+<Message type="note" >
+  This input retention value corresponds to the minimum time required to process a single message burst, the actual value used in production should therefore be higher.
+</Message>

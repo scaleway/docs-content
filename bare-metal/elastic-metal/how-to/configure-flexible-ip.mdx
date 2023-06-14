@@ -1,0 +1,143 @@
+---
+meta:
+  title: How to configure a flexible IP on an Elastic Metal server
+  description: This page explains configure a flexible IP on an Elastic Metal server
+content:
+  h1: How to configure a flexible IP on an Elastic Metal server
+  paragraph: This page explains configure a flexible IP on an Elastic Metal server
+tags: elastic-metal flexible-ip configuration 
+dates:
+  validation: 2023-01-12
+  posted: 2021-05-26
+categories:
+  - compute
+---
+
+Learn how to configure a [flexible IP address](/bare-metal/elastic-metal/concepts/#flexible-ip) on your Elastic Metal server. The configuration depends on the Linux distribution running on your machine. You can configure your flexible IP on machines running one of [Ubuntu Linux](#how-to-configure-a-flexible-ip-on-ubuntu-linux), [Debian Linux](#how-to-configure-a-flexible-ip-on-debian-linux) or [CentOS](#how-to-configure-a-flexible-ip-on-centos).
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)  
+  - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key)
+  - You have [created](/bare-metal/elastic-metal/how-to/create-server) and [installed](/bare-metal/elastic-metal/how-to/install-server) an Elastic Metal server
+  - You have [attached a flexible IP address](/bare-metal/elastic-metal/how-to/attach-detach-flexible-ip) to your Elastic Metal server
+</Message>
+
+
+## How to configure a flexible IP on Ubuntu Linux
+
+Since the LTS release of Ubuntu Version 18.04 (Bionic Beaver) the recommended way to configure a flexible IP is by using [Netplan](https://netplan.io/). If you prefer a more traditional configuration, refer to the instructions for [flexible IP configuration on Debian](#how-to-configure-a-flexible-ip-on-debian-linux).
+
+1. Log into your server using SSH with a user having super-user rights.
+2. Open the file `/etc/netplan/01-netcfg.yaml` with superuser rights in your favorite text editor and configure the networking for your machine.
+    <Message type="note">
+      IP addresses in the configuration file have to be specified in CIDR
+      notation. The netmask is `/24` for the principal IP of the server and `/32`
+      for each flexible IP.
+    </Message>
+    Your configuration file should look like the following example:
+
+    ```
+    network:
+      version: 2
+      renderer: networkd
+      ethernets:
+        enp1s0f0:
+            addresses: [163.172.123.123/24, 212.83.123.123/32]
+            gateway4: 163.172.123.1
+          nameservers:
+            addresses: [ "62.210.16.6", "62.210.16.7" ]
+    ```
+
+    <Message type="tip">
+      The interface name for your primary interface may be different from
+      `enp1s0f0`. You can use the `ip link show` command to determine the name of
+      your public Internet interface.
+    </Message>
+3. Once the file is edited as required, save it and quit the text editor. Then apply the configuration using the following command: 
+    ```
+    sudo netplan apply 
+    ```
+
+Your server now responds on both the primary IP address and the flexible IP address.
+
+## How to configure a flexible IP on Debian Linux
+
+1. Log into your server using SSH with a user having super-user rights.
+2. Open the file `/etc/network/interfaces` with superuser rights in your favorite text editor and configure the networking for your machine.
+3. Edit the file and add the flexible IP as shown in the following example:
+    ```sh
+    # This file describes the network interfaces available on your system
+    # and how to activate them. For more information, see interfaces(5).
+    # The loopback network interface
+    auto lo
+    iface lo inet loopback
+    # The primary network interface
+    auto eth0
+    iface eth0 inet static
+      address 195.154.123.123
+      netmask 255.255.255.0
+      gateway 195.154.123.1
+    auto eth0:0
+      iface eth0:0 inet static
+        address ip_flexible
+        netmask 255.255.255.255
+    ```
+
+    <Message type="note">
+      The interface name of your server might be different depending on the hardware
+      of the server. You can use the `ip link show` command to determine the name of
+      your public Internet interface.
+    </Message>
+4. Save the file and quit the editor. 
+5. Bring the interface up using the `ifup` command: 
+    ```sh
+    ifup eth0:0
+    ```
+
+Your server now responds on both the primary IP address and the flexible IP address.
+
+## How to configure a flexible IP on CentOS
+
+1. Log into your server using SSH using the `root` user.
+2. Copy the default network configuration file to create an alias:
+    ```sh
+    cp /etc/sysconfig/network-scripts/ifcfg-eth0 /etc/sysconfig/network-scripts/ifcfg-eth0:0
+    ```
+3. Open the file `/etc/sysconfig/network-scripts/ifcfg-eth0:0` in your favorite text editor and modify it as in the following example:
+    ```sh
+    DEVICE="eth0:0"
+    BOOTPROTO=static
+    IPADDR="my_flexible_ip"
+    NETMASK="255.255.255.255"
+    ONBOOT=yes
+    ```
+4. Save the file, exit the text editor and run the following command to reload the network configuration:
+    ```
+    /etc/init.d/network restart
+    ```
+Your server now responds on both the primary IP address and the flexible IP address.
+
+## How to configure a flexible IP in a virtual machine (VM)
+
+When you install your Elastic Metal server with a virtualization solution like VMware vSphere Hypervisor (ESXi) or Proxmox you can create multiple virtual machines on the physical server.
+
+To communicate on the Internet each of your virtual machines needs an IP address. You can use flexible IPs to have additional IP addresses available for your virtual machines.
+
+Configure the networking of your VM's as follows:
+
+* IP address: Your flexible IP
+* Netmask: `255.255.255.255`
+* Gateway: `62.210.0.1`
+* DNS resolver: `62.210.16.6` and `62.210.16.7`
+
+<Message type="tip">
+  The gateway of all flexible IPs is `62.210.0.1`. This allows you to move your VMs between your hypervisors without changing the network configuration of the virtual machine.
+</Message>
+
+
+<Navigation title="See Also">
+  <PreviousButton to="/bare-metal/elastic-metal/how-to/attach-detach-flexible-ip/">How to attach / detach a flexible IP</PreviousButton>
+  <NextButton to="/bare-metal/elastic-metal/how-to/configure-flexible-ipv6/">How to configure a flexible IP (IPv6)</NextButton>
+</Navigation>

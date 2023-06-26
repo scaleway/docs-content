@@ -28,11 +28,12 @@ This change can occur when you stop and restart your Instance. This private netw
 In addition, the public network is provided by a network component that manages a carrier-grade NAT (Network Address Translation), establishing a one-to-one mapping between the flexible IP and the private IP assigned to the Instance during provisioning.
 
 With IP mobility, private IPs are no longer in use. Instead, traffic is routed directly to the flexible IP of the Instance. The main advantage of this approach is that your underlying IP remains unchanged when you stop and start the Instance or when it gets provisioned on another hypervisor. However, it also means that it will not have network access if you do not attach any flexible IP to your Instance.
-Another feature of IP mobility is the ability to assign multiple flexible IP addresses to your Instance, allowing you to choose between IPv4 and IPv6 protocols.
+Another feature of IP mobility is the ability to assign multiple flexible IP addresses to your Instance, allowing you to use both IPv4 and IPv6 protocols.
 
 <Message type="note">
-   * Currently, IP mobility is available in the `pl-waw-2` Availability Zone.
-   * [Dynamic IPs](/compute/instances/concepts/#dynamic-ip) continue to be supported after migration to IP mobility.
+   * Currently, IP mobility is available in the `pl-waw-2`, `fr-par-3` and `nl-ams-2` Availability Zones.
+   * [Dynamic IPs](/compute/instances/concepts/#dynamic-ip) continue to be supported after the migration to IP mobility.
+   * The field `enable_ipv6` is being deprecated and has no meaning for IP mobility enabled instances.
 </Message>
 
 ## How to enable IP mobility?
@@ -44,7 +45,7 @@ Another feature of IP mobility is the ability to assign multiple flexible IP add
 In this section, we will guide you through the process of creating a new IP mobility-enabled Instance. We will also provide instructions on migrating your existing legacy Instances.
 
  * The following examples rely on [httpie](https://httpie.io/cli), you can easily adapt them with curl if you prefer.
- * The `API_URL` variable contains the following value: https://api.scaleway.com/instance/v1/zones/pl-waw-2
+ * The `API_URL` variable contains the following value: `https://api.scaleway.com/instance/v1/zones/<zone>`
  * The `HEADERS` variable contains: `X-Auth-Token:<API secret key>`
 
 <Message type="important">
@@ -60,36 +61,40 @@ You can request IP mobility compatible IP addresses using the Scaleway API. Avai
         ```json
         ❯ cat payloads/ip-data.json
         {
-            "type": "routed_ipv4",
+            "type": "routed_ipv6",
             "project": "7ddae24a-ad61-4744-830c-079d1c66abe1"
         }
 
         ❯ http post $API_URL/ips $HEADERS <payloads/ip-data.json
         ```
         <Message type="tip">
-            If you want an IPv6 address instead, replace the type `routed_ipv4` with `routed_ipv6`.
+            If you want an IPv4 address instead, replace the type `routed_ipv6` with `routed_ipv4`.
         </Message>
     </TabsTab>
     <TabsTab label="Response">
         ```json
         {
             "ip": {
-                "address": "51.158.51.51",
+                "address": null,
                 "id": "01ac2664-699e-46b5-80be-9d43d477857f",
                 "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
-                "prefix": null,
+                "prefix": "2001:bc8:4e10:6::/64",
                 "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
                 "reverse": null,
                 "server": null,
                 "state": "detached",
                 "tags": [],
-                "type": "routed_ipv4",
+                "type": "routed_ipv6",
                 "zone": "pl-waw-2"
             }
         }
         ```
     </TabsTab>
 </Tabs>
+
+<Message type="tip">
+    Note that the field `address` will always be `null` with `"type": "routed_ipv6"` because in practice you get assigned a complete /64 prefix and not a single IP address. You will then find the prefix information within the `prefix` key.
+</Message>
 
 ## Create a new Instance with IP mobility
 
@@ -182,23 +187,23 @@ Run the following command to create an Instance with the previously created IP a
                 "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
                 "protected": false,
                 "public_ip": {
-                    "address": "51.158.52.52",
+                    "address": "2001:bc8:4e10:6:dc00:00ff:fe01:c4b7",
                     "dynamic": false,
-                    "family": "inet",
-                    "gateway": "62.210.0.1",
+                    "family": "inet6",
+                    "gateway": "fe80::dc00:00ff:fe01:c4b8",
                     "id": "92873598-d8e6-4d98-9254-697b3e56ff6b",
-                    "netmask": "32",
-                    "provisioning_mode": "dhcp"
+                    "netmask": "64",
+                    "provisioning_mode": "slaac"
                 },
                 "public_ips": [
                     {
-                        "address": "51.158.52.52",
+                        "address": "2001:bc8:4e10:6:dc00:00ff:fe01:c4b7",
                         "dynamic": false,
-                        "family": "inet",
-                        "gateway": "62.210.0.1",
+                        "family": "inet6",
+                        "gateway": "fe80::dc00:00ff:fe01:c4b8",
                         "id": "92873598-d8e6-4d98-9254-697b3e56ff6b",
-                        "netmask": "32",
-                        "provisioning_mode": "dhcp"
+                        "netmask": "64",
+                        "provisioning_mode": "slaac"
                     }
                 ],
                 "routed_ip_enabled": true,
@@ -237,36 +242,36 @@ Run the following command to create an Instance with the previously created IP a
     </TabsTab>
 </Tabs>
 
-## Create a new Instance with one IPv6 only
+## Create a new Instance with one IPv4 only
 
-First you need to create an IPv6 reservation, then you create a new IP mobility Instance with this IP attached.
+First you need to create an IPv4 reservation, then you create a new IP mobility Instance with this IP attached.
 
-<Tabs id="create-ipv6">
+<Tabs id="create-ipv4">
     <TabsTab label="Request">
         ```json
-        ❯ cat payloads/ip6-data.json
+        ❯ cat payloads/ip-data.json
         {
-            "type": "routed_ipv6",
+            "type": "routed_ipv4",
             "project": "7ddae24a-ad61-4744-830c-079d1c66abe1"
         }
 
-        ❯ http post $API_URL/ips $HEADERS <payloads/ip6-data.json
+        ❯ http post $API_URL/ips $HEADERS <payloads/ip-data.json
         ```
     </TabsTab>
     <TabsTab label="Response">
         ```json
         {
             "ip": {
-                "address": null,
+                "address": "51.159.123.86",
                 "id": "01ac2664-699e-46b5-80be-9d43d477858f",
                 "organization": "7ddae24a-ad61-4744-830c-079d1c66abe1",
-                "prefix": "2001:bc8:1d90:6::/64",
+                "prefix": null,
                 "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
                 "reverse": null,
                 "server": null,
                 "state": "detached",
                 "tags": [],
-                "type": "routed_ipv6",
+                "type": "routed_ipv4",
                 "zone": "pl-waw-2"
             }
         }
@@ -276,12 +281,12 @@ First you need to create an IPv6 reservation, then you create a new IP mobility 
 
 And now we create the Instance.
 
-<Tabs id="create-instancev6">
+<Tabs id="create-instancev4">
     <TabsTab label="Request">
         ```json
         ❯ cat payloads/server-data.json
         {
-            "name": "my-ipmobilityv6-instance",
+            "name": "my-ipmobilityv4-instance",
             "commercial_type": "GP1-S",
             "dynamic_ip_required": false,
             "enable_ipv6": false,
@@ -363,22 +368,22 @@ And now we create the Instance.
                 "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
                 "protected": false,
                 "public_ip": {
-                    "address": "2001:bc8:1d90:6:dc00:00ff:fe05:2993",
+                    "address": "51.159.123.86",
                     "dynamic": false,
-                    "family": "inet6",
+                    "family": "inet",
                     "gateway": "fe80::dc00:00ff:fe05:2994",
                     "id": "01ac2664-699e-46b5-80be-9d43d477858f",
-                    "netmask": "64",
-                    "provisioning_mode": "slaac"
+                    "netmask": "32",
+                    "provisioning_mode": "dhcp"
                 },
                 "public_ips": [
                     {
-                        "address": "2001:bc8:1d90:6:dc00:00ff:fe05:2993",
+                        "address": "51.159.123.86",
                         "dynamic": false,
-                        "family": "inet6",
-                        "gateway": "fe80::dc00:00ff:fe05:2994",
+                        "family": "inet",
+                        "gateway": "62.210.0.1",
                         "id": "01ac2664-699e-46b5-80be-9d43d477858f",
-                        "netmask": "64",
+                        "netmask": "32",
                         "provisioning_mode": "slaac"
                     }
                 ],
@@ -418,12 +423,16 @@ And now we create the Instance.
     </TabsTab>
 </Tabs>
 
-## Create a new Instance with multiple IPs
+## Create a dual stack IPv4/IPv6 Instance
 
-You can now attach several IPs to one IP mobility Instance.
+You can now attach several IPs to one IP mobility Instance and you can mix-up both IPv4 and IPv6 addresses.
 We assume you create multiple IPs as described in the [example](#creating-an-ip-mobility-ip).
 
 Then you can create a new IP mobility instance using those IPs through the `public_ips` field.
+
+<Message type="note">
+    Not to be confused with the `public_ip` field that only accepts *one* IP.
+</Message>
 
 <Tabs id="multiple-ips">
     <TabsTab label="Request">
@@ -436,7 +445,7 @@ Then you can create a new IP mobility instance using those IPs through the `publ
             "enable_ipv6": false,
             "routed_ip_enabled": true,
             "project": "7ddae24a-ad61-4744-830c-079d1c66abe1",
-            "public_ips": ["01ac2664-699e-46b5-80be-9d43d477868f", "487e556c-0351-4a12-9762-4f33bc2c2379"],
+            "public_ips": ["01ac2664-699e-46b5-80be-9d43d477868f", "487e556c-0351-4a12-9762-4f33bc2c2379", "92873598-d8e6-4d98-9254-697b3e56ff6b"],
             "image": "62f9eea9-61dc-4944-b420-069687a3238a"
         }
 
@@ -538,6 +547,15 @@ Then you can create a new IP mobility instance using those IPs through the `publ
                         "id": "487e556c-0351-4a12-9762-4f33bc2c2379",
                         "netmask": "32",
                         "provisioning_mode": "manual"
+                    },
+                    {
+                        "address": "2001:bc8:4e10:6:dc00:00ff:fe01:c4b7",
+                        "dynamic": false,
+                        "family": "inet6",
+                        "gateway": "fe80::dc00:00ff:fe01:c4b8",
+                        "id": "92873598-d8e6-4d98-9254-697b3e56ff6b",
+                        "netmask": "64",
+                        "provisioning_mode": "slaac"
                     }
                 ],
                 "routed_ip_enabled": true,
@@ -588,12 +606,7 @@ You can use a specific server action to migrate an existing (legacy network) Ins
 <Tabs id="migrate-instance">
     <TabsTab label="Request">
         ```json
-        ❯ cat payloads/migrate-data.json
-        {
-                    "action": "enable_routed_ip"
-        }
-
-        ❯ http post $API_URL/servers/$SERVER_ID/action $HEADERS <payload/migrate-data.json
+        ❯ http post $API_URL/servers/$SERVER_ID/action $HEADERS action=enable_routed_ip
         ```
         <Message type="note">
             Your instance *will* reboot during this action.

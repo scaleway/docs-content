@@ -1,0 +1,97 @@
+---
+meta:
+  title: Configuring health checks
+  description: Learn how to configure health checks for your Load Balancer
+content:
+  h1: Configuring health checks
+  paragraph: Learn how to configure health checks for your Load Balancer
+tags: load-balancer health-check health interval transient-state unhealthy-threshold
+categories: 
+  - load-balancer
+  - network
+dates:
+  validation: 2023-06-05
+  posted: 2023-06-05
+---
+
+## Health check overview
+
+Load Balancers should only forward traffic to “healthy” backend servers. To monitor the health of a backend server, health checks regularly attempt to communicate with backend servers to ensure that servers are listening. Backend servers that fail a given number of health checks (by default, 3) are marked as `Down` and the Load Balancer stops forwarding traffic to them.
+
+In this document, we explain some of the different settings available when setting up health checks for your Load Balancer.
+
+## Health check types
+
+Health checks are available in many different types. By default, the health check type is set to be the same as that of the [backend protocol](/network/load-balancer/reference-content/configuring-backends/#protcol-and-port), that is to say **TCP** or **HTTP**. However, this can be overridden. The following health check types are available:
+
+**HTTP**: When selecting HTTP health checks, you are prompted to choose a **method** (`GET`, `POST` or `PUT`), the **path** to be targeted, the **HTTP Host header** and the response **code** that signals a successful health check. The Load Balancer will send an HTTP request to the backend server's IP address with the parameters defined in the health check. It expects to receive an HTTP response with the specified code in order to consider the health check successful. Note that the host header information is important for backend servers hosting several 'virtual hosts'.
+
+**MYSQL**: For MYSQL health checks, you are prompted to select the database username. The MYSQL health check sends two MySQL packets to the server: first a Client Authentication packet and then a QUIT packet to properly close the MySQL session. The received MySQL Handshake Initialization packet (and/or Error packet) is then parsed. This basic but useful test does not produce errors or aborted connections on the server. However, bear in mind that it does not check database presence or database consistency (an external check e.g. with xinetd would be required for this).
+    <Message type="tip">
+      The user specified for the health check must be unlocked and authorized without a password. To create a basic limited user in MySQL with optional resource limits:
+        ```
+        CREATE USER '<username>'@'<ip_of_haproxy|network_of_haproxy/netmask>'
+        /*!50701 WITH MAX_QUERIES_PER_HOUR 1 MAX_UPDATES_PER_HOUR 0 */
+        /*M!100201 MAX_STATEMENT_TIME 0.0001 */;
+        ```
+    </Message>
+
+    <Message type="important">
+    This health check method requires MySQL >=3.22. For older versions, we recommend using a TCP health check.
+    </Message>
+
+**PGSQL**: For PGSQL health checks, you are prompted to select the database username. The check sends a PostgreSQL StartupMessage and waits for either an `Authentication request` or `ErrorResponse` message. This basic but useful test does not produce errors or aborted connections on the server. This check is identical to the `mysql-check`.
+    <Message type="important">
+      There is a known bug with PGSQL health checks where the PGSQL server version is higher than **14**. A fix is currently underway. In the meantime, we recommend using a TCP health check for PGSQL servers of version 14 or higher.
+    </Message>
+
+**LDAP**: No additional settings are required for LDAP health checks. LDAP health checks test connection to the LDAP server by sending an a LDAPv3 anonymous simple bind message. This checks the LDAP service is actually up, and not just that a TCP session can be established.
+
+**Redis**: No additional settings are required for REDIS health checks. A PING redis command is sent to the server, and the response is analyzed for the `+PONG` response message. This checks that the server is correctly communicating with the REDIS protocol, rather than just accepting the TCP connection.
+
+**TCP**: No additional settings are required for TCP health checks. This check consists of a connection attempt that either fails or succeeds. 
+
+## TLS
+
+You can choose to activate or deactivate TLS for health checks. Activating TLS encrypts connections between the Load Balancer and the backend server(s) during health checks. Note that the backend server should have its own SSL/TLS certificate
+
+The activation setting is inherited from your [backend configuration](/network/load-balancer/reference-content/configuring-backends/#tls-encryption), however, you can choose to override this for health checks if you wish.
+
+## Verify certificate
+
+If you activated TLS encryption for your health check, the Verify Certificate setting displays. This determines whether the backend server's certificate is verified during health checks. 
+
+This setting is inherited from the [backend configuration](/network/load-balancer/reference-content/configuring-backends/#verify-certificate) and cannot be overridden:
+- If you activated TLS on your backend, the Verify Certificate setting you chose there is inherited for health checks.
+- If you didn't activate TLS on your backend configuration, the backend server's certificate will **not** be verified during health checks and you do not have the option to activate the setting here.
+
+The above also applies if you edit your backend settings after creating the backend: if you change your **Verify Certificate** setting in the backend, configuration the new setting will also be applied to the health check.
+
+## Proxy protocol
+
+Proxy protocol enables the original client IP address to be passed to the backend server in a standardized way during health checks. Note that the backend server must support the selected proxy protocol. 
+
+The following versions of proxy protocol are available:
+
+* **Proxy protocol v1**: Version one (text format).
+* **Proxy protocol v2**: Version two (binary format).
+* **Proxy protocol v2-ssl**: Version two with SSL information extension added, which provides information on SSL connection settings originally sent by the client.
+* **Proxy protocol v2-ssl-cn**:  Version two with SSL information extension added as above, as well as the common name from the subject of the client certificate (if any).
+
+If you activated proxy protocol on your [backend configuration](/network/load-balancer/reference-content/configuring-backends/#proxy-protocol), it will also be activated by default for your health checks. Note that:
+- You can choose to override the inherited setting and deactivate proxy protocol for health checks if you wish.
+- If you keep proxy protocol activated for health checks, the proxy protocol version is inherited from the backend configuration and cannot be overridden.
+
+If you deactivated proxy protocol on your backend, it will also be deactivated for health checks, and you cannot override this setting. That is to say, you cannot have proxy protocol deactivated on the general backend configuration, but activated for health checks.
+
+## Advanced health check settings
+
+Recommended settings for all the parameters below are selected by default, however you can modify them if you wish. These settings allow you to define more precisely the parameters that the Load Balancer should use when carrying out health checks. The following parameters are available:
+
+* **Interval:** The interval between consecutive health checks (in milliseconds). The Load Balancer will carry out health checks every \{interval\} ms. The default value is 3 000, the minimum value is 1 000 and the maximum value is 27 670 116 110 564.
+* **Timeout:** The maximum amount of time (in milliseconds) a backend server has to respond to a health check before the health check is considered as failed. The default value is 1 000, the minimum value is 1 000 and the maximum value is 27 670 116 110 564.
+* **Unhealthy threshold:** The number of consecutive failed health checks after which a backend server is diagnosed as unhealthy, and its status is changed to `Down`. Requests/connections will no longer be forwarded to servers with a `down` status.The default value is 3, the minimum value is 1 and the maximum value is 9 999.
+* **Interval (transient state)**: The interval between two consecutive health checks when a server is in a transient state. The default value is 0.5, the minimum value is 0.1 and the maximum value is 2 147 483. Note that a backend server is in a transient state when:
+    * It is considered `up`, but then fails a health check. It stays in this transient state until the number of consecutive unsuccessful health checks goes above the unhealthy threshold, at which point it switches to `down`.
+    * It is considered `down`, but then passes a health check. It stays in this transient state until the number of consecutive successful health checks goes above two, at which point it switches to `up`. 
+* **Shut down sessions if unhealthy**: Activate this option if you want the Load Balancer to shut down any open sessions to a given backend server as soon as that server is diagnosed as unhealthy.

@@ -1,10 +1,10 @@
 ---
 meta:
-  title: Deploying Serverless Functions and Triggers
-  description: This pages shows you how to deploy Serverless Functions and Triggers
+  title: Deploying Serverless Functions and Triggers demo environment
+  description: This pages shows you how to deploy Serverless Functions and Triggers for demo purposes
 content:
-  h1: Deploying Serverless Functions and Triggers
-  paragraph: This pages shows you how to deploy Serverless Functions and Triggers
+  h1: Deploying Serverless Functions and Triggers demo environment
+  paragraph: This pages shows you how to deploy Serverless Functions and Triggers for demo purposes
 categories:
   - serverless
 tags: serverless serverless-functions functions serverless-triggers triggers sqs-queue
@@ -30,8 +30,293 @@ You will now learn how to deploy Serverless Functions and connect them using tri
 
 ## Creating the BucketScan function
 
+1. Create a folder named **FunctionsTutorial** on your desktop and access it.
+2. Create a folder named **BucketScan** in this folder and access it.
+3. run the following command to create the **BucketScan** function:
+
+    ```bash
+    vim BucketScan.js
+    ```
+4. Type `i` to enter INSERT mode.
+5. Copy and paste the following code in the editor:
+
+    ```javascript
+    console.log("init");
+    const { S3Client, ListObjectsV2Command } = require("@aws-sdk/client-s3");
+    const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
+    
+    // Get info from env variables
+    const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY;
+    const S3_ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID;
+    const SOURCE_BUCKET = process.env.SOURCE_BUCKET;
+    const S3_REGION = process.env.S3_REGION;
+    const SQS_ACCESS_KEY = process.env.SQS_ACCESS_KEY;
+    const SQS_ACCESS_KEY_ID = process.env.SQS_ACCESS_KEY_ID;
+    const QUEUE_URL = process.env.QUEUE_URL;
+    const SQS_ENDPOINT = process.env.SQS_ENDPOINT;
+    const S3_ENDPOINT = `https://s3.${S3_REGION}.scw.cloud`;
+    
+    // Create S3 service object
+    const s3Client = new S3Client({
+      credentials: {
+        accessKeyId: S3_ACCESS_KEY_ID,
+        secretAccessKey: S3_ACCESS_KEY,
+      },
+      endpoint: S3_ENDPOINT,
+      region: S3_REGION
+    });
+    
+    // Configure parameters for the listObjectsV2 Command
+    const input = {
+      "Bucket": SOURCE_BUCKET
+    };
+    
+    // Create SQS service
+    var sqsClient = new SQSClient({
+      credentials: {
+        accessKeyId: SQS_ACCESS_KEY_ID,
+        secretAccessKey: SQS_ACCESS_KEY
+      },
+      region: "par",
+      endpoint: SQS_ENDPOINT,
+    })
+    
+    console.log("init Ok")
+    
+    exports.handle = async (event, context, callback) => {
+      const s3ListCommand = new ListObjectsV2Command(input);
+      const s3List = await s3Client.send(s3ListCommand);
+      const contents = s3List.Contents;
+      const total = contents.length;
+      contents.forEach(async function (content) {
+        // Infer the image type from the file suffix.
+        const srcKey = content.Key;
+        const typeMatch = srcKey.match(/\.([^.]*)$/);
+        if (!typeMatch) {
+          console.error(`${srcKey}: Could not determine the image type.`)
+        }
+        const imageType = typeMatch[1].toLowerCase();
+        // Check that the image type is supported
+        if (["jpeg", "jpg", "png"].includes(imageType) !== true) {
+          console.error(`${srcKey}: Unsupported image type: ${imageType}`)
+        }
+        else {
+          try {
+            var sendMessageCommand = new SendMessageCommand({
+              QueueUrl: QUEUE_URL,
+              MessageBody: srcKey,
+            });
+            var sendMessage = await sqsClient.send(sendMessageCommand);
+            console.log(sendMessage.MessageId);
+          } catch (error) {
+            console.error(error);
+          }
+        }
+      });
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          status: "Done",
+          message: `All images from the bucket have been processed over ${total} files in the bucket`,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+    };  
+    
+    /* This is used to test locally and will not be executed on Scaleway Functions */
+    if (process.env.NODE_ENV === 'test') {
+      import("@scaleway/serverless-functions").then(scw_fnc_node => {
+        scw_fnc_node.serveHandler(exports.handle, 8080);
+      });
+    }
+    ```
+
+6. Press the `ESC` key, type `:wq` and press `Enter` to save the file.
+7. Run the following command in the same terminal to download the required dependencies:
+
+    ```bash
+    npm i @aws-sdk/client-s3 @aws-sdk/client-sqs @scaleway/serverless-functions
+    ```
+8. Run the following command in the same terminal to zip the content of the folder:
+
+    ```bash
+    zip -r BucketScan.zip .
+    ```
+
 ## Creating the ImageTransform function
 
-## Deploying the BucketScan function
 
-## Deploying the ImageTransform function
+2. Create a folder named **BucketScan** in the **FunctionsTutorial** folder and access it.
+3. run the following command to create the **ImageTransform** function:
+
+    ```bash
+    vim ImageTransform.js
+    ```
+4. Type `i` to enter INSERT mode.
+5. Copy and paste the following code in the editor:
+
+    ```javascript
+    // Add dependencies
+    console.log("init");
+    const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+    const sharp = require("sharp");
+    
+    // Get connexion information from secret environment variables
+    const S3_ACCESS_KEY=process.env.S3_ACCESS_KEY;
+    const S3_ACCESS_KEY_ID=process.env.S3_ACCESS_KEY_ID;
+    const SOURCE_BUCKET=process.env.SOURCE_BUCKET;
+    const DESTINATION_BUCKET=process.env.DESTINATION_BUCKET;
+    const S3_REGION=process.env.S3_REGION;
+    const RESIZED_WIDTH=process.env.RESIZED_WIDTH;
+    const S3_ENDPOINT = `https://s3.${S3_REGION}.scw.cloud`;
+    
+    let width = parseInt(RESIZED_WIDTH, 10);
+    if (width < 1 || width > 1000) {
+      width = 200;
+    }
+    
+    // Create S3 service object
+    const s3Client = new S3Client({
+      credentials: {
+        accessKeyId: S3_ACCESS_KEY_ID,
+        secretAccessKey: S3_ACCESS_KEY,
+      },
+      endpoint: S3_ENDPOINT,
+      region: S3_REGION
+    });
+    
+    // Handler
+    exports.handle = async (event, context, callback) => {
+      // Object key may have spaces or unicode non-ASCII characters.
+      const srcKey = event.body;
+      console.log(srcKey);
+      const dstKey = "resized-" + srcKey;
+      // Infer the image type from the file suffix.
+      const typeMatch = srcKey.match(/\.([^.]*)$/);
+      if (!typeMatch) {
+        console.error(`${srcKey}: Could not determine the image type.`);
+        return {
+          statusCode: 500,
+          body: JSON.stringify({
+            status: "Error",
+            message: `${srcKey}: Could not determine the image type.`,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        };
+      }
+      // Check that the image type is supported
+      const imageType = typeMatch[1].toLowerCase();
+      if (["jpeg", "jpg", "png"].includes(imageType) !== true) {
+        console.error(`Unsupported image type: ${imageType}`);
+    
+        return {
+          statusCode: 500,
+          body: JSON.stringify({
+            status: "Error",
+            message: `${srcKey}: Unsupported image type: ${imageType}`,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        };
+      };
+    
+      // Download the image from the S3 source bucket.
+      try {
+        const input = {
+          Bucket: SOURCE_BUCKET,
+          Key: srcKey,
+        };
+        //var origimage = await s3.getObject(params).promise();
+        const getObjectCommand = new GetObjectCommand(input);
+        var getObjectResult = await s3Client.send(getObjectCommand);
+      } catch (error) {
+        console.error(error);
+        return error;
+      }
+    
+      // Use the sharp module to resize the image.
+      try {
+        var sharpImg = sharp().resize({ width, withoutEnlargement: true })
+        getObjectResult.Body.pipe(sharpImg);
+      } catch (error) {
+        console.error(error);
+        return error;
+      }
+    
+      // Upload the image as a Buffer to the destination bucket
+      try {
+        const destinput = {
+          Bucket: DESTINATION_BUCKET,
+          Key: dstKey,
+          Body: await sharpImg.toBuffer(),
+          ContentType: "image",
+        };
+        const putObjectCommand = new PutObjectCommand(destinput);
+        const putimage = await s3Client.send(putObjectCommand);
+        console.log(putimage.VersionId)
+      } catch (error) {
+        console.log(error);
+        return error;
+      }
+      console.log(`Successfully resized ${SOURCE_BUCKET}/${srcKey} and uploaded it to ${DESTINATION_BUCKET}/${dstKey}`)
+      return {
+        statusCode: 201,
+        body: JSON.stringify({
+          status: "ok",
+          message: `Image : ${srcKey} has successfully been resized and pushed to the bucket ${DESTINATION_BUCKET}`
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+    };
+    
+    
+    /* This is used to test locally and will not be executed on Scaleway Functions */
+    if (process.env.NODE_ENV === 'test') {
+      import("@scaleway/serverless-functions").then(scw_fnc_node => {
+        scw_fnc_node.serveHandler(exports.handle, 8081);
+      });
+    }
+    ```
+
+6. Press the `ESC` key, type `:wq` and press `Enter` to save the file.
+7. Run the following command in the same terminal to download the required dependencies and packages:
+
+    ```bash
+    npm i @aws-sdk/client-s3 @aws-sdk/client-sqs @scaleway/serverless-functions
+    npm install sharp --platform=linuxmusl --arch=x64 sharp --ignore-script=false 
+    ```
+
+8. Run the following command in the same terminal to zip the content of the folder:
+
+    ```bash
+    zip -r ImageTransform.zip .
+    ```
+
+## Deploying functions
+
+### Creating a namespace
+
+1. Click **Functions** in the **Serverless** section of the side menu.
+2. Click **Create namespace**.
+3. Enter a **name** for your namespace.
+4. Choose the **AMSTERDAM** region.
+5. Enter the following **environment variables**:
+    - `SOURCE_BUCKET` : the name of your source bucket (e.g.: `source-images-{YourName}`).
+    - `S3_REGION` : `nl-ams`
+6. Enter the following **secrets**:
+    - `S3_ACCESS_KEY_ID` : the IAM Access Key ID previously created.
+    - `S3_ACCESS_KEY` : the IAM Secret Key previously created.
+4. Click **Create namespace** to finish.
+
+### Deploying the BucketScan function
+
+
+
+### Deploying the ImageTransform function

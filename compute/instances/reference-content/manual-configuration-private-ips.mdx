@@ -1,0 +1,221 @@
+---
+meta:
+  title: Configuring Instances manually on a Private Network
+  description: Learn how to manually configure Instances on a Private Network.
+content:
+  h1: Configuring Instances manually on a Private Network
+  paragraph: Learn how to manually configure Instances on a Private Network. 
+tags: instance private-ip-address ip address private dhcp
+categories:
+  - compute
+---
+
+<Message type="important">
+  DHCP is activated by default on all newly-created Private Networks, and cannot be deactivated. If you have a Private Network created before July 12 2023, [check our migration documentation](/network/vpc/reference-content/vpc-migration/) to find out more about whether DHCP has been automatically activated on your network or not. We recommend activating DHCP and letting us take care of automatic IP address management of all resources, including Instances, on your Private Networks, to ensure they are fully compatible with managed products and integrated with our [internal IPAM](/network/vpc/concepts/#ipam). 
+  
+  The steps outlined in this document are intended for advanced users only, and are not supported by Scaleway.
+</Message>
+
+## How to configure the Private Network interface on your Instances
+
+Once you have [added your Instances to a Private Network](/compute/instances/how-to/use-private-networks/), you can manually configure the virtual network interface on each one. You will also need to turn off the automatic DHCP scripts found on the Instance for Private Network, so that they do not conflict with the manual configuration you are creating. These steps are explained below.
+
+<Message type="note">
+  While it is theoretically possible to use any IP range within your Private Network, it is not recommended to use any IP subnets that are publicly routed. Whilst the configuration may work for your Instances to communicate with each other, you might experience connectivity issues to machines on the public Internet within these ranges. 
+  It is therefore recommended that you configure your Private Network using IPs from the following private IP ranges: 
+    * `192.168.0.0` - `192.168.255.255` (65,536 IP addresses) and
+    * `172.16.0.0` - `172.31.255.255` (1,048,576 IP addresses)   
+  You can use any [subnet mask](https://en.wikipedia.org/wiki/Subnetwork) allowed by these ranges. The only constraint is that all interfaces in the same Private Network must be configured with the same subnet mask. If you are not sure, use `/24` for your Private Network. 
+  Using the `10.0.0.0/8` private IP range is **not recommended**, as this block is used for Instances' own private IPs and infrastructure services. This is only recommended for expert users.
+</Message> 
+
+1. Connect to the Instance using [SSH](/compute/instances/how-to/connect-to-instance/).
+2. Delete the file `/lib/udev/rules.d/72-scw-vpc-iface.rules` to disable the automatic DHCP scripts:
+    ```bash
+    rm /lib/udev/rules.d/72-scw-vpc-iface.rules
+    ```
+
+    <Message type="tip">
+    If a Private Network was previously plugged into this Instance, you also need to delete the following files, according to your distribution:
+    <Tabs id="cleanup-pns">
+      <TabsTab label="Ubuntu (netplan)">
+        <br />
+        `/etc/netplan/60-*-vpc.yaml`
+      </TabsTab>
+
+      <TabsTab label="Debian (ifupdon)">
+        <br />
+        `/etc/network/interfaces.d/60-*-vpc`
+      </TabsTab>
+
+      <TabsTab label="Red Hat-based (networkmanager)">
+        <br />
+        `/etc/sysconfig/network-scripts/ifcfg-*` (excluding any for `ens2` or `eth0`)
+      </TabsTab>
+    </Tabs>
+    </Message>
+
+3. Find the virtual interface corresponding to the Private Network using the `ip link show` command: 
+    ```sh
+    root@virtual-instance:~# ip link show
+    1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+        link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+    2: ens2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+        link/ether de:1c:94:64:20:44 brd ff:ff:ff:ff:ff:ff
+    3: ens5: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+        link/ether 02:00:00:00:1a:ae brd ff:ff:ff:ff:ff:ff
+    ```
+    The Private Network interface can be identified by its associated MAC address, which always begins with `02:00:00:xx:yy:zz`.
+
+    <Message type="note">
+      The network interface names may be different, depending on the operating system and the release you use.
+    </Message> 
+4. For convenience, give a more significant name (e.g. `priv0`) to the Private Network interface. Configure the new interface name as follows:
+    ```sh
+    root@virtual-instance:~# ip link set down dev ens5
+    root@virtual-instance:~# ip link set name priv0 dev ens5
+    root@virtual-instance:~# ip link set up dev priv0
+    ```
+5. Make these changes persistent at reboot to ensure the Private Networks interface always gets the same name based on its MAC address. This is done by adding the following rule to the `/etc/udev/rules.d/75-persistent-net-generator.rules` file. Make sure that you replace the address with the correct MAC address for your case:
+    ```sh
+    SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="02:00:00:00:1a:ae", NAME="priv0"
+    ```
+    <Message type="note">
+      If you want to attach a server to multiple Private Networks, create a rule for each network by replacing the MAC address and the interface name `priv0` by `priv1`, `priv2` and so on.
+    </Message>
+
+## How to configure the Private Network's IP address
+
+Once you have brought up the Private Network via the previous steps, you can configure its IP address. The steps required to configure the IP address change depending on your Linux distribution:
+
+<Tabs id="cleanup-pns">
+
+      <TabsTab label="Ubuntu (18.04 and later) distributions using Netplan">
+        1. To configure a static IP address on the Private Network interface (previously named `priv0`), open the Netplan configuration file and configure the interface as follows:
+            <Message type="note">
+              The location of the Netplan configuration file varies depending on the Ubuntu release:
+                - Ubuntu 20.04: `/etc/netplan/00-installer-config.yaml`
+                - Ubuntu 18.04: `/etc/netplan/01-netcfg.yaml`
+
+            </Message>
+
+            ```
+            network:
+              version: 2
+              renderer: networkd
+              ethernets:
+                priv0:
+                  addresses: [192.168.42.2/24]
+            ```
+
+            In this example the IP subnet `192.168.42.0/24` is being used. 
+
+            Once the interface is configured, save the file and exit the editor. 
+        2. Bring the interface up using the command `netplan apply`. 
+        3. Repeat these steps on the other Instances that will communicate within the Private Network. 
+      </TabsTab>
+
+      <TabsTab label="CentOS">
+        1. Open the file `/etc/sysconfig/network-scripts/ifcfg-priv0` (replace `priv0` with the name of the private interface) and configure the virtual network interface as follows:
+            ```
+            DEVICE=priv0
+            BOOTPROTO=none
+            ONBOOT=yes
+            USERCTL=no
+            IPV6INIT=no
+            TYPE=Ethernet
+            # configure the IPADDR and NETMASK towards the parameters of your Private Network
+            NETMASK=255.255.255.0
+            IPADDR=192.168.43.4
+            ARP=yes
+            # replace HWADDR with the MAC address assoicated to the interface
+            HWADDR=02:00:00:00:1a:ae
+            ```
+
+            In this example the IP subnet `192.168.42.0/24` is being used. The interface uses the MAC address (`02:00:00:00:1a:b0`) assigned to the Instance as it was attached to the Private Network.  
+
+            Once the interface is configured, save the file and exit the text editor. 
+        2. Restart the network service to bring the configured interface up:
+            - On **CentOS 7** use the following command: 
+
+            ```sh
+            root@virtual-instance:~# systemctl restart network.service
+            ```
+
+            - On **CentOS 8** use the following command: 
+
+            ```sh
+            root@virtual-instance:~# systemctl restart NetworkManager.service
+            ```
+        3. Repeat these steps on the other Instances that will communicate within the Private Network. 
+      </TabsTab>
+</Tabs>
+
+## How to test your Private Network configuration
+
+After you followed the steps above, you can test the connection between the Instances.
+
+Enter the `ping` command, pinging the relevant IP address for your Instances/Private Network.
+
+```sh
+root@virtual-instance:~# ping 192.168.42.3
+PING 192.168.42.3 (192.168.42.3): 56 data bytes
+64 bytes from 192.168.42.3: icmp_seq=0 ttl=64 time=0.824 ms
+64 bytes from 192.168.42.3: icmp_seq=1 ttl=64 time=1.180 ms
+64 bytes from 192.168.42.3: icmp_seq=2 ttl=64 time=0.852 ms
+64 bytes from 192.168.42.3: icmp_seq=3 ttl=64 time=0.871 ms
+--- 192.168.42.3 ping statistics ---
+4 packets transmitted, 4 packets received, 0% packet loss
+round-trip min/avg/max/stddev = 0.824/0.932/1.180/0.144 ms
+```
+
+When configured properly, the Instance should reply to the `ping` command. The Private Network is working and you can start to configure your services.
+
+## How to carry out manual configuration of the default route (if Private Network is attached to a Public Gateway)
+
+By default, Instances are configured with a default route on their public interface that allows them to reach the Scaleway Metadata API. When an Instance is on a Private Network attached to a Public Gateway, it ends up with two default routes: one towards the gateway on the Private Network and the other towards the Scaleway Metadata API on the public interface. It is necessary to adjust the metric of the default route through the gateway to make it the preferred one and to configure the route to the Scaleway Metadata API manually.
+
+<Message type="note">
+  If your Instance supports autoconfiguration and you want to configure manually, make sure to disable autoconfiguration as follows:
+    ```
+    # mv /lib/udev/rules.d/72-scw-vpc-iface.rules /lib/udev/rules.d/.72-scw-vpc-iface.rules
+    # reboot
+    ```
+</Message>
+
+1. Update the route to the Scaleway Metadata API.
+
+    The endpoint for the Scaleway Metadata API is `169.254.42.42/32` and the gateway depends on your Instance. You can retrieve it with the following command: 
+
+    ```
+    # ip route show
+    default via 10.68.2.114 dev eth0 proto dhcp metric 100
+    10.68.2.114/31 dev eth0 proto kernel scope link src 10.68.2.115 metric 100
+    ```
+
+    The address of the gateway to the Scaleway Metadata API is `10.68.2.114`. Now, add a specific route to the API as follows:
+
+    ```
+    # ip route add 169.254.42.42/32 via 10.68.2.114
+    ```
+2. Configure DHCP on the Instance, adjusting the metric of the default route.
+
+    Example using netplan:
+
+    ```
+    network:
+    version: 2
+    ethernets:
+        ens4:
+        dhcp4: true
+        dhcp4-overrides:
+            route-metric: 50
+    ```
+
+    and using ifupdown:
+
+    ```
+    auto ens4
+    iface ens4 inet dhcp
+    metric 50
+    ```

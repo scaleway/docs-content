@@ -1,11 +1,11 @@
 ---
 meta:
-  title: How to configure an IPv6 subnet on a Dedibox running Linux
-  description: This page explains how to configure an IPv6 subnet on a Dedibox running Linux.
+  title: How to configure IPv6 connectivity using systemd-networkd
+  description: This page explains how to configure IPv6 connectivity using systemd-networkd.
 content:
-  h1: How to configure an IPv6 subnet on a Dedibox running Linux
-  paragraph: This page explains how to configure an IPv6 subnet on a Dedibox running Linux.
-tags: dedibox ipv6 linux subnet
+  h1: How to configure IPv6 connectivity using systemd-networkd
+  paragraph: This page explains how to configure IPv6 connectivity using systemd-networkd.
+tags: dedibox ipv6 systemd-networkd
 dates:
   validation: 2023-05-09
   posted: 2021-08-03
@@ -17,127 +17,66 @@ categories:
   - You have an account and are logged into the [Dedibox console](https://console.online.net)
   - You have [created](/dedibox/dedicated-servers/how-to/order-a-server) a Dedibox dedicated server
   - You have [requested](/dedibox-network/ipv6/how-to/request-prefix) a /48 IPv6 prefix
-  - You have configured the [DHCPv6 client](/dedibox-network/ipv6/how-to/configure-dhcpv6)
 </Message>
 
-<Message type="important">
-  * Make sure you have configured the [DHCPv6 client](/dedibox-network/ipv6/how-to/configure-dhcpv6) on your system before setting up the network configuration.
-  * Make sure [IPv6 SLAAC](/dedibox-network/ipv6/how-to/) is enabled on servers supporting this feature.
-</Message>
 
-## How to configure IPv6 on Debian
-
-1. Open the network configuration file `/etc/network/interfaces` in a text editor and edit it as follows:
-    ```
-    auto eno1
-    iface eno1 inet6 static
-        address IPV6ADDRESS
-        netmask PREFIXLENGTH
-    ```
-
-    Remember to replace `eno1` with the proper internet interface name.
-2. Restart the network:
-    ```
-    sudo systemctl restart networking.service
-    ```
+`systemd-networkd` is the network manager of [systemd](https://systemd.io/). It is provided natively on most Linux distributions and can be used for the configuration of IPv6 with its DHCPv6 client feature.
 
 <Message type="tip">
-  The network interface is initialized with the command `allow-hotplug` by default on Debian 9. It is possible that the network restart fails with this configuration. In this case, you can initialize the network with `auto` to avoid the problem.
+  When specifying the IP address of your Dedibox, you need to enter it in [CIDR notation](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing). The netmask for the main IPv4 of a Dedibox server is `/24`, the netmask for a failover IPv4 is `/32`. The netmask for the IPv6 is `/64`.
 </Message>
 
-### How to configure IPv6 on Debian without systemd
+1. Run the `ip link show` command to find the name of your public Internet interface. Make sure to store it, as it will be required in the next steps.
+2. Run the following command to create a backup of the current network configuration and configure `systemd-networkd`:
+    ```
+    sudo mv /etc/systemd/network/eno1.network /etc/systemd/network/eno1.network.bkp
+    ```
+3. Run the following command to enable `systemd-networkd`.
+    ```
+    systemctl enable systemd-networkd.service
+    ```
+4. Create a new file called `<interface_name>.network` and open it in a text editor
+    ```
+    sudo nano /etc/systemd/network/eno1.network
+    ```
+5. Open the file in a text editor and paste the following content. Make sure to replace the values in the example with your own and save them before exiting the text editor.
+    ```
+    [Match]
+    #The name must correspond to your interface name
+    Name=eno1
 
-If you do not want to use **systemd** to start your services, use the following configuration.
+    [Network]
+    DHCP=ipv6
+    IPv6AcceptRA=yes
+    # IPv4 of the Dedibox, change netmask to /32 if failover IPv4
+    Address=<ipv4_of_your_dedibox>/24
+    # IPv6 of the Dedibox
+    Address=2001:bc8:xxxx:xxx::x/64
 
-1. Open the network configuration file `/etc/network/interfaces` in a text editor and edit it as follows:
-    ```
-    iface eno1 inet6 static
-        pre-up modprobe ipv6
-        address IPV6ADDRESS
-        netmask PREFIXLEN
-        post-up dhclient -cf /etc/dhcp/dhclient6.conf -6 -P -d -v $IFACE
-    ```
+    [Route]
+    # The IPv4 gateway is either your Dedibox IP ending on .1 (i.e. x.y.z.1) for the physical host or 62.210.0.1 for any VM running on a Dedibox
+    Gateway=<gateway_ipv4>
+    GatewayOnlink=yes
 
-    Adapt the interface name (`eno1`) to your needs, as well as the IPv6 address and the netmask.
-2. Restart the network:
-    ```
-    sudo systemctl restart networking.service
-    ```
+    [DHCP]
+    ClientIdentifier=duid-only
+    DUIDType=link-layer
+    # Scaleway Dedibox DUID without the DUID-LL "00:03" at the beginning
+    DUIDRawData=<Online by Scaleway DUID>
 
-## How to configure IPv6 on Ubuntu
-
-Ubuntu uses [netplan](https://netplan.io) since the release of Ubuntu 18.04 LTS as network configuration tool.
-It replaces the classical network configuration with new configuration files, written in [YAML](https://yaml.org) format, and located in the `/etc/netplan` directory. For more information regarding netplan, refer to the official [documentation](https://netplan.readthedocs.io/en/stable/).
-
-1. Open the default configuration file `/etc/netplan/01-netcfg.yaml` in a text editor, and edit it as follows:
-    ```yaml
-    # This file describes the network interfaces available on your system
-    # For more information, see netplan(5).
-    network:
-    version: 2
-    renderer: networkd
-    ethernets:
-        enp1s0:
-        dhcp4: no
-        dhcp6: no
-        addresses:
-        - "aaa.bbb.ccc.ddd/24" # The main IP address of your Dedibox server
-        - "<IPv6_FROM_YOUR_BLOCK>/<SUBNETMASK>" # An IP address from your IPv6 block and it's subnet mask
-        gateway4: aaa.bbb.ccc.1 # The gateway is the IP address of your Dedibox, ending on .1
-        nameservers:
-        addresses: [62.210.16.6, 62.210.16.7]
-        routes:
-        - to: 0.0.0.0
-            via: aaa.bbb.ccc.1
-            on-link: true
+    [IPv6AcceptRA]
+    DHCPv6Client=always
+    UseAddress=no
+    WithoutRA=solicit
+    UseOnLinkPrefix=False
+    UseAutonomousPrefix=False
     ```
-
-    Remember to replace `enp1s0` with the proper name of your internet interface.
-
-    <Message type="note">
-      The configuration example above is valid for the main IP address of your Dedibox server. If you want to use IPv6 on a [virtual machine](/dedibox-network/network/how-to/configure-network-netplan/#configuring-failover-ip-for-virtual-machines), remember to use the unique gateway for the failover IPv4.
-    </Message>
-2. Check and validate your configuration file.
+10. Run the following command to activate the new configuration.
     ```
-    sudo netplan –debug
+    systemctl start systemd-networkd
     ```
-3. Activate the new configuration:
-    ```
-    sudo netplan apply
-    ```
-
-## How to configure IPv6 on CentOS
-
-1. Open the automatically generated configuration file for your Internet interface in a text editor, for example `/etc/sysconfig/network-scripts/ifcfg-eth0` and edit it as follows: 
-    ```
-    # Generated by parse-kickstart
-    UUID=xxxxx
-    DNS1=62.210.16.6
-    BOOTPROTO=none
-    DEVICE=eth0
-    ONBOOT=yes
-    TYPE=Ethernet
-    IPADDR=62.210.xx.xx
-    PREFIX=24
-    GATEWAY=62.210.xx.1
-    DEFROUTE=yes
-    IPV4_FAILURE_FATAL=no
-    IPV6INIT=yes
-    IPV6ADDR="IPV6ADDRESS/PREFIXLEN"
-    IPV6_AUTOCONF=yes
-    NAME="System eth0"
-    ```
-2. Restart the networking service:
-    ```
-    systemctl restart networking.service
-    ```
-
-<Message type="tip">
-  If your network connections are managed by the **Network Manager**, use the `nmtui` tool to configure IPv6 from a text user interface.
-</Message>
-
 
 <Navigation title="See Also">
-  <PreviousButton to="/dedibox-network/ipv6/how-to/configure-dhcpv6/">How to configure DHCPv6</PreviousButton>
-  <NextButton to="/dedibox-network/ipv6/how-to/configure-ipv6-windows/">How to configure IPv6 on Windows</NextButton>
+  <PreviousButton to="/dedibox-network/ipv6/how-to/configure-ipv6-windows/">How to configure IPv6 on Windows</PreviousButton>
+  <NextButton to="/dedibox-network/ipv6/how-to/debug-ipv6/">How to resolve IPv6 connection issues</NextButton>
 </Navigation>

@@ -9,17 +9,17 @@ tags: smtp relay transactional-emails postfix send-emails
 categories:
   - transactional-email
 dates:
-  validation: 2023-06-26
-  posted: 2023-06-26
+  validation: 2023-07-18
+  posted: 2023-07-18
 ---
 
 
-Installing an [SMTP]() relay that sends messages from your servers allows you to be notified if/when there are problems, as the server tends to report them by email.
+Installing an SMTP relay that sends messages from your servers allows you to be notified if/when there are problems, as the server tends to report them by email.
 
 This also means that if you have installed software on the server, the software can rely on the relay's SMTP rather than on configurations that are not always easy to handle.
 
 
-In this tutorial, you will learn how to install postfix and how to send emails via Transactional Email's SMTP.
+In this tutorial, you will learn how to configure [Postfix](https://en.wikipedia.org/wiki/Postfix_(software)) and send emails via Transactional Email's SMTP. For the sake of this tutorial, we are using MacOS.
 
 <Macro id="iam-requirements" />
  
@@ -27,26 +27,120 @@ In this tutorial, you will learn how to install postfix and how to send emails v
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com/)
   - You have [configured your domain with Transactional Email](/managed-services/transactional-email/how-to/configure-domain-with-transactional-email/)
   - You have configured and API key with the right permissions
-  - You have configured your SMTP server and have access to port 587 on your server
+  - You have [installed Postfix](https://ubuntu.com/server/docs/mail-postfix) on your local machine
+  - You have [installed stunnel](https://www.stunnel.org/downloads.html) on your local machine
+  - You have configured your SMTP server
 </Message>
 
-## Configuring your environment
+## Configuring Postfix with submission
 
-1. Install Postfix using the following command:
-
-    ```bash
-    apt install postfix
-    ```
-2. Access the `sasl_passwd` file using the following command:
+1. Access the `sasl_passwd` file using the following command:
 
     ```bash
-    vim sasl_passwd
+    /etc/postfix && nano sasl_passwd
     ```
-3. Copy and paste the following content into the `sasl_passwd` file.
+2. Copy and paste the following content into the `sasl_passwd` file.
 
     ```bash
     [smtp.tem.scw.cloud]:587 <$SCW_USERNAME>:<$SCW_SECRET_KEY>
     ```
-4. Replace `<SCW_USERNAME>` with your username that displays in the **Overview** tab of your domain, in the SMTP configuration section.
-5. Replace `<$SCW_SECRET_KEY>` with your API's secret key.
-6. 
+3. Replace `<SCW_USERNAME>` with your username that displays in the **Overview** tab of your domain, in the SMTP configuration section.
+4. Replace `<$SCW_SECRET_KEY>` with your API's secret key.
+5. Type `CTRL O` and press `Enter` to save, then type `CTRL X` to exit the file.
+6. Access the `main.cf` file to configure Postfix:
+    ```bash
+    nano main.cf
+    ```
+7. Add the following lines at the end of the `main.cf` file. Make sure you replace `<your-domain-name>` with your own domain name.
+
+    ```bash
+    smtpd_banner = $myhostname ESMTP $mail_name
+    biff = no
+    append_dot_mydomain = no
+    myorigin = <your-domain-name>
+    delay_warning_time = 4
+    alias_maps = hash:/etc/aliases
+    alias_database = hash:/etc/aliases
+    mydestination = $myhostname, localhost.$mydomain, localhost
+    smtp_sasl_auth_enable = yes
+    smtp_sasl_password_maps = hash:/etc/postfix/sasl_passwd
+    smtp_sasl_security_options = noanonymous
+    smtp_use_tls = yes
+    relayhost = [smtp.tem.scw.cloud]:587
+    mynetworks = 127.0.0.0/8
+    inet_interfaces = loopback-only
+    smtpd_relay_restrictions = permit_mynetworks,defer_unauth_destination,reject
+    ```
+8. Type `CTRL O` and press `Enter` to save, then type `CTRL X` to exit the file.
+9. Use the following command to launch Postmap:
+    ```bash
+    postmap /etc/postfix/sasl_passwd
+    ```
+    <Message type="tip">
+     Depending on your configuration, you might need to use `sudo postmap /etc/postfix/sasl_passwd` to be able to launch Postmap.
+    </Message>
+10. Relaunch Postfix using the following command:
+    ```bash
+    sudo postfix start
+    ```
+11. Use the following command to send an email. Make sure that you replace `<your-domain>` with your own domain and `recipient@recipient.com` with your recipient's email address.
+    ```bash
+    date | mail -s "Test from postfix" -a "From:<your-domain>" recipient@recipient.com
+    ```
+
+    <Message type="important">
+    Keep in mind that the **subject**, **body** and **HTML** of your emails must have **at least 10 characters**.
+    </Message>
+12. Optionally, use `mailq` to see if your mail has been sent. An empty mail queue means that your email has been sent.
+
+## Configuring Postfix without submission
+
+Some providers do not let you access port 587. To solve this issue, you can use the SMTPS port with Postfix. However, Postfix's relayhost option does not support SMTPS connections. So you will have to use stunnel to be able to use Postfix.
+
+1. Access the `smtp-wrapper.conf` file using the following command:
+    ```bash
+    /etc/stunnel && nano smtp-wrapper.conf
+    ```
+2. Copy the following configuration and paste it into the `smtp-wrapper.conf` file:
+    ```bash
+    [smtp-tls-wrapper]
+    accept = 22465
+    client = yes
+    connect = smtp.tem.scw.cloud:2465
+    ```
+3. Type `CTRL O` and press `Enter` to save, then type `CTRL X` to exit the file.
+4. Access your `sasl_passwd` file within Postfix using the following command:
+    ```bash
+    /etc/postfix && nano sasl_passwd
+    ```
+5. Copy the following configuration and paste it in your file:
+    ```bash
+    [localhost]:22465 <scw_access>:<scw_password>
+    ```
+6. Type `CTRL O` and press `Enter` to save, then type `CTRL X` to exit the file.
+7. Access your `main.cf` file using the following command:
+    ```bash
+    cd .. && nano main.cf
+    ```
+8. Replace `relayhost = [smtp.tem.scw.cloud]:587` with `relayhost = [localhost]:22465`.
+9. Type `CTRL O` and press `Enter` to save, then type `CTRL X` to exit the file.
+10. Use the following command to launch Postmap:
+    ```bash
+    postmap /etc/postfix/sasl_passwd
+    ```
+    <Message type="tip">
+     Depending on your configuration, you might need to use `sudo postmap /etc/postfix/sasl_passwd` to be able to launch Postmap.
+    </Message>
+11. Relaunch Postfix using the following command:
+    ```bash
+    sudo postfix start
+    ```
+12. Use the following command to send an email. Make sure that you replace `<your-domain>` with your own domain and `recipient@recipient.com` with your recipient's email address.
+    ```bash
+    date | mail -s "Test from postfix" -a "From:<your-domain>" recipient@recipient.com
+    ```
+
+    <Message type="important">
+    Keep in mind that the **subject**, **body** and **HTML** of your emails must have **at least 10 characters**.
+    </Message>
+13. Optionally, use `mailq` to see if your mail has been sent. An empty mail queue means that your email has been sent.

@@ -16,13 +16,17 @@ dates:
 
 [dhcpcd](https://roy.marples.name/projects/dhcpcd/) is an open-source DHCP client, supporting both IPv4, and IPv6. The feature-rich software can be used to configure and automate network-related parameters of your computer using the [DHCP protocol](http://en.wikipedia.org/wiki/Dynamic_Host_Configuration_Protocol).
 
-In this tutorial, you will learn how to configure your IPv6 subnet with DHCPCD on Debian 10 or later on a Scaleway Dedibox dedicated server.
+<Message type="note">
+Roy Marples' dhcpcd (DHCP client daemon) is not the same as the discontinued Internet Systems Consortium's dhcpd (DHCP (server) daemon).
+</Message>
+
+In this tutorial, you will learn how to configure your IPv6 subnet with DHCPCD on a Scaleway Dedibox dedicated server.
 
 <Macro id="iam-requirements" />
 
 <Message type="requirement">
   - You have an account and are logged into the [Dedibox console](https://console.online.net)
-  - You have a [Dedibox&reg; dedicated server](https://www.scaleway.com/en/dedibox) running on Debian 10 or later.
+  - You have a [Dedibox&reg; dedicated server](https://www.scaleway.com/en/dedibox)
   - You have root access to the server
 </Message>
 
@@ -30,13 +34,21 @@ In this tutorial, you will learn how to configure your IPv6 subnet with DHCPCD o
 ## Installing DHCPCD
 
 1. Change into the root account of your server by using `su` and the password of the `root` user.
-2. Update the `apt` package manager repositories, then upgrade the software already installed on the machine to the latest version available in the repositories: 
+2. For Debian & Ubuntu, update the `apt` package manager repositories, then upgrade the software already installed on the machine to the latest version available in the repositories: 
     ```
     apt update && apt upgrade -y
     ```
-3. Install DHCPCD using the `apt` package manager:
+3. For Arch Linux, update the `pacman` package manager repositories.
+    ```
+    pacman -Syu
+    ```
+4. For Debian & Ubuntu, install DHCPCD using the `apt` package manager:
     ```
     apt install dhcpcd5
+    ```
+5. For Arch Linux, install DHCPCD using the Arch Linux package manager:
+    ```
+    pacman -S dhcpcd
     ```
 
 ## Configuring DHCPCD
@@ -46,63 +58,82 @@ In this tutorial, you will learn how to configure your IPv6 subnet with DHCPCD o
   We assume you have already generated an [IPv6 prefix and its associated DUID](/dedibox-network/ipv6/how-to/request-prefix/).
 </Message>
 
-1. Configure your network interface. The configuration is located in a file named `/etc/network/interfaces`. Open the file in a text editor, e.g. `nano`, and edit it as follows:
+1. Open the DHCPCD configuration file located at `/etc/dhcpcd.conf` in a text editor of your choice and edit it as follows:
     ```
-    auto lo
-    iface lo inet loopback
+    # Allow users of this group to interact with dhcpcd via the control socket.
+    #controlgroup wheel
 
-    auto eth0
-    iface eth0
-        use dhcp
-        # An address in the IPv6 block provided by Scaleway Dedibox
-        address <your_prefix>:<your_chosen_suffix>
-        netmask 64
-    ```
-2. Open the DHCPCD configuration file located at `/etc/dhcpcd.conf` in a text editor of your choice and edit it as follows:
-    ```
     # Inform the DHCP server of our hostname for DDNS.
-    hostname
+    #hostname
 
     # This parameter allows only selected interfaces to use the client
-    allowinterfaces eth*
+    allowinterfaces eno*
 
+    # Use the hardware address of the interface for the Client ID.
+    #clientid
+    # or
     # Use the same DUID + IAID as set in DHCPv6 for DHCPv4 ClientID as per RFC4361.
+    # Some non-RFC compliant DHCP servers do not reply with this set.
+    # In this case, comment out duid and enable clientid above.
     duid
 
     # Persist interface configuration when dhcpcd exits.
     persistent
+
+    # vendorclassid is set to blank to avoid sending the default of
+    # dhcpcd-<version>:<os>:<machine>:<platform>
+    vendorclassid
+
+    # A list of options to request from the DHCP server.
+    option classless_static_routes
+    # Respect the network MTU. This is applied to DHCP routes.
+    option interface_mtu
+
+    # Request a hostname from the network
+    option host_name
+
+    # Most distributions have NTP support.
+    #option ntp_servers
 
     # Rapid commit support.
     # Safe to enable by default because it requires the equivalent option set
     # on the server to actually work.
     option rapid_commit
 
-    # A list of options to request from the DHCP server.
-    option domain_name_servers, domain_name, domain_search, host_name
-    option classless_static_routes
-    # Respect the network MTU. This is applied to DHCP routes.
-    option interface_mtu
-
     # A ServerID is required by RFC2131.
     require dhcp_server_identifier
 
-    slaac hwaddr
+    # Generate SLAAC address using the Hardware Address of the interface
+    #slaac hwaddr
+    # OR generate Stable Private IPv6 Addresses based from the DUID
+    #slaac private
+    # Don't attempt to obtain an IPv4LL address if we failed to get one via DHCP.  See RFC 3927.
+    noipv4ll
 
-    debug
+    # Specify the network interface to which the following configurations apply
+    interface eno1
+    # Enable IPv6 Router Solicitation (RS) messages on the specified interface
+    ipv6rs
+    # Request an IPv6 Non-Temporary Address (IA_NA) from the DHCPv6 server
+    ia_na 1
+    # Configure a static IPv6 address on the interface
+    # Replace the "xxxx", "xxx", and "x" placeholder values
+    static ip6_address=2001:bc8:xxxx:xxx::x/64
     ```
-3. Write the [DUID] of your subnet in the file `/var/lib/dhcpcd/duid` using a text editor of your choice, for example `nano`:
+2. Write the [DUID] of your subnet in the file `/var/lib/dhcpcd/duid` using a text editor of your choice, for example `nano`:
     ```
     nano /var/lib/dhcpcd/duid
     ```
-4. Enable the DHCPCD service to be started automatically during system boot.
+    ```
+3. Enable the DHCPCD service to be started automatically during system boot.
     ```
     systemctl enable dhcpcd.service
     ```
-5. Start the service manually.
+4. Start the service manually.
     ```
     systemctl start dhcpcd.service
     ```
-6. Verify the status of the service.
+5. Verify the status of the service.
     ```
     systemctl status dhcpcd.service
     ```

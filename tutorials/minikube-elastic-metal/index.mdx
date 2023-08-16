@@ -10,7 +10,7 @@ categories:
   - elastic-metal
 tags: compute Kubernetes Minikube server Elastic-Metal-server
 dates:
-  validation: 2023-02-07
+  validation: 2023-08-16
   posted: 2019-05-27
 ---
 
@@ -36,7 +36,7 @@ Minikube supports Kubernetes features such as:
 - Ingress
 
 <Macro id="iam-requirements" />
- 
+
 <Message type="requirement">
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key)
@@ -84,16 +84,22 @@ Minikube supports Kubernetes features such as:
 	An output informs you about the status of Minikube:
 
 		```
-		😄  minikube v1.1.0 on linux (amd64)
-		2019/05/27 15:11:47 No matching credentials were found, falling back on anonymous
-		🔥  Creating kvm2 VM (CPUs=2, Memory=2048MB, Disk=20000MB) ...
-		🐳  Configuring environment for Kubernetes v1.14.2 on Docker 18.09.6
-		💾  Downloading kubeadm v1.14.2
-		💾  Downloading kubelet v1.14.2
-		🚜  Pulling images ...
-		🚀  Launching Kubernetes ...
-		⌛  Verifying: apiserver proxy etcd scheduler controller dns
-		🏄  Done! kubectl is now configured to use "minikube"
+		😄  minikube v1.31.1 on linux (amd64)
+		✨  Automatically selected the docker driver. Other choices: virtualbox, ssh
+		📌  Using Docker Desktop driver with root privileges
+		👍  Starting control plane node minikube in cluster minikube
+		🚜  Pulling base image ...
+		💾  Downloading Kubernetes v1.27.3 preload ...
+		🔥  Creating docker container (CPUs=2, Memory=4000MB) ...
+		🐳  Preparing Kubernetes v1.27.3 on Docker 24.0.4 ...
+			▪ Generating certificates and keys ...
+			▪ Booting up control plane ...
+			▪ Configuring RBAC rules ...
+		🔗  Configuring bridge CNI (Container Networking Interface) ...
+			▪ Using image gcr.io/k8s-minikube/storage-provisioner:v5
+		🔎  Verifying Kubernetes components...
+		🌟  Enabled addons: storage-provisioner
+		🏄  Done! kubectl is now configured to use "minikube" cluster and "default" namespace by default
 		```
 2. Check the health status of `minikube`:
 	```
@@ -101,94 +107,65 @@ Minikube supports Kubernetes features such as:
 	```
 
 	```
-	host: Running
-	kubelet: Running
-	apiserver: Running
-	kubectl: Correctly Configured: pointing to minikube-vm at 192.168.39.101
+minikube
+type: Control Plane
+host: Running
+kubelet: Running
+apiserver: Running
+kubeconfig: Configured
 	```
-3. Start an Echoserver deployment:
+3. Start a deployment that manages a pod. The pod runs a container based on the provided Docker image:
 	```
-	kubectl run hello-minikube --image=k8s.gcr.io/echoserver:1.14 --port=8080
+	kubectl create deployment hello-node --image=registry.k8s.io/e2e-test-images/agnhost:2.39 -- /agnhost netexec --http-port=8080
+
 	```
 
 	Once the deployment is created, a message confirms the step:
 
 	```
-	deployment.apps/hello-minikube created
+	deployment.apps/hello-node created
 	```
 4. Check the running pods and configured deployments:
-	```
-	kubectl get pods
-	```
-
-	```
-
-	NAME                              READY   STATUS    RESTARTS   AGE
-	hello-minikube-56cdb79778-qj7sd   1/1     Running   0          3m47s
-	```
 
 	```
 	kubectl get deployments
 	```
 
 	```
-	NAME             READY   UP-TO-DATE   AVAILABLE   AGE
-	hello-minikube   1/1     1            1           5m59s
+	NAME         READY   UP-TO-DATE   AVAILABLE   AGE
+	hello-node   1/1     1            1           98s
 	```
 
-	Expose an echoserver deployment with [NodePort](https://kubernetes.io/docs/concepts/services-networking/service/#nodeport)
-
+	Expose the pod to the public internet using the `kubectl expose` command
 	```
-	kubectl expose deployment hello-minikube --type=NodePort
+	kubectl expose deployment hello-node --type=LoadBalancer --port=8080
 	```
-5. `curl` the service created by running the following command:
+	The `--type=LoadBalancer` flag indicates that you want to expose your service outside of the cluster.
+5. View the service you created in the previous step:
 	```
-	curl $(minikube service hello-minikube --url)
+	NAME         TYPE           CLUSTER-IP      EXTERNAL-IP   PORT(S)          AGE
+	hello-node   LoadBalancer   10.102.149.85   <pending>     8080:32112/TCP   2s
+	kubernetes   ClusterIP      10.96.0.1       <none>        443/TCP          11m
 	```
-
-	A response similar to this example is shown:
-
+6. Run the following command to open a browser window that serves the app and shows the app's response:
 	```
-	Hostname: hello-minikube-56cdb79778-qj7sd
-
-	Pod Information:
-		-no pod information available-
-
-	Server values:
-		server_version=nginx: 1.13.3 - lua: 10008
-
-	Request Information:
-		client_address=172.17.0.1
-		method=GET
-		real path=/
-		query=
-		request_version=1.1
-		request_scheme=http
-		request_uri=http://192.168.39.101:8080/
-
-	Request Headers:
-		accept=*/*
-		host=192.168.39.101:30090
-		user-agent=curl/7.58.0
-
-	Request Body:
-		-no body in request-
+	minikube service hello-node
 	```
-6. Delete the `hello-minikube` service:
+7. Delete the `hello-node` service:
 	```
-	kubectl delete services hello-minikube
+	kubectl delete services hello-node
 	```
-7. Delete the deployment:
+8. Delete the deployment:
 	```
-	kubectl delete deployment hello-minikube
+	kubectl delete deployment hello-node
 	```
 
 	A confirmation displays:
 
 	```
-	deployment.extensions "hello-minikube" deleted
+	deployment.extensions "hello-node" deleted
 	```
-8. Stop Minikube:
+9. Stop Minikube:
 	```
 	minikube stop
 	```
@@ -196,8 +173,9 @@ Minikube supports Kubernetes features such as:
 	A confirmation displays:
 
 	```
-	✋  Stopping "minikube" in kvm2 ...
-	🛑  "minikube" stopped.
+	✋  Stopping node "minikube"  ...
+	🛑  Powering off "minikube" via SSH ...
+	🛑  1 node stopped.
 	```
 
 For more information regarding Minikube and Kubernetes, check out [the official documentation](https://kubernetes.io/docs) and the [Minikube GitHub repository](https://github.com/kubernetes/minikube).

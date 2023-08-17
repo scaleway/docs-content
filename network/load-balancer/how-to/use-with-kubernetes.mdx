@@ -1,0 +1,131 @@
+---
+meta:
+  title: How to use a Load Balancer with a Kubernetes cluster
+  description: This page explains how to use a Load Balancer with a Scaleway-managed Kubernetes cluster
+content:
+  h1: How to use a Load Balancer with a Kubernetes cluster
+  paragraph: This page explains how to use a Load Balancer with a Scaleway-managed Kubernetes cluster
+tags: load-balancer kuberenetes kapsule kosmos cluster annotations
+dates:
+  validation: 2023-08-16
+  posted: 2021-08-16
+categories:
+  - network
+---
+
+Kubernetes is an open-source system for automating deployment, scaling, and management of containerized applications. By default, Kubernetes clusters are not exposed to the Internet. This prevents external users from being able to access the application deployed in your cluster. Creating an external Load Balancer for your cluster lets you expose it to the internet. The Load Balancer has a single externally-accessible IP address that forwards all traffic to the LoadBalancer Service within your cluster, which then takes care of forwarding it to the right pods.
+
+If your Kubernetes cluster is created and managed via [Scaleway Kubernetes Kapsule](TODO), by default any external Load Balancer that you create with a Kubernetes `Service` will be provisioned by Scaleway, and visible in the **Load Balancer** section of the Scaleway console. If you are running your own installed Kubernetes cluster, you can also opt for your external Load Balancers to be provisioned by Scaleway, assuming that your cluster is running in a supported environment and is configured with the correct cloud load balancer provider package.
+
+<Message type="important">
+It is **not** correct procedure to provision the Load Balancer from outside the cluster, for example by creating a Scaleway Load Balancer in the console or via the API, and then attempting to use it as your cluster's external Load Balancer. Best practice is to create a `LoadBalancer` service for your cluster specified in a yaml manifest, so that the cluster's Cloud Controller Manager spawns a correctly-configured and fully managed Scaleway Load Balancer for the cluster. All configuration should then be done via [Load Balancer annotations](https://www.scaleway.com/en/docs/containers/kubernetes/api-cli/using-load-balancer-annotations/). You should not attempt to edit the Load Balancer's configuration via the console or API. <br /><br />
+
+Follow the instructions below to create and configure a Load Balancer for your Kubernetes cluster.
+</Message>
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created a Kubernetes Kapsule cluster](/network/load-balancer/how-to/create-load-balancer), or else you have your own installed Kubernetes cluster running in a supported environment and configured with the correct [cloud load balancer provider package](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/getting-started.md) for Scaleway
+  - You have [installed and configured kubectl](https://www.scaleway.com/en/docs/containers/kubernetes/how-to/connect-cluster-kubectl/)
+  - You have an application running in your cluster. (Find an example webserver application to run [here](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-examples.md))
+</Message>
+
+## How to create a Load Balancer for a Kubernetes cluster
+
+1. Create a `.yaml` file to hold the manifest for your cluster's Load Balancer. This will describe the resource (Load Balancer) that you want to create:
+
+    ```
+    nano lb.yaml
+    ```
+
+2. Copy and paste the following text into the file. Use the information below to edit it to your own specifications:
+
+    ```yaml
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: myloadbalancer
+    spec:
+      type: LoadBalancer
+      ports:
+      - port: 8000
+        name: http
+        targetPort: 8000
+      selector:
+        app: mydeployment
+    ```
+
+    - `apiVersion`: which version of the Kubernetes API to use to create the object
+    - `kind`: the kind of object defined in this yaml file. For a Load Balancer, specify a `Service`
+    - `metadata`: helps uniquely identify the Service object: give it a `name` (e.g. `myloadbalancer`).
+    - `spec`: specifies the Service: 
+        - `type`: the type of Service required: a `LoadBalancer` Service. 
+        - `ports`: the ports for the Service configuration. You can define many ports if you want, here we specify just one:
+          - `port`: the new service port that will be created, for connecting to the application
+          - `name`: a name for this port, e.g. `http`
+          - `targetPort`: the application port to target with requests coming from the Service 
+        - `selector`: links the LoadBalancer Service with a set of Pods in the cluster. Ensure that the `app` specified matches the name of the deployment of your app in the cluster (run `kubectl get all` if necessary to check the name).
+
+        <Message type="note">
+        This is a basic working configuration. To specify your Load Balancer's configuration in more detail, you can add **annotations** (see [below](TODO))
+        </Message>
+
+    Save and exit the file.
+
+3. Tell Kubernets to create the Load Balancer from the manifest created in step 2, by executing the following command:
+
+    ```
+    kubectl create -f lb.yaml
+    ```
+
+    A message displays to confirm the creation of the Load Balancer.
+
+4. Run the following command to confirm that the Load Balancer Service has been created, and view its external IP:
+
+    ```
+    kubectl get svc 
+    ```
+
+    You can also check the [Load Balancer](TODO) section of the Scaleway console, where your Kuberenetes cluster's Load Balancer now appears. Note that you should **not** attempt to edit or delete the Load Balancer via the console, only via the manifest file and kubectl.
+
+
+## How to manage the IP addresses of your cluster's Load Balancer
+
+### Use a reserved (flexible) IP address when creating your Load Balancer
+
+If you have an existing [Load Balancer flexible IP](TODO) in your account, you can specify that your cluster's external Load Balancer should be created with this IP address. You must specify this **at the time of creation**, in your yaml manifest. It is not possible to change a Load Balancer's IP after creation. 
+
+[Follow the instructions here](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-examples.md#deploy-a-loadbalancer-with-specific-ip) to see how to specify this in your yaml manifest.
+
+### Specify that your Load Balancer's IP address should not be deleted with the Load Balancer
+
+You can specify that if/when the Load Balancer is deleted, it's IP address should not be deleted with it but rather reserved in your account as a flexible IP address, so that you can attach it to another Load Balancer in the future.
+
+[Follow the instructions here](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-examples.md#convert-an-ephemeral-ip-into-reserved-ip) to see how to achieve this.
+
+## How to define your Load Balancer's configuration via annotations
+
+To set configuration details for your Load Balancer, such as the [balancing method](/network/load-balancer/concepts/#balancing-methods) it should use, [backend protection settings](/network/load-balancer/concepts/#backend-protection) and more, you must use **annotations**.
+
+Annotations are inserted into the `metadata` field of the Load Balancer's yaml manifest as follows:
+
+    ```yaml
+        apiVersion: v1
+    kind: Service
+    metadata:
+      name: myloadbalancer
+      annotations:
+        service.beta.kubernetes.io/scw-loadbalancer-forward-port-algorithm: "roundrobin"
+        service.beta.kubernetes.io/scw-loadbalancer-health-check-delay: "10s"
+    spec:
+      [etc]
+      ```
+
+You can add annotations to your Load Balancer's manifest either at the time of creation, or [after creation](TODO CHECK)
+
+<Navigation title="See Also">
+  <PreviousButton to="/network/load-balancer/how-to/create-manage-routes/">How to create and manage routes</PreviousButton>
+  <NextButton to="/network/load-balancer/how-to/set-up-s3-failover/">How to set up an S3 failover</NextButton>
+</Navigation>

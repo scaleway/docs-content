@@ -13,14 +13,12 @@ categories:
   - network
 ---
 
-Kubernetes is an open-source system for automating deployment, scaling, and management of containerized applications. By default, Kubernetes clusters are not exposed to the Internet. This prevents external users from being able to access the application deployed in your cluster. Creating an external Load Balancer for your cluster lets you expose it to the internet. The Load Balancer has a single externally-accessible IP address that forwards all traffic to the LoadBalancer Service within your cluster, which then takes care of forwarding it to the right pods.
+Kubernetes is an open-source system for automating deployment, scaling, and management of containerized applications. By default, Kubernetes clusters are not exposed to the Internet. This prevents external users from being able to access the application deployed in your cluster. Creating an external Load Balancer for your cluster solves this issue. The Load Balancer has a single externally-accessible IP address that forwards all traffic to the LoadBalancer Service within your cluster, which then takes care of forwarding it to the right pods.
 
-If your Kubernetes cluster is created and managed via [Scaleway Kubernetes Kapsule](TODO), by default any external Load Balancer that you create with a Kubernetes `Service` will be provisioned by Scaleway, and visible in the **Load Balancer** section of the Scaleway console. If you are running your own installed Kubernetes cluster, you can also opt for your external Load Balancers to be provisioned by Scaleway, assuming that your cluster is running in a supported environment and is configured with the correct cloud load balancer provider package.
+If your Kubernetes cluster is created and managed via [Scaleway Kubernetes Kapsule](TODO), by default any external Load Balancer that you create with a Kubernetes `Service` will be provisioned by Scaleway, and visible in the **Load Balancer** section of the Scaleway console. If you are running your own installed Kubernetes cluster, your external Load Balancers can also be provisioned by Scaleway, assuming that your cluster is running in a supported environment and is configured with the correct cloud load balancer provider package.
 
 <Message type="important">
-It is **not** correct procedure to provision the Load Balancer from outside the cluster, for example by creating a Scaleway Load Balancer in the console or via the API, and then attempting to use it as your cluster's external Load Balancer. Best practice is to create a `LoadBalancer` service for your cluster specified in a yaml manifest, so that the cluster's Cloud Controller Manager spawns a correctly-configured and fully managed Scaleway Load Balancer for the cluster. All configuration should then be done via [Load Balancer annotations](https://www.scaleway.com/en/docs/containers/kubernetes/api-cli/using-load-balancer-annotations/). You should not attempt to edit the Load Balancer's configuration via the console or API. <br /><br />
-
-Follow the instructions below to create and configure a Load Balancer for your Kubernetes cluster.
+Load Balancers for Kuberentes clusters should **always** be provisioned via the cluster's Cloud Controller Manager. It is **not** correct procedure to provision the Load Balancer by creating a Scaleway Load Balancer in the console or via the API, and then attempting to use it as your cluster's external Load Balancer. Similarly, you cannot use the Scaleway console or devtools to edit your cluster's Load Balancer after creation, this must be done via the CCM, as detailed in this documentation.
 </Message>
 
 <Macro id="iam-requirements" />
@@ -34,19 +32,122 @@ Follow the instructions below to create and configure a Load Balancer for your K
 
 ## How to create a Load Balancer for a Kubernetes cluster
 
-1. Create a `.yaml` file to hold the manifest for your cluster's Load Balancer. This will describe the resource (Load Balancer) that you want to create:
+Create a `.yaml` file to hold the manifest for your cluster's Load Balancer. This will describe the resource (Load Balancer) that you want to create. Then use a command such as `kubectl create -f <name-of-manifest-file>.yaml` to tell Kubernets to create the Load Balancer from the manifest.
 
-    ```
-    nano lb.yaml
-    ```
+Below, find an example for the content of the yaml manifest. You will need to edit it to your own specifications:
 
-2. Copy and paste the following text into the file. Use the information below to edit it to your own specifications:
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: myloadbalancer
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8000
+    name: http
+    targetPort: 8000
+  selector:
+    app: mydeployment
+```
+
+- `apiVersion`: which version of the Kubernetes API to use to create the object
+- `kind`: the kind of object defined in this yaml file. For a Load Balancer, specify a `Service`
+- `metadata`: helps uniquely identify the Service object: give it a `name` (e.g. `myloadbalancer`).
+- `spec`: specifies the Service: 
+    - `type`: the type of Service required: a `LoadBalancer` Service. 
+    - `ports`: the ports for the Service configuration. You can define many ports if you want, here we specify just one:
+      - `port`: the new service port that will be created, for connecting to the application
+      - `name`: a name for this port, e.g. `http`
+      - `targetPort`: the application port to target with requests coming from the Service 
+    - `selector`: links the LoadBalancer Service with a set of Pods in the cluster. Ensure that the `app` specified matches the name of the deployment of your app in the cluster (run `kubectl get all` if necessary to check the name).
+
+<Message type="tip">
+See [the Kubernetes documentation](/containers/kubernetes/api-cli/exposing-services/#creating-a-load-balancer-service) for another example of a yaml manifest to create a Load Balancer.
+</Message>
+
+You can run `kubectl get svc` to confirm that the Load Balancer Service has been created, and view its external IP. You can also check the [Load Balancer](https://console.scaleway.com/load-balancer/) section of the Scaleway console, where your Kuberenetes cluster's Load Balancer now appears. Note that you should **not** attempt to edit or delete the Load Balancer via the console, only via the manifest file and kubectl.
+
+## How to manage the IP address of your cluster's Load Balancer
+
+By default, when you create a Load Balancer for your cluster using a yaml manifest such as the one shown above, it will be assigned an IP address at random. When you delete the Load Balancer, the IP address will also be deleted and cannot be retrieved to transfer to another Load Balancer service in your cluster.
+
+However, it is possible to use [flexible IP addresses](/network/load-balancer/concepts/#flexible-ip-address) with your cluster's Load Balancer, to give you more control over the IPs being used. Flexible IP addresses can be kept in your account even if/when their associated Load Balancer is deleted. They can then be assigned to a new Load Balancer in the future.
+
+You can view your existing Load Balancer flexible IP addresses, and create new ones, in the [Scaleway console](https://console.scaleway.com/load-balancer/ips). Alternatively, use the [API](https://www.scaleway.com/en/developers/api/load-balancer/zoned-api/#path-ip-addresses-list-ip-addresses) or other devtools.
+
+### Use an existing flexible IP address when creating your Load Balancer
+
+If you have an existing [Load Balancer flexible IP](https://console.scaleway.com/load-balancer/ips) in your account, that is not attached to any other Load Balancer, you can specify that your cluster's external Load Balancer should be assigned this IP address.
+
+To specify the flexible IP address, use the `loadBlalancerIP` key to the `spec` section of your yaml file as shown below, with the value being the flexible IP address you want to use.
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: myloadbalancer
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8000
+    name: http
+    targetPort: 8000
+  selector:
+    app: mydeployment
+  loadBalancerIP: 51.159.206.51
+  
+```
+
+You can then create your Load Balancer with the `kubectl create -f <name-of-manifest-file>.yaml` command. When you run `kubectl get svc` you will see that its `EXTERNAL-IP` matches the IP specified in the yaml manifest. When you delete your LoadBalancer service, the flexible IP 51.159.206.51 will remain reserved in your account to be used with another Load Balancer in the future.
+
+### Modify your Load Balancer's IP address after creation
+
+To modify your Load Balancer's IP address after creation, you must use the `kubectl patch` command. This updates the Load Balancer according to the arguments given.
+
+You must have an existing [Load Balancer flexible IP](https://console.scaleway.com/load-balancer/ips) in your account, that is not attached to any other Load Balancer. 
+
+In the case that you have created a Load Balancer with the manifest above (with IP address `51.159.206.51`) but wish to change its IP address to another, available flexible IP address in your account which is `51.159.113.199`, use the following command:
+
+```
+kubectl patch svc myloadbalancer --type merge --patch '{"spec":{"loadBalancerIP": "51.159.113.199"}}'
+```
+
+When you run `kubectl get svc` you will see that its `EXTERNAL-IP` matches the IP specified in the patch command.
+
+### Specify that your Load Balancer's IP should not be deleted with the Load Balancer
+
+As long as you have specified a `loadBalancerIP` for your LoadBalancer service, either via [the original manifest](TODO) or a [patch afterwards](TODO), the IP address will not be deleted from your account, even if you delete the LoadBalancer service with a `kubectl delete svc myloadbalancer` command.
+
+If you created the Load Balancer without specifying a `loadBalancerIP` in your manifest, but you want its current IP address to be kept in your account after you delete the Load Balancer, you can use a `kubectl patch` command to achieve this. 
+
+- Identify the IP address which was randomly assigned to the Load Balancer, either via the [Scaleway console](https://console.scaleway.com/load-balancer/ips) or via a `kubectl get svc` command. Let's imagine that this IP address is `51.159.10.49`.
+- Run a patch command to add this as the `loadBalancerIP` address in the service definition: `kubectl patch svc myloadbalancer --type merge --patch '{"spec":{"loadBalancerIP": "51.159.10.49"}}'`
+
+Now, even if you delete the Load Balancer, its IP address will be held in your account and you can use it with a different Load Balancer in the future.
+
+## How to define your Load Balancer's configuration via annotations
+
+Your Load Balancer will be created with a default configuration, unless you define configuration parameters via **annotations**. 
+
+With annotations you can configure parameters such as the [balancing method](/network/load-balancer/concepts/#balancing-methods), [backend protection settings](/network/load-balancer/concepts/#backend-protection) and more. See the full list of available annotations [here](TODO).
+
+<Message type="important">
+Do **not** try to modify the configuration of your cluster's Load Balancer via the Scaleway console or any other devtools. Any modifications made this way will be overwritten by the cluster's CCM. You should **always** use annotations as described below to configure your cluster's Load Balancer.
+</Message>
+
+### Define configuration annotations when creating your Load Balancer
+
+Add annotations to the `metadata` section of your LoadBalancer Service's yaml manifest as shown below. In this example we include two annotations, but you can include as many as you need.
 
     ```yaml
     apiVersion: v1
     kind: Service
     metadata:
       name: myloadbalancer
+      annotations:
+        service.beta.kubernetes.io/scw-loadbalancer-forward-port-algorithm: "leastconn"
+        service.beta.kubernetes.io/scw-loadbalancer-health-check-delay: "10s"
     spec:
       type: LoadBalancer
       ports:
@@ -57,73 +158,28 @@ Follow the instructions below to create and configure a Load Balancer for your K
         app: mydeployment
     ```
 
-    - `apiVersion`: which version of the Kubernetes API to use to create the object
-    - `kind`: the kind of object defined in this yaml file. For a Load Balancer, specify a `Service`
-    - `metadata`: helps uniquely identify the Service object: give it a `name` (e.g. `myloadbalancer`).
-    - `spec`: specifies the Service: 
-        - `type`: the type of Service required: a `LoadBalancer` Service. 
-        - `ports`: the ports for the Service configuration. You can define many ports if you want, here we specify just one:
-          - `port`: the new service port that will be created, for connecting to the application
-          - `name`: a name for this port, e.g. `http`
-          - `targetPort`: the application port to target with requests coming from the Service 
-        - `selector`: links the LoadBalancer Service with a set of Pods in the cluster. Ensure that the `app` specified matches the name of the deployment of your app in the cluster (run `kubectl get all` if necessary to check the name).
+You can then create your Load Balancer with the `kubectl create -f <name-of-manifest-file>.yaml` command. When you examine your Load Balancer's backend configuration and health check information in the Scaleway console, you will see that the balancing method (aka forward port algorithm) and health check interval (aka health check delay) of its backend reflect the values set in the annotations.
 
-        <Message type="note">
-        This is a basic working configuration. To specify your Load Balancer's configuration in more detail, you can add **annotations** (see [below](TODO))
-        </Message>
+### Modify your Load Balancer's configuration via annotations after creation
 
-    Save and exit the file.
+To modify your Load Balancer's configuration with annotations after creation, you must use the `kubectl patch` command. This updates the Load Balancer according to the arguments given.
 
-3. Tell Kubernets to create the Load Balancer from the manifest created in step 2, by executing the following command:
+When we used a patch to [modify the Load Balancer's IP address](TODO) we specified the patch as a JSON object directly in the command line. Since in this case we want to add multiple annotations, for ease of use and visibility we will define the patch in a separate yaml file. This will then be passed as an argument to the patch command.
 
-    ```
-    kubectl create -f lb.yaml
-    ```
+Example patch file (`annotations-patch.yaml`):
 
-    A message displays to confirm the creation of the Load Balancer.
+```yaml
+metadata:
+  annotations:
+    service.beta.kubernetes.io/scw-loadbalancer-forward-port-algorithm: "first"
+    service.beta.kubernetes.io/scw-loadbalancer-health-check-timeout: "30s"
+```
 
-4. Run the following command to confirm that the Load Balancer Service has been created, and view its external IP:
+Command for the patch:
 
-    ```
-    kubectl get svc 
-    ```
-
-    You can also check the [Load Balancer](TODO) section of the Scaleway console, where your Kuberenetes cluster's Load Balancer now appears. Note that you should **not** attempt to edit or delete the Load Balancer via the console, only via the manifest file and kubectl.
-
-
-## How to manage the IP addresses of your cluster's Load Balancer
-
-### Use a reserved (flexible) IP address when creating your Load Balancer
-
-If you have an existing [Load Balancer flexible IP](TODO) in your account, you can specify that your cluster's external Load Balancer should be created with this IP address. You must specify this **at the time of creation**, in your yaml manifest. It is not possible to change a Load Balancer's IP after creation. 
-
-[Follow the instructions here](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-examples.md#deploy-a-loadbalancer-with-specific-ip) to see how to specify this in your yaml manifest.
-
-### Specify that your Load Balancer's IP address should not be deleted with the Load Balancer
-
-You can specify that if/when the Load Balancer is deleted, it's IP address should not be deleted with it but rather reserved in your account as a flexible IP address, so that you can attach it to another Load Balancer in the future.
-
-[Follow the instructions here](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-examples.md#convert-an-ephemeral-ip-into-reserved-ip) to see how to achieve this.
-
-## How to define your Load Balancer's configuration via annotations
-
-To set configuration details for your Load Balancer, such as the [balancing method](/network/load-balancer/concepts/#balancing-methods) it should use, [backend protection settings](/network/load-balancer/concepts/#backend-protection) and more, you must use **annotations**.
-
-Annotations are inserted into the `metadata` field of the Load Balancer's yaml manifest as follows:
-
-    ```yaml
-        apiVersion: v1
-    kind: Service
-    metadata:
-      name: myloadbalancer
-      annotations:
-        service.beta.kubernetes.io/scw-loadbalancer-forward-port-algorithm: "roundrobin"
-        service.beta.kubernetes.io/scw-loadbalancer-health-check-delay: "10s"
-    spec:
-      [etc]
-      ```
-
-You can add annotations to your Load Balancer's manifest either at the time of creation, or [after creation](TODO CHECK)
+```
+kubectl patch svc myloadbalancer --type merge --patch-file annotations-patch.yaml
+```
 
 <Navigation title="See Also">
   <PreviousButton to="/network/load-balancer/how-to/create-manage-routes/">How to create and manage routes</PreviousButton>

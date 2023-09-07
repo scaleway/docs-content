@@ -1,0 +1,95 @@
+---
+meta:
+  title: Ensuring resiliency with Multi-AZ Kubernetes clusters
+  description: This page explains how to ensure resiliency with Multi-AZ Kubernetes clusters
+content:
+  h1: Ensuring resiliency with Multi-AZ Kubernetes clusters
+  paragraph: This page explains how to ensure resiliency with Multi-AZ Kubernetes clusters
+tags: kubernetes persistent volume persistent-volume
+dates:
+  validation: 2023-09-07
+  posted: 2023-09-07
+categories:
+  - kubernetes
+---
+
+With the introduction of regional Private Networks, Kubernetes Kapsule clusters can now benefit from an extra layer of security for their worker nodes.
+
+It is now also possible to deploy different pools within a cluster across different Availability Zones (AZ).
+
+## Benefits of a multi-AZ configuration
+
+- With the multi-AZ option, you can implement a disaster recovery strategy that includes the replication of your workload across multiple AZ. This helps ensure data resiliency even in the unlikely event of an AZs becoming suddenly unavailable.
+
+- By activating multi AZ clusters, you can also gain access to certain compute resources that are not available, or in stock, in certain AZs.
+
+  Before multi-AZ clusters, if you had pools in PAR3, you would necessarily create new pools in PAR3. GPU nodes are not available in PAR3. If you wanted to use GPU nodes, you would have to create a new cluster with a new pool in PAR1 or PAR2 and configure your cluster from scratch. Now, you can use the same cluster configuration with two or more pools in different AZs.
+
+  For example, you can create a pool in PAR3 with PLAY2-NANO nodes, and a pool in PAR2 with GPU nodes in the same cluster.  possible to  but you want it to include GPU nodes, which are currently not available in PAR2,
+
+  The same goes for node types that are not in stock. If GPUs are out of stock in PAR3, you can try PAR1.
+
+## Requirements of a multi-AZ setup
+
+- In order to benefit from multi-AZ clusters, you must have a created a cluster compatible with and [attached to a Private Network](/containers/kubernetes/how-to/create-cluster/).
+
+  <Message type="note">
+    If your cluster is not attached to Private Network, make sure it is compatible with regional Private Networks first. If it is not, you can follow the procedure to migrate your cluster [via the console](/secure-cluster-with-private-network/#how-can-i-migrate-my-existing-clusters-to-regional-private-networks), [the API](https://www.scaleway.com/en/developers/api/kubernetes/#path-clusters-migrate-an-existing-cluster-to-a-private-network-cluster), or [via Terraform](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/k8s_cluster#private_network_id).
+  </Message>
+
+- You must also make sure that the nodes you select for your pool are available and in stock in your AZ of choice.
+
+  <Message type="important">
+    Some node types are not available with Kubernetes. Not all node types are available in all AZs. Even if a node type is available in a certain AZs, it might be out of stock. Make sure you check the availability in the Scaleway console before creating your pools.
+  </Message>
+
+## Recommendations
+
+To create a solid environment for data resiliency, we recommend that you set up your cluster with:
+
+  - at least 3 nodes and
+  - distributed across a minimum of 2 AZs
+
+### Affinity and anti-affinity set up
+
+You also need to update your affinity and anti-affinity configuration of your pods when building a resilient Kapsule environment.
+
+Block volumes, the storage units present in your pods, are zoned.
+
+If inter-pod affinity or anti-affinity rules are not set up for your pods, the nodes on which it should (or should not) run, will not be specified. This means that if the region the pod is located in becomes unavailable, it will not be able to restart in a different region.
+
+This is because a pod that is attached to a PAR1 Block volume cannot run on a node located in PAR2.
+
+For example, if a database pod is attached to a Block volume in PAR1, and PAR1 suddenly becomes unavailable, the database will not restart in PAR2 since its Block is in PAR1.
+
+With this in mind, we recommend you set up your affinity rules to determine which pods should run on which nodes. Or, you can set up anti-affinity rules to determine on which nodes your pods should not run on.
+
+For more information on how to set up affinity rules, refer to the [official Kubernetes documentation](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity).
+
+### Load Balancer service definition
+
+
+## How to create a multi-AZ cluster
+
+If you have taken into consideration the requirements and recommendations listed above, you can now create a multi-AZ cluster.
+
+To do so, you must [create a new cluster](/containers/kubernetes/how-to/create-cluster), one compatible with regional Private Networks, and add two or more pools located in different AZs.
+
+This can be done either via the Scaleway console, the CLI, or Terraform.
+
+<Message type="note">
+  If you use another method, refer to our [API Reference Documentation](https://www.scaleway.com/en/developers/api/kubernetes/#path-pools-create-a-new-pool-in-a-cluster).
+</Message>
+
+In the example below, we use the [Scaleway CLI](https://github.com/scaleway/scaleway-cli/blob/master/docs/commands/k8s.md#create-a-new-pool-in-a-cluster).
+
+Run the following command twice. Replace `<cluster-id>`, `<AZ>` and `<instance-type>` with their corresponding values. Make sure you replace `<AZ>` with different AZs for each pool.
+
+```
+scw k8s pool create cluster-id=<cluster-id> zone=<AZ> size=1 node-type=<instance-type>
+```
+
+To see an example Terraform configuration, refer to the [How to create a multi-AZ cluster with Terraform](/containers/kubernetes/api-cli/creating-multi-az-clusters-terraform) tutorial page.
+
+
+

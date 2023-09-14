@@ -1,0 +1,153 @@
+---
+meta:
+  title: Installing CockroachDB on Scaleway Instances
+  description: This page shows you how to deploy a secure multi-node CockroachDB cluster on Scaleway, using Scaleway managed load balancing service to distribute client traffic.
+content:
+  h1: Installing CockroachDB on Scaleway Instances
+  paragraph: This page shows you how to deploy a secure multi-node CockroachDB cluster on Scaleway, using Scaleway managed load balancing service to distribute client traffic.
+tags:  cockroachdb instances sql database
+categories:
+  - 
+  - 
+dates:
+  validation: 2023-31-08
+  posted: 2023-31-08
+---
+
+[CockroachDB](https://www.cockroachlabs.com/docs/v23.1/frequently-asked-questions) is an open-source, distributed SQL database designed to be scalable, reliable and consistent.
+
+CockroachDB scales horizontally. This means that in case of increased data volume, you can simply add more servers to your CockroachDB cluster instead of scaling vertically by adding more resources (memory, CPU or storage) to a single server.
+
+Its reliability lies in the ability to overcome software and hardware failures. Indeed, CockroachDB uses replication, meaning data is stored across multiple nodes. Moreover, the [Raft Consensus Algorithm](https://raft.github.io/) ensures data consistency by requiring a majority of replicas to agreee before a change is committed to the database. Additionally, the Raft algorithm can also automatically detect anc correct issues (such as identifying corrupted data and restoring it) without any human intervention. 
+
+Thanks to its serializable SQL transactions, CockroachDB also ensures that data remains consistent and accurate. To do so, it combines both the Raft algorithm to read data and timestamps and multiple versions of data (MVCC) to write data. MVCC provides you with a stable and unchanging view of the data whenever you start a transaction, regardless of other changes happening in the database at the same time.
+
+This article shows you how to install CockroachDB using three nodes on a Regional Private Network as well as Scaleway Load Balancer to access the database and console.
+
+<Macro id="iam-requirements" />
+ 
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key/) 
+  - Your network configuration must allow TCP communication on the following ports:
+    - 26257 for intra-cluster and client-cluster communication
+    - 8080 to expose your DB Console
+</Message>
+
+## Creating Instances
+
+This procedure shows you how to create Instances for each node you plan to have in your cluster. Make sure to replace all example values with your own. 
+
+<Message type="important">
+  At least three nodes need to be ran to ensure survivability. You can use any Instance except for PLAY2-PICO Instances as they are 1 vCPU which is below CockroachDB's minimum requirement of 4 vCPUs. For more details, refer to [Hardware Recommendations](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#hardware) and [Cluster Topology](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#topology).
+</Message>
+
+1. Run the following command to create a Private Network: 
+    ```
+    scw vpc private-network create name=cockroachdb region=fr-par subnets.0=192.168.0.0/24
+    ```
+
+2. Run the following command to create a Public Gateway to grant access to Instances: 
+    ```
+    scw vpc-gw gateway create name=external-access type=VPC-GW-S enable-bastion=true
+    ```
+  
+    Once your Public Gateway is created, you must create a DHCP subnet that matches the one used in your previously created Private Network: 
+    ```
+    scw vpc-gw gateway create name=external-access type=VPC-GW-S enable-bastion=true
+    ```
+
+    Finally, configure your gateway with your Private Network using your newly created DHCP subnet: 
+    ```
+    scw vpc-gw gateway create name=external-access type=VPC-GW-S enable-bastion=true
+    ```
+
+3. Run the following command to create an Instance in the `fr-par-1` zone with a data volume of 30G: 
+    ```
+    scw instance server create name=db01 zone=fr-par-1 type=PRO2-XXS image=ubuntu_jammy ip=none additional-volumes.0=b:30G
+    ```
+
+    Then, create a private NIC (Network Interface Card) for your newly created Instance: 
+    ```
+    scw instance private-nic create zone=fr-par-1 server-id=<id> private-network-id=<id>
+    ```
+
+    <Message type="important">
+      You need to repeat the same operation with `fr-par-2` and `fr-par-3` zones to create all nodes
+    </Message>
+
+4. Run the following command to check your Instance's DHCP entry on the Private Network and retrieve its private IP:
+    ```
+    scw vpc-gw dhcp-entry list gateway-network-id=<id>
+    ```
+
+5. Run the following command to connect on the Instances using the gateway bastion: 
+    ```
+    ssh -J bastion@<gw-ip>:61000 root@db01.priv
+    ```
+
+## Synchronizing clocks 
+
+CockroachDB requires moderate levels of [clock synchronization](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#clock-synchronization) to preserve data consistency. For this reason, the node spontaneously shuts down when a node detects that its clock is out of sync with at least half of the other nodes in the cluster by 80% of the maximum offset allowed (500ms by default). 
+
+This is to avoid consistency anomalies. However, it is best to prevent clocks from drifting too far in the first place by FIRST running a clock synchronization software on each node.
+
+For the sake of this tutorial, we will be using [NTP](https://www.ntp.org/documentation/4.2.8-series/) to keep offsets in a single-digit milliseconds. Note that other methods of clock synchronization are suitable as well.
+
+1. Connect to one of your nodes using SSH.
+
+2. Disable `timesyncd` as it tends to be active by default on some Linux distributions by running the following command:
+    ```
+    timedatectl set-ntp no
+    ```
+
+    <Message type="note">
+        You can also make sure timesyncd is off by running the `timedatectl` command
+    </Message>
+
+3. Run the following command to install the NTP package:
+    ```
+    apt-get install ntp -y
+    ```
+
+4. Run the following command to stop the NTP daemon: 
+    ```
+    service ntp stop
+    ```
+
+5. Configure  the machine's clock with Google's NTP service, in the /etc/ntp.conf file, remove or comment out any lines starting with server or pool and add the following lines:
+    ```
+    server time1.google.com iburst
+    server time2.google.com iburst
+    server time3.google.com iburst
+    server time4.google.com iburst
+    ```
+
+6. Restart the NTP daemon: 
+    ```
+    service ntp start
+    ```
+    <Message type="important">
+      We recommend Google's NTP service because it handles "smearing" the leap second. If you use a different NTP service that doesn't smear the leap second, be sure to configure client-side smearing in the same way on each machine. See the Production Checklist for details.
+    </Message>
+
+7. Synchronize the machine's clock wiht Google's NTP service: 
+    ```
+     ntpd -b time.google.com
+    ```
+
+8. Verify that the machine is using a Google NTP server:
+    ```
+     ntpq -p
+    ```
+      <Message type="note">
+      The active NTP server will be marked with an asterisk.
+      </Message>
+
+      <Message type="important">
+        You need to repeat this step for each machine where a CockroachDB node will run.
+      </Message>
+
+
+
+

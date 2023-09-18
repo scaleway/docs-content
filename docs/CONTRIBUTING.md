@@ -11,12 +11,22 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 ## How to contribute?
 
-All rules below concern this repository.
-Any PRs which do not comply with the rules below will be rejected.
+### Prerequisites
 
-1. Read and follow [the writing guidelines](#writing-guidelines).
-2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (eg: tutorial, API/CLI documentation, reference content or troubleshooting content?).
-3. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
+- You have [Git](https://git-scm.com/) installed
+- You have a [GitHub](https://github.com/signup) personal account
+- You have installed [Yarn](https://yarnpkg.com/getting-started) package manager
+- You have [Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown) and [MDX](https://mdxjs.com/guides/) syntax knowledge
+- You have read [the writing guidelines](#writing-guidelines)
+
+:warning: **Important**
+
+  - All rules below concern this repository.
+  - Any PRs which do not comply with the rules below will be rejected.
+
+1. Clone the `docs-content` repository by following the [cloning procedure](#cloning-the-project) below. 
+2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, reference content or troubleshooting).
+3. Create your branch. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
    - `source`: Either `int` (for internal contributor) or `ext` (for external contributor) to Scaleway. If you are not a Scaleway staff member, please use `ext`.
    - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
    - `product`: the name of the product that corresponds to the documentation page you will edit.
@@ -29,21 +39,12 @@ Any PRs which do not comply with the rules below will be rejected.
 
 ## Use repository locally
 
-You have to clone the project locally to work on it. If you need to fork the repository, [follow this link](https://docs.github.com/en/get-started/quickstart/fork-a-repo) to find out how.
+You have to clone the project locally to work on it.
 
-### Requirements
+:warning:
+  If you are not a member of the Scaleway organization, you need to fork the repository. [Follow this link](https://docs.github.com/en/get-started/quickstart/fork-a-repo) to find out how.
 
-Work on docs-content assumes that you have knowledge in the following techniques:
-
-- [Git](https://git-scm.com/)
-- A [Github](https://github.com/signup) personal account
-- [Yarn](https://yarnpkg.com/getting-started) package manager installed
-- [Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown) syntax knowledge
-- [MDX](https://mdxjs.com/guides/) syntax knowledge
-
-Be sure you have read the present **contributing rules** and **commit conventions**.
-
-### Steps to install the project
+### Cloning the project
 
 1. Copy the following code and enter it in your terminal:
 ```bash

@@ -1,0 +1,347 @@
+---
+meta:
+  title: How to use the NVIDIA MIG technology on GPU Instances
+  description: This section provides information about NVIDIA's MIG technology
+content:
+  h1: How to use the NVIDIA MIG technology on GPU Instances
+  paragraph: This section provides information about NVIDIA's MIG technology
+tags: NVIDIA H100 MIG multi-instance gpu
+dates:
+  validation: 2023-08-31
+  posted: 2023-08-31
+categories:
+  - compute
+---
+
+<Message type="important">
+  * Scaleway offers GPU Instances such as H100 PCIe GPU Instances, RENDER-S GPU Instance, etc.
+  * Nvidia uses the term *"GPU instance"* to designate a MIG partition of a GPU (MIG= Multi-Instance GPU)
+  * To avoid confusion, we will use the term GPU Instance in this document to designate the Scaleway GPU Instance, and *"MIG partition"* in the context of the MIG feature.
+</Message>
+
+NVIDIA Multi-Instance GPU (MIG) is a technology introduced by NVIDIA to enhance the utilization and flexibility of their data center GPUs, specifically designed for virtualization and multi-tenant environments.
+It allows a single physical GPU to be partitioned into up to seven smaller Instances, each of which operates as an independent MIG partition with its own dedicated resources, such as memory, compute cores, and video outputs.
+MIG ensures one client cannot impact the work or scheduling of other clients and provides enhanced isolation for customers.
+
+<Lightbox src="scaleway-multi-instance-gpu.webp" size="large" alt="" />
+
+With MIG, you are able to see and schedule jobs on virtual MIG partitions as if they were physical GPUs. MIG works with Linux operating systems and containers using Docker Engine, with support for Kubernetes and virtual machines using hypervisors such as Red Hat Virtualization and VMware vSphere.
+
+MIG also provides you with the following benefits:
+
+* **Resource sharing:** MIG allows multiple users or workloads to share a single physical GPU, which can lead to better resource utilization and cost savings.
+* **Complete isolation:** Each MIG partition is isolated from the others, ensuring that workloads running on one Instance do not interfere with or impact the performance of workloads in other Instances. With MIG, each MIG partition's processors have separate and isolated paths through the entire memory system - the on-chip crossbar ports, L2 cache banks, memory controllers, and DRAM address buses are all assigned uniquely to an individual Instance.
+* **Guaranteed resources:** MIG partitions can be configured with specific resource allocations, providing dedicated performance to different workloads. This is especially important in multi-tenant environments.
+
+For more information about NVIDIA MIG, refer to the official [MIG documentation](https://docs.nvidia.com/datacenter/tesla/mig-user-guide/).
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com) 
+  - You have created a [MIG compatible GPU Instance](/compute/gpu/how-to/create-manage-gpu-instance)
+  - You have [generated your SSH key](/console/my-project/how-to/create-ssh-key/)
+</Message>
+
+## How to enable MIG on a GPU Instance
+
+By default, the MIG feature of NVIDIA GPUs is disabled. To use it with your GPU Instance, you need to activate MIG.
+
+1. [Connect to your GPU Instance](/compute/gpu/how-to/create-manage-gpu-instance/#how-to-connect-to-a-gpu-instance) as root using SSH.
+2. Check the status of the MIG mode of your Instance running `nvidia-smi`. It shows that MIG mode is disabled:
+    ```s
+    root@my-h100-instance:~# nvidia-smi -i 0
+    Tue Aug 22 11:58:39 2023
+    +-----------------------------------------------------------------------------+
+    | NVIDIA-SMI 525.125.06   Driver Version: 525.125.06   CUDA Version: 12.0     |
+    |-------------------------------+----------------------+----------------------+
+    | GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+    | Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+    |                               |                      |               MIG M. |
+    |===============================+======================+======================|
+    |   0  NVIDIA H100 PCIe    On   | 00000000:01:00.0 Off |                    0 |
+    | N/A   40C    P0    51W / 350W |      0MiB / 81559MiB |      0%      Default |
+    |                               |                      |             Disabled |
+    +-------------------------------+----------------------+----------------------+
+    ```
+2. Run the following command to enable MIG mode on the GPU:
+    ```s
+    root@my-h100-instance:~# sudo nvidia-smi -i 0 -mig 1
+    Enabled MIG Mode for GPU 00000000:01:00.0
+    All done.
+    ```
+3. Run the following command to verify that MIG mode is enabled on the GPU:
+    ```s
+    root@my-h100-instance:~# nvidia-smi -i 0 --query-gpu=pci.bus_id,mig.mode.current --format=csv
+    pci.bus_id, mig.mode.current
+    00000000:01:00.0, Enabled
+    ```
+    MIG is now enabled for the GPU Instance.
+
+## How to list MIG Profiles
+The NVIDIA driver provides several predefined profiles you can choose from while setting up the MIG (Multi-Instance GPU) feature on the H100.
+These profiles determine the sizes and functionalities available of the MIG partitions that users can generate.
+Additionally, the driver supplies details regarding placements, which specify the types and quantities of Instances that can be established. 
+Refer to the official documentation for more information about the supported [MIG profiles on H100 GPU Instances](https://docs.nvidia.com/datacenter/tesla/mig-user-guide/#h100-profiles).
+
+1. Run the command `nvidia-smi mig -lgip` to retrieve a list of the available MIG profiles for the Instance. An output similar to the following displays:
+    ```s
+    root@my-h100-instance:~# nvidia-smi mig -lgip
+    +-----------------------------------------------------------------------------+
+    | GPU instance profiles:                                                      |
+    | GPU   Name             ID    Instances   Memory     P2P    SM    DEC   ENC  |
+    |                              Free/Total   GiB              CE    JPEG  OFA  |
+    |=============================================================================|
+    |   0  MIG 1g.10gb       19     7/7        9.62       No     14     1     0   |
+    |                                                             1     1     0   |
+    +-----------------------------------------------------------------------------+
+    |   0  MIG 1g.10gb+me    20     1/1        9.62       No     14     1     0   |
+    |                                                             1     1     1   |
+    +-----------------------------------------------------------------------------+
+    |   0  MIG 1g.20gb       15     4/4        19.50      No     14     1     0   |
+    |                                                             1     1     0   |
+    +-----------------------------------------------------------------------------+
+    |   0  MIG 2g.20gb       14     3/3        19.50      No     30     2     0   |
+    |                                                             2     2     0   |
+    +-----------------------------------------------------------------------------+
+    |   0  MIG 3g.40gb        9     2/2        39.25      No     46     3     0   |
+    |                                                             3     3     0   |
+    +-----------------------------------------------------------------------------+
+    |   0  MIG 4g.40gb        5     1/1        39.25      No     62     4     0   |
+    |                                                             4     4     0   |
+    +-----------------------------------------------------------------------------+
+    |   0  MIG 7g.80gb        0     1/1        79.00      No     114    7     0   |
+    |                                                             8     7     1   |
+    +-----------------------------------------------------------------------------+
+    ```
+2. Run the following command to list the possible placements available. The syntax of the placement is `{<index>}:<GPU Slice Count>` and shows the placement of the instances on the GPU.
+    ```s
+    root@my-h100-instance:~# nvidia-smi mig -lgipp
+    GPU  0 Profile ID 19 Placements: {0,1,2,3,4,5,6}:1
+    GPU  0 Profile ID 20 Placements: {0,1,2,3,4,5,6}:1
+    GPU  0 Profile ID 15 Placements: {0,2,4,6}:2
+    GPU  0 Profile ID 14 Placements: {0,2,4}:2
+    GPU  0 Profile ID  9 Placements: {0,4}:4
+    GPU  0 Profile ID  5 Placement : {0}:4
+    GPU  0 Profile ID  0 Placement : {0}:8
+    ```
+
+## How to partition the GPU into several MIG partitions
+
+1. Run the following command to divide the H100 GPU Instance into four slices (MIG partitions):
+    ```s
+    root@my-h100-instance:~# sudo nvidia-smi mig -cgi 9,19,19,19 -C
+    Successfully created GPU instance ID  2 on GPU  0 using profile MIG 3g.40gb (ID  9)
+    Successfully created compute instance ID  0 on GPU  0 GPU instance ID  2 using profile MIG 3g.40gb (ID  2)
+    Successfully created GPU instance ID  7 on GPU  0 using profile MIG 1g.10gb (ID 19)
+    Successfully created compute instance ID  0 on GPU  0 GPU instance ID  7 using profile MIG 1g.10gb (ID  0)
+    Successfully created GPU instance ID  8 on GPU  0 using profile MIG 1g.10gb (ID 19)
+    Successfully created compute instance ID  0 on GPU  0 GPU instance ID  8 using profile MIG 1g.10gb (ID  0)
+    Successfully created GPU instance ID  9 on GPU  0 using profile MIG 1g.10gb (ID 19)
+    Successfully created compute instance ID  0 on GPU  0 GPU instance ID  9 using profile MIG 1g.10gb (ID  0)
+    ```
+
+    The command `nvidia-smi mig -cgi 9,19,19,19 -C` is used to manage NVIDIA MIG partitions and their configurations using the NVIDIA System Management Interface (`nvidia-smi`) tool.
+
+    Here is a breakdown of the components of the command:
+
+    * `nvidia-smi`: is the command-line tool provided by NVIDIA to interact with and manage NVIDIA GPUs.
+    * `mig`: is a subcommand of `nvidia-smi` specifically used for managing MIG partitions. MIG (Multi-Instance GPU) allows a single NVIDIA GPU to be partitioned into multiple smaller instances, each with its own memory, compute, and other resources.
+    * `-cgi 9,19,19,19`: this flag specifies the MIG partition configuration. The numbers following the flag represent the MIG partitions for each of the four MIG device slices. In this case, there are four slices with configurations 9, 19, 19, and 19 compute instances each. These numbers correspond to the profile IDs retrieved previously. Note that you can use either of the following:
+      * Profile ID (e.g. 9, 14, 5)
+      * Short name of the profile (e.g. `3g.40gb`)
+      * Full profile name of the instance (e.g. `MIG 3g.40gb`)
+    * `-C`: this flag automatically creates the corresponding compute instances for the MIG partitions.
+
+    The command instructs the `nvidia-smi` tool to set up a MIG configuration where the GPU is divided into four slices, each containing different numbers of MIG partition configurations as specified: an MIG 3g.40gb (Profile ID 9) for the first slice, and an MIG 1g.10gb (Profile ID 19) for each of the remaining three slices.
+
+    <Message type="note">
+      Running CUDA workloads on the GPU requires the creation of MIG partitions along with their corresponding compute instances. Just enabling MIG mode on the GPU is not enough to achieve this.
+      Additionally, it is important to understand that any MIG devices created will not be retained after the system is rebooted.
+      This means if the GPU or system is reset, you will have to set up the desired MIG configurations again.
+      You can use the [NVIDIA MIG Partition Editor](https://github.com/nvidia/mig-parted) (`mig-parted`) tool for automated assistance in this process.
+      This tool offers the option of creating a systemd service, which can be used to reestablish the MIG geometry when the system starts up.
+    </Message>
+
+2. Run the following command to verify the MIG configuration of the GPU:
+    ```s
+    root@my-h100-instance:~# sudo nvidia-smi mig -lgi
+    +-------------------------------------------------------+
+    | GPU instances:                                        |
+    | GPU   Name             Profile  Instance   Placement  |
+    |                          ID       ID       Start:Size |
+    |=======================================================|
+    |   0  MIG 1g.10gb         19        7          0:1     |
+    +-------------------------------------------------------+
+    |   0  MIG 1g.10gb         19        8          1:1     |
+    +-------------------------------------------------------+
+    |   0  MIG 1g.10gb         19        9          2:1     |
+    +-------------------------------------------------------+
+    |   0  MIG 3g.40gb          9        2          4:4     |
+    +-------------------------------------------------------+
+    ```
+3. Display the UUID of each of your MIG partitions:
+    ```s
+    root@my-h100-instance:~# nvidia-smi -L
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-7cd6d4d6-9fa8-13be-3c42-09a1b2280a02)
+      MIG 3g.40gb     Device  0: (UUID: MIG-da06d78f-7534-56a0-a062-62fef012be91)
+      MIG 1g.10gb     Device  1: (UUID: MIG-8aa1fc52-9818-58ec-bc64-8f0cae121bb4)
+      MIG 1g.10gb     Device  2: (UUID: MIG-42fa9c93-1430-5ccc-b623-c02fb93b7f5a)
+      MIG 1g.10gb     Device  3: (UUID: MIG-6d96b431-44ba-5360-80b0-9359561c927d)
+    ```
+
+4. Run `nvidia-smi` on three 1g.10gb MIG partitions to display their characteristics:
+    * MIG 1g.10gb 1
+    ```s
+    root@my-h100-instance:~# sudo docker run --runtime=nvidia     -e NVIDIA_VISIBLE_DEVICES=MIG-8aa1fc52-9818-58ec-bc64-8f0cae121bb4     nvidia/cuda:11.0.3-base-ubuntu20.04 nvidia-smi
+    Tue Aug 22 12:53:40 2023
+    +-----------------------------------------------------------------------------+
+    | NVIDIA-SMI 525.125.06   Driver Version: 525.125.06   CUDA Version: 12.0     |
+    |-------------------------------+----------------------+----------------------+
+    | GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+    | Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+    |                               |                      |               MIG M. |
+    |===============================+======================+======================|
+    |   0  NVIDIA H100 PCIe    On   | 00000000:01:00.0 Off |                   On |
+    | N/A   40C    P0    52W / 350W |                  N/A |     N/A      Default |
+    |                               |                      |              Enabled |
+    +-------------------------------+----------------------+----------------------+
+
+    +-----------------------------------------------------------------------------+
+    | MIG devices:                                                                |
+    +------------------+----------------------+-----------+-----------------------+
+    | GPU  GI  CI  MIG |         Memory-Usage |        Vol|         Shared        |
+    |      ID  ID  Dev |           BAR1-Usage | SM     Unc| CE  ENC  DEC  OFA  JPG|
+    |                  |                      |        ECC|                       |
+    |==================+======================+===========+=======================|
+    |  0    7   0   0  |      6MiB /  9856MiB | 14      0 |  1   0    1    0    1 |
+    |                  |      0MiB / 16383MiB |           |                       |
+    +------------------+----------------------+-----------+-----------------------+
+
+    +-----------------------------------------------------------------------------+
+    | Processes:                                                                  |
+    |  GPU   GI   CI        PID   Type   Process name                  GPU Memory |
+    |        ID   ID                                                   Usage      |
+    |=============================================================================|
+    |  No running processes found                                                 |
+    +-----------------------------------------------------------------------------+
+    ```
+    * MIG 1g.10gb 2
+    ```s
+    root@my-h100-instance:~# sudo docker run --runtime=nvidia     -e NVIDIA_VISIBLE_DEVICES=MIG-42fa9c93-1430-5ccc-b623-c02fb93b7f5a     nvidia/cuda:11.0.3-base-ubuntu20.04 nvidia-smi
+    Tue Aug 22 12:54:11 2023
+    +-----------------------------------------------------------------------------+
+    | NVIDIA-SMI 525.125.06   Driver Version: 525.125.06   CUDA Version: 12.0     |
+    |-------------------------------+----------------------+----------------------+
+    | GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+    | Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+    |                               |                      |               MIG M. |
+    |===============================+======================+======================|
+    |   0  NVIDIA H100 PCIe    On   | 00000000:01:00.0 Off |                   On |
+    | N/A   40C    P0    52W / 350W |                  N/A |     N/A      Default |
+    |                               |                      |              Enabled |
+    +-------------------------------+----------------------+----------------------+
+
+    +-----------------------------------------------------------------------------+
+    | MIG devices:                                                                |
+    +------------------+----------------------+-----------+-----------------------+
+    | GPU  GI  CI  MIG |         Memory-Usage |        Vol|         Shared        |
+    |      ID  ID  Dev |           BAR1-Usage | SM     Unc| CE  ENC  DEC  OFA  JPG|
+    |                  |                      |        ECC|                       |
+    |==================+======================+===========+=======================|
+    |  0    8   0   0  |      6MiB /  9856MiB | 14      0 |  1   0    1    0    1 |
+    |                  |      0MiB / 16383MiB |           |                       |
+    +------------------+----------------------+-----------+-----------------------+
+
+    +-----------------------------------------------------------------------------+
+    | Processes:                                                                  |
+    |  GPU   GI   CI        PID   Type   Process name                  GPU Memory |
+    |        ID   ID                                                   Usage      |
+    |=============================================================================|
+    |  No running processes found                                                 |
+    +-----------------------------------------------------------------------------+
+    ```
+    * MIG 1g.10gb 3
+    ```s
+    root@my-h100-instance:~# sudo docker run --runtime=nvidia     -e NVIDIA_VISIBLE_DEVICES=MIG-6d96b431-44ba-5360-80b0-9359561c927d     nvidia/cuda:11.0.3-base-ubuntu20.04 nvidia-smi
+    Tue Aug 22 12:54:54 2023
+    +-----------------------------------------------------------------------------+
+    | NVIDIA-SMI 525.125.06   Driver Version: 525.125.06   CUDA Version: 12.0     |
+    |-------------------------------+----------------------+----------------------+
+    | GPU  Name        Persistence-M| Bus-Id        Disp.A | Volatile Uncorr. ECC |
+    | Fan  Temp  Perf  Pwr:Usage/Cap|         Memory-Usage | GPU-Util  Compute M. |
+    |                               |                      |               MIG M. |
+    |===============================+======================+======================|
+    |   0  NVIDIA H100 PCIe    On   | 00000000:01:00.0 Off |                   On |
+    | N/A   40C    P0    53W / 350W |                  N/A |     N/A      Default |
+    |                               |                      |              Enabled |
+    +-------------------------------+----------------------+----------------------+
+
+    +-----------------------------------------------------------------------------+
+    | MIG devices:                                                                |
+    +------------------+----------------------+-----------+-----------------------+
+    | GPU  GI  CI  MIG |         Memory-Usage |        Vol|         Shared        |
+    |      ID  ID  Dev |           BAR1-Usage | SM     Unc| CE  ENC  DEC  OFA  JPG|
+    |                  |                      |        ECC|                       |
+    |==================+======================+===========+=======================|
+    |  0    9   0   0  |      6MiB /  9856MiB | 14      0 |  1   0    1    0    1 |
+    |                  |      0MiB / 16383MiB |           |                       |
+    +------------------+----------------------+-----------+-----------------------+
+
+    +-----------------------------------------------------------------------------+
+    | Processes:                                                                  |
+    |  GPU   GI   CI        PID   Type   Process name                  GPU Memory |
+    |        ID   ID                                                   Usage      |
+    |=============================================================================|
+    |  No running processes found                                                 |
+    +-----------------------------------------------------------------------------+
+    ```
+5. Launch a Jupyter Notebook within a Docker container on the MIG 3g.40gb MIG partition. Once initiated, you can reach it by connecting to port 8888 using the public IP of your GPU Instance.
+    ```s
+    root@my-h100-instance:~# sudo docker run --runtime=nvidia     -e NVIDIA_VISIBLE_DEVICES=MIG-da06d78f-7534-56a0-a062-62fef012be9 -p 8888:8888 jupyter/minimal-notebook
+    ```
+
+<Lightbox src="scaleway-jupyter-gpu-instance.webp" size="large" alt="" />
+
+## How to delete MIG partitions
+
+Once you have finished your jobs, you can delete the MIG partitions.
+
+1. Run the following command to remove all MIG partitions and their corresponding compute instances:
+    ```s
+    root@my-h100-instance:~# sudo nvidia-smi mig -dci && sudo nvidia-smi mig -dgi
+    Successfully destroyed compute instance ID  0 from GPU  0 GPU instance ID  7
+    Successfully destroyed compute instance ID  0 from GPU  0 GPU instance ID  8
+    Successfully destroyed compute instance ID  0 from GPU  0 GPU instance ID  9
+    Successfully destroyed compute instance ID  0 from GPU  0 GPU instance ID  2
+    Successfully destroyed GPU instance ID  7 from GPU  0
+    Successfully destroyed GPU instance ID  8 from GPU  0
+    Successfully destroyed GPU instance ID  9 from GPU  0
+    Successfully destroyed GPU instance ID  2 from GPU  0
+    ```
+2. Verify that the MIG partitions have been removed by running the `nvidia-smi` command:
+    ```s
+    +-----------------------------------------------------------------------------+
+    | MIG devices:                                                                |
+    +------------------+----------------------+-----------+-----------------------+
+    | GPU  GI  CI  MIG |         Memory-Usage |        Vol|         Shared        |
+    |      ID  ID  Dev |           BAR1-Usage | SM     Unc| CE  ENC  DEC  OFA  JPG|
+    |                  |                      |        ECC|                       |
+    |==================+======================+===========+=======================|
+    |  No MIG devices found                                                       |
+    +-----------------------------------------------------------------------------+
+    ```
+
+## How to disable MIG on a GPU Instance
+
+To disable MIG on your H100 GPU Instance, run the following command:
+```s
+root@my-h100-instance:~# nvidia-smi -mig 0
+Disabled MIG Mode for GPU 00000000:01:00.0
+All done.
+```
+
+<Navigation title="See Also">
+  <PreviousButton to="/compute/gpu/how-to/use-gpu-with-docker/">How to access the GPU using Docker</PreviousButton>
+  <NextButton to="/compute/gpu/how-to/use-scratch-storage-h100-instances/">How to use the scratch storage on H100 GPU Instances</NextButton>
+</Navigation>

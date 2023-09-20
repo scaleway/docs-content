@@ -1,0 +1,404 @@
+---
+meta:
+  title: How to use NVIDIA MIG technology with Kubernetes
+  description: This section provides information about MIG with Kubernetes
+content:
+  h1: How to use NVIDIA MIG technology with Kubernetes
+  paragraph: This section provides information about MIG with Kubernetes
+tags: NVIDIA H100 MIG multi-instance gpu
+dates:
+  validation: 2023-09-19
+  posted: 2023-09-19
+categories:
+  - compute
+---
+
+<Message type="important">
+  * Scaleway offers GPU Instances such as H100 PCIe GPU Instances, RENDER-S GPU Instance, etc.
+  * Nvidia uses the term *"GPU instance"* to designate a MIG partition of a GPU (MIG= Multi-Instance GPU)
+  * To avoid confusion, we will use the term GPU Instance in this document to refer to the Scaleway GPU Instance, and *"MIG partition"* in the context of the MIG feature.
+</Message>
+
+NVIDIA Multi-Instance GPU (MIG) is a powerful feature that allows you to divide a single NVIDIA GPU into multiple smaller partitions, each with its dedicated GPU resources, such as memory and compute units.
+This technology is particularly valuable in Kubernetes (K8s) environments, where efficient resource allocation is crucial for running diverse workloads efficiently.
+
+In this guide, we will explore the capabilities of NVIDIA MIG within a Kubernetes cluster. We cover the steps required to set up and configure MIG-enabled GPUs to use with Kubernetes, to maximize GPU usage and ensure workload isolation and performance predictability.
+
+<Message type="tip">
+    MIG is fully supported on [Scaleway managed Kubernetes](/containers/kubernetes/quickstart/) clusters (Kapsule and Kosmos).
+</Message>
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have created a [Kubernetes cluster](kubernetes/reference-content/introduction-to-kubernetes/) with a [GPU Instance](https://www.scaleway.com/en/gpu-instances/) as node
+</Message>
+
+## Configure MIG partitions inside a Kubernetes cluster
+
+1. Find the name of the pods running the Nvidia Driver:
+    ```
+    % kubectl get pods -n kube-system
+    NAME                                                              READY   STATUS      RESTARTS   AGE
+    cilium-operator-fbff794f4-kff42                                   1/1     Running     0          4h13m
+    cilium-sfkgc                                                      1/1     Running     0          4h12m
+    cilium-w768l                                                      1/1     Running     0          4h2m
+    coredns-7449449ddc-plr8m                                          1/1     Running     0          4h11m
+    csi-node-44xll                                                    2/2     Running     0          4h2m
+    csi-node-pg7vd                                                    2/2     Running     0          4h12m
+    gpu-feature-discovery-dgjlx                                       1/1     Running     0          20m
+    gpu-operator-6b8db67bfb-2b5f8                                     1/1     Running     0          4h11m
+    konnectivity-agent-mhcqt                                          1/1     Running     0          4h12m
+    konnectivity-agent-vrgqg                                          1/1     Running     0          4h2m
+    kube-proxy-th6g8                                                  1/1     Running     0          4h12m
+    kube-proxy-xcdlj                                                  1/1     Running     0          4h2m
+    metrics-server-59fb595596-4xlbb                                   1/1     Running     0          4h11m
+    node-problem-detector-cqxnn                                       1/1     Running     0          4h2m
+    node-problem-detector-kr8v5                                       1/1     Running     0          4h12m
+    nvidia-container-toolkit-daemonset-2jtn8                          1/1     Running     0          4h1m
+    nvidia-cuda-validator-kcgzv                                       0/1     Completed   0          20m
+    nvidia-dcgm-exporter-5bn4w                                        1/1     Running     0          20m
+    nvidia-device-plugin-daemonset-vvm8s                              1/1     Running     0          20m
+    nvidia-device-plugin-validator-gk6pt                              0/1     Completed   0          20m
+    nvidia-driver-daemonset-8t89m                                     1/1     Running     0          4h1m
+    nvidia-gpu-operator-node-feature-discovery-master-6fb7d946phbmb   1/1     Running     0          4h11m
+    nvidia-gpu-operator-node-feature-discovery-worker-49bwd           1/1     Running     0          4h11m
+    nvidia-gpu-operator-node-feature-discovery-worker-xtnnb           1/1     Running     0          4h2m
+    nvidia-mig-manager-gf492                                          1/1     Running     0          3h58m
+    nvidia-operator-validator-m4686                                   1/1     Running     0          20m
+    ```
+
+2. Check the status of  Nvidia SMI in the Nvidia driver container:
+    ```
+    % kubectl exec nvidia-driver-daemonset-8t89m  -t -n kube-system -- nvidia-smi -L
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    ```
+    MIG is currently disabled.
+
+3. Find the name of the H100 GPU node
+    ```
+    % kubectl get nodes
+    NAME                                             STATUS   ROLES    AGE     VERSION
+    scw-k8s-jovial-dubinsky-default-8dcea9ad52bc47   Ready    <none>   4h12m   v1.27.4
+    scw-k8s-jovial-dubinsky-pool-h100-93a072191d38   Ready    <none>   4h3m    v1.27.4
+    ```
+4. Configure two `3g.40gb` MIG partitions by adding a label on the GPU node:
+    ```
+    % kubectl label nodes scw-k8s-jovial-dubinsky-pool-h100-93a072191d38 nvidia.com/mig.config=all-3g.40gb --overwrite
+    node/scw-k8s-jovial-dubinsky-pool-h100-93a072191d38 labeled
+    ```
+5. Check the status of Nvidia SMI in the Nvidia driver container:
+    ```
+    % kubectl exec nvidia-driver-daemonset-8t89m  -t -n kube-system -- nvidia-smi -L
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    MIG 3g.40gb     Device  0: (UUID: MIG-3f77eb92-98ee-5f05-8aef-9ec3d3c24b9d)
+    MIG 3g.40gb     Device  1: (UUID: MIG-13088296-f5a2-5f84-9e37-6105abda4b4f)
+    ```
+    Two MIG `3g.40gb` partitions are available now.
+
+
+## Reconfigure MIG partitions inside a Kubernetes cluster
+
+1. Reconfigure the GPU into seven MIG `1g.10gb` partitions by overwriting the existing labels:
+    ```
+    % kubectl label nodes scw-k8s-jovial-dubinsky-pool-h100-93a072191d38 nvidia.com/mig.config=all-1g.10gb --overwrite 
+    node/scw-k8s-jovial-dubinsky-pool-h100-93a072191d38 labeled
+    ```
+
+2. Check the status of Nvidia SMI in the Nvidia driver container:
+    ```
+    % kubectl exec nvidia-driver-daemonset-8t89m  -t -n kube-system -- nvidia-smi -L
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    MIG 1g.10gb     Device  0: (UUID: MIG-222504cc-4a15-589b-8ec8-dbc02e6fb378)
+    MIG 1g.10gb     Device  1: (UUID: MIG-fdfd2afa-5cbd-5d1d-b1ae-6f0e13cc0ff8)
+    MIG 1g.10gb     Device  2: (UUID: MIG-b2925bc6-41ca-5ccd-bf5e-24259386f88e)
+    MIG 1g.10gb     Device  3: (UUID: MIG-083c76fc-5d21-5322-9d50-c8e21a01852f)
+    MIG 1g.10gb     Device  4: (UUID: MIG-13d8a181-5bc1-5527-9a0f-9c3f9cc1d89e)
+    MIG 1g.10gb     Device  5: (UUID: MIG-db99bb81-dde3-5c95-9778-daa291fce210)
+    MIG 1g.10gb     Device  6: (UUID: MIG-2d636152-57c2-5e73-9654-b1d21d6d21fb)
+    ```
+    Seven MIG `1g.10gb` partitions are available now.
+
+3. Look at the Nvidia labels on the node (note the label `nvidia.com/mig.config=all-1g.10gb` and `nvidia.com/gpu.product=NVIDIA-H100-PCIe-MIG-1g.10gb`):
+    ```
+    % kubectl describe nodes scw-k8s-jovial-dubinsky-pool-h100-93a072191d38 | grep "nvidia.com/"
+                        nvidia.com/cuda.driver.major=525
+                        nvidia.com/cuda.driver.minor=105
+                        nvidia.com/cuda.driver.rev=17
+                        nvidia.com/cuda.runtime.major=12
+                        nvidia.com/cuda.runtime.minor=0
+                        nvidia.com/gfd.timestamp=1692810266
+                        nvidia.com/gpu-driver-upgrade-state=upgrade-done
+                        nvidia.com/gpu.compute.major=9
+                        nvidia.com/gpu.compute.minor=0
+                        nvidia.com/gpu.count=7
+                        nvidia.com/gpu.deploy.container-toolkit=true
+                        nvidia.com/gpu.deploy.dcgm=true
+                        nvidia.com/gpu.deploy.dcgm-exporter=true
+                        nvidia.com/gpu.deploy.device-plugin=true
+                        nvidia.com/gpu.deploy.driver=true
+                        nvidia.com/gpu.deploy.gpu-feature-discovery=true
+                        nvidia.com/gpu.deploy.mig-manager=true
+                        nvidia.com/gpu.deploy.node-status-exporter=true
+                        nvidia.com/gpu.deploy.nvsm=true
+                        nvidia.com/gpu.deploy.operator-validator=true
+                        nvidia.com/gpu.engines.copy=1
+                        nvidia.com/gpu.engines.decoder=1
+                        nvidia.com/gpu.engines.encoder=0
+                        nvidia.com/gpu.engines.jpeg=1
+                        nvidia.com/gpu.engines.ofa=0
+                        nvidia.com/gpu.family=hopper
+                        nvidia.com/gpu.machine=SCW-H100-1-80G
+                        nvidia.com/gpu.memory=9856
+                        nvidia.com/gpu.multiprocessors=14
+                        nvidia.com/gpu.present=true
+                        nvidia.com/gpu.product=NVIDIA-H100-PCIe-MIG-1g.10gb
+                        nvidia.com/gpu.replicas=1
+                        nvidia.com/gpu.slices.ci=1
+                        nvidia.com/gpu.slices.gi=1
+                        nvidia.com/mig.capable=true
+                        nvidia.com/mig.config=all-1g.10gb
+                        nvidia.com/mig.config.state=success
+                        nvidia.com/mig.strategy=single
+                        nvidia.com/gpu-driver-upgrade-enabled: true
+    nvidia.com/gpu:     7
+    nvidia.com/gpu:     7
+    nvidia.com/gpu     0           0
+    ```
+
+## Deploy containers that use NVIDIA MIG technology partitions
+
+1. Write a deployment file to deploy 8 pods executing Nvidia SMI. 
+    Open a text editor of your choice and create a deployment file `deploy-mig.yaml`, then paste the following content into the file, save it and exit the editor:
+    ```yaml
+    apiVersion: v1
+    kind: Pod
+    metadata:
+    name: test-1
+    spec:
+    restartPolicy: OnFailure
+    containers:
+    - name: gpu-test
+        image: nvcr.io/nvidia/pytorch:23.07-py3
+        command: [ "nvidia-smi" ]
+        args: ["-L" ]
+        resources:
+        limits:
+            nvidia.com/gpu: 1
+    nodeSelector:
+        nvidia.com/gpu.product : NVIDIA-H100-PCIe-MIG-1g.10gb
+
+    ---
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+    name: test-2
+    spec:
+    restartPolicy: OnFailure
+    containers:
+    - name: gpu-test
+        image: nvcr.io/nvidia/pytorch:23.07-py3
+        command: [ "nvidia-smi" ]
+        args: ["-L" ]
+        resources:
+        limits:
+            nvidia.com/gpu: 1
+    nodeSelector:
+        nvidia.com/gpu.product : NVIDIA-H100-PCIe-MIG-1g.10gb
+
+
+    ---
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+    name: test-3
+    spec:
+    restartPolicy: OnFailure
+    containers:
+    - name: gpu-test
+        image: nvcr.io/nvidia/pytorch:23.07-py3
+        command: [ "nvidia-smi" ]
+        args: ["-L" ]
+        resources:
+        limits:
+            nvidia.com/gpu: 1
+    nodeSelector:
+        nvidia.com/gpu.product : NVIDIA-H100-PCIe-MIG-1g.10gb
+
+    ---
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+    name: test-4
+    spec:
+    restartPolicy: OnFailure
+    containers:
+    - name: gpu-test
+        image: nvcr.io/nvidia/pytorch:23.07-py3
+        command: [ "nvidia-smi" ]
+        args: ["-L" ]
+        resources:
+        limits:
+            nvidia.com/gpu: 1
+    nodeSelector:
+        nvidia.com/gpu.product : NVIDIA-H100-PCIe-MIG-1g.10gb
+
+
+    ---
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+    name: test-5
+    spec:
+    restartPolicy: OnFailure
+    containers:
+    - name: gpu-test
+        image: nvcr.io/nvidia/pytorch:23.07-py3
+        command: [ "nvidia-smi" ]
+        args: ["-L" ]
+        resources:
+        limits:
+            nvidia.com/gpu: 1
+    nodeSelector:
+        nvidia.com/gpu.product : NVIDIA-H100-PCIe-MIG-1g.10gb
+
+
+    ---
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+    name: test-6
+    spec:
+    restartPolicy: OnFailure
+    containers:
+    - name: gpu-test
+        image: nvcr.io/nvidia/pytorch:23.07-py3
+        command: [ "nvidia-smi" ]
+        args: ["-L" ]
+        resources:
+        limits:
+            nvidia.com/gpu: 1
+    nodeSelector:
+        nvidia.com/gpu.product : NVIDIA-H100-PCIe-MIG-1g.10gb
+
+
+    ---
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+    name: test-7
+    spec:
+    restartPolicy: OnFailure
+    containers:
+    - name: gpu-test
+        image: nvcr.io/nvidia/pytorch:23.07-py3
+        command: [ "nvidia-smi" ]
+        args: ["-L" ]
+        resources:
+        limits:
+            nvidia.com/gpu: 1
+    nodeSelector:
+        nvidia.com/gpu.product : NVIDIA-H100-PCIe-MIG-1g.10gb
+
+    ---
+
+    apiVersion: v1
+    kind: Pod
+    metadata:
+    name: test-8
+    spec:
+    restartPolicy: OnFailure
+    containers:
+    - name: gpu-test
+        image: nvcr.io/nvidia/pytorch:23.07-py3
+        command: [ "nvidia-smi" ]
+        args: ["-L" ]
+        resources:
+        limits:
+            nvidia.com/gpu: 1
+    nodeSelector:
+        nvidia.com/gpu.product : NVIDIA-H100-PCIe-MIG-1g.10gb
+    ```
+
+2. Deploy the pods:
+    ```
+    % kubectl create -f deploy-mig.yaml
+    pod/test-1 created
+    pod/test-2 created
+    pod/test-3 created
+    pod/test-4 created
+    pod/test-5 created
+    pod/test-6 created
+    pod/test-7 created
+    pod/test-8 created
+    ```
+
+3. Display the logs of the pods. The pods print their UUID with the `nvidia-smi` command:
+    ```
+    % kubectl get -f deploy-mig.yaml -o name | xargs -I{} kubectl logs {}  
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    MIG 1g.10gb     Device  0: (UUID: MIG-2d636152-57c2-5e73-9654-b1d21d6d21fb)
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    MIG 1g.10gb     Device  0: (UUID: MIG-db99bb81-dde3-5c95-9778-daa291fce210)
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    MIG 1g.10gb     Device  0: (UUID: MIG-13d8a181-5bc1-5527-9a0f-9c3f9cc1d89e)
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    MIG 1g.10gb     Device  0: (UUID: MIG-b2925bc6-41ca-5ccd-bf5e-24259386f88e)
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    MIG 1g.10gb     Device  0: (UUID: MIG-fdfd2afa-5cbd-5d1d-b1ae-6f0e13cc0ff8)
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    MIG 1g.10gb     Device  0: (UUID: MIG-222504cc-4a15-589b-8ec8-dbc02e6fb378)
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    MIG 1g.10gb     Device  0: (UUID: MIG-083c76fc-5d21-5322-9d50-c8e21a01852f)
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    MIG 1g.10gb     Device  0: (UUID: MIG-fdfd2afa-5cbd-5d1d-b1ae-6f0e13cc0ff8)
+    ```
+    As you can see, seven pods have been executed on different MIG partitions, while the eighth pod had to wait for one of the seven MIG partitions to become available in order to be executed.
+
+4. Clean the deployment:
+    ```
+    % kubectl delete -f deploy-mig.yaml
+    pod "test-1" deleted
+    pod "test-2" deleted
+    pod "test-3" deleted
+    pod "test-4" deleted
+    pod "test-5" deleted
+    pod "test-6" deleted
+    pod "test-7" deleted
+    pod "test-8" deleted
+    ```
+
+## Disable MIG inside a Kubernetes cluster
+
+1. Disable MIG by overwriting the Kubernetes labels:
+    ```
+    % kubectl label nodes scw-k8s-jovial-dubinsky-pool-h100-93a072191d38  nvidia.com/mig.config=all-disabled --overwrite
+    node/scw-k8s-jovial-dubinsky-pool-h100-93a072191d38 labeled
+    ```
+
+2. Check the status of Nvidia SMI in the driver pod:
+    ```
+    % kubectl exec nvidia-driver-daemonset-8t89m  -t -n kube-system -- nvidia-smi -L
+    GPU 0: NVIDIA H100 PCIe (UUID: GPU-717ef73c-2d43-4fdc-76d2-1cddef4863bb)
+    ```
+    MIG is disabled and the whole GPU is available.
+
+
+<Message type="tip">
+    To enable autoscaling with [Kubernetes Kapsule](/containers/kubernetes/quickstart/), it is necessary to designate a tag for the node pool. This tag will be automatically inherited as a label by all nodes within that pool.
+    Therefore, to create a node pool offering H100 nodes configured with the label `nvidia.com/mig.config=all-3g.40g`, simply assign the tag `noprefix=nvidia.com/mig.config=all-3g.40gb` to the corresponding Kapsule node pool.
+    All nodes added by the autoscaler will automatically receive the label `MIG`. Note, that updates to a tag may take up to five minutes to fully propagate.
+</Message>
+
+For more information about NVIDIA MIG, refer to the official [NVIDIA MIG user guide](https://docs.nvidia.com/datacenter/tesla/mig-user-guide/) and the [Kubernetes GPU operator documentation](https://docs.nvidia.com/datacenter/cloud-native/gpu-operator/23.6.1/gpu-operator-mig.html).
+
+
+<Navigation title="See Also">
+  <PreviousButton to="/compute/gpu/how-to/use-nvidia-mig-technology/">How to use NIVIDA MIG technology on GPU Instances</PreviousButton>
+  <NextButton to="/compute/gpu/how-to/use-scratch-storage-h100-instances/">How to use the scratch storage on H100 GPU Instances</NextButton>
+</Navigation>

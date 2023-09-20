@@ -12,39 +12,69 @@ categories:
 
 This document contains information to help you create and upload an SSL/TLS certificate to serve your bucket content over HTTPS, through your customized [Edge Services](/storage/object/how-to/get-started-edge-services) domain.
 
-## Configuring a Load Balancer for SSL bridging
+### Introduction
 
-SSL bridging allows the user to initiate a secure, encrypted connection with the Load Balancer thanks to the Load Balancer frontend's SSL certificate. The Load Balancer decrypts incoming HTTPS traffic. This allows the Load Balancer to carry out layer 7 actions on the received traffic. The Load Balancer's backend then initiates a new encrypted connection to re-encrypt traffic between the Load Balancer and the backend server, this time using the backend server's certificate. 
+### What is an SSL/TLS certificate? 
 
-    <Lightbox src="scaleway-ssl-bridging.webp" alt="" />
+An SSL/TLS certificate is a digital certificate that enables an encrypted connection between a client and a web server over HTTPS. 
 
-To configure your Load Balancer for SSL bridging:
+You may hear certificates referred to as “SSL certificates”, “TLS certificates” or “SSL/TLS certificates”. These are all the same thing. SSL (Secured Socket Layer) was the protocol initially used for encryption, though it has now been replaced with TLS (Transport Layer Security).
 
-- The frontend must have a [certificate](/network/load-balancer/how-to/add-certificate).
-- The frontend must be linked to a backend which has TLS.
-- The backend server should have its own [certificate](/network/load-balancer/concepts/#certificate).
+SSL/TLS certificates contain a public key, which corresponds to a separate private key. The private key is used to generate a signature for the certificate. The public key is shared with clients upon request (unlike the private key), and the client uses it to check the server certificate's signature. Once an encrypted connection is established, the client uses the public key to encrypt the data that it transfers to the website server. The server uses its private key to decrypt the data that has been encrypted by the public key. 
 
-## Configuring a Load Balancer for SSL offloading
+### When and why do I need an SSL/TLS for Edge Services?
 
-SSL offloading, also known as SSL termination, allows the user to initiate a secure connection with the Load Balancer thanks to the Load Balancer frontend's SSL certificate. The Load Balancer decrypts incoming HTTPS traffic. Layer 7 actions may therefore be applied to the traffic at this stage. Traffic is not re-encrypted on its way from the Load Balancer to the backend server, unlike with SSL bridging. Traffic that has gone through the offloading process is marked with a new header, called `X-Forwarded-Proto`, which informs the backend server that the client used HTTPS to contact the Load Balancer.
+When you enable Edge Services, initially your bucket content is served through the standard Edge Services endpoint, e.g. `https://bucket-name.edge.scw.cloud`. Scaleway's own SSL/TLS certificate, which covers this subdomain, is used to establish the encrypted connection between client and host. If you do not want to customize the standard Edge Services endpoint, you do not need to worry about creating SSL/TLS certificates.
 
-    <Lightbox src="scaleway-ssl-offloading.webp" alt="" />
+However, if you choose to [customize your Edge Services endpoint with your own subdomain](/storage/object/how-to/get-started-edge-services/#how-to-configure-a-custom-domain), Scaleway's own SSL/TLS certificate can no longer be used to establish encrypted connections. Client connections are now initially going to a different domain which needs to be "guaranteed" by its own certificate (despite the CNAME record for the subdomain pointing to the Scaleway endpoint). 
 
-To configure your Load Balancer for SSL offloading:
+Therefore, when you customize your Edge Services endpoint with a subdomain, you are prompted to upload an SSL/TLS certificate for that subdomain. This certificate is stored in [Scaleway Secret Manager](https://www.scaleway.com/en/docs/identity-and-access-management/secret-manager/quickstart/).
 
-- The frontend must have a [certificate](/network/load-balancer/how-to/add-certificate).
-- The frontend must be linked to a backend which uses HTTP protocol.
-- The backend server does not need its own certificate.
+## SSL/TLS certificate criteria
 
-## Configuring a Load Balancer for SSL passthrough
+In general, SSL/TLS certificates can either be **self-signed** (signed by the subject of the certificate, e.g. the owner of the domain) or **CA-signed** (signed by a third party **C**ertificate **A**uthority which is publically trusted). 
 
-Passthrough is the simplest way to handle encrypted traffic on a Load Balancer. As the name suggests, traffic is simply passed through the Load Balancer without being decrypted on it. Whilst this option generates very low overhead, no layer 7 actions can be carried out. This means that no cookie-based sticky sessions are possible with this method. In addition, if an application does not share sessions between servers, users’ sessions may get lost by being redirected to different servers of the group. 
+**Self-signed certificates are not suitable for Edge Services, all certificates must be signed by a CA.** [Well-known CAs](https://en.wikipedia.org/wiki/Certificate_authority#Providers) include Sectigo, GlobalSign, Let's Encrypt and GoDaddy. 
 
-    <Lightbox src="scaleway-ssl-passthrough.webp" alt="" />
+Domain Validated Certificates (where the CA simply checks that the applicant owns the domain) or Extended/Organization Validation Certificates (where the applicant must pass more in-depth validation procedures and checks) are both acceptable.
 
-To configure your Load Balancer for SSL passthrough:
+Certificate files necessarily have an extension, commonly either `.DER`, `.PEM`, `CRT` or `.CERT`. 
 
-- The frontend does not need a certificate and can listen on any port.
-- The frontend must be linked to a backend which uses TCP protocol, and the TLS toggle should be disabled in the backend configuration.
-- The backend server must listen with its HTTP server process on the same port as configured for the backend.
-- The backend server must have its own [certificate](/network/load-balancer/concepts/#certificate).
+**For Scaleway Edge Services, certificates must be in `.PEM` format**. The PEM file consists of the private key preceded by a chain of certificates which should look like this: 
+
+```
+-----BEGIN RSA PRIVATE KEY-----
+(Your private key)
+-----END RSA PRIVATE KEY-----
+-----BEGIN CERTIFICATE-----
+(Your primary certificate (aka server certificate), e.g. your_domain_name.crt)
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+(Your intermediate certificate, e.g. letsencrypt.crt)
+-----END CERTIFICATE-----
+-----BEGIN CERTIFICATE-----
+(Your root certificate, e.g. trustedroot.crt)
+-----END CERTIFICATE-----
+```
+
+- **Private key**: 
+- **Primary SSL certificate**: Issued by the CA for your domain name.
+- **Intermediate certificate**: Acts as an intermediary between the root certiciate 
+- **Root certificate**: Issued by the CA, for the CA
+https://www.ssl2buy.com/wiki/root-vs-intermediate-certificates CONTINUE
+
+SAY SOMETHING ABOUT THIS: https://www.thesslstore.com/knowledgebase/ssl-support/understanding-different-certificate-types/
+
+## How can I create an SSL/TLS certificate?
+
+To get an SSL/TLS certificate for your domain or subdomain, you need to generate a Certificate Signing Request (CSR) and submit it to a Certificate Authority (CA) for them to validate your domain, who then send you a signed certificate. You may be able to carry out this procedure via your hosting provider. 
+
+Find below some useful guides from different CAs on how to obtain a certificate from them:
+
+- [Let's Encrypt: Getting Started](https://letsencrypt.org/getting-started/). Let's Encrypt is a popular, non-profit CA that provides certificates at no cost. Note that the certificates are limited to 90 day validity, and must be renewed (again, at no cost) after this period.
+- [ZeroSSL: Creating an SSL Certificates](https://help.zerossl.com/hc/en-us/articles/360060119373-Creating-an-SSL-Certificate). ZeroSSL is another CA, which provides 90-day certificates at no cost, or certificates of longer duration at a price.
+- [Sectigo: Compare Sectigo SSL Certificates](https://www.sectigo.com/ssl-certificates-tls/compare). Sectigo is a CA who provide paid-for certificates with a validity period of between 1 and 6 years.
+
+
+
+

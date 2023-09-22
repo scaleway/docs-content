@@ -1,0 +1,117 @@
+---
+meta:
+  title: Deploying models with NVIDIA Triton Inference Server on Scaleway Object Storage
+  description: This page shows how to deploy models with NVIDIA Triton Inference Server on Scaleway Object Storage
+content:
+  h1: Deploying models with NVIDIA Triton Inference Server on Scaleway Object Storage
+  paragraph: This page shows how to deploy models with NVIDIA Triton Inference Server on Scaleway Object Storage
+categories:
+  - compute
+  - observability
+tags: compute gpu nvidia triton storage
+dates:
+  validation: 2023-08-23
+  posted: 2023-08-23
+---
+
+In this tutorial, we will walk you through the process of deploying machine learning models using NVIDIA Triton Inference Server on Scaleway Object Storage.
+We will cover how to set up Triton Inference Server, store your model in an Object Storage bucket, and enable metric export for monitoring.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key/)
+  - You have [created a GPU Instance](/compute/instances/how-to/create-an-instance/) that runs Ubuntu GPU 12
+  - You have [activated your Observability Cockpit](/observability/cockpit/how-to/activate-cockpit/)
+  - You have sudo privileges or access to the root user
+  - You have basic understanding of machine learning models and Docker
+</Message>
+
+
+## Storing models in Scaleway Object Storage
+
+In this step, we will create an Object Storage bucket on Scaleway and upload your machine learning model. If you have already created and uploaded your model to an Object Storage bucket, you can skip this step.
+For this tutorial, we will use a pre-trained model available in the Triton Inference Server model repository. You can replace this with your own model if desired.
+
+1. Click **Object Storage** on the left side menu of the console. The Object Storage dashboard displays.
+2. [Create a new bucket](/storage/object/how-to/create-a-bucket/) to store your model artifacts.
+3. Download the example model repository from NVIDIA's GitHub to your local computer:
+   ```bash
+   git clone https://github.com/triton-inference-server/server.git
+   ```
+4. Download the example models:
+    ```bash
+    cd server/docs/examples
+    ./fetch_models.sh
+    ```
+5. Navigate to the `server/docs/examples/model_repository` directory within the cloned repository.
+6. Upload the example model folder to your bucket in Scaleway Object Storage. You can use the [Scaleway Object Storage API](/docs/storage/object/api-cli/using-api-call-list/), any S3 compatible tool, or web interface to upload the model folder.
+    <Message type="tip">
+      You can use the `s3cmd` [command-line tool](/docs/tutorials/s3cmd/) or any other S3 compatible tool to upload your data.
+    </Message>
+
+## Configuring Triton Inference Server
+
+1. Log into your GPU Instance using SSH.
+    ```
+    ssh root@<gpu_instance_ip>
+    ```
+3. Edit the Triton server configuration file, typically named `config.pbtxt`. This file should be located in the Triton Inference Server installation directory.
+4. Configure the model repository path by adding or modifying the `model-repository` parameter:
+   ```bash
+   model-repository: "s3://https://s3.fr-par.scw.cloud:443/<your-bucket-name>/<path-to-model-folder>"
+   ```
+   Replace `<your-bucket-name>` and `<path-to-model-folder>` with the appropriate values for your Scaleway Object Storage setup.
+   <Message type="tip">
+     When using S3, the credentials and default region can be passed by using either the [created AWS-CLI configuration file](/storage/object/api-cli/object-storage-aws-cli/) or via the respective environment variables. If the environment variables are set they will take a higher priority and will be used by Triton instead of the credentials set using the AWS-CLI configuration file.
+   </Message>
+5. Save the configuration file.
+
+## Starting Triton Inference Server
+
+1. Pull the Triton Inference Server container image:
+   ```bash
+   docker pull nvcr.io/nvidia/tritonserver:23.07-py3
+   ```
+   <Message type="tip">
+     If Docker is not preinstalled on your GPU Instance, follow the [Docker installation guide](/tutorials/install-docker-ubuntu-jammy-jellyfish/) before pulling the image.
+   </Message>
+
+2. Start the Triton Inference Server container:
+   ```bash
+   docker run --gpus all --rm -p8000:8000 -p8001:8001 -p8002:8002 \
+   -v<path_to_your_model_repository>:/models nvcr.io/nvidia/tritonserver:23.07-py3> \
+   tritonserver --model-repository=s3://https://s3.fr-par.scw.cloud:443/<your_bucket_name>/<path-to-model-folder>
+   ```
+   - `--gpus all`: Utilizes all available GPUs for inference (if present).
+   - `-p8000:8000 -p8001:8001 -p8002:8002`: Exposes ports for HTTP, GRPC, and metrics.
+   - `-v<path_to_your_model_repository>:/models`: Mounts your local model repository inside the container.
+   - `--model-repository=s3://https://s3.fr-par.scw.cloud:443/<your-bucket-name>/<path-to-model-folder>`: The path to your Scaleway Object Storage bucket
+
+    Once Triton Server is running, you can access it for inference using the appropriate REST APIs or SDKs provided by NVIDIA.
+
+## Exporting metrics to Scaleway Observability Cockpit
+
+Triton Inference Server provides metrics that can be exported for monitoring. In this section, we will set up Prometheus and Scaleway Cockpit to visualize these metrics.
+
+Configure Triton to export metrics in Prometheus format by adding the following lines to the Triton server configuration:
+   ```ini
+   metrics: [
+     {
+       name: "prometheus"
+       kind: PROMETHEUS
+       output: "https://<SECRET_KEY>:<COCKPIT_API_KEY>@metrics.cockpit.fr-par.scw.cloud/api/v1/push"
+     }
+   ]
+   ```
+   Replace `<SECRET_KEY>` and `<COCKPIT_API_KEY>` with your Cockpit [token credentials](/observability/cockpit/how-to/create-token/).
+
+Your metrics are now pushed to Cockpit and you can [access Grafana](/observability/cockpit/how-to/access-grafana-and-managed-dashboards/) to visualize them.
+
+## Conclusion
+
+You have successfully deployed a machine learning model using NVIDIA Triton Inference Server on Scaleway Object Storage and set up metrics monitoring using the monitoring Cockpit.
+This tutorial highlights how Scaleway's Object Storage and AI capabilities can be combined to build and deploy powerful AI applications.
+
+Remember that this tutorial provides just a basic overview. Refer to the official [Triton Inference Server](https://docs.nvidia.com/deeplearning/triton-inference-server/user-guide/docs/index.html) documentation for more advanced configurations, security settings, and additional features to configure the application to your specific needs.

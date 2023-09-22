@@ -5,7 +5,7 @@ meta:
 content:
   h1: SSL/TLS Certificates for Object Storage with Edge Services
   paragraph: Learn how to create and upload an SSL/TLS certificate to serve your bucket content over HTTPS through your customized Edge Services domain, and troubleshoot any potential problems.
-tags: object-storage edge-services ssl-tls certificate ssl tls pem certificate-authority root-certificate
+tags: object-storage edge-services ssl-tls certificate ssl tls pem certificate-authority root-certificate pem chain ca
 categories: 
   - storage
 ---
@@ -20,9 +20,11 @@ An SSL/TLS certificate is a digital certificate that enables an encrypted connec
 
 You may hear certificates referred to as “SSL certificates”, “TLS certificates” or “SSL/TLS certificates”. These are all the same thing. SSL (Secured Socket Layer) was the protocol initially used for encryption, though it has now been replaced with TLS (Transport Layer Security).
 
-SSL/TLS certificates contain a public key, which corresponds to a separate private key. When a client wants to establish an encrypted connection to a host, it requests the host's certificate. The host shares the certificate, which includes the public key (the private key is never shared and is kept by the host). The client checks the certificate, and uses the host's public key to encrypt the data that it transfers to the host. The host uses its private key to decrypt the data that has been encrypted by the public key. 
+SSL/TLS certificates contain a **public key**, which corresponds to a separate **private key**. These work as a pair. When a client wants to establish an encrypted connection to a host, it requests the host's certificate. The host shares the certificate, which includes the public key (the private key is never shared and is kept by the host). The client checks the certificate, and uses the host's public key to encrypt the data that it transfers to the host. The host uses its private key to decrypt the data that has been encrypted by the public key. 
 
-### When and why do I need an SSL/TLS for Edge Services?
+The private key is also used by the host for generating digital signatures, while the public key is used by clients for verifying those signatures.
+
+### When and why do I need an SSL/TLS certificate for Edge Services?
 
 When you enable Edge Services, initially your bucket content is served through the standard Edge Services endpoint, e.g. `https://bucket-name.edge.scw.cloud`. Scaleway's own SSL/TLS certificate, which covers this subdomain, is used to establish the encrypted connection between client and host. If you do not want to customize the standard Edge Services endpoint, you do not need to worry about creating SSL/TLS certificates.
 
@@ -54,15 +56,15 @@ Types of validation:
 
 Types of domain coverage:
 
-- ✅ **Single domain certificate**. Secures a single domain or subdomain. Note that the certificate must be for `your-sub.domain.com`, where the subdomain corresponds to the [subdomain for Edge Services](TODO). A single domain certificate simply for `yourdomain.com` would not be acceptable, as it would not cover the subdomain for Edge Services.
+- ✅ **Single domain certificate**. Secures a single domain or subdomain. Note that the certificate must be for `your-sub.domain.com`, where the subdomain corresponds to the [subdomain for Edge Services](/storage/object/how-to/get-started-edge-services/#how-to-configure-a-custom-domain). A single domain certificate simply for `yourdomain.com` would not be acceptable, as it would not cover the subdomain for Edge Services.
 - ✅ **Wildcard certificate**. Secures multiple subdomains for a domain, using a wildcard `*` symbol. The **Common Name** of the certificate should look like `*.yourdomain.com`.
 - ✅ **Multi-domain (MD) / Subject Alternative Name (SAN) / Unified Communications Certificate (UCC) certificate**.  Secures multiple explicitly-defined fully qualified domain names (`www.yourfirstdomain.com`, `sub.yourfirstdomain.com`, `yourfirstdomain.com`, `yourseconddomain.com`, `sub.yourseconddomain.com` etc.)
 
 ## PEM format certificate chain
 
-Edge Services requires that you import your certificate as a `.PEM`-formatted certificate chain, which includes the private key.
+Edge Services requires that you import your certificate as a `PEM`-formatted certificate chain, which includes the private key. PEM format is Base64 encoded ASCII, and by definition includes lines stating `-----BEGIN x-----` and `-----END x-----`.
 
-The file should look like this:
+Your PEM formatted certificate chain should look like this:
 
 ```
 -----BEGIN RSA PRIVATE KEY-----
@@ -79,12 +81,38 @@ The file should look like this:
 -----END CERTIFICATE-----
 ```
 
-| Section                  | Contains                                                         | Issued for   | Issued and signed by |
-|--------------------------|------------------------------------------------------------------|--------------|----------------------|
-| Private key              | The private key file for the certificate, e.g. `your_domain.key` |              |                      |
-| Primary SSL certificate  | The certificate issued by the CA for your domain name            | Your name and public key  | CA      |
-| Intermediate certificate | The intermediate certificate chaining your primary certificate to the root certificate | CA's name and public key | Root CA |
+| Section                  | Contains                                                         | Subject (issued for)   | Issued and signed by |
+|--------------------------|------------------------------------------------------------------|------------------------|----------------------|
+| Private key              | The private key file for the certificate                         |                        |                      |
+| Primary/server certificate  | The certificate issued by the CA for your domain name            | Your name and public key  | CA      |
+| Intermediate certificate | The intermediate certificate chaining your primary certificate to the root certificate | CA's name and public key. | Root CA |
 | Root certificate         | The root certificate by the CA, for the trusted CA itself        | The Root CA's name and public key | Root CA (self signed) |
+
+Note that in certain cases an intermediate certificate may not be necessary, if the root certificate chains directly to the primary/server certificate. The crucial thing is that the subject and issuers of each certificate form a coherent chain of validation. If a certificate is issued by an authority that is not present in the chain, an error will occur.
+
+<Message type="tip">
+
+You can use the [OpenSSL](https://www.openssl.org/) utility to convert certificates and keys from other formats to PEM, from the command line. Once installed, use a command like the following:
+
+```sh 
+openssl x509 -in cert.crt -out cert.pem
+```
+
+```sh 
+openssl x509 -in cert.der -out cert.pem
+```
+
+```sh 
+openssl x509 -in cert.cer -out cert.pem
+```
+
+When you have your key, your server certificate and your root certificate all in separate files, you can use the `cat` command to chain them together into one file, ready to be copied and pasted:
+
+```sh
+cat private_key.pem cert.pem root_cert.pem > cert_chain.pem
+```
+
+</Message>
 
 ## Uploading your certificate
 
@@ -103,9 +131,41 @@ You must renew your certificate or create a new one. A number of tools are avail
 
 When you have your up to date certificate, go to [Secret Manager](https://console.scaleway.com/secret-manager/secrets) in the console,  and access the secret that contains your certificate. [Create a new version](/identity-and-access-management/secret-manager/how-to/create-version/) of the secret, to hold the up to date certificate. Edge Services will automatically detect and use the most recent enabled version of the secret. You can nonetheless choose to disable or delete the old version(s) as you prefer.
 
+<Message type="tip">
+
+If you change your customized subdomain to something new, you will need to generate and import a new certificate for that subdomain. In this case, it is recommended to create a new [secret](/docs/identity-and-access-management/secret-manager/concepts/#secret) to hold the new certificate, rather than creating a new version of an existing secret.
+
+</Message>
+
  ## Troubleshooting errors
 
-Explain the various errors you can encounter with your certificate and how to fix them (see https://jira.infra.online.net/browse/CNS-6680?jql=project%20%3D%20CNS%20AND%20text~certificate%20ORDER%20BY%20priority%20DESC%2C%20updated%20DESC)
+If Edge Services detects a problem with your certificate, an error will be displayed. See the table below for help resolving these errors.
+
+| Error                                                                   | Solution                                                            |
+|-------------------------------------------------------------------------|---------------------------------------------------------------------|
+| Certificate format                                                      | Make sure your certificate is in [PEM format](#pem-format-certificate-chain). |
+| Certificate private key format                                          | Make sure your private key is in [PEM format](#pem-format-certificate-chain).|
+| Missing server certificate                                              | Make sure the server certificate (which validates your own subdomain) is included in the [PEM-formatted chain](#pem-format-certificate-chain).|
+| Missing private key                                                     | Make sure your private key is included in the [PEM-formatted chain](#pem-format-certificate-chain).|
+| Missing root certificate                                                | Make sure a valid root certificate is included in the [PEM-formatted chain](#pem-format-certificate-chain). |
+| Wrong order                                                             | Make sure the server certificate (which validates your own subdomain) is listed before the intermediate and root certificates in the [PEM-formatted chain](#pem-format-certificate-chain) |
+| Too many private keys                                                   | Make sure the [PEM-formatted chain](#pem-format-certificate-chain) includes only one corresponding private key  |
+| Self-signed certificates not allowed                                    | Create and upload a certificate issued by a recognized [certificate authority](#how-to-get-a-certificate). |
+| Invalid intermediate or root certificate authority                      | Make sure each **Issuer** field matches the **Subject** of the next certificate in the [PEM-formatted chain](#pem-format-certificate-chain).|
+| Incorrect root certificate                                              | Make sure your server certificate chains up to the provided root(s) certificate(s) in the [PEM-formatted chain](#pem-format-certificate-chain). |
+| Private key and certificate mismatch                                    | Make sure the private key in the [PEM-formatted chain](#pem-format-certificate-chain) matches the server certificate.  |
+| Subdomain and server certificate mismatch                               | Make sure the subdomain you configured for Edge Services matches that of the server certificate. |
+| Certificate expired                                                      | [Create a new certificate](#keeping-your-certificate-up-to-date) and import it.  |
+
+If any of these errors are detected while you are initially configuring your subdomain, you will be blocked from continuing until the error is fixed.
+
+However, these errors may also be detected and displayed on your Edge Services dashboard even after you have initially successfully configured your subdomain and certificate. This could be the case, for example, if your certificate has since expired, or you have modified your subdomain without modifying the certificate, or you have modified the certificate in Secret Manager. In this case, your initial certificate will remain in use by Edge Services until the error is fixed, but clients may see an error in their browser as they try to access your customized domain. 
+
+To fix the problem, you must generate a valid certificate, and then do one of the following:
+
+- [Use Edge Services to import a new certificate directly](/storage/object/how-to/get-started-edge-services/#how-to-edit-your-customized-domain-or-its-certificate)
+- [Create a new secret](/identity-and-access-management/secret-manager/how-to/create-secret/) to hold the certificate in Secret Manager, and [edit your customized endpoint with Edge services](/storage/object/how-to/get-started-edge-services/#how-to-edit-your-customized-domain-or-its-certificate) to tell it to use this secret
+- [Create a new version](/identity-and-access-management/secret-manager/how-to/create-version/) of the existing secret holding your expired certificate, where the new version contains a valid certificate. If Edge Services is already using this secret, it will  automatically detect and use the new version - it always uses the most recent enabled version of a secret.
 
 
 

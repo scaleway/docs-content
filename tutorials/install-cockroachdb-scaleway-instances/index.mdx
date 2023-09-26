@@ -7,8 +7,8 @@ content:
   paragraph: This page shows you how to deploy a secure multi-node CockroachDB cluster on Scaleway, using the Scaleway managed load balancing service to distribute client traffic.
 tags:  cockroachdb instances sql database
 categories:
-  - 
-  - 
+  - compute
+  - instances
 dates:
   validation: 2023-31-08
   posted: 2023-31-08
@@ -18,104 +18,131 @@ dates:
 
 CockroachDB scales horizontally. This means that in case of increased data volume, you can simply add more servers to your CockroachDB cluster instead of scaling vertically by adding more resources (memory, CPU or storage) to a single server.
 
-Its reliability lies in the ability to overcome software and hardware failures. Indeed, CockroachDB uses replication, meaning data is stored across multiple nodes. Moreover, the [Raft Consensus Algorithm](https://raft.github.io/) ensures data consistency by requiring a majority of replicas to agree before a change is committed to the database. Additionally, the Raft algorithm can also automatically detect and correct issues (such as identifying corrupted data and restoring it) without any human intervention. 
+Its reliability lies in the ability to overcome software and hardware failures. Indeed, CockroachDB uses replication, meaning data is stored across multiple nodes. Moreover, the [Raft Consensus Algorithm](https://raft.github.io/) ensures data consistency by requiring a majority of replicas to agree before a change is committed to the database. Additionally, the Raft algorithm can also automatically detect and correct issues (such as identifying corrupted data and restoring it) without any human intervention.
 
 Thanks to its serializable SQL transactions, CockroachDB also ensures that data remains consistent and accurate. To do so, it combines both the Raft algorithm to read data and timestamps and multiple versions of data (MVCC) to write data. MVCC provides you with a stable and unchanging view of the data whenever you start a transaction, regardless of other changes happening in the database at the same time.
 
 This article shows you how to install CockroachDB using three nodes on a Regional Private Network as well as Scaleway Load Balancer to access the database and console.
 
 <Macro id="iam-requirements" />
- 
-<Message type="requirement">
-  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
-  - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key/) 
-  - Your network configuration must allow TCP communication on the following ports:
-    - 26257 for intra-cluster and client-cluster communication
-    - 8080 to expose your DB Console
-</Message>
+
+## Before starting
+
+### Requirements
+
+    - You must have [CockroachDB installed](https://www.cockroachlabs.com/docs/v23.1/install-cockroachdb) locally. This is necessary for generating and managing your deployment's certificates.
+    - You must have [created an SSH key](/console/my-project/how-to/create-ssh-key/) to access the machine via SSH. This is necessary for distributing and starting CockroachDB binaries.
+    - Your network configuration must allow TCP communication on the following ports:
+      - `26257` for intra-cluster and client-cluster communication
+      - `8080` to expose your DB Console
+    - Carefully review the [Production Checklist](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings) and recommended [Topology Patterns](https://www.cockroachlabs.com/docs/v23.1/topology-patterns).
+    - Run each node on a separate machine. Since CockroachDB replicates across nodes, running more than one node per machine increases the risk of data loss if a machine fails. Likewise, if a machine has multiple disks or SSDs, run one node with multiple `--store` flags and not one node per disk. For more details about stores, see the [Start a Node](https://www.cockroachlabs.com/docs/v23.1/cockroach-start#store) documentation page.
+    - When starting each node, use the `--locality` flag to describe the node's location, for example, `--locality=region=fr-par,zone=fr-par-1`. The key-value pairs should be ordered from most to least inclusive, and the keys and order of key-value pairs must be the same on all nodes.
+    When deploying in a single Availability Zone (AZ):
+      - To be able to tolerate the failure of any 1 node, use at least 3 nodes with the `default` [3-way replication factor](https://www.cockroachlabs.com/docs/v23.1/configure-replication-zones#view-the-default-replication-zone). In this case, if 1 node fails, each range retains 2 of its 3 replicas, a majority.
+      - To be able to tolerate 2 simultaneous node failures, use at least 5 nodes and [increase the default replication factor](https://www.cockroachlabs.com/docs/v23.1/configure-replication-zones#edit-the-default-replication-zone) for user data to 5. The replication factor for [important internal data](https://www.cockroachlabs.com/docs/v23.1/configure-replication-zones#create-a-replication-zone-for-a-system-range) is 5 by default, so no adjustments are needed for internal data. In this case, if 2 nodes fail at the same time, each range retains 3 of its 5 replicas, a majority.
+    - When deploying across multiple AZs:
+      - To be able to tolerate the failure of 1 entire AZ in a region, use at least 3 AZs per region and set `--locality` on each node to spread data evenly across regions and AZs. In this case, if 1 AZ goes offline, the 2 remaining AZs retain a majority of replicas.
+      - To ensure that ranges are split evenly across nodes, use the same number of nodes in each AZ. This is to avoid overloading any nodes with excessive resource consumption.
+    - When deploying across multiple regions:
+      - To be able to tolerate the failure of 1 entire region, use at least 3 regions.
+
+### Access levels
+
+You can configure different access levels for the DB Console. We recommend different configurations depending on your needs:
+
+| Access Level | Description         |
+| :------------ | :------------------- |
+| Partially open        | Sets an ACL rule on the Load Balancer to allow only specific IP addresses to communicate on port `8080`. |
+| Completely open    | Does not set an ACL rule on the Load Balancer. All IP addresses will be able to access the console on port `8080`. |
+| Completely closed    | Does not create a console backend and frontend on the Load Balancer. In this case, a machine with SSH access to a node could use an SSH tunnel to access the DB Console.|
 
 ## Creating Instances
 
-This procedure shows you how to create Instances for each node you plan to have in your cluster. Make sure to replace all example values with your own. 
+This procedure shows you how to create Instances for each node you plan to have in your cluster. Make sure to replace all example values with your own.
 
 <Message type="important">
-  At least three nodes need to be ran to ensure survivability. You can use any Instance type except for PLAY2-PICO Instances as they are 1 vCPU which is below CockroachDB's minimum requirement of 4 vCPUs. For more details, refer to [the Cockroach hardware recommendations](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#hardware) and [cluster topology](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#topology).
+  At least three nodes need to be run to [ensure survivability](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#topology).<br /><br /> You can use any Instance type except for PLAY2-PICO Instances as they have 1 vCPU, which is below CockroachDB's minimum requirement of 4 vCPUs.<br /><br /> For more details, refer to [the Cockroach hardware recommendations](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#hardware) and [cluster topology](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#topology).
 </Message>
 
-1. Run the following command to create a Private Network: 
+1. Run the following command to create a Private Network:
     ```
     scw vpc private-network create name=cockroachdb region=fr-par subnets.0=192.168.0.0/24
     ```
 
-2. Run the following command to create a Public Gateway to grant access to Instances: 
-    ```
-    scw vpc-gw gateway create name=external-access type=VPC-GW-S enable-bastion=true
-    ```
-  
-    Once your Public Gateway is created, you must create a DHCP subnet that matches the one used in your previously created Private Network: 
+2. Create a Public Gateway to access Instances.
     ```
     scw vpc-gw gateway create name=external-access type=VPC-GW-S enable-bastion=true
     ```
 
-    Finally, configure your gateway with your Private Network using your newly created DHCP subnet: 
+3. Create a DHCP subnet that matches the one used in your Private Network.
     ```
     scw vpc-gw gateway create name=external-access type=VPC-GW-S enable-bastion=true
     ```
 
-3. Run the following command to create an Instance in the `fr-par-1` zone with a data volume of 30G: 
+4. Configure your gateway with your Private Network using your newly created DHCP subnet.
+    ```
+    scw vpc-gw gateway create name=external-access type=VPC-GW-S enable-bastion=true
+    ```
+
+5. Run the following command to create an Instance in the `fr-par-1` zone with a data volume of 30G.
     ```
     scw instance server create name=db01 zone=fr-par-1 type=PRO2-XXS image=ubuntu_jammy ip=none additional-volumes.0=b:30G
     ```
 
-    Then, create a private NIC (Network Interface Card) for your newly created Instance: 
+6. Create a private NIC (Network Interface Card) for your Instance.
     ```
     scw instance private-nic create zone=fr-par-1 server-id=<id> private-network-id=<id>
     ```
 
-    <Message type="important">
-      You need to repeat the same operation with `fr-par-2` and `fr-par-3` zones to create all nodes
-    </Message>
+7. Repeat steps 5 and 6 to create the two other nodes in the `fr-par-2` and `fr-par-3` AZs.
 
-4. Run the following command to check your Instance's DHCP entry on the Private Network and retrieve its private IP:
+4. Check your Instance's DHCP entry on the Private Network and retrieve its private IP.
     ```
     scw vpc-gw dhcp-entry list gateway-network-id=<id>
     ```
 
-5. Run the following command to connect on the Instances using the gateway bastion: 
+5. Connect to the Instances using the gateway bastion.
     ```
     ssh -J bastion@<gw-ip>:61000 root@db01.priv
     ```
 
-## Synchronizing clocks 
+## Synchronizing clocks
 
-CockroachDB requires moderate levels of [clock synchronization](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#clock-synchronization) to preserve data consistency. For this reason, the node spontaneously shuts down when a node detects that its clock is out of sync with at least half of the other nodes in the cluster by 80% of the maximum offset allowed (500ms by default). 
+CockroachDB requires moderate levels of [clock synchronization](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#clock-synchronization) to preserve data consistency.
 
-This is to avoid consistency anomalies. However, it is best to prevent clocks from drifting too far in the first place by FIRST running a clock synchronization software on each node.
+For this reason, nodes spontaneously shut down when they detect that their clock is out of sync with at least half of the other nodes in the cluster by 80% of the maximum offset allowed (500ms by default).
 
-For the sake of this tutorial, we will be using [NTP](https://www.ntp.org/documentation/4.2.8-series/) to keep offsets in a single-digit milliseconds. Note that other methods of clock synchronization are suitable as well.
+This is done to avoid consistency anomalies. However, it is best to prevent clocks from drifting too far off. To do so, a clock synchronization software can be run on each mode.
+
+For the sake of this tutorial, we will be using [NTP](https://www.ntp.org/documentation/4.2.8-series/) to keep offsets in single-digit milliseconds.
+
+<Message type="note">
+  Note that other methods of clock synchronization are suitable as well.
+</Message>
 
 1. Connect to one of your nodes using SSH.
 
-2. Disable `timesyncd` as it tends to be active by default on some Linux distributions by running the following command:
+2. Disable `timesyncd` as it tends to be active by default on some Linux distributions by running the following command.
     ```
     timedatectl set-ntp no
     ```
 
     <Message type="note">
-        You can also make sure timesyncd is off by running the `timedatectl` command
+        You can also make sure `timesyncd` is off by running the `timedatectl` command.
     </Message>
 
-3. Run the following command to install the NTP package:
+3. Run the following command to install the NTP package.
     ```
     apt-get install ntp -y
     ```
 
-4. Run the following command to stop the NTP daemon: 
+4. Run the following command to stop the NTP daemon.
     ```
     service ntp stop
     ```
 
-5. Configure  the machine's clock with Google's NTP service, in the /etc/ntp.conf file, remove or comment out any lines starting with server or pool and add the following lines:
+5. Configure the machine's clock with Google's NTP service, in the `/etc/ntp.conf` file, remove or comment out any lines starting with server or pool and add the following lines.
     ```
     server time1.google.com iburst
     server time2.google.com iburst
@@ -123,7 +150,7 @@ For the sake of this tutorial, we will be using [NTP](https://www.ntp.org/docume
     server time4.google.com iburst
     ```
 
-6. Restart the NTP daemon: 
+6. Restart the NTP daemon:
     ```
     service ntp start
     ```
@@ -131,12 +158,12 @@ For the sake of this tutorial, we will be using [NTP](https://www.ntp.org/docume
       We recommend Google's NTP service because it handles "smearing" the leap second. If you use a different NTP service that does not smear the leap second, be sure to configure client-side smearing in the same way on each machine. See the Production Checklist for details.
     </Message>
 
-7. Synchronize the machine's clock wiht Google's NTP service: 
+7. Synchronize the machine's clock with Google's NTP service.
     ```
      ntpd -b time.google.com
     ```
 
-8. Verify that the machine is using a Google NTP server:
+8. Verify that the machine is using a Google NTP server.
     ```
      ntpq -p
     ```
@@ -148,6 +175,305 @@ For the sake of this tutorial, we will be using [NTP](https://www.ntp.org/docume
         You need to repeat this step for each machine where a CockroachDB node will run.
       </Message>
 
+## Setting up load balancing
+
+Each CockroachDB node is an equally suitable SQL gateway to your cluster, but to ensure client performance and reliability, it is important to use load balancing:
+
+  - **Performance**: Load balancers spread client traffic across nodes. This prevents any one node from being overwhelmed by requests and improves overall cluster performance (queries per second).
+  - **Reliability**: Load balancers decouple client health from the health of a single CockroachDB node. In cases where a node fails, the load balancer redirects client traffic to available nodes.
+
+Scaleway offers fully-managed Load Balancers to distribute traffic between Instances.
+
+1. Create a Load Balancer.
+    ```
+    scw lb lb create name=cockroachdb assign-flexible-ip=true type=LB-S
+    ```
+
+2. Attach Load Balancer to the Private Network using the the Private Network UUID.
+    ```
+    scw lb private-network attach <lb-id> private-network-id=<id>
+    ```
+3. Configure Load Balancer IP in your DNS, for example using Scaleway DNS.
+    ```
+    scw dns record add <domain> type=A name=<entry> data=<lb-ip> ttl=3600
+    ```
+4. Create Load Balancer certificate using Let’s Encrypt.
+    ```
+    scw lb certificate create lb-id=<lb-ip> name=cockroach letsencrypt-common-name=<fqdn>
+    ```
+5. Create the DB communication backend and check the ready status of the node via the console.
+    ```
+    scw lb backend create lb-id=<lb-ip> name=db forward-protocol=tcp forward-port=26257 \
+    forward-port-algorithm=leastconn sticky-sessions=table health-check.check-max-retries=5 \
+    server-ip.0=<ip db01> server-ip.1=<ip db02> server-ip.2=<ip db03> health-check.port=8080 \
+    health-check.http-config.method=GET "health-check.http-config.uri=/health?ready=1" \
+    health-check.http-config.code=200
+    ```
+6. Create the DB communication fronted. SSL is handled by the nodes.
+    ```
+    scw lb frontend create lb-id=<lb-id> name=db inbound-port=26257 backend-id=<backend-id>
+    ```
+7. Create the console backend. The healthcheck can be done via HTTP, even if the console is exposed via HTTPS.
+    ```
+    scw lb backend create lb-id=<lb-ip> name=console forward-protocol=https forward-port=8080 \
+    forward-port-algorithm=leastconn sticky-sessions=table health-check.port=8080 \
+    server-ip.0=<ip db01> server-ip.1=<ip db02> server-ip.2=<ip db03> \
+    health-check.check-max-retries=5 health-check.http-config.method=GET \
+    "health-check.http-config.uri=/health" health-check.http-config.code=200 \
+    ssl-bridging=true ignore-ssl-server-verify=true
+    ```
+8. Create the console frontend. We use the Let’s Encrypt certificate to avoid a self-signed CA warning.
+    ```
+    scw lb frontend create lb-id=<lb-ip> name=console inbound-port=443\
+    certificate-ids.0=<cert-id> backend-id=<backend-id>
+    ```
+9. You can use the following command to set up an ACL on the frontend:
+    ```
+    scw lb acl create frontend-id=<console-frontend-id> name=admin action.type=deny \
+    match.ip-subnet.0=<your ip> match.invert=true index=0
+    ```
+
+## Configuring your network
+
+Set up a firewall on each of your Instances, allowing TCP ingoing communication on the following three ports:
+  - `26257` (`tcp:26257`) for inter-node communication (i.e., working as a cluster), for applications to connect to the Load Balancer, and for routing from the Load Balancer to the nodes
+  - `8080` (`tcp:8080`) for exposing your DB Console
+  - `22` (`tcp:22`) for SSH access
+
+  For further information, refer to the [Configuring Firewalls for Instances](/tutorials/installation-uncomplicated-firewall/) tutorial.
+
+## Generating certificates
+
+You can use `cockroach cert commands`, [openssl commands](https://www.cockroachlabs.com/docs/v23.1/create-security-certificates-openssl), or [Auto TLS cert generation](https://www.cockroachlabs.com/docs/v23.1/auto-tls) (alpha) to generate security certificates. This section features the `cockroach cert` commands.
+
+Locally, you'll need to [create the following certificates and keys](https://www.cockroachlabs.com/docs/v23.1/cockroach-cert):
+
+  - A certificate authority (CA) key pair (`ca.crt` and `ca.key`).
+  - A node key pair for each node, issued to its IP addresses and any common names the machine uses, as well as to the IP addresses and common names for machines running load balancers.
+  - A client key pair for the `root` user. You'll use this to run a sample workload against the cluster as well as some `cockroach` client commands from your local machine.
+
+1. [Install CockroachDB](https://www.cockroachlabs.com/docs/install-cockroachdb.html) on your local machine.
+2. Create two directories.
+    ```
+    mkdir certs
+    mkdir my-safe-directory
+    ```
+
+    `certs`
+    : You'll generate your CA certificate and all node and client certificates and keys in this directory and then upload some of the files to your nodes.
+
+    `my-safe-directory`
+    : You'll generate your CA key in this directory and then reference the key when generating node and client certificates. After that, you'll keep the key safe and secret; you will not upload it to your nodes.
+
+4. Create the CA certificate and key.
+    ```
+    cockroach cert create-ca --certs-dir=certs --ca-key=my-safe-directory/ca.key
+    ```
+5. Create the certificate and key for the first node, issued to all common names you might use to refer to the node as well as to the load balancer instances:
+    ```
+    cockroach cert create-node \
+    <ip db01> \
+    db01.priv  \
+    localhost \
+    127.0.0.1 \
+    <lb ip> \
+    <lb fqdn>  \
+    --certs-dir=certs \
+    --ca-key=my-safe-directory/ca.key
+    ```
+6. Upload the CA certificate, node certificate and key to the first node.
+    ```
+    scp -J bastion@<gateway ip>:61000 -r certs/ root@db01.priv:~/
+    ```
+7. Delete the local copy of the node certificate and key:
+    ```
+    rm -f certs/node.*
+    ```
+8. Repeat steps 3 to 5 for each additional node.
+9. Create a client certificate and key for the root user.
+    ```
+    cockroach cert create-client root \
+    --certs-dir=certs \
+    --ca-key=my-safe-directory/ca.key
+    ```
+
+## Starting the nodes
+
+You will automate starting nodes using [systemd](https://www.freedesktop.org/wiki/Software/systemd/).
+
+<Message type="note">
+  After completing these steps, nodes will not yet be live. They will complete the startup process and join together to form a cluster as soon as the cluster is initialized in the next step.
+</Message>
+
+For each initial node of your cluster, complete the following steps:
+
+1. Connect to the machine where you want the node to run via SSH. Ensure you are logged in as the root user.
+2. Download the CockroachDB archive for Linux, and extract the binary:
+    ```
+    curl https://binaries.cockroachdb.com/cockroach-v23.1.4.linux-amd64.tgz | tar -xz
+    ```
+3. Copy the binary into the PATH:
+    ```
+    cp -i cockroach-v23.1.4.linux-amd64/cockroach /usr/local/bin/
+    ```
+
+    CockroachDB uses custom-built versions of the GEOS libraries.
+
+4. Copy the libraries to the location where CockroachDB expects to find them:
+    ```
+    mkdir -p /usr/local/lib/cockroach
+    cp -i cockroach-v23.1.4.linux-amd64/lib/libgeos.so /usr/local/lib/cockroach/
+    cp -i cockroach-v23.1.4.linux-amd64/lib/libgeos_c.so /usr/local/lib/cockroach/
+    ```
+5. Create the Cockroach directory.
+    ```
+    mkdir /var/lib/cockroach
+    ```
+6. Prepare and attach the data volume.
+    ```
+    mkfs -t ext4 /dev/sdb
+    e2label /dev/sdb DATA
+    echo "LABEL=DATA  	/var/lib/cockroach ext4 defaults 0 1" >> /etc/fstab
+    mount -a
+    ```
+7. Move the `certs` directory to the cockroach directory.
+    ```
+    mv certs /var/lib/cockroach/
+    ```
+8. Create a Unix user named `cockroach`.
+    ```
+    useradd cockroach
+    ```
+9. Change the ownership of the cockroach directory to the user cockroach.
+    ```
+    chown -R cockroach /var/lib/cockroach
+    ```
+10. Download the sample configuration template and save the file in the `/etc/systemd/system/` directory:
+    ```
+    curl -sSL -o /etc/systemd/system/cockroachdb.service https://raw.githubusercontent.com/cockroachdb/docs/master/_includes/v23.1/prod-deployment/securecockroachdb.service
+    ```
+
+    Alternatively, you can create the file yourself and copy the script into it:
+
+    ```
+    [Unit]
+    Description=Cockroach Database cluster node
+    Requires=network.target
+    [Service]
+    Type=notify
+    WorkingDirectory=/var/lib/cockroach
+    ExecStart=/usr/local/bin/cockroach start --certs-dir=certs --advertise-addr=<node1 address> --join=<node1 address>,<node2 address>,<node3 address> --cache=.25 --max-sql-memory=.25
+    TimeoutStopSec=300
+    Restart=always
+    RestartSec=10
+    StandardOutput=syslog
+    StandardError=syslog
+    SyslogIdentifier=cockroach
+    User=cockroach
+    [Install]
+    WantedBy=default.target
+    ```
+11. In the sample configuration template, specify values for the following flags:
+
+    | Flag | Description |
+    | :------------ | :------------------- |
+    | `--advertise-addr` | Specifies the IP address/hostname and port to tell other nodes to use. The port number can be omitted, in which case it defaults to `26257`. <br /><br /> This value must route to an IP address the node is listening on (with `--listen-addr` unspecified, the node listens on all IP addresses).<br /><br /> In some networking scenarios, you may need to use `--advertise-addr` and/or `--listen-addr` differently. For more details, see [Networking](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#networking). |
+    | `--join`    | Identifies the address of 3 of the initial nodes of the cluster. These addresses should match the addresses that the target nodes are advertising. |
+
+    When deploying across multiple datacenters, or when there is otherwise high latency between nodes, it is recommended to set `--locality` as well, like for example `--locality=region=fr-par,zone=fr-par-1`. It is also required to use certain enterprise features. For more details, see [Locality](https://www.cockroachlabs.com/docs/v23.1/cockroach-start#locality).
+
+    For other flags not explicitly set, the command uses default values. For example, the node stores data in `--store=cockroach-data` and binds DB Console HTTP requests to `--http-port=8080`. To set these options manually, see the [Start a Node](https://www.cockroachlabs.com/docs/v23.1/cockroach-start) documentation page.
+
+12. Start the CockroachDB cluster.
+
+    ```
+    systemctl start cockroachdb
+    ```
+13. Repeat these steps for each additional node that you want in your cluster.
+
+## Initializing the cluster
+
+On your local machine, run the [cockroach init command](https://www.cockroachlabs.com/docs/v23.1/cockroach-init) to complete the node startup process and have them join together as a cluster.
+
+Run the cockroach init command, with the `--host` flag set to the Load Balancer address to access any of the nodes:
+```
+cockroach init --certs-dir=certs --host=<lb-fqdn>
+```
+The console is available via `https://<lb-fqdn>`.
+
+## Testing the cluster
+
+CockroachDB replicates and distributes data behind the scenes and uses a Gossip protocol to enable each node to locate data across the cluster. Once a cluster is live, any node can be used as an SQL gateway.
+
+When using a load balancer, you should issue commands directly to the load balancer, which then routes traffic to the nodes.
+
+Use the built-in SQL client locally as follows:
 
 
+1. Launch the built-in SQL client on your local machine with the `--host` flag set to the address of the load balancer:
+    ```
+    cockroach sql --certs-dir=certs --host=<lb-fqdn>
+    ```
+2. Create a database called `securenodetest`.
+    ```
+    CREATE DATABASE securenodetest;
+    ```
+3. View the cluster's databases, which will include `securenodetest`.
+    ```
+    SHOW DATABASES;
+    +--------------------+
+    |      Database      |
+    +--------------------+
+    | crdb_internal      |
+    | information_schema |
+    | securenodetest     |
+    | pg_catalog         |
+    | system             |
+    +--------------------+
+    (5 rows)
+    ```
+4. Create an admin user and password to log in the console:
+    ```
+    CREATE USER webadmin WITH LOGIN PASSWORD '<strong password>';
 
+    GRANT admin TO webadmin;
+    ```
+5. Use `\q` to exit the SQL shell.
+6. Use the `webadmin` user to log into the console via `https://<lb-fqdn>`.
+
+## Monitoring the cluster
+
+Despite CockroachDB's various [built-in safeguards against failure](https://www.cockroachlabs.com/docs/v23.1/frequently-asked-questions#how-does-cockroachdb-survive-failures), it is critical to actively monitor the overall health and performance of a cluster running in production and to create alerting rules that promptly send notifications when there are events that require investigation or intervention.
+
+You can leverage [Scaleway Cockpit](/observability/cockpit/how-to/send-metrics-logs-to-cockpit/) to set up monitoring and alerting using [CockroachDB Prometheus endpoint](https://www.cockroachlabs.com/docs/stable/monitor-cockroachdb-with-prometheus.html) via Prometheus Remote Write capabilities. This can be done by installing Prometheus as an agent on each node.
+
+For details about available monitoring options and the most important events and metrics to alert on, see [Monitoring and Alerting(https://www.cockroachlabs.com/docs/v23.1/monitoring-and-alerting).
+
+## Scaling the cluster
+
+You can start the new nodes using the same procedure used to create the initial nodes (steps 1, 2, 4, 5, and 6). The join list can be set to the initial 3 nodes installed.
+
+##  Using the database
+
+Now that your deployment is working, you can:
+
+1. [Implement your data model](https://www.cockroachlabs.com/docs/v23.1/sql-statements).
+2. [Create users](https://www.cockroachlabs.com/docs/v23.1/create-user) and [grant them privileges](https://www.cockroachlabs.com/docs/v23.1/grant).
+3. [Connect your application](https://www.cockroachlabs.com/docs/v23.1/install-client-drivers). Be sure to connect your application to the load balancer, not to a CockroachDB node.
+4. [Make backups](https://www.cockroachlabs.com/docs/v23.1/take-full-and-incremental-backups) of your data.
+
+You may also want to adjust the way the cluster replicates data. For example, by default, a multi-node cluster replicates all data 3 times; you can change this replication factor or create additional rules for replicating individual databases and tables differently. For more information, see [Configure Replication Zones](https://www.cockroachlabs.com/docs/v23.1/configure-replication-zones).
+
+<Message type="important">
+  When running a cluster of 5 nodes or more, it is safest to [increase the replication factor](https://www.cockroachlabs.com/docs/v23.1/configure-replication-zones#create-a-replication-zone-for-a-system-range) for important internal data to 5, even if you do not do so for user data. For the cluster as a whole to remain available, the ranges for this internal data must always retain a majority of their replicas.
+</Message>
+
+## Going further
+
+- [Production Checklist](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings)
+- [Manual Deployment](https://www.cockroachlabs.com/docs/v23.1/manual-deployment)
+- [Orchestrated Deployment](https://www.cockroachlabs.com/docs/v23.1/kubernetes-overview)
+- [Monitoring and Alerting](https://www.cockroachlabs.com/docs/v23.1/monitoring-and-alerting)
+- [Performance Benchmarking](https://www.cockroachlabs.com/docs/v23.1/performance-benchmarking-with-tpcc-small)
+- [Performance Tuning](https://www.cockroachlabs.com/docs/v23.1/performance-best-practices-overview)
+- [Local Deployment](https://www.cockroachlabs.com/docs/v23.1/start-a-local-cluster)

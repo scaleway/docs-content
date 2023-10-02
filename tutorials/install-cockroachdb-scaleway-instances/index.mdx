@@ -39,8 +39,8 @@ This article shows you how to install CockroachDB using three nodes on a regiona
     - Run each node on a separate machine. Since CockroachDB replicates across nodes, running more than one node per machine increases the risk of data loss if a machine fails. Likewise, if a machine has multiple disks or SSDs, run one node with multiple `--store` flags and not one node per disk. For more details about stores, see the [Start a Node](https://www.cockroachlabs.com/docs/v23.1/cockroach-start#store) documentation page.
     - When starting each node, use the `--locality` flag to describe the node's location, for example, `--locality=region=fr-par,zone=fr-par-1`. The key-value pairs should be ordered from most to least inclusive, and the keys and order of key-value pairs must be the same on all nodes.
     When deploying in a single Availability Zone (AZ):
-      - To be able to tolerate the failure of any 1 node, use at least 3 nodes with the `default` [3-way replication factor](https://www.cockroachlabs.com/docs/v23.1/configure-replication-zones#view-the-default-replication-zone). In this case, if 1 node fails, each range retains 2 of its 3 replicas, a majority.
-      - To be able to tolerate 2 simultaneous node failures, use at least 5 nodes and [increase the default replication factor](https://www.cockroachlabs.com/docs/v23.1/configure-replication-zones#edit-the-default-replication-zone) for user data to 5. The replication factor for [important internal data](https://www.cockroachlabs.com/docs/v23.1/configure-replication-zones#create-a-replication-zone-for-a-system-range) is 5 by default, so no adjustments are needed for internal data. In this case, if 2 nodes fail at the same time, each range retains 3 of its 5 replicas, a majority.
+      - To be able to tolerate the failure of any node, use at least 3 nodes with the `default` [3-way replication factor](https://www.cockroachlabs.com/docs/v23.1/configure-replication-zones#view-the-default-replication-zone). In this case, if 1 node fails, each range retains 2 of its 3 replicas, a majority.
+      - To be able to tolerate 2 simultaneous node failures, use at least 5 nodes and [increase the default replication factor](https://www.cockroachlabs.com/docs/v23.1/configure-replication-zones#edit-the-default-replication-zone) for user data to 5. The replication factor for [important internal data](https://www.cockroachlabs.com/docs/v23.1/configure-replication-zones#create-a-replication-zone-for-a-system-range) is 5 by default, so no adjustments are needed for internal data. In this case, if 2 nodes fail at the same time, each range retains 3 of its 5 replicas.
     - When deploying across multiple AZs:
       - To be able to tolerate the failure of 1 entire AZ in a region, use at least 3 AZs per region and set `--locality` on each node to spread data evenly across regions and AZs. In this case, if 1 AZ goes offline, the 2 remaining AZs retain a majority of replicas.
       - To ensure that ranges are split evenly across nodes, use the same number of nodes in each AZ. This is to avoid overloading any nodes with excessive resource consumption.
@@ -62,7 +62,7 @@ You can configure different access levels for the DB Console. We recommend diffe
 This procedure shows you how to create Instances for each node you plan to have in your cluster. Make sure to replace all example values with your own.
 
 <Message type="important">
-  To [ensure survivability](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#topology), you must run at least three nodes.<br /><br /> You can use any Instance type except for PLAY2-PICO Instances as they have 1 vCPU, which is below CockroachDB's minimum requirement of 4 vCPUs.<br /><br /> For more details, refer to [the Cockroach hardware recommendations](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#hardware) and [cluster topology](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#topology).
+  To [ensure survivability](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#topology), you must run at least 3 nodes.<br /><br /> You can use any Instance type except for PLAY2-PICO Instances as they have 1 vCPU, which is below CockroachDB's minimum requirement of 4 vCPUs.<br /><br /> For more details, refer to [the Cockroach hardware recommendations](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#hardware) and [cluster topology](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#topology).
 </Message>
 
 1. Run the following command to create a Private Network:
@@ -98,12 +98,12 @@ This procedure shows you how to create Instances for each node you plan to have 
 
 7. Repeat steps 5 and 6 to create the two other nodes in the `fr-par-2` and `fr-par-3` AZs.
 
-4. Check your Instance's DHCP entry on the Private Network and retrieve its private IP.
+8. Check your Instance's DHCP entry on the Private Network and retrieve its private IP.
     ```
     scw vpc-gw dhcp-entry list gateway-network-id=<id>
     ```
 
-5. Connect to the Instances using the gateway bastion.
+9. Connect to the Instances using the gateway bastion.
     ```
     ssh -J bastion@<gw-ip>:61000 root@db01.priv
     ```
@@ -112,9 +112,8 @@ This procedure shows you how to create Instances for each node you plan to have 
 
 CockroachDB requires moderate levels of [clock synchronization](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings#clock-synchronization) to preserve data consistency.
 
-For this reason, nodes spontaneously shut down when they detect that their clock is out of sync with at least half of the other nodes in the cluster by 80% of the maximum offset allowed (500ms by default).
+For this reason, nodes spontaneously shut down when they detect that their clock is out of sync with at least half of the other nodes in the cluster by 80% of the maximum offset allowed (500ms by default). This is done to avoid consistency anomalies. However, it is best to prevent clocks from drifting too far off. To do so, a clock synchronization software can be run on each mode.
 
-This is done to avoid consistency anomalies. However, it is best to prevent clocks from drifting too far off. To do so, a clock synchronization software can be run on each mode.
 
 For the sake of this tutorial, we will be using [NTP](https://www.ntp.org/documentation/4.2.8-series/) to keep offsets in single-digit milliseconds.
 
@@ -156,7 +155,7 @@ For the sake of this tutorial, we will be using [NTP](https://www.ntp.org/docume
     service ntp start
     ```
     <Message type="important">
-      We recommend Google's NTP service because it handles "smearing" the leap second. If you use a different NTP service that does not smear the leap second, be sure to configure client-side smearing in the same way on each machine. See the [production checklist](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings) for details.
+      We recommend using Google's NTP service because it handles "smearing" the leap second. If you use a different NTP service that does not smear the leap second, be sure to configure client-side smearing in the same way on each machine. See the [production checklist](https://www.cockroachlabs.com/docs/v23.1/recommended-production-settings) for details.
     </Message>
 
 7. Synchronize the machine's clock with Google's NTP service.
@@ -194,7 +193,7 @@ Scaleway offers fully-managed Load Balancers to distribute traffic between Insta
     ```
     scw lb private-network attach <lb-id> private-network-id=<id>
     ```
-3. Configure a Load Balancer IP in your DNS, for example using Scaleway DNS.
+3. Configure a Load Balancer IP in your DNS, using Scaleway Domains and DNS for example.
     ```
     scw dns record add <domain> type=A name=<entry> data=<lb-ip> ttl=3600
     ```
@@ -210,7 +209,7 @@ Scaleway offers fully-managed Load Balancers to distribute traffic between Insta
     health-check.http-config.method=GET "health-check.http-config.uri=/health?ready=1" \
     health-check.http-config.code=200
     ```
-6. Create the DB communication fronted. SSL is handled by the nodes.
+6. Create the DB communication frontend. SSL is handled by the nodes.
     ```
     scw lb frontend create lb-id=<lb-id> name=db inbound-port=26257 backend-id=<backend-id>
     ```
@@ -266,11 +265,11 @@ Locally, you will need to [create the following certificates and keys](https://w
     `my-safe-directory`
     : You will generate your CA key in this directory and then reference the key when generating node and client certificates. After that, you will keep the key safe and secret; you will not upload it to your nodes.
 
-4. Create the CA certificate and key.
+3. Create the CA certificate and key.
     ```
     cockroach cert create-ca --certs-dir=certs --ca-key=my-safe-directory/ca.key
     ```
-5. Create the certificate and key for the first node, issued to all common names you might use to refer to the node as well as to the load balancer instances:
+4. Create the certificate and key for the first node, issued to all common names you might use to refer to the node as well as to the load balancer instances:
     ```
     cockroach cert create-node \
     <ip db01> \
@@ -282,16 +281,16 @@ Locally, you will need to [create the following certificates and keys](https://w
     --certs-dir=certs \
     --ca-key=my-safe-directory/ca.key
     ```
-6. Upload the CA certificate, node certificate, and key to the first node.
+5. Upload the CA certificate, node certificate, and key to the first node.
     ```
     scp -J bastion@<gateway ip>:61000 -r certs/ root@db01.priv:~/
     ```
-7. Delete the local copy of the node certificate and key:
+6. Delete the local copy of the node certificate and key:
     ```
     rm -f certs/node.*
     ```
-8. Repeat steps 3 to 5 for each additional node.
-9. Create a client certificate and key for the root user.
+7. Repeat steps 3 to 5 for each additional node.
+8. Create a client certificate and key for the root user.
     ```
     cockroach cert create-client root \
     --certs-dir=certs \
@@ -400,7 +399,7 @@ Run the cockroach init command, with the `--host` flag set to the Load Balancer 
 ```
 cockroach init --certs-dir=certs --host=<lb-fqdn>
 ```
-The console is available via `https://<lb-fqdn>`.
+The console is available at `https://<lb-fqdn>`.
 
 ## Testing the cluster
 

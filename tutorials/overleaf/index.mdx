@@ -1,0 +1,203 @@
+---
+meta:
+  title: Installing Overleaf Community Edition
+  description: This page shows you how to install Overleaf Community Edition on Ubuntu Linux
+content:
+  h1: Installing Overleaf Community Edition
+  paragraph: This page shows you how to install Overleaf Community Edition on Ubuntu Linux
+tags: compute mediaserver media Overleaf Community Edition documents editor
+categories:
+  - compute
+dates:
+  validation: 2023-10-02
+  posted: 2023-10-02
+---
+
+Overleaf is a collaborative writing and publishing system that utilizes LaTeX, a powerful typesetting software, allowing individuals to create structured, professional documents online.
+It is particularly favored by academics and professionals for producing scientific documents, research papers, theses, and presentations due to its precise formatting and styling capabilities, and it supports real-time collaboration between multiple authors.
+
+<Macro id="iam-requirements" />
+ 
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [configured your SSH key](/console/my-project/how-to/create-ssh-key/)
+  - You have an Instance running on the Docker Image or has Docker installed
+  - You have `git` installed on the Instance
+  - For optimal performances it is recommended to run this tutorial at least on a DEV1-M instance
+</Message>
+
+<Message type="tip">
+  Overleaf requires Docker. Make sure to run this tutorial on an Instance running the Docker InstantApp image or make sure [Docker is installed](/tutorials/install-docker-ubuntu-jammy-jellyfish/) on the Instance.
+</Message>
+
+## Installing Overleaf community edition
+
+1. Connect to your Instance using SSH.
+    ```
+    ssh root@<YOUR-INSTANCE-IP>
+    ```
+2. Use `git` to downlaoad the Overleaf code repoisitory.
+    ```
+    git clone https://github.com/overleaf/toolkit.git /opt/overleaf-toolkit
+    ```
+3. Enter the Overleaf `overleaf-toolkit` directory.
+    ```
+    cd /opt/overleaf-toolkit
+    ```
+4. Run the following command to copy the configuration files
+    ```
+    ./bin/init
+    ```
+5. Download and start the Overleaf container and its requirements
+    ```
+    ./bin/up
+    ```
+    <Message type="tip">
+      * If a web server is already running on port 80, be sure to stop it before executing the above command.
+      * Dowloading and configuring the application for the first start may take some time.
+    </Message>
+6. Stop the application by pressing `CTRL+C`.
+7. Open the file `./config/overleaf.rc` in a text editor and edit the line `NGINX_HTTP_PORT=80`. Set the value to `NGINX_HTTP_PORT=8877`, then save the file and exit the editor.
+
+## Configuring a systemd script
+
+If the previous command runs overleaf correctly, it is time to create a systemd daemon service.
+
+1. Create and open the file `/etc/systemd/system/overleaf.service` in a text editor of your choice and past the following content into it:
+    ```
+    [Unit]
+    Description=Overleaf Community Edition
+
+    [Service]
+    User=root
+    WorkingDirectory=/opt/overleaf-toolkit
+    ExecStart=/opt/overleaf-toolkit/bin/up
+    Restart=always
+    RestartSec=10
+
+    [Install]
+    WantedBy=multi-user.target
+
+    [Unit]
+    Description=Overleaf Community Edition
+    
+    [Service]
+    User=root
+    WorkingDirectory=/opt/overleaf-toolkit
+    ExecStart=/opt/overleaf-toolkit/bin/up
+    Restart=always
+    RestartSec=10
+    
+    [Install]
+    WantedBy=multi-user.target
+    ```
+2. Save the file and exit the text editor.
+3. Reload systemd by runnning the following command:
+    ```
+    systemctl daemon-reload
+    ```
+4. Enable the `overleaf.service` to be started on reboot
+    ```
+    systemctl enable overleaf.service
+    ```
+5. Start the Overleaf service:
+    ```
+    systemctl start overleaf.service
+    ```
+6. Check the status of the Overleaf service:
+    ```
+    systemctl status overleaf.service
+    ```
+
+## Installing LaTeX packages
+
+The LaTeX packages can now be installed, using TeX Live.
+1. Run the following command to launch the Texlive manager update.
+    ```
+    docker exec Overleaf Community Edition tlmgr update --self
+    ```
+2. Run the following command to lauch the full `texlive` installation
+    ```
+    docker exec Overleaf Community Edition tlmgr install scheme-full
+    ```
+    <Message type="note">
+      The installation of `texlive` may take a while.
+    </Message>
+
+## Configuring Nginx
+
+This tutorial uses [NGINX](https://nginx.org/en/) with [Let's Encrypt](https://letsencrypt.org/) and [CertBot](https://certbot.eff.org/) as an SSL enabled reverse proxy to secure the connection between the client and our server.
+
+1. Install Certbot on the server:
+    ```
+    apt install python3-certbot-nginx
+    ```
+2. Generate the certificate, by running the following command:
+    ```
+    sudo certbot --nginx certonly
+    ```
+
+    SSL certificates issued by Let's Encrypt are valid for 90 days. Certbot comes with the option to automatically renew the certificate.
+3. Configure a cron job that launches Certbot daily to check the status of the certificate. Open the crontab by typing:
+    ```
+    crontab -e
+    ```
+4. Add the following line which will stop Nginx, renew the certificate and restart the web server daily at 4:30 in the morning:
+    ```
+    30 4 * * * /opt/letsencrypt/certbot-auto renew --pre-hook "service nginx stop" --post-hook "service nginx start"
+    ```
+5.  Edit the file `/etc/nginx/sites-enabled/default` so that it looks like the following example, to configure Nginx in a way, that it will serve our Overleaf Community Edition site as default site:
+    ```
+    server {
+        listen       80;
+        listen       [::]:80;
+
+        server_name  my.Overleaf Community Edition.tld;
+
+        location / {
+          return              301 https://$server_name$request_uri;
+        }
+    }
+
+    server {
+      listen [::]:443 ssl ipv6only=on;
+      listen 443 ssl;
+
+      server_name my.Overleaf Community Edition.tld;
+
+      ssl_certificate /etc/letsencrypt/live/my.Overleaf Community Edition.tld/fullchain.pem;
+      ssl_certificate_key /etc/letsencrypt/live/my.Overleaf Community Edition.tld/privkey.pem;
+      include /etc/letsencrypt/options-ssl-nginx.conf;
+      ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;
+
+      proxy_set_header X-Forwarded-For $remote_addr;
+
+      add_header Strict-Transport-Security "max-age=31536000; includeSubDomains";
+      server_tokens off;
+
+      add_header X-Frame-Options SAMEORIGIN;
+      add_header X-Content-Type-Options nosniff;
+      client_max_body_size 50M;
+
+      location / {
+          proxy_pass http://localhost:8877;
+
+          proxy_set_header X-Forwarded-Proto $scheme;
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade $http_upgrade;
+          proxy_set_header Connection "upgrade";
+          proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+          proxy_read_timeout 3m;
+          proxy_send_timeout 3m;
+
+          access_log      /var/log/nginx/Overleaf Community Edition.access.log;
+          error_log       /var/log/nginx/Overleaf Community Edition.error.log;
+      }
+    }
+    ```
+6. Restart Nginx with the following command:
+    ```
+    service nginx restart
+    ```
+    You can now reach your Overleaf installation at `https://<YOUR-INSTANCE-IP>/launchpad`. 
+    Open a web browser and navigate to this page to set up your instance's administrator credentials, log in, and you can start drafting your documents, and invite collaborators to work with you.

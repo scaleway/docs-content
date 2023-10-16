@@ -66,17 +66,17 @@ Start by creating a multi-AZ cluster on `fr-par` region, in a dedicated VPC and 
     }
     ```
 
-3. Now create a dedicated VPC and a Private Network where we will deploy the Kapsule cluster. VPC and Private Networks are region-wide, so you can use them to host a cluster spread on multiple availability zones.
+3. Now create a dedicated VPC and a Private Network where we will deploy the Kapsule cluster. VPC and Private Networks are region-wide, so you can use them to host a cluster spreading across multiple availability zones.
     ```
     resource "scaleway_vpc" "vpc_multi_az" {
-    name = "vpc-multi-az"
-    tags = ["multi-az"]
+        name = "vpc-multi-az"
+        tags = ["multi-az"]
     }
 
     resource "scaleway_vpc_private_network" "pn_multi_az" {
-    name   = "pn-multi-az"
-    vpc_id = scaleway_vpc.vpc_multi_az.id
-    tags   = ["multi-az"]
+        name   = "pn-multi-az"
+        vpc_id = scaleway_vpc.vpc_multi_az.id
+        tags   = ["multi-az"]
     }
     ```
 
@@ -108,6 +108,11 @@ For the [pools configuration](https://registry.terraform.io/providers/scaleway/s
         private_network_id = scaleway_vpc_private_network.pn_multi_az.id
     }
 
+    output "kapsule" {
+        description = "Kapsule cluster id"
+        value = scaleway_k8s_cluster.kapsule_multi_az.id
+    }
+
     resource "scaleway_k8s_pool" "pool-multi-az" {
         for_each = {
             "fr-par-1" = "PRO2-XXS",
@@ -119,7 +124,7 @@ For the [pools configuration](https://registry.terraform.io/providers/scaleway/s
         zone                   = each.key
         tags                   = ["multi-az"]
         cluster_id             = scaleway_k8s_cluster.kapsule_multi_az.id
-        node_type              = "${each.value}"
+        node_type              = each.value
         size                   = 2
         min_size               = 2
         max_size               = 3
@@ -130,53 +135,22 @@ For the [pools configuration](https://registry.terraform.io/providers/scaleway/s
     }
     ```
 
-5. To access the Kapsule cluster with `kubectl` you need a `kubeconfig` file, with the address of the cluster and the credentials. Copy/paste this `template_file` and write it into a `kubeconfig` file in the current directory.
-    ```
-    data "template_file" "kubeconfig" {
-        template = <<EOT
-    apiVersion: v1
-    clusters:
-    - name: "$${cluster_name}"
-    cluster:
-        certificate-authority-data: $${ca_cert}
-        server: "$${host}"
-    contexts:
-    - name: admin@kapsule-multi-az
-    context:
-        cluster: "kapsule-multi-az"
-        user: kapsule-multi-az-admin
-    current-context: admin@kapsule-multi-az
-    kind: Config
-    preferences: {}
-    users:
-    - name: kapsule-multi-az-admin
-    user:
-        token: $${token}
-    EOT
-
-        vars = {
-            cluster_name = scaleway_k8s_cluster.kapsule_multi_az.name
-            host         = scaleway_k8s_cluster.kapsule_multi_az.kubeconfig[0].host
-            token        = scaleway_k8s_cluster.kapsule_multi_az.kubeconfig[0].token
-            ca_cert      = scaleway_k8s_cluster.kapsule_multi_az.kubeconfig[0].cluster_ca_certificate
-        }
-    }
-
-    resource "local_file" "kubeconfig" {
-        content  = data.template_file.kubeconfig.rendered
-        filename = "${path.module}/kubeconfig"
-    }
-    ```
-
-6. Initialize your Terraform configuration and apply it to create your resources.
+5. Initialize your Terraform configuration and apply it to create your resources.
     ```
     terraform init
     terraform apply
     ```
 
-7. Configure your `KUBECONFIG` environment variable to point to the `kubeconfig` file you just created via Terraform
+6. To access the Kapsule cluster with `kubectl` you need a `kubeconfig` file, with the address of the cluster and the credentials. You can use the CLI to retrieve and use it.
     ```
-    export KUBECONFIG=kubeconfig
+    terraform output kapsule
+    "fr-par/[CLUSTER-ID]"
+
+    scw k8s kubeconfig install [CLUSTER-ID]
+    kubectl config use-context [CONTEXT]
+    ```
+
+7. List your nodes now to check that your cluster is ready, and that there are two nodes per availability zone.
     ```
 
 8. List your nodes now to check that your cluster is ready, and that there are two nodes per availability zone.

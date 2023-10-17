@@ -13,18 +13,13 @@ dates:
 
 Scaleway Object Storage allows you to manage access to your resources with two features, [Identity and Access Management (IAM)](/identity-and-access-management/iam/concepts/#iam) and [Bucket policies](/storage/object/api-cli/bucket-policy/).
 
-You can use IAM when you do not need to configure access to specific buckets, and favor simplicity over granularity. IAM is central, and policy-based: it says who can do what in the entire Scaleway ecosystem. For example, if access to resources at the Project level is enough for your Object Storage use cases, use IAM only.
+You can use IAM when you do not need to configure access to specific buckets, and favor simplicity over granularity. IAM is central, and policy-based: it says who can do what in the entire Scaleway ecosystem.
 
 Bucket policies operate at the bucket level, and enable you to state clearly who can do what in each bucket.
 
-To configure more granular access to your Object Storage buckets, you can combine both IAM and bucket policies. For example, if you must restrict access to specific actions you can perform on a bucket, or if you need the bucket to be available only to certain users, you can use a combination of IAM and bucket policies.
-
+To configure more granular access to your Object Storage buckets, you can combine both IAM and bucket policies.
 
 ## Bucket policies and IAM overview
-
-### Bucket policies
-
-<Macro id="storage-bucket-policy" />
 
 ### IAM
 
@@ -32,100 +27,145 @@ To configure more granular access to your Object Storage buckets, you can combin
 
 An [IAM policy](/identity-and-access-management/iam/concepts/#policy) is used to define the permissions of users, groups and applications in a given Organization. A policy is composed of a [principal](/identity-and-access-management/iam/concepts/#principal) (the user, group or application to which it applies) and one or more IAM rules (which describe the permission sets the principal should have, and the scope of those permission sets).
 
+If access to resources at the Project level is enough for your Object Storage use cases, use IAM only.
+
+### Bucket policies
+
+<Macro id="storage-bucket-policy" />
+
 ## Combining IAM and bucket policies
 
-<Lightbox src="scaleway-bucket-policy-iam-table.webp" alt="" />>
+<Lightbox src="scaleway-bucket-policy-iam-table.webp" alt="" />
 
-In order to perform actions on a bucket, a principal (user or application) must be granted access via an IAM policy, and optionally via a bucket policy.
+In order to perform actions on a bucket, a [principal](/storage/object/concepts/#principal) (user or application) must be granted access via an IAM policy and optionnaly via a bucket policy.
 
-For example, if a user wants to list the objects in a bucket, they must ensure that:
+By properly setting IAM first, you can restrict access to Object Storage to the desired users and applications, and limit their allowed actions. By adding bucket policies to your critical resources, you can further restrain access and actions directly at the bucket-level and achieve optimum security.
 
-    - the IAM policy explicitly allows the user to list Objects (for example, with an `ObjectStorageReadOnly` or a `ObjectStorageObjectRead` permission set specified in the policy)
-    - if there is no existing bucket policy, the action allowed by IAM is enough to grant them list accesss
-    - if there is a bucket policy, the list action is **not explicitly denied** in the policy
+To set up a granular access to your Object Storage resources, you must:
+
+1. List all the users and applications you want to grant access to Object Storage, what rights you want to give them, and which buckets they can access.
+
+2. [Create an IAM group](/identity-and-access-management/iam/how-to/create-group/) that contains every user and application that must access Object Storage. 
+    <Message type="note">
+        You can create several groups to assign different permission sets to your users and applications.
+    </Message>
+3. [Create an IAM policy](/identity-and-access-management/iam/how-to/create-policy/) for each group created, select the appropriate permission sets (e.g. `ObjectStorageReadOnly` or `ObjectStorageObjectsRead`), and [attach it to the group](/docs/identity-and-access-management/iam/how-to/manage-groups/#attach-a-policy-to-a-group). 
+
+4. [Create and push a bucket policy](/storage/object/api-cli/create-bucket-policy/) in each bucket in which you want a fine-grained access.
 
 <Message type="important">
-  When using bucket and IAM policies concurrently, keep in mind that:
-    - Even if you only want to define the permissions available for bucket policies, you must first define IAM policy permissions. This is a necessary step of the process.
-    - When you create a Scaleway API key with IAM, you are prompted to specify the API key’s [preferred Project for Object Storage](/identity-and-access-management/iam/api-cli/using-api-key-object-storage/). This API key will always use this Project when carrying out Object Storage actions via any API/CLI.
-    - The [preferred Project](/identity-and-access-management/iam/api-cli/using-api-key-object-storage/) must always be the one of the bucket where you wish to perform an action.
+    - You must always define an IAM policy 
+    - When creating a Scaleway API key with IAM, you must specify the [preferred Project for Object Storage](/identity-and-access-management/iam/api-cli/using-api-key-object-storage#how-to-create-an-api-key-via-the-scaleway-console). This API key will always use this Project, so it must always be the one of the bucket where you wish to perform an action.
 </Message>
 
 ## IAM and bucket policy example
 
 Consider an Organization in which a user and an application must perform specific tasks with Scaleway Object Storage in a [project](/console/my-project/concepts/#project) named `S3-project`.
 
-We want: 
+### Defining authorizations
 
-- The user to be able to read ([GET](/storage/object/api-cli/object-operations/#getobject)) and write ([PUT](/storage/object/api-cli/object-operations/#putobject)) objects in a bucket A
+- The user must be able to read ([GET](/storage/object/api-cli/object-operations/#getobject)) and write ([PUT](/storage/object/api-cli/object-operations/#putobject)) objects in a bucket A
 
-- The application to be able to read ([GET](/storage/object/api-cli/object-operations/#getobject)) objects in bucket A, and to be able to write and delete objects in a bucket B
+- The application must be able to read ([GET](/storage/object/api-cli/object-operations/#getobject)) objects in bucket A, and to be able to write ([PUT](/storage/object/api-cli/object-operations/#putobject)) and [DELETE](/storage/object/api-cli/object-operations/#deleteobjects) objects in a bucket B
 
-We must:
+### Setting up access
 
-- [Create a group](/identity-and-access-management/iam/how-to/create-group/) named `S3-group` that contains the user and the application.
+1. [Create a group](/identity-and-access-management/iam/how-to/create-group/) named `S3-group` that contains the user and the application so they are the only ones to have access to Object Storage.
 
-- [Create an IAM policy](/identity-and-access-management/iam/how-to/create-policy/) named `S3-policy` with the previously created group as a [principal](identity-and-access-management/iam/concepts/#principal). The members of this group will have the `ObjectStorageFullAccess` right.
-        ```json
+2. [Create an IAM policy](/identity-and-access-management/iam/how-to/create-policy/) named `S3-policy` with the previously created group as a [principal](identity-and-access-management/iam/concepts/#principal). The members of this group will have the `ObjectStorageFullAccess` right.
+    ```json
+    {
+    "name": "S3-policy",
+    "description": "This policy grants full access to Object Storage resources in S3-Project to S3-group",
+    "organization_id": "example-orga-id-81df-11532f025b28",
+    "rules": [
         {
-        "name": "S3-policy",
-        "description": "This policy grants full access to Object Storage resources in S3-Project to S3-group",
-        "organization_id": "example-orga-4d35-81df-11532f025b28",
-        "rules": [
-            {
-            "permission_set_names": [
-                "ObjectStorageFullAccess"
-            ],
-            "project_ids": [
-                "my-project-id-4c04-9e03-f48147eee1f1"
-            ]
-            }
+        "permission_set_names": [
+            "ObjectStorageFullAccess"
         ],
-        "group_id": "example-group-4ac6-b86e-1d960b4c54cd"
+        "project_ids": [
+            "S3-project-id-4c04-9e03-f48147eee1f1"
+        ]
         }
-        ```
-- [Create a bucket policy](/storage/object/api-cli/create-bucket-policy/) to manage access to bucket A.
+    ],
+    "group_id": "S3-group-id-b86e-1d960b4c54cd"
+    }
+    ```
+3. [Create a bucket policy](/storage/object/api-cli/create-bucket-policy/) to manage access to bucket A.
     ```json
     {
     "Version": "2023-06-07-alpha",
         "Id": "bucket-A-policy",
         "Statement": [
             {
-                "Sid": "Deny access to all except ",
+                "Sid": "Allow user to GET and PUT objects",
                 "Effect": "Deny",
-                "Principal": "user",
-                "Action": [
-                    "s3:AbortMultipartUpload",
-                    "s3:DeleteBucketWebsite",
-                    "s3:DeleteObject",
-                    "s3:DeleteObjectTagging",
-                    "s3:DeleteObjectVersion",
-                    "s3:DeleteObjectVersionTagging",
-                    "s3:GetBucketTagging",
-                    "s3:GetBucketVersioning",
-                    "s3:GetBucketWebsite",
-                    "s3:GetLifecycleConfiguration",
-                    "s3:GetObjectTagging",
-                    "s3:GetObjectVersion",
-                    "s3:GetObjectVersionTagging",
-                    "s3:ListBucket",
-                    "s3:ListBucketMultipartUploads",
-                    "s3:ListMultipartUploadParts",
-                    "s3:PutBucketTagging",
-                    "s3:PutBucketVersioning",
-                    "s3:PutBucketWebsite",
-                    "s3:PutLifecycleConfiguration",
-                    "s3:PutObject",
-                    "s3:PutObjectTagging",
-                    "s3:PutObjectVersionTagging"
+                "Principal": "user-id-1d96-0b4c-54cd",
+                "NotAction": [
+                    "s3:GetObject",
+                    "s3:PutObject"
                 ],
                 "Resource": [
-                    "production-bucket-1",
-                    "production-bucket-1/*"
+                    "bucket-A",
+                    "bucket-A/*"
+                ]
+            }
+        ],
+        "Statement": [
+            {
+                "Sid": "Allow application to GET objects",
+                "Effect": "Deny",
+                "Principal": "application-id-1d96-0b4c-54cd",
+                "NotAction": [
+                    "s3:GetObject",
+                ],
+                "Resource": [
+                    "bucket-A",
+                    "bucket-A/*"
                 ]
             }
         ]
     }
+    ```
+4. [Create a bucket policy](/storage/object/api-cli/create-bucket-policy/) to manage access to bucket B.
+    ```json
+    {
+    "Version": "2023-06-07-alpha",
+        "Id": "bucket-B-policy",
+        "Statement": [
+            {
+                "Sid": "Deny access to all except application",
+                "Effect": "Deny",
+                "NotPrincipal": "application-id-1d96-0b4c-54cd",
+                "Action":  "s3:*",
+                "Resource": [
+                    "bucket-B",
+                    "bucket-B/*"
+                ]
+            }
+        ],
+        "Statement": [
+            {
+                "Sid": "Allow application to PUT and DELETE objects",
+                "Effect": "Deny",
+                "Principal": "application-id-1d96-0b4c-54cd",
+                "NotAction": [
+                    "s3:PutObject",
+                    "s3:DeleteObject",
+                    "s3:DeleteObjects"
+                ],
+                "Resource": [
+                    "bucket-B",
+                    "bucket-B/*"
+                ]
+            }
+        ]
+    }
+    ```
+
+5. [Push the policies](/storage/object/api-cli/create-bucket-policy/) to the corresponding buckets.
+
+The user can now GET and PUT in bucket A, and the application can now GET in bucket A, and PUT and DELETE in bucket B.
 
 <Navigation title="See Also">
   <PreviousButton to="/storage/object/api-cli/create-bucket-policy">Creating and Using bucket policies</PreviousButton>

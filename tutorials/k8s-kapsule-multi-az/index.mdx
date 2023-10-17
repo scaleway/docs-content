@@ -180,7 +180,7 @@ In this part we will deploy an [ingress-nginx](https://github.com/kubernetes/ing
     For this section you need, as a prerequisite, a domain managed on the Scaleway "Domains and DNS" service.
 </Message>
 
-The domain userd for this tutorial can be of type `internal` when bought with your Scaleway account, or of the `external` type if you want to re-use a domain bought with an external DNS registrar. If you choose the `external` method, you can follow the [How to add an external domain to DNS](https://www.scaleway.com/en/docs/network/domains-and-dns/how-to/add-external-domain/). If you don't want to delegate all your domain to your Scaleway account, import your domain but don't change the name servers in your registrar. Then you can create a "DNS zone" in Scaleway on your external domain, and declare two NS records in your registrar matching this zone. For example, with a domain "your-domain.tld" imported in Scaleway, you can create a DNS zone "scw", and delegate this zone in your registrar by adding those two records:
+The domain used for this tutorial can be of type `internal` when bought with your Scaleway account, or of the `external` type if you want to re-use a domain bought with an external DNS registrar. If you choose the `external` method, you can follow the [How to add an external domain to DNS](https://www.scaleway.com/en/docs/network/domains-and-dns/how-to/add-external-domain/) documentation. If you don't want to delegate all your domain to your Scaleway account, import your domain but don't change the name servers in your registrar. Then you can create a "DNS zone" in Scaleway on your external domain, and declare two NS records in your registrar matching this zone. For example, with a domain "your-domain.tld" imported in Scaleway, you can create a DNS zone "scw", and delegate this zone in your registrar by adding those two records:
     ```
     scw 600 IN NS ns0.dom.scw.cloud.
     scw 600 IN NS ns1.dom.scw.cloud.
@@ -432,81 +432,87 @@ In this last section, you will deploy a multi-AZ Elasticsearch and a Kibana inst
     scw-bssd-retain      csi.scaleway.com   Retain          WaitForFirstConsumer   true                   131m
     ```
 
-The use of a storage class with `volumeBindingMode` option set to `WaitForFirstConsumer` is essential to deploy a multi-az application using persistent volumes. This option is necessary to make sure that the volume is created only when the pod is scheduled on a node. This is important because the volume is restricted to a specific AZ and ca not be used or moved to another AZ. So if we create the volume before the pod is scheduled, the CSI driver will not know on which AZ it will be used, so it will create the volume on a random AZ, and at the binding time, if the pod trying to attach the volume is scheduled on another AZ, it will fail to attach the volume and the pod will fail to start. With the `WaitForFirstConsumer` option, the volume is created only when the pod is scheduled on a node, so the volume is created on the AZ of the node where the pod is scheduled. Since pods are spread across the different AZs, the volumes will also be spread across the different AZs.
+It is important to use a storage class with the `volumeBindingMode` option set to `WaitForFirstConsumer` when deploying a multi-AZ application with persistent volumes. 
+  This option ensures that the volume is created only when the pod is scheduled on a node, addressing the specific AZ requirement. Creating the volume before scheduling the pod could result in the volume being placed randomly in an AZ, potentially causing attachment failures if the pod is scheduled in a different AZ. 
+  With the `WaitForFirstConsumer` option, volumes are created on the same AZ as the node where the pod is scheduled, effectively spreading volumes across different AZs as pods are distributed.
 
 1. For this new section, create a new Terraform file `elasticsearch.tf`. Deploying a clustered application commonly implies a more complex deployment logic. For Elasticsearch and Kibana, this logic is managed by ECK, the Elasticsearch operator for Kubernetes. It will be in charge of creating Elasticsearch nodes and configuring them to make a cluster. It will also automatically configure Kibana to connect to the Elasticsearch cluster. So the first thing to do is to deploy the ECK operator using its chart with the Helm provider.
     ```
     resource "helm_release" "eck" {
-    name      = "elastic-operator"
-    namespace = "elastic-system"
+        name      = "elastic-operator"
+        namespace = "elastic-system"
 
-    create_namespace = true
+        create_namespace = true
 
-    repository = "https://helm.elastic.co"
-    chart      = "eck-operator"
+        repository = "https://helm.elastic.co"
+        chart      = "eck-operator"
 
-    depends_on = [helm_release.nginx_ingress]
+        depends_on = [helm_release.nginx_ingress]
     }
     ```
 
 2. Now we create a namespace to deploy your Elasticsearch cluster and Kibana instance. We use the `depends_on` parameter to make sure that the namespace is created after the ECK operator, so the Elasticsearch and Kibana CRDs are available before we try to create them.
     ```
-    resource "kubernetes_namespace" "elasticsearch" {
-    metadata {
-        name = "elasticsearch"
-    }
+        resource "kubernetes_namespace" "elasticsearch" {
+        metadata {
+            name = "elasticsearch"
+        }
 
-    depends_on = [helm_release.eck]
+        depends_on = [helm_release.eck]
     }
     ```
 
-3. To create your multi-AZ Elasticsearch cluster, we will use the "Elasticsearch" CRD made available by the ECK operator. With it, we can now deploy an Elasticsearch cluster via a `nodeSets` with three Elasticsearch nodes, one in each AZ, with a persistent volume bound to each Elasticsearch nodes to persists data. We have to use different parameters to spread the pods across the different AZs. The first one is to set the `storageClassName` to `scw-bssd`, allowing the creation to the correct AZ of the Elasticsearch volumes as explained before. Adding the annotation `eck.k8s.elastic.co/downward-node-labels` we ask the operator to set the label `topology.kubernetes.io/zone` on each created pod, which will be used as an environment variable to set the `node.attr.zone` parameter on each Elasticsearch node. This allows Elasticsearch to allocate primary and replica shards to pods running on different AZs and nodes. Finally, we set the `topologySpreadConstraints` to spread the pods across the different AZs based on the `topology.kubernetes.io/zone` label defined on the nodes by Kapsule. If we have three node pools, one in each AZ, and nodeset `count` of 3, we will have one pod per AZ. So in case of loss of one AZ, we will still have two pods running in the other AZs and the Elasticsearch cluster will still be available, maintaining the quorum of 2 nodes needed to elect a master node.
+3. To create your multi-AZ Elasticsearch cluster, we will use the "Elasticsearch" CRD provided by the ECK operator.
+  * Deploy an Elasticsearch cluster using `nodeSets`, consisting of three Elasticsearch nodes, one in each AZ.  These nodes will have persistent volumes to store data.
+  * Now set the `storageClassName` to `scw-bssd`. This choice ensures that Elasticsearch volumes are correctly created in the respective AZs.
+  * Then add the annotation `eck.k8s.elastic.co/downward-node-labels`. This annotation instructs the operator to assign the label `topology.kubernetes.io/zone` to each pod it creates. This label serves as an environment variable to set the `node.attr.zone` parameter on each Elasticsearch node. This step enables Elasticsearch to allocate primary and replica shards to pods in different AZs and nodes.
+  * Finally, configure `topologySpreadConstraints` to distribute pods across AZs based on the `topology.kubernetes.io/zone` label defined on the nodes by Kapsule. For instance, if there are three node pools, each in a different AZ, and a nodeset `count` of 3, this configuration will ensure one pod per AZ. This redundancy ensures that even if one AZ experiences a failure, two pods will continue to run in the other AZs, maintaining the necessary quorum of 2 nodes needed to elect a master node and keeping the Elasticsearch cluster available.
     ```
     resource "kubectl_manifest" "elasticsearch" {
-    yaml_body = <<YAML
+      yaml_body = <<YAML
     apiVersion: "elasticsearch.k8s.elastic.co/v1"
     kind: "Elasticsearch"
     metadata:
-    name: "multi-az"
-    namespace: "${kubernetes_namespace.elasticsearch.metadata[0].name}"
-    annotations:
+      name: "multi-az"
+      namespace: "${kubernetes_namespace.elasticsearch.metadata[0].name}"
+      annotations:
         "eck.k8s.elastic.co/downward-node-labels": "topology.kubernetes.io/zone"
     spec:
-    version: "8.10.2"
-    nodeSets:
-    - name: "default"
+      version: "8.10.2"
+      nodeSets:
+      - name: "default"
         count: 3
         volumeClaimTemplates:
         - metadata:
             name: "elasticsearch-data"
-        spec:
+          spec:
             accessModes:
             - "ReadWriteOnce"
             resources:
-            requests:
+              requests:
                 storage: "1Gi"
             storageClassName: "scw-bssd"
         config:
-        node.attr.zone: "$${ZONE}"
-        cluster.routing.allocation.awareness.attributes: "k8s_node_name,zone"
-        node.store.allow_mmap: false
+          node.attr.zone: "$${ZONE}"
+          cluster.routing.allocation.awareness.attributes: "k8s_node_name,zone"
+          node.store.allow_mmap: false
         podTemplate:
-        spec:
+          spec:
             containers:
             - name: "elasticsearch"
-            env:
-            - name: "ZONE"
+              env:
+              - name: "ZONE"
                 valueFrom:
-                fieldRef:
+                  fieldRef:
                     fieldPath: "metadata.annotations['topology.kubernetes.io/zone']"
             topologySpreadConstraints:
             - maxSkew: 1
-            topologyKey: "topology.kubernetes.io/zone"
-            whenUnsatisfiable: "DoNotSchedule"
-            labelSelector:
+              topologyKey: "topology.kubernetes.io/zone"
+              whenUnsatisfiable: "DoNotSchedule"
+              labelSelector:
                 matchLabels:
-                "elasticsearch.k8s.elastic.co/cluster-name": "multi-az"
-                "elasticsearch.k8s.elastic.co/statefulset-name": "multi-az-es-default"
+                  "elasticsearch.k8s.elastic.co/cluster-name": "multi-az"
+                  "elasticsearch.k8s.elastic.co/statefulset-name": "multi-az-es-default"
     YAML
     }
     ```
@@ -514,63 +520,62 @@ The use of a storage class with `volumeBindingMode` option set to `WaitForFirstC
 4. Then we can deploy a Kibana instance, which will be automatically configured to connect to the Elasticsearch cluster. We use the same `topologySpreadConstraints` as for Elasticsearch to spread the pods across the different AZs. We also use the `eck.k8s.elastic.co/cluster-name` annotation to tell the operator to connect this Kibana instance to the Elasticsearch cluster named "multi-az" created before.
     ```
     resource "kubectl_manifest" "kibana" {
-    yaml_body = <<YAML
+      yaml_body = <<YAML
     apiVersion: "kibana.k8s.elastic.co/v1"
     kind: "Kibana"
     metadata:
-    name: "kibana"
-    namespace: "${kubernetes_namespace.elasticsearch.metadata[0].name}"
+      name: "kibana"
+      namespace: "${kubernetes_namespace.elasticsearch.metadata[0].name}"
     spec:
-    version: "8.10.2"
-    count: 3
-    elasticsearchRef:
+      version: "8.10.2"
+      count: 3
+      elasticsearchRef:
         name: "multi-az"
-    http:
+      http:
         tls:
-        selfSignedCertificate:
+          selfSignedCertificate:
             disabled: true
     YAML
-    }
     ```
 
 5. To expose Kibana to the outside world, we can create an Ingress resource that matches the host `kibana.scw.your-domain.tld` and redirect traffic to the Kibana service. Once applied it will allow you to access Kibana on https://kibana.scw.your-domain.tld using your browser.
     ```
     resource "kubernetes_ingress_v1" "kibana" {
-    metadata {
+      metadata {
         name      = "kibana"
         namespace = kubernetes_namespace.elasticsearch.metadata[0].name
-    }
-
-    spec {
+      }
+    
+      spec {
         ingress_class_name = "nginx"
         rule {
-        host = "kibana.scw.your-domain.tld"
-        http {
+          host = "kibana.scw.your-domain.tld"
+          http {
             path {
-            backend {
+              backend {
                 service {
-                name = "kibana-kb-http"
-                port {
+                  name = "kibana-kb-http"
+                  port {
                     number = 5601
+                  }
                 }
-                }
+              }
             }
-            }
+          }
         }
-        }
-    }
+      }
     }
     ```
 
-6. Finally, create a DNS CNAME record for `kibana.scw.your-domain.tld`, pointing to the A record of your ingress-nginx controller that deployed in the second section. Since this A record ,`ingress.scw.your-domain.tld`, is configured with health checks, it will automatically resolve to the IPs of the available load balancers, so in case of the loss of one AZ, the DNS record will automatically resolve to the IP of the healthy load balancer and the traffic will be dispatched to the healthy nodes of the other AZs, maintaining the availability of Kibana.
+6. Finally, create a DNS CNAME record for `kibana.scw.your-domain.tld`, pointing to the A record of your ingress-nginx controller deployed in the second section. Since this A record ,`ingress.scw.your-domain.tld`, is configured with health checks, it will automatically resolve to the IPs of the available load balancers, so in case of the loss of one AZ, the DNS record will automatically resolve to the IP of the healthy load balancer and the traffic will be dispatched to the healthy nodes of the other AZs, maintaining the availability of Kibana.
     ```
     resource "scaleway_domain_record" "kibana" {
-    dns_zone        = data.scaleway_domain_zone.multi-az.id
-    name            = "kibana"
-    type            = "CNAME"
-    data            = "ingress.scw.your-domain.tld."
-    ttl             = 300
-    keep_empty_zone = true
+      dns_zone        = data.scaleway_domain_zone.multi-az.id
+      name            = "kibana"
+      type            = "CNAME"
+      data            = "ingress.scw.your-domain.tld."
+      ttl             = 300
+      keep_empty_zone = true
     }
     ```
 
@@ -579,14 +584,14 @@ The use of a storage class with `volumeBindingMode` option set to `WaitForFirstC
     terraform apply
     ```
 
-8. Check now that the pods of your Elasticsearch cluster is spread across the different AZs, that your Elasticsarch cluster is healthy and that Kibana is ready.
+8. Check now that the pods of your Elasticsearch cluster are spread across the different AZs, that your Elasticsarch cluster is healthy and that Kibana is ready.
     ```
     kubectl get pods -n elasticsearch -o wide
 
     NAME                    READY   STATUS    RESTARTS   AGE     IP             NODE                                             NOMINATED NODE   READINESS GATES
-    multi-az-es-default-0   1/1     Running   0          2m40s   100.64.6.118   scw-kapsule-multi-az-pool-fr-par-1-0bdb455d5fc   <none>           <none>
-    multi-az-es-default-1   1/1     Running   0          2m40s   100.64.2.30    scw-kapsule-multi-az-pool-fr-par-2-f5d35098b27   <none>           <none>
-    multi-az-es-default-2   1/1     Running   0          2m40s   100.64.4.74    scw-kapsule-multi-az-pool-fr-par-3-8ffcc335760   <none>           <none>
+    multi-az-es-default-0   1/1     Running   0          2m40s   100.64.6.118   scw-kapsule-multi-az-pool-fr-par-1-61e22198f8c   <none>           <none>
+    multi-az-es-default-1   1/1     Running   0          2m40s   100.64.2.30    scw-kapsule-multi-az-pool-fr-par-2-1bcf90f3683   <none>           <none>
+    multi-az-es-default-2   1/1     Running   0          2m40s   100.64.4.74    scw-kapsule-multi-az-pool-fr-par-3-44b14b7bbbd   <none>           <none>
 
     kubectl get es
 

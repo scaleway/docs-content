@@ -164,11 +164,11 @@ Start by creating a multi-AZ cluster on `fr-par` region, in a dedicated VPC and 
     scw-kapsule-multi-az-pool-fr-par-3-863491657c7   Ready    <none>   80s   v1.28.0
     ```
 
-## Nginx Ingress Controller as a stateless multi-az application
+## Nginx Ingress Controller as a stateless multi-AZ application
 
 A very common pattern is to deploy an Ingress Controller to externally expose applications hosted inside the Kapsule cluster. Configuring a multi-AZ deployment of your Ingress Controller will greatly improve its resilience and scalability.
 
-In this part we will deploy an [ingress-nginx](https://github.com/kubernetes/ingress-nginx) in a multi-AZ, production ready configuration, using the previously created Kapsule cluster. The official Helm for the nginx controller is full-featured, so we will use it through the Terraform Helm provider.
+In this part, we will deploy an [ingress-nginx](https://github.com/kubernetes/ingress-nginx) in a multi-AZ, production ready configuration, using the previously created Kapsule cluster. The official Helm for the nginx controller is full-featured, so we will use it through the Terraform Helm provider.
 
 * Healthy cluster
 <Lightbox src="scaleway-k8s-kapsule-multi-az-2-v2.webp" alt="" size="large" />
@@ -180,7 +180,7 @@ In this part we will deploy an [ingress-nginx](https://github.com/kubernetes/ing
     For this section you need, as a prerequisite, a domain managed on the Scaleway "Domains and DNS" service.
 </Message>
 
-The domain used for this tutorial can be of type `internal` when bought with your Scaleway account, or of the `external` type if you want to re-use a domain bought with an external DNS registrar. If you choose the `external` method, you can follow the [How to add an external domain to DNS](https://www.scaleway.com/en/docs/network/domains-and-dns/how-to/add-external-domain/) documentation. If you don't want to delegate all your domain to your Scaleway account, import your domain but don't change the name servers in your registrar. Then you can create a "DNS zone" in Scaleway on your external domain, and declare two NS records in your registrar matching this zone. For example, with a domain "your-domain.tld" imported in Scaleway, you can create a DNS zone "scw", and delegate this zone in your registrar by adding those two records:
+The domain used for this tutorial can be of type `internal` when bought with your Scaleway account, or of the `external` type if you want to re-use a domain bought with an external DNS registrar. If you choose the `external` method, you can follow the [How to add an external domain to DNS](https://www.scaleway.com/en/docs/network/domains-and-dns/how-to/add-external-domain/) documentation. If you don't want to delegate all your domain to your Scaleway account, import your domain, but do not change the name servers in your registrar. Then you can create a "DNS zone" in Scaleway on your external domain, and declare two NS records in your registrar matching this zone. For example, with a domain "your-domain.tld" imported in Scaleway, you can create a DNS zone "scw", and delegate this zone in your registrar by adding those two records:
     ```
     scw 600 IN NS ns0.dom.scw.cloud.
     scw 600 IN NS ns1.dom.scw.cloud.
@@ -338,7 +338,7 @@ The selector matches the labels set by the Helm chart on the ingress-nginx pods,
     ```
 
 5. Now add the creation of a DNS record to direct the external traffic to the available load balancers. We assume that you have an internal or external domain configured in your account with a `scw` zone, as described in the prerequisites part at the beginning of this section. In the code below, we use `your-domain.tld` as placeholder, so you need to replace it with your domain name. If you want to use a bare-domain, remove the subdomain parameter from the `scaleway_domain_zone` resource.
-In this configuration we use the `http_service` block to check that the `ingress-nginx` service is up and running via each load balancer on the two AZs. We retrieve the IPs of the LoadBalancers via the "EXTERNAL-IP" exposed by the Kubernetes services. The DNS record "ingress" under your domain `scw.your-domain.tld` will resolve to all the IPs of the healthy load balancers, via the "all" strategy. So in case of the loss of one AZ, the DNS record will automatically be updated to resolve only to the IP of the healthy load balancer and the traffic will be dispatched to the healthy nodes of the other AZs.
+In this configuration we use the `http_service` block to check that the `ingress-nginx` service is up and running via each load balancer on the two AZs. We retrieve the IPs of the LoadBalancers via the "EXTERNAL-IP" exposed by the Kubernetes services. The DNS record "ingress" under your domain `scw.your-domain.tld` will resolve to all the IPs of the healthy load balancers, via the "all" strategy. So in case of the loss of one AZ, the DNS record will automatically be updated to resolve only to the IP of the healthy load balancer, and the traffic will be dispatched to the healthy nodes of the other AZs.
     ```
     data "scaleway_domain_zone" "multi_az" {
         domain    = "your-domain.tld"
@@ -433,7 +433,7 @@ In this last section, you will deploy a multi-AZ Elasticsearch and a Kibana inst
     ```
 
 It is important to use a storage class with the `volumeBindingMode` option set to `WaitForFirstConsumer` when deploying a multi-AZ application with persistent volumes. 
-  This option ensures that the volume is created only when the pod is scheduled on a node, addressing the specific AZ requirement. Creating the volume before scheduling the pod could result in the volume being placed randomly in an AZ, potentially causing attachment failures if the pod is scheduled in a different AZ. 
+  This option ensures the volume is created only when the pod is scheduled on a node, addressing the specific AZ requirement. Creating the volume before scheduling the pod could result in the volume being placed randomly in an AZ, potentially causing attachment failures if the pod is scheduled in a different AZ. 
   With the `WaitForFirstConsumer` option, volumes are created on the same AZ as the node where the pod is scheduled, effectively spreading volumes across different AZs as pods are distributed.
 
 1. For this new section, create a new Terraform file `elasticsearch.tf`. Deploying a clustered application commonly implies a more complex deployment logic. For Elasticsearch and Kibana, this logic is managed by ECK, the Elasticsearch operator for Kubernetes. It will be in charge of creating Elasticsearch nodes and configuring them to make a cluster. It will also automatically configure Kibana to connect to the Elasticsearch cluster. So the first thing to do is to deploy the ECK operator using its chart with the Helm provider.
@@ -516,7 +516,7 @@ It is important to use a storage class with the `volumeBindingMode` option set t
     YAML
     }
     ```
-4. Then we can deploy a Kibana instance, which will be automatically configured to connect to the Elasticsearch cluster. We use the same `topologySpreadConstraints` as for Elasticsearch to spread the pods across the different AZs. We also use the `eck.k8s.elastic.co/cluster-name` annotation to tell the operator to connect this Kibana instance to the Elasticsearch cluster named "multi-az" created before.
+4. Then, we can deploy a Kibana instance, which will be automatically configured to connect to the Elasticsearch cluster. We use the same `topologySpreadConstraints` as for Elasticsearch to spread the pods across the different AZs. We also use the `eck.k8s.elastic.co/cluster-name` annotation to tell the operator to connect this Kibana instance to the Elasticsearch cluster named "multi-az" created before.
     ```
     resource "kubectl_manifest" "kibana" {
       yaml_body = <<YAML
@@ -538,7 +538,7 @@ It is important to use a storage class with the `volumeBindingMode` option set t
     }
     ```
 
-5. To expose Kibana to the outside world, we can create an Ingress resource that matches the host `kibana.scw.your-domain.tld` and redirect traffic to the Kibana service. Once applied it will allow you to access Kibana on https://kibana.scw.your-domain.tld using your browser.
+5. To expose Kibana to the outside world, we can create an Ingress resource that matches the host `kibana.scw.your-domain.tld` and redirect traffic to the Kibana service. Once applied, it will allow you to access Kibana on https://kibana.scw.your-domain.tld using your browser.
     ```
     resource "kubernetes_ingress_v1" "kibana" {
       metadata {

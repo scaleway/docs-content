@@ -1,44 +1,50 @@
 ---
 meta:
-  title: Understanding bucket policies
-  description: This page explains how to use S3 bucket policies.
+  title: Bucket policies overview
+  description: This page explains what are S3 bucket policies and how they work.
 content:
-  h1: Understanding bucket policies
-  paragraph: This page explains how to use S3 bucket policies.
+  h1: Bucket policies overview
+  paragraph: This page explains what are S3 bucket policies and how they work.
 tags: object-storage bucket bucket-policy s3
 dates:
-  validation: 2023-06-13
+  validation: 2023-10-18
   posted: 2021-02-17
 categories:
   - storage
   - object-storage
 ---
 
-<Macro id="iam-requirements" />
-
-## Bucket policies and IAM overview
-
-### IAM
-
-[Identity and Access Management (IAM)](/identity-and-access-management/iam/concepts/#iam) brings a set of features to your Scaleway account, allowing you to control and manage access to your resources. For users of Scaleway Object Storage, this means that besides configuring access via bucket policies, you can use IAM policies to configure permissions.
-
-An [IAM policy](/identity-and-access-management/iam/concepts/#policy) is used to define the permissions of users, groups and applications in a given Organization. A policy is composed of a [principal](/identity-and-access-management/iam/concepts/#principal) (the user, group or application to which it applies) and one or more IAM rules (which describe the permission sets the principal should have, and the scope of those permission sets).
-
-### Bucket policies
+## What are bucket policies
 
 <Macro id="storage-bucket-policy" />
 
-The different component strings of a bucket policy allow you to [configure fine-grained permissions](/storage/object/api-cli/combining-iam-and-object-storage/).
+The different component strings of a bucket policy allow you to [configure fine-grained permissions](/storage/object/api-cli/combining-iam-and-object-storage/) when combined with [Identity and Access Management (IAM)](/identity-and-access-management/iam/concepts/#iam).
 
 Bucket policies behave like objects: they can be uploaded into buckets. Once you upload, or "put", a bucket policy into a bucket, it takes immediate effect and will from then on define who can access and perform actions on the bucket.
 
-<Message type="important">
-  Each bucket can have only one bucket policy.
+<Macro id="important-bucket-policy" />
+
+## Bucket policies versions
+
+| Version | ID                | Lifecycle status  |
+|:-------:|:-----------------:|:-----------------:|
+| V3      | `2023-06-07-alpha`| Current           |
+| V2      | `2023-04-17`      | Extended support  |
+| V1      | `2012-10-17`      | Deprecated        |
+
+- The `2012-10-17` version is deprecated and its usage is strongly discouraged.
+
+- If you use the `2023-04-17` version, everything that is not explicitly **allowed** by the bucket policy is **denied**, regardless of what is defined in the IAM policy.
+
+- If you use the `2023-06-07-alpha` version, everything that is not explicitly **denied** by the bucket policy is **allowed**.
+
+<Message type="note">
+Refer to the [version migration procedure](/storage/object/api-cli/migrating-bucket-policy-version/) for more information on how to update the version of a bucket policy.
 </Message>
 
 ## Bucket policies description
 
-Bucket policies use a JSON-based access policy language and are composed of strings, such as: `Version`, `Id`, `Statement`, `Sid`, `Principal`, `Action`, `Effect`, `Resource` and `Condition`.
+Bucket policies use a JSON-based access policy language, and are composed of strings, such as: `Version`, `Id`, `Statement`, `Sid`, `Principal`, `NotPrincipal`, `Action`, `NotAction`, `Effect`, `Resource` and `Condition`.
 
 ### Version
 
@@ -52,31 +58,27 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 : const
 
 **Value**
-: "2023-04-17"
+: `2023-06-07-alpha`
 
 **Sample**:
 
 ```json
 {
-    "Version": "2023-04-17",
+    "Version": "2023-06-07-alpha",
     "Id": "MyBucketPolicy",
     "Statement": [
         {
-            "Sid": "Delegate access",
-            "Effect":"Allow",
+            "Sid": "Deny access",
+            "Effect":"Deny",
             "Principal": {
                 "SCW": "user_id:<USER_ID>"
             },
-            "Action": "s3:ListBucket",
+            "Action": "s3:*",
             "Resource": "<BUCKET_NAME>"
         }
     ]
 }
 ```
-
-<Message type="note">
-    Refer to the [documentation on bucket policy versions](/storage/object/api-cli/combining-iam-and-object-storage/#note-on-bucket-policy-versions) for more information.
-</Message>
 
 ### Id
 
@@ -93,18 +95,19 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 
 ```json
 {
-    "Version": "2023-04-17",
+    "Version": "2023-06-07-alpha",
     "Id": "MyBucketPolicy",
     "Statement": [
         {
-            "Sid": "Delegate access",
-            "Effect":"Allow",
+            "Sid": "Deny Delete actions",
+            "Effect":"Deny",
             "Principal":{
                 "SCW":"application_id:<APPLICATION_ID>"
             },
             "Action":[
-                "s3:ListBucket",
-                "s3:GetObject"
+                "s3:DeleteBucket",
+                "s3:DeleteObject",
+                "s3:DeleteObjects"
             ],
             "Resource":[
                 "<BUCKET_NAME>",
@@ -118,7 +121,7 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 ### Statement
 
 **Description**
-: `Statement` defines the rules that should be respected by our policy engine.
+: `Statement` defines the rules that should be respected by our policy engine. A policy can have several statements.
 
 **Children**
 : `Sid`, `Principal`, `Action`, `Effect` and `Resource`
@@ -131,56 +134,34 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 
 **Samples**
 
+
 ```json
 {
-    "Version": "2023-04-17",
+    "Version": "2023-06-07-alpha",
     "Id":"MyBucketPolicy",
     "Statement": [
         {
-            "Sid": "Delegate access",
-            "Effect":"Allow",
-            "Principal":{
+            "Sid": "Deny access to all except user",
+            "Effect":"Deny",
+            "NotPrincipal":{
                 "SCW":"user_id:<USER_ID>"
             },
-            "Action":[
-                "s3:ListBucket",
-                "s3:GetObject"
-            ],
-            "Resource":[
-                "<BUCKET_NAME>",
-                "<BUCKET_NAME>/*"
-            ]
-        }
-    ]
-}
-```
-```json
-{
-    "Version": "2023-04-17",
-    "Id":"MyBucketPolicy",
-    "Statement": [
-        {
-            "Sid": "Delegate access to user",
-            "Effect":"Allow",
-            "Principal":{
-                "SCW":"user_id:<USER_ID>"
-            },
-            "Action":[
-                "s3:ListBucket",
-                "s3:GetObject"
-            ],
+            "Action":"*",
             "Resource":[
                 "<BUCKET_NAME>",
                 "<BUCKET_NAME>/*"
             ]
         },
         {
-            "Sid": "Delegate PUT to application",
-            "Effect":"Allow",
+            "Sid": "Deny all actions except Get and List",
+            "Effect":"Deny",
             "Principal":{
-                "SCW":"application_id:<APPLICATION_ID>"
+                "SCW":"user_id:<USER_ID>"
             },
-            "Action":"s3:PutObject",
+            "NotAction":[
+                "s3:GetObject",
+                "s3:ListBucket"
+            ],
             "Resource":"<BUCKET_NAME>/*"
         }
     ]
@@ -205,16 +186,16 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 
 ```json
 {
-    "Version": "2023-04-17",
+    "Version": "2023-06-07-alpha",
     "Id":"MyBucketPolicy",
     "Statement": [
         {
-            "Sid": "Grant list to user",
-            "Effect":"Allow",
+            "Sid": "Deny all actions",
+            "Effect":"Deny",
             "Principal":{
                 "SCW":"user_id:<USER_ID>"
             },
-            "Action":"s3:ListBucket",
+            "Action":"*",
             "Resource":"<BUCKET_NAME>"
         }
     ]
@@ -224,7 +205,7 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 ### Principal
 
 **Description**
-: Provides a way to specify principals, eg. targets of the bucket policies, which can be a [user](/identity-and-access-management/iam/concepts#user) or an [application](/identity-and-access-management/iam/concepts#application). You must use the `user_id` and/or `application_id`, to target these. Note that you can use `*` to grant access to "everyone". Before the [arrival of IAM](/identity-and-access-management/iam/reference-content/migration/) principals in a Scaleway bucket policy were defined by the `project_id`. Now they can either be specified by the `user_id` or the `application_id`.
+: The [user](/identity-and-access-management/iam/concepts#user) or [application](/identity-and-access-management/iam/concepts#application) targeted by the bucket policy.
 
 **Required**
 : Yes
@@ -232,64 +213,18 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 **Parent**
 : `Statement`
 
-<Message type="important">
-  If you want to use bucket policies to grant access to Object Storage resources, you must always specify to which principal (user or application) you are attributing the policy, even if they are the Owner of the Organization. If the Owner of the Organization does not have access rights to resources via a policy, they still have inherent rights to create and edit bucket policies and can add themselves as principals to a policy anytime.
-</Message>
+**Supported values**
+: : `user_id` / `application_id` / `*`
 
 **Sample**
-
 ```json
 {
-    "Version": "2023-04-17",
+    "Version": "2023-06-07-alpha",
     "Id":"MyBucketPolicy",
     "Statement": [
         {
-            "Sid": "Grant List and GET to everyone",
-            "Effect":"Allow",
-            "Principal":"*",
-            "Action":[
-                "s3:ListBucket",
-                "s3:GetObject"
-            ],
-            "Resource":[
-                "<BUCKET_NAME>",
-                "<BUCKET_NAME>/*"
-            ]
-        }
-    ]
-}
-```
-```json
-{
-    "Version": "2023-04-17",
-    "Id":"MyBucketPolicy",
-    "Statement": [
-        {
-            "Sid": "Grant List and GET to user",
-            "Effect":"Allow",
-            "Principal":{
-                "SCW":"user_id:<USER_ID>"
-            },
-            "Action":[
-                "s3:ListBucket",
-                "s3:GetObject"
-            ],
-            "Resource":[
-                "<BUCKET_NAME>",
-                "<BUCKET_NAME>/*"
-            ]
-        }
-    ]
-}
-```
-```json
-{
-    "Version": "2023-04-17",
-    "Id":"MyBucketPolicy",
-    "Statement": [
-        {
-            "Sid": "Grant List and GET to user and application",
-            "Effect":"Allow",
+            "Sid": "Prevent user and application to DELETE",
+            "Effect":"Deny",
             "Principal":{
                 "SCW":[
                     "user_id:<USER_ID>",
@@ -297,8 +232,51 @@ Bucket policies use a JSON-based access policy language and are composed of stri
                 ]
             },
             "Action":[
-                "s3:ListBucket",
-                "s3:GetObject"
+                "s3:DeleteBucket",
+                "s3:DeleteObject",
+                "s3:DeleteObjects"
+            ],
+            "Resource":[
+                "<BUCKET_NAME>",
+                "<BUCKET_NAME>/*"
+            ]
+        }
+    ]
+}
+```
+
+### NotPrincipal
+
+**Description**
+: Everybody **except** the [user](/identity-and-access-management/iam/concepts#user) or [application](/identity-and-access-management/iam/concepts#application) targeted by the bucket policy.
+
+**Required**
+: Yes
+
+**Parent**
+: `Statement`
+
+**Supported values**
+: `user_id` / `application_id` / `*`
+
+**Sample**
+
+```json
+{
+    "Version": "2023-06-07-alpha",
+    "Id":"MyBucketPolicy",
+    "Statement": [
+        {
+            "Sid": "Deny access to all except user and application",
+            "Effect":"Deny",
+            "NotPrincipal":{
+                "SCW":[
+                    "user_id:<USER_ID>",
+                    "application_id:<APPLICATION_ID>"    
+                ]
+            },
+            "Action":[
+                "s3:*"
             ],
             "Resource":[
                 "<BUCKET_NAME>",
@@ -315,7 +293,7 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 : Consists of S3 namespace, a colon, and the name of an action. Action names can include wildcards represented by `*`.
 
 **Required**
-: Yes
+: Yes (either `Action` or `NotAction`)
 
 **Parent**
 : `Statement`
@@ -324,19 +302,20 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 
 ```json
 {
-    "Version": "2023-04-17",
+    "Version": "2023-06-07-alpha",
     "Id":"MyBucketPolicy",
     "Statement": [
         {
-            "Sid": "Grant List and GET to user and application",
-            "Effect":"Allow",
+            "Sid": "Deny Delete to user",
+            "Effect":"Deny",
             "Principal":{
-                "SCW":[
-                    "user_id:<USER_ID>",
-                    "application_id:<APPLICATION_ID>"
-                ]
+                "SCW":"user_id:<USER_ID>"
             },
-            "Action":"*",
+            "Action":[
+                "s3:DeleteBucket",
+                "s3:DeleteObject",
+                "s3:DeleteObjects",
+            ],
             "Resource":[
                 "<BUCKET_NAME>",
                 "<BUCKET_NAME>/*"
@@ -374,39 +353,36 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 - `s3:PutObjectTagging`
 - `s3:PutObjectVersionTagging`
 
-
-### Effect
+### NotAction
 
 **Description**
-: Uses **Allow** or **Deny** to indicate whether the policy allows or denies access. All actions that are not explicitly allowed, are denied.
+: The `NotAction` element is the opposite `Action`. It corresponds to every action **EXCEPT** the ones listed.
 
 **Required**
-: Yes
+: Yes (either `Action` or `NotAction`)
 
 **Parent**
 : `Statement`
 
 **Sample**
 
-- Allow
-
 ```json
 {
-    "Version": "2023-04-17",
+    "Version": "2023-06-07-alpha",
     "Id":"MyBucketPolicy",
     "Statement": [
         {
             "Sid": "Grant List and GET to user and application",
-            "Effect":"Allow",
+            "Effect":"Deny",
             "Principal":{
                 "SCW":[
                     "user_id:<USER_ID>",
                     "application_id:<APPLICATION_ID>"
                 ]
             },
-            "Action":[
-                "s3:ListBucket",
-                "s3:GetObject"
+            "NotAction":[
+                "GetObject",
+                "ListBucket"
             ],
             "Resource":[
                 "<BUCKET_NAME>",
@@ -416,18 +392,37 @@ Bucket policies use a JSON-based access policy language and are composed of stri
     ]
 }
 ```
-- Deny
+
+### Effect
+
+**Description**
+: Uses **Deny** to indicate that the policy denies access. All actions that are not explicitly denied are allowed.
+
+**Required**
+: Yes
+
+**Parent**
+: `Statement`
+
+**Sample**
 ```json
 {
-  "Version": "2023-04-17",
+  "Version": "2023-06-07-alpha",
   "Id": "MyBucketPolicy",
   "Statement": [
     {
-      "Sid": "Deny DELETE to everyone",
-      "Effect": "Deny",
-      "Principal": "*",
-      "Action": "s3:DeleteObject",
-      "Resource": "*"
+        "Sid": "Deny DELETE to everyone",
+        "Effect": "Deny",
+        "Principal": "*",
+        "Action":[
+            "s3:DeleteBucket",
+            "s3:DeleteObject",
+            "s3:DeleteObjects",
+        ],
+        "Resource":[
+            "<BUCKET_NAME>",
+            "<BUCKET_NAME>/*"
+        ]
     }
   ]
 }
@@ -448,23 +443,20 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 
 * `"<BUCKET_NAME>"` - Grants access to the bucket, but not to the objects inside. If the `s3:ListBucket` action is applied, this resource specification is required.
 * `"<BUCKET_NAME>/*"` - Grants access to all objects inside a bucket, but not to the bucket itself. If the `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` actions are applied, this resource specification is required.
-* `"<BUCKET_NAME>/<PREFIX>/*"` - Grants access only to objects with the specified prefix inside a bucket, but not to the bucket itself. For example, if you apply a bucket policy that specifies `"my_files/movie/*"` under **Resource**, you would grant access to all objects with the `movie/` prefix, but not to other objects in `my_files/` bucket. If the `s3:PutObject`, `s3:GetObject` and `s3:DeleteObject` actions are applied, this resource specification is required.
+* `"<BUCKET_NAME>/<PREFIX>/*"` - Grants access only to objects with the specified prefix inside a bucket, but not to the bucket itself.
 
 ```json
 {
-    "Version": "2023-04-17",
+    "Version": "2023-06-07-alpha",
     "Id":"MyBucketPolicy",
     "Statement": [
         {
-            "Sid": "Grant List and GET to user and application",
-            "Effect":"Allow",
+            "Sid": "Grant List and GET to application",
+            "Effect":"Deny",
             "Principal":{
-                "SCW":[
-                    "user_id:<USER_ID>",
-                    "application_id:<APPLICATION_ID>"
-                ]
+                "SCW":"application_id:<APPLICATION_ID>"
             },
-            "Action":[
+            "NotAction":[
                 "s3:ListBucket",
                 "s3:GetObject"
             ],
@@ -473,29 +465,22 @@ Bucket policies use a JSON-based access policy language and are composed of stri
                 "<BUCKET_NAME>/*"
             ]
         }
-    ]
-}
-```
-```json
-{
-    "Version": "2023-04-17",
-    "Id":"MyBucketPolicy",
+    ],
     "Statement": [
         {
-            "Sid": "Grant List and GET to user and application",
-            "Effect":"Allow",
+            "Sid": "Grant Put and Delete to user in a specific folder",
+            "Effect":"Deny",
             "Principal":{
                 "SCW":[
                     "user_id:<USER_ID>",
                     "application_id:<APPLICATION_ID>"
                 ]
             },
-            "Action":[
-                "s3:ListBucket",
-                "s3:GetObject"
+            "NotAction":[
+                "s3:PutObject",
+                "s3:DeleteObject"
             ],
             "Resource":[
-                "<BUCKET_NAME>",
                 "<BUCKET_NAME>/photos/*"
             ]
         }
@@ -514,7 +499,7 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 : `Statement`
 
 **Condition Keys**
-: - `aws:SourceIp`, `aws:Referer`, `aws:CurrentTime`, `aws:EpochTime`
+: `aws:SourceIp`, `aws:Referer`, `aws:CurrentTime`, `aws:EpochTime`
 
 **Examples**
 
@@ -522,22 +507,28 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 
 ```json
 {
-  "Version": "2023-04-17",
-  "Id": "MyBucketPolicy",
-  "Statement": [
-    {
-      "Sid": "Grant List and GET from my Instances",
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": ["s3:ListBucket", "s3:GetObject"],
-      "Resource": ["<BUCKET_NAME>", "<BUCKET_NAME>/*"],
-      "Condition": {
-        "IpAddress": {
-          "aws:SourceIp": "192.0.2.0/24"
+    "Version": "2023-06-07-alpha",
+    "Id": "MyBucketPolicy",
+    "Statement": [
+        {
+        "Sid": "Grant List and GET from my Instances",
+        "Effect": "Deny",
+        "Principal": "*",
+        "NotAction":[
+            "s3:ListBucket", 
+            "s3:GetObject"
+        ],
+        "Resource":[
+            "<BUCKET_NAME>",
+            "<BUCKET_NAME>/*"
+        ],
+        "Condition": {
+            "IpAddress":{
+                "aws:SourceIp": "192.0.2.0/24"
+            }
         }
-      }
-    }
-  ]
+        }
+    ]
 }
 ```
 
@@ -545,49 +536,57 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 
 ```json
 {
-  "Version": "2023-04-17",
-  "Id": "MyBucketPolicy",
-  "Statement": [
-    {
-      "Sid": "Grant List and GET to user for 10 years",
-      "Effect": "Allow",
-      "Principal": {
-        "SCW": "user_id:<USER_ID>"
-      },
-      "Action": ["s3:ListBucket", "s3:GetObject"],
-      "Resource": ["<BUCKET_NAME>", "<BUCKET_NAME>/photos/*"],
-      "Condition": {
-        "DateGreaterThan": {
-          "aws:CurrentTime": "2020-01-01T00:00:00Z"
-        },
-        "DateLessThan": {
-          "aws:CurrentTime": "2030-01-01T00:00:00Z"
+    "Version": "2023-06-07-alpha",
+    "Id": "MyBucketPolicy",
+    "Statement": [
+        {
+            "Sid": "Grant List and GET to user for 10 years",
+            "Effect": "Deny",
+            "Principal": {
+                "SCW": "user_id:<USER_ID>"
+            },
+            "NotAction":[
+                "s3:ListBucket",
+                "s3:GetObject"
+            ],
+            "Resource":[
+                "<BUCKET_NAME>",
+                "<BUCKET_NAME>/photos/*"
+            ],
+            "Condition":{
+                "DateGreaterThan": {
+                    "aws:CurrentTime": "2020-01-01T00:00:00Z"
+                },
+                "DateLessThan": {
+                    "aws:CurrentTime": "2030-01-01T00:00:00Z"
+                }
+            }
         }
-      }
-    }
-  ]
+    ]
 }
 ```
 * You can also allow access according to the `HTTP` referer.
 
 ```json
 {
-  "Version": "2023-04-17",
-  "Id": "MyBucketPolicy",
-  "Statement": [
-    {
-      "Sid": "Allow access to assets from my website",
-      "Effect": "Allow",
-      "Principal": "*",
-      "Action": "s3:GetObject",
-      "Resource": ["<BUCKET_NAME>/assets/*"],
-      "Condition": {
-        "StringLike": {
-          "aws:Referer": "https://console.scaleway.com"
+    "Version": "2023-06-07-alpha",
+    "Id": "MyBucketPolicy",
+    "Statement": [
+        {
+            "Sid": "Allow access to assets from my website",
+            "Effect": "Deny",
+            "Principal": "*",
+            "NotAction": "s3:GetObject",
+            "Resource":[
+                "<BUCKET_NAME>/assets/*"
+            ],
+            "Condition": {
+                "StringLike": {
+                    "aws:Referer": "https://console.scaleway.com"
+                }
+            }
         }
-      }
-    }
-  ]
+    ]
 }
 ```
 #### Supported conditions
@@ -607,5 +606,5 @@ Bucket policies use a JSON-based access policy language and are composed of stri
 
 <Navigation title="See Also">
   <PreviousButton to="/storage/object/api-cli/setting-cors-rules/">Setting CORS rules</PreviousButton>
-  <NextButton to="/storage/object/api-cli/using-bucket-policies/">Using bucket policies</NextButton>
+  <NextButton to="/storage/object/api-cli/create-bucket-policy/">Creating and applying bucket policies</NextButton>
 </Navigation>

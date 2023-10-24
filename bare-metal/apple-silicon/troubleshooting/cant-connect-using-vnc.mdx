@@ -7,7 +7,7 @@ content:
   paragraph: This page suggests solutions for when you cannot establish a remote VNC connection to your Mac mini M1
 tags: remote vnc connection apple-silicon m1 error 
 dates:
-  validation: 2023-06-16
+  validation: 2023-10-24
   posted: 2023-04-07
 categories:
   - bare-metal
@@ -20,37 +20,68 @@ categories:
   - You have [created a Mac mini M1](/bare-metal/apple-silicon/how-to/create-mac-mini-m1/)
 </Message>
 
-VNC (Virtual Network Computing) is a desktop-sharing system that allows users to remotely access and control a computer's desktop from another device. Scaleway users renting a Mac mini M1 can use VNC by simply enabling the "Screen Sharing" or "Remote Management" configuration on their Mac mini's system preferences. Using the Mac mini's IP address or hostname, a user can then connect to the M1 from another device through a VNC client (such as RealVNC, TightVNC, etc.).
 
-However, some users that have recently upgraded their macOS are currently encountering a bug preventing them from effectively using the screen sharing feature. Error messages include `Connection failed to <M1s_address>` and `Make sure Screen Sharing or Remote Management (in the Sharing section of System Preferences) is enabled on the remote computer`.
+VNC (Virtual Network Computing) is a system that lets users remotely access and control another computer's desktop. For those using Scaleway's rented Mac mini M1, VNC can be activated by turning on either the "Screen Sharing" or "Remote Management" options in the system preferences. Once set up, you can connect to the Mac mini M1 from another device using its IP address or hostname through VNC clients like RealVNC, TightVNC, and others.
+
+However, some users who have updated their macOS have faced issues with this feature, receiving error messages like `Connection failed to <M1s_address>` and `Make sure Screen Sharing or Remote Management is enabled on the remote computer` under the Sharing section of System Preferences. 
+
+Upon further analysis, we found a design flaw in macOS, where brute-force attacks performed by malicious actors could result in the service halting. [Find out more about this issue on our blog](https://www.scaleway.com/en/blog/m1-how-a-design-flaw-slowed-down-apples-vnc/).
+
+As a precaution, every Mac mini comes with a preinstalled `fail2ban` service (a tool that parses logs, notices authentication failures, and configures the firewall. Refer to our [fail2ban tutorial](/tutorials/protect-server-fail2ban/) for further information). For added security and to ensure VNC service reliability, you can restrict access to macOS Screen Sharing to certain static IPs. This can be done by tweaking your network settings and using macOS's inbuilt firewall, `pf` (Packet Filter), to manage incoming connections.
 
 <Message type="note">
   This is a known issue that multiple Apple users have reported over time. Unfortunately, Apple's support team has not effectively addressed it yet.
 </Message>
 
-If you are experiencing this issue, you can try the following solutions:
+## Enable and configure pf (Packet Filter)
 
-## Connect to the Mac mini M1 via SSH and restart Screen Sharing
+You have to create a custom rule set for `pf` to only allow incoming Screen Sharing connections from your static IP.
+
+<Message type="tip">
+  We strongly advise using SSH for this procedure to prevent any risk of losing your connection to your machine in the event of a malicious configuration.
+</Message>
+
+1. Run the following command to connect to your Mac mini M1:
+    ```
+    ssh m1@<your_mac_mini_m1_ip>
+    ```
+2. Backup the original `pf.conf` file by copying it to a different location.
+   ```
+   sudo cp /etc/pf.conf /etc/pf.conf.backup
+   ```
+3. Edit the `pf.conf` file with a command like `sudo nano /etc/pf.conf`.
+4. Add the following lines to write rules that block all incoming connections on the Screen Sharing port, except for the desired IP.
+    ```
+    [...]
+    ## Add these lines to block connections to port 5900 except from your static IP
+    block in on en0 proto tcp from any to any port 5900
+    pass in on en0 proto tcp from <static IP> to any port 5900
+    ```
+    In the example above, `en0` should be replaced with the network interface you are using (you may discover the name of your network interface using the `ifconfig` command), and `<static IP>` should be the static IP address you are allowing. Port 5900 is typically used for VNC/screen sharing services.
+5. Save and close the file (if you are using `nano`: type **Y** to confirm your changes, **Enter** to save, and **Control-X** to close).
+6. Run `sudo pfctl -f /etc/pf.conf` to load the new `pf` configuration.
+7. Initiate a Screen Sharing session from the approved IP address and ensure it connects. Also, test from a different IP address to confirm it does not allow the connection.
+  <Message type="note">
+    - Any changes in your network configuration or the external static IP might require updates to this configuration. Keep this in mind, and adjust as necessary.
+    - Remember that this setup can cause issues if the static IP changes for some reason. You can access your Mac mini using SSH to update the configuration.
+  </Message>
+
+## Restarting screen sharing via SSH
+
+If your Mac's screen-sharing service stops responding, you can restart it from SSH. 
 
 1. Run the following command to connect to your Mac mini M1:
     ```
     ssh m1@<your_mac_mini_m1_ip>
     ```
 
-2. Run the following command to forcefully terminate Screen Sharing:
+2. Execute the command below to force termination of the Screen Sharing daemon:
     ```
-    sudo killall screensharing
+    sudo killall screensharingd
     ```
+    The `screensharingd` service will automatically restart upon the next incoming connection.
 
-3. Run the following command to load the `screensharing.plist` file responsible for Screen Sharing: 
-    ```
-    sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.screensharing.plist
-    ```
-
-If you need to restart Screen Sharing, unload the `screensharing.plist` file before loading it again. You can do so by running the following command:
-    ```
-    sudo launchctl unload /System/Library/LaunchDaemons/com.apple.screensharing.plist
-    ```
+## Troubleshooting connection issues
 
 ### Verify your latest upgrade has not reset your system preferences
 
@@ -58,8 +89,8 @@ Even though it is uncommon for system preferences to be reset during an upgrade,
 
 ### Verify whether Screen sharing or Remote management is enabled
 
-Make sure that either "Screen sharing" or "Remote management" are enabled on your Mac Mini M1. Go to **System Settings > General**, then verify that **Sharing** is ticked. 
+Make sure that either "Screen sharing" or "Remote management" are enabled on your Mac mini M1. Go to **System Settings > General**, then verify that **Sharing** is ticked. 
 
 ### Verify that incoming VNC connections are not blocked by the firewall
 
-Make sure that your Mac Mini M1 firewall allows incoming connections for your VNC client. Go to **System Settings** and then, depending on the OS version, **Firewall** will be located in either **Network** or **Security & Privacy**.
+Make sure that your Mac mini M1 firewall allows incoming connections for your VNC client. Go to **System Settings** and then, depending on the OS version, **Firewall** will be located in either **Network** or **Security & Privacy**.

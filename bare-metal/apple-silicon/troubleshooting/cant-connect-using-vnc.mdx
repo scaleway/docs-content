@@ -7,7 +7,7 @@ content:
   paragraph: This page suggests solutions for when you cannot establish a remote VNC connection to your Mac mini M1
 tags: remote vnc connection apple-silicon m1 error 
 dates:
-  validation: 2023-06-16
+  validation: 2023-10-24
   posted: 2023-04-07
 categories:
   - bare-metal
@@ -24,6 +24,47 @@ VNC (Virtual Network Computing) is a desktop-sharing system that allows users to
 
 However, some users that have recently upgraded their macOS are currently encountering a bug preventing them from effectively using the screen sharing feature. Error messages include `Connection failed to <M1s_address>` and `Make sure Screen Sharing or Remote Management (in the Sharing section of System Preferences) is enabled on the remote computer`.
 
+A design flaw in the VNC service may lead to malicious intends to brute-force into the service. [Read more about the issue in our blog](https://www.scaleway.com/en/blog/m1-how-a-design-flaw-slowed-down-apples-vnc/)
+
+To avoid the the issue, restricting access to the macOS Screen Sharing service to a specific static IP can be done by configuring your network and using the built-in macOS firewall, `pf` (Packet Filter), to control inbound connections.
+
+## Enable and Configure `pf` (Packet Filter)
+
+macOS comes with a built-in firewall called `pf`. You'll need to use this to control inbound connections.
+
+### Turn on the firewall
+
+If you haven't already, enable the macOS firewall by going to **System Settings** -> **Network** -> **Firewall**. Toggle the switch to **On** if you haven't yet.
+
+### Configure the firewall
+You'll have to create a custom rule set for `pf` to only allow incoming Screen Sharing connections from your static IP.
+
+1. Open a **Terminal**.
+2. Backup the original `pf.conf` file by copying it to a different location. You might use a command like: `sudo cp /etc/pf.conf /etc/pf.conf.backup`.
+3. Edit the `pf.conf` file with a command like `sudo nano /etc/pf.conf`.
+4. You'll need to write rules that block all incoming connections on the screen sharing ports except for the desired IP.
+    ```
+    scrub-anchor "com.apple/*"
+    nat-anchor "com.apple/*"
+    rdr-anchor "com.apple/*"
+    dummynet-anchor "com.apple/*"
+    anchor "com.apple/*"
+    load anchor "com.apple" from "/etc/pf.anchors/com.apple"
+    block drop in proto { tcp, udp } from <fail2ban> to any
+    ## Add these lines
+    block in all
+    pass in on en0 proto tcp from <static IP> to any port 5900
+    ```
+    In the example above, `en0` should be replaced with the network interface you're using, and `<static IP>` should be the static IP address you are allowing. Port 5900 is typically used for VNC/screen sharing services.
+5. Save and close the file (in `nano`, it's **Control-X** to close, **Y** to confirm changes, and **Enter** to save).
+6. Run `sudo pfctl -e` to enable `pf`. You might need to restart your computer for changes to take effect.
+7. Try to initiate a Screen Sharing session from the approved IP address and ensure it connects. Also, test from a different IP address to confirm it does not allow the connection.
+  <Message type="note">
+    - Any changes in your network configuration or the external static IP might require updates to this configuration. Keep this in mind, and adjust as necessary.
+    - Remember that this setup can cause issues if the static IP changes for some reason. You can access your m
+  </Message>
+
+---- old----
 <Message type="note">
   This is a known issue that multiple Apple users have reported over time. Unfortunately, Apple's support team has not effectively addressed it yet.
 </Message>

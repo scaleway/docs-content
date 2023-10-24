@@ -30,14 +30,14 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 3. Create your branch. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
 
-  - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors). If you are not a Scaleway staff member, please use `ext`.
+    - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors). If you are not a Scaleway staff member, please use `ext`.
 
-  - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
+    - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
 
-  - `product`: the name of the product that corresponds to the documentation page you will edit.
+    - `product`: the name of the product that corresponds to the documentation page you will edit.
 
-  :information_source: Example:
-    in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
+    :information_source: Example:
+      in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
 
 4. Make your edits to the documentation. Refer to the [writing guidelines](#writing-guidelines) below to ensure your changes comply with our style guide.
 

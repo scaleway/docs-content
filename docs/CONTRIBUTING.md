@@ -21,7 +21,7 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 ### Contribution procedure
 
-:warning: **Important**
+:warning: **Important**  
   - All rules below concern this repository.
   - Any PRs which do not comply with the rules below will be rejected.
 
@@ -37,7 +37,7 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
     - `product`: the name of the product that corresponds to the documentation page you will edit.
 
-    :information_source: Example:  
+    :information_source: **Example:**  
       in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
 
 4. Make your edits to the documentation. Refer to the [writing guidelines](#writing-guidelines) below to ensure your changes comply with our style guide.
@@ -49,7 +49,7 @@ Anyone who has a GitHub account can contribute to the documentation content.
     All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
 
 
-:warning: **Important**
+:warning: **Important**  
   All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
 
 ---

@@ -18,21 +18,6 @@ Anyone who has a GitHub account can contribute to the documentation content.
 - You have installed [Yarn](https://yarnpkg.com/getting-started) package manager
 - You have [Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown) and [MDX](https://mdxjs.com/guides/) syntax knowledge
 - You have read [the writing guidelines](#writing-guidelines)
-<<<<<<< HEAD
-=======
-
-:warning: **Important**
-
-  - All rules below concern this repository.
-  - Any PRs which do not comply with the rules below will be rejected.
-
-1. Clone the `docs-content` repository by following the [cloning procedure](#cloning-the-project) below. 
-2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, reference content or troubleshooting).
-3. Create your branch. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
-   - `source`: Either `int` (for internal contributor) or `ext` (for external contributor) to Scaleway. If you are not a Scaleway staff member, please use `ext`.
-   - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
-   - `product`: the name of the product that corresponds to the documentation page you will edit.
->>>>>>> db356cf6a9bb7c1d93123be3fe13a970fd96e62d
 
 :warning: **Important**
 
@@ -58,7 +43,7 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 5. Run `git commit -m "type(module): description with some words <BRANCH_NAME>"`. Refer to the [commit naming conventions](#commit-conventions) below to properly name your commit.
 
-5. Run `git push --set-upstream origin <YOUR_BRANCH_NAME>`, and go to [the pull requests page](https://github.com/scaleway/docs-content/pulls) to open a pull request.
+6. Run `git push --set-upstream origin <YOUR_BRANCH_NAME>`, and go to [the pull requests page](https://github.com/scaleway/docs-content/pulls) to open a pull request.
 
 All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
 

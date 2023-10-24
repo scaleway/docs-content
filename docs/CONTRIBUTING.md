@@ -19,10 +19,11 @@ Anyone who has a GitHub account can contribute to the documentation content.
 - You have [Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown) and [MDX](https://mdxjs.com/guides/) syntax knowledge
 - You have read [the writing guidelines](#writing-guidelines)
 
-:warning: **Important**
+### Contribution procedure
 
-  - All rules below concern this repository.
-  - Any PRs which do not comply with the rules below will be rejected.
+:warning: **Important**
+    - All rules below concern this repository.
+    - Any PRs which do not comply with the rules below will be rejected.
 
 1. Clone the `docs-content` repository by following the [cloning procedure](#cloning-the-project) below.
 
@@ -45,13 +46,15 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 6. Run `git push --set-upstream origin <YOUR_BRANCH_NAME>`, and go to [the pull requests page](https://github.com/scaleway/docs-content/pulls) to open a pull request.
 
-All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
+    All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
 
-  :warning: **Important**
+
+:warning: **Important**
     All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
+
 ---
 
-## Use repository locally
+## Use the repository locally
 
 You have to clone the project locally to work on it.
 
@@ -99,7 +102,7 @@ Here is the list of `type` to use (commons in bold):
 - `style`
   - _For simple format changes that are not content changes_
 
-### Commit name examples
+### Commit examples
 
 `feat(console): add vpc how-to page MTA-2342`
 

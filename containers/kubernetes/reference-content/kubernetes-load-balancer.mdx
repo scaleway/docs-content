@@ -15,21 +15,154 @@ categories:
 
 Creating a Load Balancer for your Kubernetes cluster allows you to expose an application running inside your cluster to the internet.
 
-To create a Load Balancer for your cluster, you must first create a `LoadBalancer` service in your cluster, which is an abstraction describing the Load Balancer you want to create, what you want to expose with it, and how. When this service is created, the Scaleway Cloud Controller Manager will spin up an external Scaleway Load Balancer, with a single IP address that forwards all traffic to the LoadBalancer Service within your cluster. The LoadBalancer service then takes care of forwarding it to the right pods.
+In this document, we summarize when to create a Load Balancer for your cluster (as opposed to a different solution for exposing your application), and take you through the basic steps to create and configure your Load Balancer.
+
+## Does your cluster need a Load Balancer?
+
+Before creating a Load Balancer for your cluster, ensure that this is definitely the best solution for what you want to achieve.
+
+A  single **LoadBalancer** Service is sufficient for exposing one service in your cluster. Each further service will need its own external Load Balancer (which should generally be set up to forward TCP traffic) and corresponding `LoadBalancer` Service. 
+
+However, remember that Load Balancers are a paid-for resource. Consider whether one of the following free solutions might be appropriate if you have relatively simple cluster:
+
+- A **ClusterIP** Service is sufficient for facilitating communication between different components in a cluster.
+- A **NodePort** Service is often sufficient for exposing a single application in a simple cluster, to the internet for testing purposes
+
+On the other hand, if you have multiple services running in a more complex cluster, and you want to forward traffic to the right service based on HTTP, consider the following:
+
+- **Ingress** with an **Ingress Controller** and **Load Balancer** may be more suitable for exposing multiple services in your cluster, via a single external IP which forwards HTTP traffic to the right service in the cluster based on Ingress rules.
+
+Read the [full documentation](/containers/kubernetes/reference-content/exposing-services) on different ways to expose your services for full details, and links to the relevant documentation for each possibility.
+
+## Creating a Load Balancer for your cluster: overview
+
+Here is a quick overview of how to create a Load Balancer for your cluster:
+
+- [Create a Scaleway Kubernetes Kapsule cluster](/network/load-balancer/how-to/create-load-balancer) with an application running inside.
+- Make sure you have [installed and configured kubectl](https://www.scaleway.com/en/docs/containers/kubernetes/how-to/connect-cluster-kubectl/)
+- Create a yaml manifest to describe the LoadBalancer service you want to create. You can use [Load Balancer annotations](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-annotations.md) to fine-tune the Load Balancer's configuration in the manifest.
+- Deploy the LoadBalancer service based on the manifest, using kubectl. The Cloud Controller Manager (CCM) will spin up the external [Scaleway Load Balancer](https://www.scaleway.com/en/docs/network/load-balancer/quickstart/) with the correct configuration to forward traffic to the LoadBalancer service within your cluster.
+- Modify your Load Balancer's configuration as necessary via the yaml manifest and [Load Balancer annotations](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-annotations.md) , putting any new annotations into effect via kubectl, so the CCM can carry out the modifications as necessary.
+
+<Message type="important">
+Load Balancers for Kubernetes clusters should **always** be provisioned via the cluster's Cloud Controller Manager. It is **not** correct procedure to provision the Load Balancer by creating a Scaleway Load Balancer in the console or via the API, and then attempting to use it as your cluster's external Load Balancer. Similarly, you cannot use the Scaleway console or devtools to edit your cluster's Load Balancer after creation, this must be done via the CCM, as detailed in this documentation.
+</Message>
+
+## Creating a Load Balancer for your cluster: step by step
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created a Kubernetes Kapsule cluster](/network/load-balancer/how-to/create-load-balancer)
+  - You have [installed and configured kubectl](https://www.scaleway.com/en/docs/containers/kubernetes/how-to/connect-cluster-kubectl/)
+  - You have an application running in your cluster. (Find an example webserver application to run [here](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-examples.md))
+
+</Message>
+
+1. Create a `.yaml` file to hold the manifest for your cluster's Load Balancer. This will describe the resource (Load Balancer) that you want to create. 
+
+        Below, find an example for the content of the yaml manifest. You will need to edit it to your own specifications. 
+
+        ```yaml
+        apiVersion: v1
+        kind: Service
+        metadata:
+        name: myloadbalancer
+        spec:
+        type: LoadBalancer
+        ports:
+        - port: 8000
+            name: http
+            targetPort: 8000
+        selector:
+            app: mydeployment
+        ```
+
+        - `apiVersion`: which version of the Kubernetes API to use to create the object
+        - `kind`: the kind of object defined in this yaml file. For a Load Balancer, specify a `Service`
+        - `metadata`: helps uniquely identify the Service object: give it a `name` (e.g. `myloadbalancer`).
+        - `spec`: specifies the Service: 
+            - `type`: the type of Service required: a `LoadBalancer` Service. 
+            - `ports`: the ports for the Service configuration. You can define many ports if you want, here we specify just one:
+            - `port`: the new service port that will be created, for connecting to the application
+            - `name`: a name for this port, e.g. `http`
+            - `targetPort`: the application port to target with requests coming from the Service 
+            - `selector`: links the LoadBalancer Service with a set of Pods in the cluster. Ensure that the `app` specified matches the name of the deployment of your app in the cluster (run `kubectl get all` if necessary to check the name).
+
+2. Use the command `kubectl create -f <name-of-manifest-file>.yaml` to tell the Kubernetes Cloud Controller to create the Load Balancer from the manifest.
+
+3. Run `kubectl get svc` to confirm that the Load Balancer Service has been created, and view its external IP. You can also check the [Load Balancer](https://console.scaleway.com/load-balancer/) section of the Scaleway console, where your Kuberenetes cluster's Load Balancer now appears. Note that you should **not** attempt to edit or delete the Load Balancer via the console, only via the manifest file and kubectl.
+
+## Specifying an IP address for your Load Balancer
+
+By default, when you create a Load Balancer for your cluster, it will be assigned a public IP address at random. When you delete the Load Balancer, the IP address will also be deleted, and cannot be retrieved to transfer to another Load Balancer service in your cluster. 
+
+However, it is possible to use [flexible IP addresses](/network/load-balancer/concepts/#flexible-ip-address) with your cluster's Load Balancer, to give you more control over the IPs being used. Flexible IP addresses can be kept in your account even if/when their associated Load Balancer is deleted. They can then be assigned to a new Load Balancer in the future.
+
+To specify that an existing flexible IP address that you hold in your account should be used when creating your Load Balancer, add the `loadBalancerIP` field to your yaml manifest, as shown in the last line here:
 
 
-By default, Kubernetes clusters are not exposed to the internet. This prevents external users from being able to access the application deployed in your cluster. There are a number of different ways to expose your cluster to the internet: one of them is by creating an external Load Balancer for your cluster. In this document, we explain when and why a Load Balancer may be the right solution for exposing your cluster, and explain the basics of how to create and configure a Load Balancer for your cluster.
+    ```yaml
+    apiVersion: v1
+    kind: Service
+    metadata:
+    name: myloadbalancer
+    spec:
+    type: LoadBalancer
+    ports:
+    - port: 8000
+        name: http
+        targetPort: 8000
+    selector:
+        app: mydeployment
+    loadBalancerIP: 51.159.24.7
+    ```
 
-## Ingress or LoadBalancer?
+For full details and further examples of how to use flexible IPs with your Kubernetes Load Balancer, see our [dedicated documentation](/containers/kubernetes/api-cli/managing-load-balancer-ips/).
 
-When considering whether to expose your application via Ingress (and an Ingress Controller) or a LoadBalancer service, consider the following:
+## Defining your Load Balancer's configuration via annotations
 
-- A Load Balancer on its own may be sufficient if you have one or few services that you want to expose in your cluster. Each service will need its own external Load Balancer and LoadBalancer service.
-- A Load Balancer is also most appropriate for dealing with external TCP traffic
-- Ingress Controller with an external Load Balancer may be most appropriate if you have multiple services running in your cluster, and you want to direct HTTP traffic from a single external access point, to different services within your cluster, based on a set of rules.
+Your Load Balancer will be created with a default configuration, unless you define configuration parameters via **annotations**. 
 
-See [how to create an Ingress Controller](TODO) to find out how to easily create an Ingress Controller for your cluster from the Scaleway console. 
+With annotations you can configure parameters such as the balancing method, health check settings and more. 
 
-Watch our [webinar](https://www.youtube.com/watch?v=V0uKqYXJRF4) for a deeper dive and practical demonstration of how to create an Ingress Controller with a Load Balancer for your cluster (from the 14 minute mark to the 48 minute mark).
+<Message type="important">
+You should **never** try to modify the configuration of your cluster's Load Balancer via the Scaleway console, the API, or any other devtools. Any modifications made this way will be overwritten by the cluster's CCM. You should **always** use annotations as described below to configure your cluster's Load Balancer.
+</Message>
 
-Read on to find out how to create a Load Balancer for your cluster without using Ingress.
+Add annotations to the `metadata` section of your LoadBalancer Service's yaml manifest as shown below. In this example we include two annotations, but you can include as many as you need.
+
+    ```yaml
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: myloadbalancer
+      annotations:
+        service.beta.kubernetes.io/scw-loadbalancer-forward-port-algorithm: "leastconn"
+        service.beta.kubernetes.io/scw-loadbalancer-health-check-delay: "10s"
+    spec:
+      type: LoadBalancer
+      ports:
+      - port: 8000
+        name: http
+        targetPort: 8000
+      selector:
+        app: mydeployment
+    ```
+
+For full details on how to use Load Balancer annotations when creating your Load Balancer, or how to modify your Load Balancer's annotations after creation, see our [dedicated documentation](/containers/kubernetes/reference-content/using-load-balancer-annotations/). For a full list of Load Balancer annotations, refer to the [Scaleway Cloud Controller documentation](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-annotations.md).
+
+## Further resources
+
+For more help and support using Scaleway Load Balancers with your Kubernetes cluster, check out the following resources:
+
+- [Scaleway Load Balancers: full documentation](https://www.scaleway.com/en/docs/network/load-balancer/) *
+- [Getting Started with Kubernetes Load Balancers - Tutorial](https://www.scaleway.com/en/docs/tutorials/get-started-kubernetes-loadbalancer/)
+- [Getting Started with Kubernetes Load Balancers - Video Demonstration](https://www.youtube.com/watch?v=W3gPUQ_ELEo)
+- [Configuring a Load Balancer for your Kubernetes applications - Webinar](https://www.youtube.com/watch?v=V0uKqYXJRF4)
+- [Managing Kubernetes Load Balancer IPs](/containers/kubernetes/reference-content/managing-load-balancer-ips/)
+- [Using annotations for Kubernetes Load Balancers](/containers/kubernetes/reference-content/using-load-balancer-annotations/)
+
+\* Though this documentation may be useful, bear in mind that it principally concerns Load Balancers outside of a Kubernetes context. Remember to always create and configure Load Balancers for your Kubernetes cluster via the methods described on this page and **not** via the Scaleway console, API or devtools.
+
+
+

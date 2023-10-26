@@ -1,225 +1,138 @@
 ---
 meta:
-  title: Exposing services in Scaleway Kubernetes
-  description: Exposing services in Scaleway Kubernetes
+  title: Kubernetes service routing with wildcard DNS and ingress controller
+  description: This page explains how to route external traffic in Kubernetes using wildcard DNS and ingress controller
 content:
-  h1: Exposing services in Scaleway Kubernetes
-  paragraph: Exposing services in Scaleway Kubernetes
-tags: kubernetes load-balancer-service wildcard
+  h1: Kubernetes service routing with wildcard DNS and ingress controller
+  paragraph: This page explains how to route external traffic in Kubernetes using wildcard DNS and ingress controller
+tags: kubernetes load-balancer-service wildcard ingress
 dates:
-  validation: 2023-04-25
+  validation: 2023-10-26
   posted: 2021-08-12
 categories:
   - kubernetes
 ---
 
-BENE TO UPDATE THIS CONTENT
+Kubernetes wildcard DNS refers to a DNS configuration that allows for routing any subdomain of a domain to a particular service or set of services within a Kubernetes cluster. A wildcard DNS record is usually indicated by an asterisk (*), for mytest: `*.yourdomain.com`.
+
+Using wildcard DNS with Kubernetes has several advantages:
+
+- Without wildcard DNS, each time you deploy a new service and want to expose it with a domain name, you'd have to create a new DNS record. With wildcard DNS, any subdomain of `yourdomain.com` (like `service1.yourdomain.com`, `service2.yourdomain.com`, etc.) will automatically resolve to the IP address specified in the wildcard record.
+- Wildcard DNS is especially useful for development and staging environments where you might frequently spin up and tear down services. The wildcard DNS ensures that these services get valid DNS names without additional configuration.
+- When used in conjunction with an Ingress controller (like Nginx or Traefik), wildcard DNS can be powerful. The Ingress controller can route traffic based on the hostname, meaning that while the wildcard DNS points all subdomains to the Ingress controller, the controller itself determines which service should handle the request based on its configuration.
+
+
+In short, Kubernetes wildcard DNS, combined with an ingress controller, provides a powerful way to dynamically route external traffic to different services in the cluster based on hostname patterns.
 
 <Macro id="iam-requirements" />
 
 <Message type="requirement">
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have [created](/containers/kubernetes/how-to/create-cluster/) a Scaleway Kubernetes cluster
+  - You have `helm` installed on your local computer
+  - You have a domain name
   - The service you want to expose is a `TCP` or `HTTP` one
 </Message>
 
-## Creating a Load Balancer service
+## Installing the ingress controller with helm
 
-(SHOULD BE ABLE TO REPLACE THIS WITH A LINK TO /reference-content/kubernetes-load-balancer.mdx)
+1. Add the Helm repository:
+   ```bash
+   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+   helm repo update
+   ```
 
-1. Create a YAML manifest called `lb.yaml` and paste the following content into it.
-2. Save the file and quit your text editor:
-    ```yml
-    apiVersion: v1
-    kind: Service
-    metadata:
-      name: traefik-ingress
-      namespace: kube-system
-      labels:
-        k8s-app: traefik-ingress-lb
-    spec:
-      type: LoadBalancer
-      ports:
-      - port: 80
-        name: http
-        targetPort: 80
-      - port: 443
-        name: https
-        targetPort: 443
-      selector:
-        k8s-app: traefik-ingress-lb
-    ```
-2. Run the following command to 
-    ```sh
-    # kubectl create -f lb.yaml
-    service/traefik-ingress created
-    ```
+2. Install the Nginx ingress controller using the helm packet manager:
+   ```bash
+   helm install nginx-ingress ingress-nginx/ingress-nginx \
+     --namespace ingress-nginx --create-namespace
+   ```
 
-    This manifest creates a service of the Load Balancer type. With it, you will get a public IP address. As this Load Balancer is created on Scaleway, you can also see it in your console.
+3. Verify the installation:
+   ```bash
+   kubectl get pods -n ingress-nginx
+   ```
 
-    <Message type="tip">
-    The Load Balancer is managed automatically for you by the cloud controller manager. If you want to know more about our cloud controller manager, check out [our dedicated documentation](https://github.com/scaleway/scaleway-cloud-controller-manager).
+## Configuring wildcard DNS
 
-    </Message>
-3. Get the IP address of your newly created Load Balancer:
-    ```
-    # kubectl get svc -n kube-system
-    traefik-ingress   LoadBalancer   10.32.18.72    51.159.24.212   80:30122/TCP,443:31362/TCP   90s
-    ```
+1. Retrieve the ingress IP:
+   ```bash
+   kubectl get svc -n ingress-nginx
+   ```
+   <Message type="note">
+      It may take a few minutes for the Load Balancer IP to be assigned.
+   </Message>
 
-## Using the Kubernetes Kapsule Wildcard DNS
+2. Configure Wildcard DNS:
+   - Go to your DNS provider and add an A record for `*.yourdomain.com` pointing to the IP address of the ingress controller's load balancer.
 
-By default, on Kubernetes Kapsule, a wildcard round-robin DNS record is created, pointing to all your cluster nodes. This means that every time you add or delete a node in your cluster, the DNS record is updated to reflect the state of your nodes.
+## Deploy a Sample Application
 
-1. Test the DNS entry of your Kubernetes Kapsule cluster (you can get the FQDN of your cluster in the Scaleway console):
-    ```bash
-    # host test.c39a0d71-f66c-4657-8fe1-c3280012311c.nodes.k8s.fr-par.scw.cloud
-    test.49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud is an alias for 49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud
-    49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud has address 51.15.207.3
-    ```
-2. Use a test application called `cafe-ingress`, to test the way it works. The application serves different web pages depending on the URL you type. Deploy it with the following command: 
-    ```sh
-    kubectl create -f https://raw.githubusercontent.com/nginxinc/kubernetes-ingress/master/examples/complete-example/cafe.yaml
-    ```
-3. Create the ingress object with this YAML manifest, called `cafe-ingress.yml`. Note that we use our DNS wildcard on the host stanza of this YAML file.
-    ```yml
-    apiVersion: networking.k8s.io/v1
-    kind: Ingress
-    metadata:
-      name: cafe-ingress
-    spec:
-      rules:
-      - host: test.49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud
-        http:
-          paths:
-          - path: /tea
-            pathType: Prefix
-            backend:
-              service:
-                name: tea-svc
-                port:
-                  number: 80
-          - path: /coffee
-            pathType: Prefix
-            backend:
-              service:
-                name: coffee-svc
-                port:
-                  number: 80
-    ```
-4. Deploy the application and check its status: 
-    ```sh
-    # kubectl create -f cafe-ingress.yaml
-    # kubectl get ing
-    NAME           CLASS    HOSTS                                                                  ADDRESS   PORTS   AGE
-    cafe-ingress   <none>   test.49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud             80      4m11s
-    ```
+1. Deploy a Sample Application by creating a file `hello-world.yaml`. Below is a simple deployment and service example. Copy the content in the file and save it:
+     ```yaml
+     apiVersion: apps/v1
+     kind: Deployment
+     metadata:
+       name: hello-world
+     spec:
+       replicas: 2
+       selector:
+         matchLabels:
+           app: hello-world
+       template:
+         metadata:
+           labels:
+             app: hello-world
+         spec:
+           containers:
+           - name: hello-world
+             image: nginxdemos/hello
+             ports:
+             - containerPort: 80
+     ---
+     apiVersion: v1
+     kind: Service
+     metadata:
+       name: hello-world
+     spec:
+       ports:
+       - port: 80
+       selector:
+         app: hello-world
+     ```
 
-    You can test that this ingress is configured correctly by accessing your test application:
+2. Apply the configuration with `kubectl apply -f hello-world.yaml`
 
-    ```sh
-    # curl http://test.49087273-8296-46cc-a82c-f08cb9623ce2.nodes.k8s.fr-par.scw.cloud/coffee
-    Server address: 100.64.0.181:8080
-    Server name: coffee-5f56ff9788-68xs2
-    Date: 28/Apr/2020:13:34:26 +0000
-    URI: /coffee
-    Request ID: 9d2ee64655b936384a64cf89e7a975b0
-    ```
+## Create an ingress resource
 
-## Creating a wildcard DNS record and point your domain name to the IP address
+1. Create an Ingress resource. Create a YAML file called `wildcard-ingress.yaml`. Copy the following sample resource in the file and save it. Remember to edit the domain name:
+     ```yaml
+     apiVersion: networking.k8s.io/v1
+     kind: Ingress
+     metadata:
+       name: wildcard-ingress
+       annotations:
+         nginx.ingress.kubernetes.io/rewrite-target: /
+     spec:
+       rules:
+       - host: "*.yourdomain.com"
+         http:
+           paths:
+           - path: /
+             pathType: Prefix
+             backend:
+               service:
+                 name: hello-world
+                 port:
+                   number: 80
+     ```
 
-1. Create a wildcard DNS record, using the [Scaleway DNS](https://console.scaleway.com/domains/external) product, pointing to this IP address (the domain used in this tutorial will be “mytest.com”). A wildcard record (`*.mydomain.com`) allows you to point any subdomain of your domain to the configured IP address.
+2. Apply the configuration with `kubectl apply -f wildcard-ingress.yaml`
 
-    <Lightbox src="scaleway_traefik_wildcard.webp" alt="" />
-2. Verify that the domain is pointed to the IP address of your Load Balancer:
-    ```sh
-    host foobar.mytest.com
-    foobar.mytest.com has address 195.154.68.108
-    ```
+## Test your setup
 
-    Your domain is now pointing to your Load Balancer IP, you can resolve any of your subdomain with that IP.
+1. Access your application by pointing your web brower to `http://anything.yourdomain.com` (replace this with your own domain name). It should load the hello-world application.
 
-## Deploying Cert Manager
+2. Test with different subdomains, they should all lead to your `hello-world` application due to the wildcard DNS setup.
 
-Cert-manager is in charge of creating [Let's Encrypt](https://www.letsencrypt.org/) TLS certificates to secure your website, to sum-up:
-
-* Create an ingress object for a specific subdomain (for instance `foobar.mytest.com`)
-* Let's Encrypt must be sure that the domain belongs to you. For this reason, Let's Encrypt requests a “challenge”, in our case, an HTTP challenge. Meaning here that Let's Encrypt will try to reach foobar.mytest.com, and is able to see a specific hash on this page.
-* Cert-manager is serving this page for you by creating an ingress object and using an HTTP server.
-* When the challenge is ok, the certificate is created and added in a certificate object.
-* You can then use this certificate object to serve your website securely (HTTPS).
-
-<Message type="note">
-  Any modification to the Traefik2 deployed by Kapsule may be overwritten by the reconciliation process, consider installing it yourself for a production usage.
-</Message>
-
-1. Modify the default Traefik 2 daemonset running on Kapsule to do that, add `--providers.kubernetesIngress.ingressClass=traefik-cert-manager` in the cmd stanza.
-    ```
-    kubectl edit ds traefik -n kube-system
-    daemonset.apps/traefik edited
-    []
-            - --global.checknewversion
-            - --global.sendanonymoususage
-            - --entryPoints.traefik.address=:9000
-            - --entryPoints.web.address=:8000
-            - --entryPoints.websecure.address=:8443
-            - --providers.kubernetesIngress.ingressClass=traefik-cert-manager
-            - --api.dashboard=true
-            - --ping=true
-            - --providers.kubernetescrd
-            - --providers.kubernetesingress
-    []
-    ```
-2. Delete the existing Traefik pods in order to get the new arguments.
-    ```
-    kubectl -n kube-system delete pod -l app.kubernetes.io/name=traefik
-    ```
-3. Use the command below to install cert-manager and its needed CRD (Custom Resource Definitions):
-    ```
-    kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.1.1/cert-manager.yaml
-    customresourcedefinition.apiextensions.k8s.io/certificaterequests.cert-manager.io created
-    customresourcedefinition.apiextensions.k8s.io/certificates.cert-manager.io created
-    customresourcedefinition.apiextensions.k8s.io/challenges.acme.cert-manager.io created
-    customresourcedefinition.apiextensions.k8s.io/clusterissuers.cert-manager.io created
-    customresourcedefinition.apiextensions.k8s.io/issuers.cert-manager.io created
-    customresourcedefinition.apiextensions.k8s.io/orders.acme.cert-manager.io created
-    namespace/cert-manager created
-    serviceaccount/cert-manager-cainjector created
-    serviceaccount/cert-manager created
-    serviceaccount/cert-manager-webhook created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-cainjector created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-issuers created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-clusterissuers created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-certificates created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-orders created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-challenges created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-ingress-shim created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-view created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-edit created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-cainjector created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-issuers created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-clusterissuers created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-certificates created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-orders created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-challenges created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-ingress-shim created
-    role.rbac.authorization.k8s.io/cert-manager-cainjector:leaderelection created
-    role.rbac.authorization.k8s.io/cert-manager:leaderelection created
-    role.rbac.authorization.k8s.io/cert-manager-webhook:dynamic-serving created
-    rolebinding.rbac.authorization.k8s.io/cert-manager-cainjector:leaderelection created
-    rolebinding.rbac.authorization.k8s.io/cert-manager:leaderelection created
-    rolebinding.rbac.authorization.k8s.io/cert-manager-webhook:dynamic-serving created
-    service/cert-manager created
-    service/cert-manager-webhook created
-    deployment.apps/cert-manager-cainjector created
-    deployment.apps/cert-manager created
-    deployment.apps/cert-manager-webhook created
-    mutatingwebhookconfiguration.admissionregistration.k8s.io/cert-manager-webhook created
-    validatingwebhookconfiguration.admissionregistration.k8s.io/cert-manager-webhook created
-    ```
-
-
-<Navigation title="See Also">
-  <PreviousButton to="/containers/kubernetes/api-cli/cluster-monitoring/">Monitoring clusters</PreviousButton>
-  <NextButton to="/containers/kubernetes/api-cli/managing-load-balancer-ips/">Managing Load Balancer IPs</NextButton>
-</Navigation>
+You have successfully set up an ingress controller with wildcard DNS on Scaleway Kubernetes Kapsule. This setup will allow you to easily manage multiple subdomains and route traffic to the various services in your Kubernetes cluster.

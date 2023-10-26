@@ -5,7 +5,7 @@ meta:
 content:
   h1: Creating a Kubernetes Cluster on Scaleway with K3s and Cilium
   paragraph: This tutorial offers a detailed, step-by-step guide for setting up a Kubernetes cluster with K3s and Cilium on the Scaleway cloud platform.
-tags: kubernetes k3s cri containerd cni cilium
+tags: kubernetes k3s cri containerd cni cilium ipv6 Ingress Gateway API
 hero: 
 categories: 
   - kubernetes
@@ -56,6 +56,7 @@ Follow these steps to create your instance on Scaleway:
 
     ``` console
     $ scw vpc vpc create
+
     ID                   4734fb11-fe52-4517-a06a-1541abefd121
     Name                 cli-vpc-competent-solomon
     Region               fr-par
@@ -68,6 +69,7 @@ Follow these steps to create your instance on Scaleway:
       
     ``` console
     $ scw vpc private-network create subnets.0="fd7c:71f5:8976::/64" vpc-id=4734fb11-fe52-4517-a06a-1541abefd12
+
     ID                   35712479-ef79-444b-94cb-c52160973505
     Name                 cli-pn-crazy-gould
     Region               fr-par
@@ -90,6 +92,7 @@ Follow these steps to create your instance on Scaleway:
 
     ```console
     $ scw instance ip create type=routed_ipv6
+
     ID            aa549e1d-15d5-4060-94da-0868a161bdef
     Type          routed_ipv6
     State         detached
@@ -101,6 +104,7 @@ Follow these steps to create your instance on Scaleway:
 
     ``` console
     $ scw instance server create name=master type=AMP2-C4 image=ubuntu-jammy routed-ip-enabled=true ip=none tags.0="k3s"
+
     ID                          a2c29016-690c-40bc-a35f-898646d958d4
     Name                        master
     AllowedActions.0            poweron
@@ -118,6 +122,7 @@ Follow these steps to create your instance on Scaleway:
 
     ``` console
     $ scw instance ip attach 2001:bc8:1210:2fb:: server-id=a2c29016-690c-40bc-a35f-898646d958d4
+
     IP.ID            aa549e1d-15d5-4060-94da-0868a161bdef
     IP.Server.ID     a2c29016-690c-40bc-a35f-898646d958d4
     IP.Server.Name   master
@@ -130,6 +135,7 @@ Follow these steps to create your instance on Scaleway:
 
     ``` console
     $ scw instance private-nic create server-id=a2c29016-690c-40bc-a35f-898646d958d4 private-network-id=35712479-ef79-444b-94cb-c52160973505
+
     PrivateNic.ID                a7cb3de8-c175-4414-a956-17799d4363e3
     PrivateNic.ServerID          a2c29016-690c-40bc-a35f-898646d958d4
     PrivateNic.PrivateNetworkID  35712479-ef79-444b-94cb-c52160973505
@@ -137,7 +143,7 @@ Follow these steps to create your instance on Scaleway:
     PrivateNic.State             syncing
     ```
 
-7. Create an environment variable named `master` with the public IPv6 address assigned to the instance.
+7. Create an environment variable named `$master` with the public IPv6 address assigned to the instance for later use.
 
     ``` console
     $ export master=$(scw instance server get a2c29016-690c-40bc-a35f-898646d958d4 | awk '$1 == "PublicIP.Address" {print $2}')
@@ -149,7 +155,7 @@ In this section, we'll guide you through the process of installing K3s on your S
 
 Due to GitHub's lack of IPv6 support, you'll need to fetch and save the K3s and Cilium binaries manually to the host. 
 
-1. On your local machine, run the following command to upload the K3s binary to the `/usr/local/bin` folder on `master`.
+1. On your local machine, run the following command to upload the K3s binary to the `/usr/local/bin` folder on `$master`.
 
     ``` console
     $ wget https://github.com/k3s-io/k3s/releases/download/v1.28.2%2Bk3s1/k3s-arm64
@@ -159,7 +165,7 @@ Due to GitHub's lack of IPv6 support, you'll need to fetch and save the K3s and 
   
     The K3s binary for each architecture can be found in the  [releases page](https://github.com/k3s-io/k3s/releases).
 
-2. On your local machine, run the following command to upload the Cilium binary to the `/usr/local/bin` folder on `master`:
+2. On your local machine, run the following command to upload the Cilium binary to the `/usr/local/bin` folder on `$master`:
 
     ``` console
     $ CILIUM_CLI_VERSION=$(curl -s https://raw.githubusercontent.com/cilium/cilium-cli/main/stable.txt)
@@ -174,7 +180,7 @@ Due to GitHub's lack of IPv6 support, you'll need to fetch and save the K3s and 
     The Cilium binary for each architecture can be found in the  [releases page](https://github.com/cilium/cilium-cli/releases)
 
 
-2. Connect to the Scaleway instance: `ssh root@[$master]`
+2. Connect to the Scaleway instance with `ssh root@[$master]`
 
 3. Create environment variables named `public_ip` and `private_ip` with the public and private IPv6 addresses assigned to the instance:
     ``` console
@@ -190,13 +196,13 @@ Due to GitHub's lack of IPv6 support, you'll need to fetch and save the K3s and 
 
     You can check wthe K3s documentation to gather additional information on the available [packaged components](https://docs.k3s.io/installation/packaged-components)
 
-5. For the Cilium CLI to access the cluster in successive steps you will need to use the kubeconfig file stored at `/etc/rancher/k3s/k3s.yaml` by setting the `KUBECONFIG` environment variable:
+5. For the Cilium CLI to access the cluster in successive steps you will need to use the kubeconfig file stored at `/etc/rancher/k3s/k3s.yaml` by setting the `$KUBECONFIG` environment variable:
 
     ``` console
     $ export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
     ```
 
-6. As you will install Cilium with Gateway API support, you need to make sure the Gateway API CRDS are installed.
+6. As you will install Cilium with Gateway API support, you need to make sure the Gateway API CRDs (Custom Resources Definitions) are installed.
 
     ``` console
     $ kubectl apply -f https://raw.githubusercontent.com/kubernetes-sigs/gateway-api/v0.5.1/config/crd/standard/gateway.networking.k8s.io_gatewayclasses.yaml
@@ -219,6 +225,7 @@ Due to GitHub's lack of IPv6 support, you'll need to fetch and save the K3s and 
 
       ``` console
       $ cilium status --wait
+
           /¯¯\
       /¯¯\__/¯¯\    Cilium:             OK
       \__/¯¯\__/    Operator:           OK
@@ -297,10 +304,10 @@ Due to GitHub's lack of IPv6 support, you'll need to fetch and save the K3s and 
 2. Apply the `my-application.yaml` manifest to the cluster:
 
     ``` console
-    $ kubectl apply -f app.yml
+    $ kubectl apply -f my-application.yaml
     ```
 
-3. Verify that your application is deployed and accessible `http://[2001:bc8:1210:2fb:dc00:ff:fe20:adef]/`
+3. Verify that your application is deployed and accessible `http://[$master]/`
 
 <Lightbox src="scaleway-validate-configuration.webp" size="medium" alt="" />
 
@@ -327,10 +334,11 @@ Due to GitHub's lack of IPv6 support, you'll need to fetch and save the K3s and 
 
     The K3s agent will register with the K3s server listening at the supplied URL. The value to use for `K3S_TOKEN` is stored at `/var/lib/rancher/k3s/server/node-token` on your Scaleway `master` instance.
 
-5. Connect to `master` and verify the status of the Kubernetes nodes.
+5. Connect to the `master` node and verify the status of the Kubernetes nodes.
 
     ``` console
     $ kubectl get nodes
+
     NAME      STATUS     ROLES                  AGE   VERSION
     master    Ready      control-plane,master   36m   v1.28.2+k3s1
     agent-1   Ready      <none>                 44s   v1.28.2+k3s1
@@ -340,6 +348,7 @@ Due to GitHub's lack of IPv6 support, you'll need to fetch and save the K3s and 
 
     ``` console
     $ cilium status
+
         /¯¯\
     /¯¯\__/¯¯\    Cilium:             OK
     \__/¯¯\__/    Operator:           OK
@@ -359,7 +368,6 @@ Due to GitHub's lack of IPv6 support, you'll need to fetch and save the K3s and 
 
 7. Thanks to K3s ServiceLB LoadBalancer controller, your application is also accessible via the public IP address of the new Scaleway intance.
 
-
 ## Conclusion
 In this tutorial, we embarked on a journey to create a highly efficient and cost-effective Kubernetes cluster on the Scaleway cloud platform. We started by laying the foundation, setting up an IPv6-only infrastructure, replacing the traditional kube-proxy with Cilium for enhanced security and performance.
 
@@ -367,11 +375,16 @@ With K3s as our Kubernetes distribution, we streamlined the installation and con
 
 We hope this tutorial has empowered you with the knowledge and skills needed to create your own K3s Kubernetes cluster on Scaleway.
 
+If you prefer not to handle the management and configuration of a Kubernetes cluster yourself, you may want to explore [Scaleway Kubernetes Kapsule](https://www.scaleway.com/en/kubernetes-kapsule/), a fully managed Kubernetes solution.
+
 ## Additional Resources
 To continue your learning and exploration of Kubernetes, here are some valuable resources:
-- [K3s Documentation](https://k3s.io/): The official documentation for K3s, providing in-depth information on installation, configuration, and advanced features.
-- [Cilium Documentation](https://cilium.io/docs/): Explore the official documentation of the Cilium CNI plugin for Kubernetes, including detailed guides and use cases.
-- [Kubernetes Documentation](https://kubernetes.io/docs/home/): The Kubernetes official documentation is a comprehensive resource for all things Kubernetes, from introductory concepts to advanced topics.
-- [Scaleway Tutorials](https://www.scaleway.com/docs/tutorials/): Scaleway offers a collection of tutorials covering various topics, including cloud infrastructure and Kubernetes.
+- [K3s Documentation](https://k3s.io/):
+  The official documentation for K3s, providing in-depth information on installation, configuration, and advanced features.
+
+- [Cilium Documentation](https://cilium.io/docs/):
+  Explore the official documentation of the Cilium CNI plugin for Kubernetes, including detailed guides and use cases.
+- [Kubernetes Documentation](https://kubernetes.io/docs/home/): 
+  The Kubernetes official documentation is a comprehensive resource for all things Kubernetes, from introductory concepts to advanced topics.
 
 With these resources at your disposal, you'll be well-equipped to continue your Kubernetes journey, tackle more complex configurations, and adapt your cluster to meet evolving demands.

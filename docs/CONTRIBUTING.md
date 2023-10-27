@@ -11,50 +11,69 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 ## How to contribute?
 
-All rules below concern this repository.
-Any PRs which do not comply with the rules below will be rejected.
+### Prerequisites
 
-1. Read and follow [the writing guidelines](#writing-guidelines).
-2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (eg: tutorial, API/CLI documentation, reference content or troubleshooting content?).
-3. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
-   - `source`: Either `int` (for internal contributor) or `ext` (for external contributor) to Scaleway. If you are not a Scaleway staff member, please use `ext`.
-   - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
-   - `product`: the name of the product that corresponds to the documentation page you will edit.
+- You have [Git](https://git-scm.com/) installed
+- You have a [GitHub](https://github.com/signup) personal account
+- You have installed [Yarn](https://yarnpkg.com/getting-started) package manager
+- You have [Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown) and [MDX](https://mdxjs.com/guides/) syntax knowledge
+- You have read [the writing guidelines](#writing-guidelines)
 
-     So in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
-4. All commit names must comply with the [commit naming conventions](#commit-conventions) described below.
-5. All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
-6. All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
+### Contribution procedure
+
+:warning: **Important**  
+  - All rules below concern this repository.
+  - Any PRs which do not comply with the rules below will be rejected.
+
+1. Clone the `docs-content` repository by following the [cloning procedure](#cloning-the-project) below.
+
+2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, reference content or troubleshooting).
+
+3. Create your branch. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
+
+    - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors). If you are not a Scaleway staff member, please use `ext`.
+
+    - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
+
+    - `product`: the name of the product that corresponds to the documentation page you will edit.
+
+    :information_source: **Example:**  
+      in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
+
+4. Make your edits to the documentation. Refer to the [writing guidelines](#writing-guidelines) below to ensure your changes comply with our style guide.
+
+5. Run `git commit -m "type(module): description with some words <BRANCH_NAME>"`. Refer to the [commit naming conventions](#commit-conventions) below to properly name your commit.
+
+6. Run `git push --set-upstream origin <YOUR_BRANCH_NAME>`, and go to [the pull requests page](https://github.com/scaleway/docs-content/pulls) to open a pull request.
+
+    All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
+
+
+:warning: **Important**  
+  All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
+
 ---
 
-## Use repository locally
+## Use the repository locally
 
-You have to clone the project locally to work on it. If you need to fork the repository, [follow this link](https://docs.github.com/en/get-started/quickstart/fork-a-repo) to find out how.
+You have to clone the project locally to work on it.
 
-### Requirements
+:warning:
+  If you are not a member of the Scaleway organization, you need to fork the repository. [Follow this link](https://docs.github.com/en/get-started/quickstart/fork-a-repo) to find out how.
 
-Work on docs-content assumes that you have knowledge in the following techniques:
-
-- [Git](https://git-scm.com/)
-- A [Github](https://github.com/signup) personal account
-- [Yarn](https://yarnpkg.com/getting-started) package manager installed
-- [Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown) syntax knowledge
-- [MDX](https://mdxjs.com/guides/) syntax knowledge
-
-Be sure you have read the present **contributing rules** and **commit conventions**.
-
-### Steps to install the project
+### Cloning the project
 
 1. Copy the following code and enter it in your terminal:
+
 ```bash
-git clone git@github.com:[your-docs-content-fork]/docs-content.git | bash -s -- cd docs-content && yarn
+git clone git@github.com:docs-content.git | bash -s -- cd docs-content && yarn
 ```
+
 2. Ensure `yarn` has been run, if not run `yarn install`.
-3. Edit files.
 
 ## Git commit
 
-Helpfull pre-commit commands:
+Helpful pre-commit commands:
 
 - `yarn check-slugs` Output slugs that are not kebab-case well formatted.
 
@@ -83,7 +102,7 @@ Here is the list of `type` to use (commons in bold):
 - `style`
   - _For simple format changes that are not content changes_
 
-#### examples
+### Commit examples
 
 `feat(console): add vpc how-to page MTA-2342`
 

@@ -5,28 +5,81 @@ meta:
 content:
   h1: Using Scaleway Load Balancer annotations
   paragraph: This page explains how to use Scaleway Load Balancer annotations
-tags: kubernetes load-balancer load-balancer-annotations
+tags: kubernetes load-balancer load-balancer-annotations annotations
 dates:
-  validation: 2023-10-05
+  validation: 2023-10-23
   posted: 2021-08-12
 categories:
   - kubernetes
 ---
 
-RO TO UPDATE THIS CONTENT
+## Overview
 
-<Macro id="iam-requirements" />
+In Kubernetes, annotations are a way to attach metadata to objects, like pods, services, and more. These annotations are key-value pairs that can be useful for tools and libraries interacting with these objects. These annotations are used to influence the behavior, settings, or configurations of the provisioned load balancer resource.
 
-<Message type="requirement">
-  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
-  - You have [created](/containers/kubernetes/how-to/create-cluster/) a Scaleway Kubernetes cluster
+When you [create a Load Balancer](/containers/kubernetes/reference-content/kubernetes-load-balancer/) for your Kubernetes cluster, it will be created with a default configuration, unless you define its configuration parameters via **annotations**. Load Balancer annotations let you configure parameters such as the balancing method] health check settings and more.
+
+See the full list of available Load Balancer annotations [here](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-annotations.md) as part of the Scaleway Cloud Controller Manager documentation. For help understanding any of these parameters, refer to the following documentation:
+- [Load Balancer Concepts](/network/load-balancer/concepts/)
+- [Configuring backends](/network/load-balancer/reference-content/configuring-backends/)
+- [Configuring frontends](/network/load-balancer/reference-content/configuring-frontends/)
+- [Configuring health checks](/network/load-balancer/reference-content/configuring-health-checks/)
+
+<Message type="important">
+Do **not** try to modify the configuration of your Kubernetes cluster's Load Balancer via the Scaleway console, the API, or any other devtools. Any modifications made this way will be overwritten by the cluster's CCM. You should **always** use annotations as described below to configure your cluster's Load Balancer.
 </Message>
 
-In Kubernetes, annotations are a way to attach metadata to objects, like pods, services, and more. These annotations are key-value pairs that can be useful for tools and libraries interacting with these objects.
+The following documentation shows you how to use annotations to fine tune your Load Balancer's configuration.
 
-These annotations are used to influence the behavior, settings, or configurations of the provisioned load balancer resource.
+## Adding annotations when creating your Load Balancer
 
-For Scaleway Load Balancers, annotations are prefixed with `service.beta.kubernetes.io/`. For example:
+Add annotations to the `metadata` section of your LoadBalancer Service's yaml manifest as shown below. In this example we include two annotations, but you can include as many as you need.
+
+    ```yaml
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: myloadbalancer
+      annotations:
+        service.beta.kubernetes.io/scw-loadbalancer-forward-port-algorithm: "leastconn"
+        service.beta.kubernetes.io/scw-loadbalancer-health-check-delay: "10s"
+    spec:
+      type: LoadBalancer
+      ports:
+      - port: 8000
+        name: http
+        targetPort: 8000
+      selector:
+        app: mydeployment
+    ```
+
+You can then create your Load Balancer with the `kubectl create -f <name-of-manifest-file>.yaml` command. 
+
+When you examine your Load Balancer's backend configuration and health check information in the Scaleway console, you will see that the balancing method (aka forward port algorithm) and health check interval (aka health check delay) of its backend reflect the values set in the annotations.
+
+## Modifying your Load Balancer's configuration via annotations after creation
+
+To modify your Load Balancer's configuration with annotations after creation, you can use the `kubectl patch` command. This updates the Load Balancer according to the arguments given.
+
+In this example, we create the following file to hold our patch, and call it `annotations-patch.yaml`:
+
+```yaml
+metadata:
+  annotations:
+    service.beta.kubernetes.io/scw-loadbalancer-forward-port-algorithm: "first"
+    service.beta.kubernetes.io/scw-loadbalancer-health-check-timeout: "30s"
+```
+
+You can then tell the CCM to put this patch into effect with the following command:
+
+```
+kubectl patch svc myloadbalancer --type merge --patch-file annotations-patch.yaml
+```
+
+When you examine your Load Balancer's backend configuration and health check information in the Scaleway console, you will see that the balancing method (aka forward port algorithm) and health check timeout of its backend reflect the values set in the patched annotations.
+
+
+
 
 ```yaml
 kind: Service
@@ -41,8 +94,3 @@ spec:
 ```
 
 For a complete list of all annotations available to use with Scaleway Load Balancers, refer directly to the [Scaleway Cloud Controller Manager documentation](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-annotations.md) on GitHub.
-
-<Navigation title="See Also">
-  <PreviousButton to="/containers/kubernetes/api-cli/managing-load-balancer-ips/">Managing Load Balancer IPs</PreviousButton>
-  <NextButton to="/containers/kubernetes/api-cli/managing-storage/">Managing storage</NextButton>
-</Navigation>

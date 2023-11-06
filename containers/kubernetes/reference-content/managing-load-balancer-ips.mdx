@@ -1,0 +1,204 @@
+---
+meta:
+  title: Managing Load Balancer IPs
+  description: Managing Load Balancer IPs
+content:
+  h1: Managing Load Balancer IPs
+  paragraph: Managing Load Balancer IPs
+tags: load-balancer load-balancer-ip kubernetes ip flexible-ip
+dates:
+  validation: 2023-10-23
+  posted: 2021-08-12
+categories:
+  - kubernetes
+---
+
+
+By default, when you create a Load Balancer for your cluster, it will be assigned a public IP address at random. When you delete the Load Balancer, the IP address will also be deleted and cannot be retrieved to transfer to another Load Balancer service in your cluster.
+
+However, it is possible to use [flexible IP addresses](/network/load-balancer/concepts/#flexible-ip-address) with your cluster's Load Balancer, to give you more control over the IPs being used. Flexible IP addresses can be kept in your account even if/when their associated Load Balancer is deleted. They can then be assigned to a new Load Balancer in the future.
+
+You can view your existing Load Balancer flexible IP addresses, and create new ones, in the [Scaleway console](https://console.scaleway.com/load-balancer/ips). Alternatively, use the [API](https://www.scaleway.com/en/developers/api/load-balancer/zoned-api/#path-ip-addresses-list-ip-addresses) or other devtools.
+
+<Message type="note">
+Load Balancer flexible IPs have the following limitations:
+- They can only be used with Load Balancers (not with Instances or any other Scaleway product)
+- They are scoped to a single Availability Zone
+</Message>
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created](/containers/kubernetes/how-to/create-cluster/) a Scaleway Kubernetes cluster
+</Message>
+
+## Reserve a Load Balancer flexible IP address via the API
+
+### Using the API
+
+Ensure that you have created an [API key](/identity-and-access-management/iam/how-to/create-api-keys/) and run this call:
+
+```sh
+curl -X POST \
+  -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{}' \
+  "https://api.scaleway.com/lb/v1/zones/$SCW_DEFAULT_ZONE/ips"
+```
+
+### Using the console
+
+1. From the [Load Balancer Flexible IPs](https://console.scaleway.com/load-balancer/ips) page of the Scaleway console, click **Create flexible IP**.
+
+2. Choose the Availability Zone for your flexible IP, and click **Create flexible IP**.
+
+## Deploy a Load Balancer with your reserved IP
+
+When creating a Load Balancer service via a yaml manifest, you can specify the reserved IP to use via the `loadBalancerIP` field. On the example below, the IP we reserved was 51.159.24.7, and this will be the Load Balancer's public IP address:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: myloadbalancer
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8000
+    name: http
+    targetPort: 8000
+  selector:
+    app: mydeployment
+  loadBalancerIP: 51.159.24.7
+```
+
+You can then create your Load Balancer with the `kubectl create -f <name-of-manifest-file>.yaml` command. When you run `kubectl get svc` you will see that its `EXTERNAL-IP` matches the IP specified in the yaml manifest. When you delete your LoadBalancer service, the flexible IP 51.159.24.7 will remain reserved in your account to be used with another Load Balancer in the future.
+
+### Modify your Load Balancer's IP address after creation
+
+To modify your Load Balancer's IP address after creation, you must use the `kubectl patch` command. This updates the Load Balancer according to the arguments given.
+
+You must have an existing [Load Balancer flexible IP](https://console.scaleway.com/load-balancer/ips) in your account, that is not attached to any other Load Balancer. 
+
+In the case that you have created a Load Balancer with the manifest above (with IP address `51.159.24.7`) but wish to change its IP address to another available one, use the following command and replace `51.159.113.199` with your other available flexible IP address:
+
+```
+kubectl patch svc myloadbalancer --type merge --patch '{"spec":{"loadBalancerIP": "51.159.113.199"}}'
+```
+
+When you run `kubectl get svc` you will see that its `EXTERNAL-IP` matches the IP specified in the patch command.
+
+### Specify that your Load Balancer's IP should not be deleted with the Load Balancer
+
+As long as you have specified a `loadBalancerIP` for your LoadBalancer service, either via [the original manifest](#deploy-a-load-balancer-with-your-reserved-ip) or a [patch afterwards](#modify-your-load-balancers-ip-address-after-creation), the IP address will not be deleted from your account, even if you delete the LoadBalancer service with a `kubectl delete svc myloadbalancer` command.
+
+If you created the Load Balancer without specifying a `loadBalancerIP` in your manifest, but you want its current IP address to be kept in your account after you delete the Load Balancer, you can use a `kubectl patch` command to achieve this. 
+
+- Identify the IP address which was randomly assigned to the Load Balancer, either via the [Scaleway console](https://console.scaleway.com/load-balancer/ips) or via a `kubectl get svc` command. Let's imagine that this IP address is `51.159.10.49`.
+- Run a patch command to add this as the `loadBalancerIP` address in the service definition: `kubectl patch svc myloadbalancer --type merge --patch '{"spec":{"loadBalancerIP": "51.159.10.49"}}'`
+
+Now, even if you delete the Load Balancer, its IP address will be held in your account and you can use it with a different Load Balancer in the future.
+
+
+On the example below we will:
+
+* Create a new Load Balancer with the IP reserved before by patching the tea-svc service.
+* Check the IP address was correctly set on this service and that this service is now a Load Balancer one.
+* Delete the `tea-svc` service (showing that the IP address is not deleted).
+* Create a new Load Balancer with the IP reserved beforehand, by patching the `coffee-svc` service.
+
+By doing the steps above, we show that we can use a reserved IP on Load Balancer creation and that we can “move” this IP from one service to one another.
+
+```sh
+# kubectl get svc
+NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+coffee-svc   ClusterIP   10.32.102.89   <none>        80/TCP    9s
+kubernetes   ClusterIP   10.32.0.1      <none>        443/TCP   3m56s
+tea-svc      ClusterIP   10.32.57.52    <none>        80/TCP    9s
+
+# kubectl patch svc tea-svc --type merge --patch '{"spec":{"loadBalancerIP": "51.159.24.7","type":"Load Balancer"}}'
+service/tea-svc patched
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   ClusterIP      10.32.102.89   <none>        80/TCP         44s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        4m31s
+tea-svc      Load Balancer   10.32.57.52    <pending>     80:32434/TCP   44s
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   ClusterIP      10.32.102.89   <none>        80/TCP         45s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        4m32s
+tea-svc      Load Balancer   10.32.57.52    51.159.24.7   80:32434/TCP   45s
+
+# kubectl delete svc tea-svc
+service "tea-svc" deleted
+
+# kubectl patch svc coffee-svc --type merge --patch '{"spec":{"loadBalancerIP": "51.159.24.7","type":"Load Balancer"}}'
+service/coffee-svc patched
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   Load Balancer   10.32.102.89   <pending>     80:31094/TCP   100s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        5m27s
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   Load Balancer   10.32.102.89   51.159.24.7   80:31094/TCP   103s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        5m30s
+```
+
+As you can see, we have been able to keep the same IP on different Load Balancers. This allows for instance, to keep the same DNS configuration and move it from one Load Balancer Instance type to another. We have also seen that Kapsule manages the configuration of your Load Balancer for you. The cloud controller manager is in charge of managing the complete lifecycle of your Load Balancer.
+
+## Demonstrate how to move an IP address across Kubernetes services
+
+In the example below, we will:
+
+* Create a new Load Balancer with a reserved IP, by patching an existing ClusterIP service called `tea-svc`.
+* Check the IP address was correctly set on this service and that this service is now a Load Balancer one.
+* Delete the `tea-svc` service (showing that the IP address is not deleted).
+* Create a new Load Balancer with the IP reserved beforehand, by patching the `coffee-svc` service.
+
+These steps show how we can use a reserved IP on Load Balancer creation and then “move” this IP from one service to another.
+
+```sh
+# kubectl get svc
+NAME         TYPE        CLUSTER-IP     EXTERNAL-IP   PORT(S)   AGE
+coffee-svc   ClusterIP   10.32.102.89   <none>        80/TCP    9s
+kubernetes   ClusterIP   10.32.0.1      <none>        443/TCP   3m56s
+tea-svc      ClusterIP   10.32.57.52    <none>        80/TCP    9s
+
+# kubectl patch svc tea-svc --type merge --patch '{"spec":{"loadBalancerIP": "51.159.24.7","type":"Load Balancer"}}'
+service/tea-svc patched
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   ClusterIP      10.32.102.89   <none>        80/TCP         44s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        4m31s
+tea-svc      Load Balancer   10.32.57.52    <pending>     80:32434/TCP   44s
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   ClusterIP      10.32.102.89   <none>        80/TCP         45s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        4m32s
+tea-svc      Load Balancer   10.32.57.52    51.159.24.7   80:32434/TCP   45s
+
+# kubectl delete svc tea-svc
+service "tea-svc" deleted
+
+# kubectl patch svc coffee-svc --type merge --patch '{"spec":{"loadBalancerIP": "51.159.24.7","type":"Load Balancer"}}'
+service/coffee-svc patched
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   Load Balancer   10.32.102.89   <pending>     80:31094/TCP   100s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        5m27s
+
+# kubectl get svc
+NAME         TYPE           CLUSTER-IP     EXTERNAL-IP   PORT(S)        AGE
+coffee-svc   Load Balancer   10.32.102.89   51.159.24.7   80:31094/TCP   103s
+kubernetes   ClusterIP      10.32.0.1      <none>        443/TCP        5m30s
+```
+
+As you can see, we have been able to keep the same IP on different Load Balancers. This allows for instance, to keep the same DNS configuration and move it from one Load Balancer Instance type to another. We have also seen that Kapsule manages the configuration of your Load Balancer for you. The cloud controller manager is in charge of managing the complete lifecycle of your Load Balancer.

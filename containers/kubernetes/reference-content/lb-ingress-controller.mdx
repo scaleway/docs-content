@@ -1,0 +1,119 @@
+---
+meta:
+  title: Exposing a Kubernetes Kapsule ingress controller service with a Load Balancer
+  description: This page explains how to expose an application via an ingress object, and using a Load Balancer to make the IP persistent.
+content:
+  h1: Exposing a Kubernetes Kapsule ingress controller service with a Load Balancer
+  paragraph: This page explains how to expose an application via an ingress object, and using a Load Balancer to make the IP persistent.
+categories:
+  - network
+  - kubernetes
+  - storage
+  - load-balancer
+tags: compute kapsule kubernetes ingress-controller k8s Load-balancer wildcard 
+dates:
+  validation: 2023-10-26
+  posted: 2020-05-05
+---
+
+
+This tutorial will guide you through deploying a test application on a Kubernetes cluster, exposing it via an ingress object, and using a Scaleway Load Balancer to make the IP persistent.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [set up a Kapsule cluster](/containers/kubernetes/how-to/create-cluster/), and you have deployed a TRAEFIK2 ingress controller via the application library using the [Easy Deploy function](/containers/kubernetes/how-to/enable-easy-deploy/)
+   - You have obtained the [kubeconfig](/containers/kubernetes/how-to/edit-cluster/) file for the cluster
+   - You have installed [kubectl](/containers/kubernetes/how-to/connect-cluster-kubectl/) on your local machine
+</Message>
+
+
+## Expose the ingress controller using a Scaleway Load Balancer
+
+By default, ingress controllers on Kapsule are deployed using a [hostPort](https://kubernetes.io/docs/concepts/services-networking/service/). This means they are accessible on all cluster nodes on ports 80 and 443. This choice was made to prevent additional costs for users during their test and deployment phase. However, for production-readiness, you might want to use a Load Balancer to expose your services on the internet.
+
+### Deploying a test application
+
+1. Deploy the `cafe-ingress` test application:
+
+    ```bash
+    kubectl create -f https://raw.githubusercontent.com/nginxinc/kubernetes-ingress/main/examples/ingress-resources/basic-auth/cafe.yaml
+    ```
+
+2. Create the ingress object (`coffee-ingress.yaml`) using the DNS wildcard provided by Scaleway:
+
+    ```yaml
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: coffee-ingress
+    spec:
+      rules:
+        - host: YOUR_SCALEWAY_DNS_WILDCARD
+          http:
+            paths:
+              - path: /tea
+                pathType: Prefix
+                backend:
+                  service:
+                    name: tea-svc
+                    port:
+                      number: 80
+              - path: /coffee
+                pathType: Prefix
+                backend:
+                  service:
+                    name: coffee-svc
+                    port:
+                      number: 80
+    ```
+
+    <Message type="note">
+      Your DNS wildcard is composed of your cluster ID (e.g. `68362d3b-57c8-4bea-905a-aeb7f9ab95dc`) followed by `.nodes.k8s.<SCW_REGION>.scw.cloud`. For a cluster located in the Paris region, your DNS wildcard could be for example: `hotdrinks.68362d3b-57c8-4bea-905a-aeb7f9ab95dc.nodes.k8s.fr-par.scw.cloud`. 
+    </Message>
+
+3. Apply the configuration:
+
+    ```bash
+    kubectl create -f coffee-ingress.yaml
+    ```
+
+4. Test the ingress:
+
+    ```bash
+    curl http://YOUR_SCALEWAY_DNS_WILDCARD/coffee
+    ```
+
+## Using a reserved IP with a Load Balancer
+
+
+Reserve a flexible Load Balancer IP address [through the Scaleway API](/containers/kubernetes/reference-content/managing-load-balancer-ips/#reserve-a-load-balancer-flexible-ip-address-via-the-api). Take note of the IP address, referred to as `RESERVED_IP` from now on.
+
+### Using the reserved IP in Kubernetes
+
+1. Patch `tea-svc` to use the reserved IP with a `LoadBalancer` service:
+
+   ```bash
+   kubectl patch svc tea-svc --type merge --patch '{"spec":{"loadBalancerIP": "RESERVED_IP","type":"LoadBalancer"}}'
+   ```
+
+2. Delete `tea-svc`:
+
+   ```bash
+   kubectl delete svc tea-svc
+   ```
+
+3. Patch `coffee-svc` to use the reserved IP:
+
+   ```bash
+   kubectl patch svc coffee-svc --type merge --patch '{"spec":{"loadBalancerIP": "RESERVED_IP","type":"LoadBalancer"}}'
+   ```
+
+---
+
+### Related tutorials
+
+- [Loki Monitoring on Kubernetes](/tutorials/manage-k8s-logging-loki/)
+- [Monitoring a Kubernetes Kapsule Cluster](/tutorials/monitor-k8s-grafana/)
+- [Deploy an Image from a Private Registry](/containers/kubernetes/how-to/deploy-image-from-container-registry/)

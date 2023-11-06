@@ -1,0 +1,137 @@
+---
+meta:
+  title: Kubernetes service routing with wildcard DNS and ingress controller
+  description: This page explains how to route external traffic in Kubernetes using wildcard DNS and ingress controller
+content:
+  h1: Kubernetes service routing with wildcard DNS and ingress controller
+  paragraph: This page explains how to route external traffic in Kubernetes using wildcard DNS and ingress controller
+tags: kubernetes load-balancer-service wildcard ingress
+dates:
+  validation: 2023-10-30
+  posted: 2021-08-12
+categories:
+  - kubernetes
+---
+
+Kubernetes wildcard DNS refers to a DNS configuration that allows for routing any subdomain of a domain to a particular service or set of services within a Kubernetes cluster. A wildcard DNS record is usually indicated by an asterisk (*), for example: `*.yourdomain.com`.
+
+Using wildcard DNS with Kubernetes has several advantages:
+
+- Without wildcard DNS, each time you deploy a new service and want to expose it with a domain name, you would have to create a new DNS record. With wildcard DNS, any subdomain of `yourdomain.com` (like `service1.yourdomain.com`, `service2.yourdomain.com`, etc.) will automatically resolve to the IP address specified in the wildcard record.
+- Wildcard DNS is especially useful for development and staging environments where you might frequently spin up and tear down services. The wildcard DNS ensures that these services get valid DNS names without additional configuration.
+- When used in conjunction with an ingress controller (like Nginx or Traefik), wildcard DNS can be powerful. The ingress controller can route traffic based on the hostname, meaning that while the wildcard DNS points all subdomains to the ingress controller, the controller itself determines which service should handle the request based on its configuration.
+
+In short, Kubernetes wildcard DNS, combined with an ingress controller, provides a powerful way to dynamically route external traffic to different services in the cluster based on hostname patterns.
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created](/containers/kubernetes/how-to/create-cluster/) a Scaleway Kubernetes cluster
+  - You have `helm` installed on your local computer
+  - You have a domain name
+  - The service you want to expose is a `TCP` or `HTTP` one
+</Message>
+
+## Installing the ingress controller with helm
+
+1. Add the Helm repository:
+   ```bash
+   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+   helm repo update
+   ```
+
+2. Install the Nginx ingress controller using the helm packet manager:
+   ```bash
+   helm install nginx-ingress ingress-nginx/ingress-nginx \
+     --namespace ingress-nginx --create-namespace
+   ```
+
+3. Verify the installation:
+   ```bash
+   kubectl get pods -n ingress-nginx
+   ```
+
+## Configuring wildcard DNS
+
+1. Retrieve the ingress IP:
+   ```bash
+   kubectl get svc -n ingress-nginx
+   ```
+   <Message type="note">
+      It may take a few minutes for the Load Balancer IP to be assigned.
+   </Message>
+
+2. Configure Wildcard DNS:
+   - Go to your DNS provider and add an A record for `*.yourdomain.com` pointing to the IP address of the ingress controller's load balancer.
+
+## Deploy a sample application
+
+1. Deploy a sample application by creating a file `hello-world.yaml`. Below is a simple deployment and service example. Copy the content in the file and save it:
+     ```yaml
+     apiVersion: apps/v1
+     kind: Deployment
+     metadata:
+       name: hello-world
+     spec:
+       replicas: 2
+       selector:
+         matchLabels:
+           app: hello-world
+       template:
+         metadata:
+           labels:
+             app: hello-world
+         spec:
+           containers:
+           - name: hello-world
+             image: nginxdemos/hello
+             ports:
+             - containerPort: 80
+     ---
+     apiVersion: v1
+     kind: Service
+     metadata:
+       name: hello-world
+     spec:
+       ports:
+       - port: 80
+       selector:
+         app: hello-world
+     ```
+
+2. Apply the configuration with `kubectl apply -f hello-world.yaml`
+
+## Create an ingress resource
+
+1. Copy the following sample resource and paste and save it into a YAML file called `wildcard-ingress.yaml`. Remember to replace the domain name with your own.
+     ```yaml
+     apiVersion: networking.k8s.io/v1
+     kind: Ingress
+     metadata:
+       name: wildcard-ingress
+       annotations:
+         nginx.ingress.kubernetes.io/rewrite-target: /
+     spec:
+       rules:
+       - host: "*.yourdomain.com"
+         http:
+           paths:
+           - path: /
+             pathType: Prefix
+             backend:
+               service:
+                 name: hello-world
+                 port:
+                   number: 80
+     ```
+
+2. Apply the configuration with `kubectl apply -f wildcard-ingress.yaml`
+
+## Test your setup
+
+1. Access your application by pointing your web brower to `http://anything.yourdomain.com` (replace this with your own domain name). It should load the hello-world application.
+
+2. Test with different subdomains, they should all lead to your `hello-world` application due to the wildcard DNS setup.
+
+You have successfully set up an ingress controller with wildcard DNS on Scaleway Kubernetes Kapsule. This setup will allow you to easily manage multiple subdomains and route traffic to the various services in your Kubernetes cluster.

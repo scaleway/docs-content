@@ -1,0 +1,201 @@
+---
+meta:
+    title: Use Scaleway Managed Redis™ for MySQL caching with Entity Framework
+    description: In this tutorial you will learn to use Scaleway Redis™ as a record cache for Scaleway MySQL
+content:
+    h1: Use Scaleway Managed Redis™ for MySQL caching with Entity Framework
+    paragraph: In this tutorial you will learn to use Scaleway Redis™ as a record cache for Scaleway MySQL.
+tags: mysql redis entity-framework cache
+categories:
+  - postgresql-and-mysql
+  - redis
+dates:
+validation: 2023-11-25
+posted: 2023-11-25
+---
+This tutorial demonstrates the integration of a [Scaleway Redis™](https://www.scaleway.com/en/managed-database-for-redistm/) instance as a record cache (commonly referred to as a second-level cache) for an application using a [Scaleway MySQL](https://www.scaleway.com/fr/database/) instance through [Entity Framework](https://learn.microsoft.com/en-us/ef/).
+
+<Message type="note">
+    While the principles discussed are applicable to various technologies and data stores, the examples and demonstrations specifically use MySQL as the database, Redis as the cache, and Entity Framework for .NET as the Object-Relational Mapping (ORM) tool.
+</Message>
+
+<Macro id="iam-requirements" />
+
+<Message type="requirement">
+    - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+    - You have a [Redis™ Database Instance](/managed-databases/redis/how-to/create-a-database-for-redis)
+    - You have a [MySQL Database Instance](/managed-databases/postgresql-and-mysql/how-to/create-a-database)
+    - You have installed the [.NET 7 SDK](https://dotnet.microsoft.com/en-us/download/dotnet/7.0)
+</Message>
+
+## Scaffold a project with Entity Framework
+
+Entity Framework acts as an object-relational mapper for databases, also providing the capability to cache data retrieved from the underlying data store and effectively reducing database-access costs.
+
+The framework includes an integrated first-level cache that stores data for the scope of a single database session. Additionally, this tutorial explores a second-level cache, which functions as a globally shared record cache throughout the application to store recently accessed data.
+
+To initiate a new .NET project, follow these steps using the dotnet CLI:
+
+1. Create an empty project:
+    ```
+    dotnet new web -n ScalewayTutorial
+    ```
+2. Navigate to your newly created project folder and install dependencies for the data stores:
+    - `Pomelo.EntityFrameworkCore.MySql` is the database driver for MySQL in Entity Framework.
+    - `EFCoreSecondLevelCacheInterceptor` is the second-level cache extension for Entity Framework.
+    - `EasyCaching.Redis` is a Redis™ driver for .NET.
+    - `EasyCaching.Serialization.MessagePack`: provides serialization support for EasyCaching.
+
+    ```
+    dotnet add package Pomelo.EntityFrameworkCore.MySql
+    dotnet add package EFCoreSecondLevelCacheInterceptor
+    dotnet add package EasyCaching.Redis
+    dotnet add package EasyCaching.Serialization.MessagePack
+    ```
+
+### Create a database schema
+
+Begin by creating a database schema. Create a new class to represent a table:
+
+```csharp
+public class ProductModel
+{
+    public int Id { get; set; }
+    public string Name { get; set; }
+    public decimal Price { get; set; }
+}
+```
+
+### Setup the database context
+
+To establish a connection between Entity Framework and your table model, create the following class representing the database context:
+
+```csharp
+public class ProductDatabase : DbContext
+{
+    public ProductDatabase(DbContextOptions<ProductDatabase> options)
+        : base(options)
+    { }
+    public DbSet<ProductModel> Products => Set<ProductModel>();
+}
+```
+
+These components define both the structure of your database schema and the means by which Entity Framework interacts with it through the specified `ProductModel` class.
+
+## Configure the MySQL database
+
+Follow these steps to configure your MySQL database with Entity Framework:
+
+1. Get the public IP and port of your Database Instance. You can locate this information on the **Database Instance Information** page of your instance in the [Scaleway console](https://console.scaleway.com/rdb/instances), under **Public endpoint**.
+    <Lightbox src="scaleway-mysql-db-information.png" size="small" alt="Database Instance Information page in the Scaleway Console" />
+
+2. Create a new user for your database, granting administrative rights from the **Users page**. Alternatively, use the default user.
+    <Lightbox src="scaleway-mysql-user-information.png" size="small" alt="User page in the Scaleway Console" />
+
+3. Generate a connection string for your database using the provided information:
+    ```
+    server=<IP address>;port=<Port>;user id=<Username>;password=<Password>;database=products
+    ```
+
+4. During the application startup, establish the connection between Entity Framework and your Scaleway MySQL instance. Begin by clearing the content of `Program.cs`, then insert the following snippet:
+    ```csharp
+    var builder = WebApplication.CreateBuilder(args);
+
+    builder.Services.AddDbContext<ProductDatabase>(
+        (sp, options) =>
+        var connectionString = "<your connection string>";
+        {
+            options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString))
+                .AddInterceptors(sp.GetRequiredService<SecondLevelCacheInterceptor>());
+        }
+    );
+    ```
+
+    <Message type="important">
+        Replace the connection string placeholder by the one from the previous step in that snippet.
+    </Message>
+
+## Configure the Redis™ cache
+
+Follow these steps to configure your Redis™ cache with Entity Framework:
+
+1. Get the public IP, port and username for your Redis™ Instance. Locate this information on the **Database Instance Information** page of your instance in the [Scaleway console](https://console.scaleway.com/redis/clusters), under **Public endpoints**.
+<Lightbox src="scaleway-redis-db-information.png" size="small" alt="Redis Overview page in the Scaleway Console" />
+
+2. Download the TLS certificate using the <Icon name="toggle" /> button and store it in your project folder.
+
+2. Generate a connection string using the provided information:
+    ```
+    <IP address>:<Port>,user=<Username>,password=<Password>,ssl=True
+    ```
+
+3. During application startup, configure the EasyCaching library to connect to your Redis Instance, and configure it as the second-level cache for Entity Framework. Insert this snippet at the end of `Program.cs`:
+    ```csharp
+    builder.Services.AddEasyCaching(options =>
+    {
+        options.WithMessagePack("redis-messagepack");
+        options.UseRedis(config =>
+        {
+            config.SerializerName = "redis-messagepack";
+            config.DBConfig.ConfigurationOptions = ConfigurationOptions.Parse("<your connection string>");
+            var scalewayCert = new X509Certificate2("<your TLS certificate filename>", "");
+            config.DBConfig.ConfigurationOptions.CertificateValidation +=
+                (_, _, chain, _) => chain.ChainElements.Any(x => x.Certificate.Thumbprint == scalewayCert.Thumbprint);
+        }, "scaleway-redis");
+    });
+
+    builder.Services.AddEFSecondLevelCache(options => options.UseEasyCachingCoreProvider("scaleway-redis"));
+    ```
+
+    <Message type="important">
+        - Replace the connection string placeholder with the one generated in the previous step.
+        - Replace the TLS certificate file name.
+    </Message>
+
+## Create the app
+
+Your application is now fully configured to utilize the Scaleway Redis™ instance as a second-level cache for the Scaleway MySQL instance. To test the setup, create a couple of API endpoints.
+
+1. Define endpoints to interact with your Product database model for listing, retrieving and adding `ProductModel`s. Add the following snippet at the end of Program.cs:
+    ```csharp
+    var app = builder.Build();
+
+    app.MapGet("/product", (ProductDatabase db) => db.Products.Cacheable().ToList());
+
+    app.MapPost("/product", (ProductModel p, ProductDatabase db) =>
+    {
+        db.Products.Add(p);
+        db.SaveChanges();
+    });
+
+    app.MapGet("/product/{id}", (int id, ProductDatabase db) =>
+    {
+        return db.Products.Cacheable().FirstOrDefault(p => p.Id == id);
+    });
+    ```
+
+    <Message type="note">
+        Use `.Cacheable()` on Entity Framework queries to leverage the Redis™ second-level cache:
+            - During a query, Entity Framework checks the cache for recent executions and retrieves results if available. Otherwise, it executes the query using the database and stores the result in the cache.
+            - Any DML operation invalidate the cache on the related rows.
+        To further configure the second-level cache behavior, refer to the [package extension documentation](https://github.com/VahidN/EFCoreSecondLevelCacheInterceptor).
+    </Message>
+
+2. Scaffold the database at launch. Insert the following snippet at the end of `Program.cs`:
+    ```csharp
+    using (var serviceScope = app.Services.CreateScope())
+    {
+        var context = serviceScope.ServiceProvider.GetRequiredService<ProductDatabase>();
+        context.Database.EnsureCreated();
+        context.Database.Migrate();
+    }
+
+    app.Run();
+    ```
+
+3. Start the application. In your project folder, execute the following commands:
+    ```
+    dotnet build
+    dotnet run
+    ```
+    The last command will display the local URL to access the web application and test your API endpoints.

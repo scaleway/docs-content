@@ -1,22 +1,18 @@
 ---
 meta:
-  title: How to mount and use a Block Storage volume
-  description: This page explains how to mount and use a Block Storage volume
+  title: Managing a Block Storage volume
+  description: This page explains how to mount, use and dismount Block Storage volume
 content:
-  h1: How to mount and use a Block Storage volume
-  paragraph: This page explains how to mount and use a Block Storage volume
+  h1: Managing a Block Storage volume
+  paragraph: This page explains how to mount, use and dismount a Block Storage volume
 tags: volume block-storage block mount connect use
 dates:
-  validation: 2023-06-08
+  validation: 2023-11-23
   posted: 2019-11-29
 categories:
   - block-storage
   - storage
 ---
-
-To use a storage device on Linux it must be mounted (attached) to the operating system. Once it is mounted, a filesystem can be created on the device to store data. Similarly, to remove the device securely from the operating system, you should [unmount it](/storage/block/how-to/detach-a-volume) properly.
-
-This document explains how to mount an additional block volume to your Instance. Note that the root volume of the Instance is mounted for you at the time of Instance creation, this how-to concerns additional block volumes only.
 
 <Macro id="iam-requirements" />
 
@@ -26,7 +22,14 @@ This document explains how to mount an additional block volume to your Instance.
   - You have an [Instance](/compute/instances/concepts/#instance) with an [attached](/storage/block/how-to/attach-a-volume/) additional Block Storage volume
 </Message>
 
-## How to verify device availability
+This documentation only explains how to mount additional block volumes to your Instance, as the root volume of your Instance is already mounted at creation.
+
+## Mounting and using a Block Storage volume
+
+In order to mount and use your Block Storage volume, you need to connect to the Instance it is attached to via SSH.
+Then, check that the volume is available, format it and mount it, following the instructions below.
+
+### Verifying device availability
 
 1. Connect to your Instance with `ssh`.
     ```
@@ -53,7 +56,7 @@ This document explains how to mount an additional block volume to your Instance.
 </Message>
 
 
-## How to format the Block Volume
+### Formatting the Block volume
 
 1. Create a file system with the following command. This command uses the `ext4` filesystem, though you can choose another if you prefer.
     ```
@@ -75,15 +78,15 @@ This document explains how to mount an additional block volume to your Instance.
   └─vda15 vfat         B3E7-7040                            /boot/efi
   ```
 
-## How to mount the Block Volume
+### Mounting the Block volume
 
-Once your file system is created, you need to mount it.
+Once you have created your file system, you need to mount it.
 
 1. Create the mount point. In this tutorial, we choose `/mnt/block-volume`.
     ```
     mkdir /mnt/block-volume
     ```
-2. Mount the volume. We recommend you use the `defaults` option, as in the command below.
+2. Mount the volume. We recommend that you use the `defaults` option, as in the command below.
     ```
     mount -o defaults /dev/sda /mnt/block-volume
     ```
@@ -95,6 +98,7 @@ Once your file system is created, you need to mount it.
     ```
 
     If you want to see all available options, you can run `man mount` on your Instance.
+
 3. Make sure your file system is properly mounted by running the `lsblk` command.
     ```
     lsblk
@@ -111,7 +115,7 @@ Once your file system is created, you need to mount it.
     └─vda15 252:15   0  100M  0 part /boot/efi
     ```
 
-## How to use fstab for Persistent Mounting
+### Using fstab for Persistent Mounting
 
 With the current configuration, the block device will not be mounted automatically upon reboot. Use the `fstab` file to make sure the reboot does not impact your file system.
 
@@ -121,9 +125,9 @@ Add this line to the `/etc/fstab` file of your Instance:
 echo "UUID=$(blkid --output value /dev/sda | head -n1) /mnt/block-volume ext4 defaults 0 0" >> /etc/fstab
 ```
 
-## How to transfer data from your local machine to the remote block volume
+### Transferring data from your local machine to the remote Block volume
 
-You may wish to transfer files from your local machine to your Instance's remote block volume. This can be simply achieved with [rsync](https://en.wikipedia.org/wiki/Rsync), a tool for efficiently transferring and copying files. The rsync utility is preinstalled on most Linux distributions and macOS.
+You may wish to transfer files from your local machine to your Instance's remote Block volume. This can be simply achieved with [rsync](https://en.wikipedia.org/wiki/Rsync), a tool for efficiently transferring and copying files. The rsync utility is pre-installed on most Linux distributions and macOS.
 
 1. Check that rsync is installed on your local machine with the following command:
     ```
@@ -147,7 +151,7 @@ You may wish to transfer files from your local machine to your Instance's remote
     ```
 
     <Message type="tip">
-    If you get a `command not found` output (or similar), you need to install rsync. On Linux Ubuntu and Debian systems, you can do this with the APT package tool using the command `sudo apt install rsync`. For Linux CentOS/ Fedora, use the YUM package manager: `sudo yum install rsync`. On Mac OSX with the Homebrew package manager, use `brew install rsync`.
+     If you get a `command not found` output (or similar), you need to install rsync. On Linux Ubuntu and Debian systems, you can do this with the APT package tool using the command `sudo apt install rsync`. For Linux CentOS/ Fedora, use the YUM package manager: `sudo yum install rsync`. On Mac OSX with the Homebrew package manager, use `brew install rsync`.
     </Message>
 2. On your local machine, use nano to create a file called `hello-world.txt`:
     ```
@@ -162,12 +166,51 @@ You may wish to transfer files from your local machine to your Instance's remote
 
 The file is now transferred. You can connect to your Instance again, and use the command `cd /mnt/block-volume ; ls` to check that the file appears in the directory.
 
+## Increasing the partition size of the volume
 
+<Message type="tip">
+  We recommend that you make a backup of your data using the [snapshot](/storage/block/how-to/create-a-snapshot/) feature, before increasing the partition size of your volume. This helps you avoid any potential data loss.
+</Message>
 
-<Navigation title="See Also">
-  <PreviousButton to="/storage/block/how-to/attach-a-volume/">How to attach a volume</PreviousButton>
-  <NextButton to="/storage/block/how-to/increase-block-volume/">How to increase the volume size</NextButton>
-</Navigation>
+1. Connect to your Instance using [SSH](/compute/instances/how-to/connect-to-instance/).
+2. Use the `lsblk` command to identify your Block Storage volume's mount point. In the following example the volume is mounted at `/mnt/block-volume`:
+    ```
+    root@scw-distracted-keldysh:~# lsblk
+    NAME    MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+    loop0     7:0    0  63.3M  1 loop /snap/core20/1852
+    loop1     7:1    0 111.9M  1 loop /snap/lxd/24322
+    loop2     7:2    0  49.8M  1 loop /snap/snapd/18596
+    sda       8:0    0   9.3G  0 disk
+    ├─sda1    8:1    0   9.2G  0 part /
+    ├─sda14   8:14   0     4M  0 part
+    └─sda15   8:15   0   106M  0 part /boot/efi
+    ```
+
+3. Use `growpart` to increase the partition size of your block storage volume (here `/dev/sdb1`):
+    ```
+    growpart /dev/sdX 1
+    ```
+
+    <Message type="tip">
+      Take note of the space between the device identifier and the partition number.
+    </Message>
+4. Increase the partition size of the volume using `resize2fs`. Replace `/dev/sdX` with the name of your block volume in the following command:
+    ```
+    resize2fs -p /dev/sdX1
+    ```
+5. Check the new block volume size using `lsblk`:
+    ```
+    root@scw-distracted-keldysh:~# lsblk
+    NAME    MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+    loop0     7:0    0  63.3M  1 loop /snap/core20/1852
+    loop1     7:1    0 111.9M  1 loop /snap/lxd/24322
+    loop2     7:2    0  49.8M  1 loop /snap/snapd/18596
+    sda       8:0    0  18.6G  0 disk
+    ├─sda1    8:1    0  18.5G  0 part /
+    ├─sda14   8:14   0     4M  0 part
+    └─sda15   8:15   0   106M  0 part /boot/efi
+    ```
+
 
 
 

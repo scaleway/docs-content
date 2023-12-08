@@ -13,8 +13,8 @@ categories:
   - postgresql-and-mysql
 tags: serverless serverless-functions functions serverless-triggers triggers sqs-queue managed-database
 dates:
-  validation: 2023-12-21
-  posted: 2023-12-07
+  validation: 2023-12-08
+  posted: 2023-12-08
 ---
 
 ## Introduction
@@ -27,8 +27,8 @@ dates:
 </Message>
 
 In this tutorial we are going to show how to set up a simple application reading [Hacker News](https://news.ycombinator.com) and processing articles asynchronously. To do so, we will use Scaleway serverless products and deploy two functions:
- - A producer function, activated by a recurrent cron trigger, that scrapes HackerNews for articles published in the last 15m and pushes the title and url of such articles to an SQS queue provisioned with Scaleway Messaging and Queueing.
- - A consumer function, triggered by each new message on the SQS queue, that consumes the information published to the queue, scrapes information from the linked article, and then writes the scraped information into a Scaleway Managed Database.
+ - A producer function, activated by a recurrent cron trigger, that scrapes HackerNews for articles published in the last 15m and pushes the title and url of such articles to an SQS queue created with Scaleway Messaging and Queueing.
+ - A consumer function, triggered by each new message on the SQS queue, that consumes messages published to the queue, scrapes some data from the linked article, and then writes such data into a Scaleway Managed Database.
  
 We show how to provision all the required Scaleway resources via Terraform (but you could equally use the console, API or one of our other supported devtools). The code for the functions is written in `python`.
 
@@ -44,7 +44,7 @@ Let's start with the scraper program (the "producer")
   At the moment the scaleway MnQ product does not support AWS SQS json protocol, hence the need to pin the `boto3` version to a previous one.  
   </Message>
 3. Create a subdirectory `handlers`, and add a `scrape_hn.py` file inside of it.
-4. Add the function code from the repository.
+4. Add the function code from the repository. Here you can find an explaination of the main code blocks
 
     SQS credentials and queue url are read by the function from environment variables. Those variables are set by terraform as explained in [one of the next sections](#create-a-terraform-file-to-provision-the-necessary-scw-resources). *If you choose another deployment method (e.g: console) don't forget to set them!*
     ```python
@@ -89,11 +89,11 @@ Let's start with the scraper program (the "producer")
     ```
 
 ## Create the consumer
-Next, let's create our consumer function. After receiving the article's title and information from the queue, it will scrape the page for some stats (number of `a`, `h1` and `p` tags) and save these values in a Scaleway managed PostgreSql instance. We are going to create the resources via terraform the following step, if you opt for another method don't forget to set the relevant function environment variables.
+Next, let's create our consumer function. When receiving a message containing the article's title and url from the queue, it will scrape the page for some stats (number of `a`, `h1` and `p` tags) and save these values in a Scaleway managed PostgreSql instance. We are going to create the resources via terraform the following step, if you opt for another method don't forget to set the relevant function environment variables.
 1. Create a directory called `consumer`
 2. Inside of it, add a file `requirements.txt`. We need the packages `requests`, `bs4` and `pg8000`. We use `pg8000` as it does not depend on system packages, thus making it a good fit for a serverless function. 
 3. Create a subdirectory `handlers`, and add a `consumer.py` file inside of it.
-4. Add the function code from the repository.
+4. Add the function code from the repository. Here you can find an explaination of the main code blocks
 
     SQS credentials and queue url are accessed by the function as environment variables. We set those variables directly in terraform as explained in [one of the next sections](#create-a-terraform-file-to-provision-the-necessary-scw-resources). If you choose another deployment method (e.g: console) don't forget to set them!
     ```python
@@ -191,6 +191,11 @@ You just need to set up env variables for functions!
       override_special = "_-"
     }
 
+    output db_password {
+      value = random_password.dev_mnq_pg_exporter_password.result
+      sensitive = true
+    }
+
     resource "scaleway_rdb_instance" "main" {
       name = "test-rdb"
       project_id   = scaleway_account_project.mnq_tutorial.id
@@ -198,7 +203,7 @@ You just need to set up env variables for functions!
       engine = "PostgreSQL-15"
       is_ha_cluster = false
       disable_backup = true 
-      user_name = "postgres"
+      user_name = "mnq_initial_user"
       password = random_password.dev_mnq_pg_exporter_password.result
     }
 
@@ -260,6 +265,7 @@ You just need to set up env variables for functions!
       zip_file     = "../worker/functions.zip"
       zip_hash     = filesha256("../worker/functions.zip")
       deploy       = true
+      max_scale    = 3
       environment_variables = {
         DB_NAME = scaleway_rdb_database.hn-database.name
         DB_HOST = scaleway_rdb_instance.main.load_balancer[0].ip
@@ -292,13 +298,26 @@ You just need to set up env variables for functions!
 ## Put it all in motion
 Using terraform, it is really straightforward: just run
 ```
+cd terraform
 terraform init
 terraform plan 
 terraform apply
 ```
 
-And when you are done testing, don't forget to clean up! 
+How to know if it is working as intended? 
+
+First, you can go in the scaleway console, [activate cockpit](https://www.scaleway.com/en/docs/observability/cockpit/quickstart/), and check logs and metrics about the functions execution or queue stats. 
+
+And to check if the data is correctly stored in the database, you can try to connect directly to it via a cli tool like psql. 
+You can retrieve your instance ip and port from the console, under the managed db section.
+When prompted for password, you can find it by running `terraform output -json`
 ```
+psql -h <DB_INSTANCE_IP> --port <DB_INSTANCE_PORT> -d hn-database -U worker
+```
+
+And when you are done testing, don't forget to clean up! First deactivate the cockpit from the console, if you had activated it. Then run: 
+```
+cd terraform
 terraform destroy
 ```
 
@@ -306,8 +325,10 @@ terraform destroy
 We have showed how to asynchronously decouple producer and consumer using SQS, adhering to serverless patterns. 
 While the volume of data processed in this example is not really notewhorty, thanks to queue's robustness and functions 
 auto scaling capabilities, it is possible to manage larger workloads. 
-As the pattern is rather generic, feel free to replace the simple proposed logic with your own .
 
-Another possible extension is to define multiple cron triggers for different websites, and pass the website as argument to the function, or creating multiple functions that feed the same queue. 
+Here are some possible extensions to this basic example:
+ - Replace the simple proposed logic with your own. What about counting how many times some keywords (e.g: copilot, serverless, microservice) appears in HN articles? 
+ - Define multiple cron triggers for different websites and pass the website as argument to the function. Or create multiple functions that feed the same queue. 
+ - Use a serverless container instead of the consumer function, and use a command line util like `htmldoc` or `pandoc` to perform a pdf conversion of the article and upload the result to an S3 bucket. 
+ - Replace the managed rdb with a Scaleway serverless db, so that all the infrastructure lives in the serverless ecosystem! *Note that at the moment there is no terraform support for serverless db, hence the choice to use rdb*.
 
-Yet another option could be to use a serverless container instead of the consumer function, and use a command line util like `htmldoc` or `pandoc` to perform a pdf conversion and upload the result to an S3 bucket. 

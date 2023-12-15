@@ -1,0 +1,117 @@
+---
+meta:
+  title: Getting started with Clicon self hosted CI on Apple silcion
+  description: This page explains how to setup a self-hosted CI on Apple silicon using Clicon
+content:
+  h1: Getting started with the Cloud Controller Manager
+  paragraph: This page explains how to setup a self-hosted CI on Apple silicon using Clicon
+categories:
+  - apple-silicon
+tags: bare-metal apple-silicon m1 m2pro
+dates:
+  validation: 2023-12-14
+  posted: 2023-12-14
+---
+
+Cilicon is a macOS application that use Apple's Virtualization Framework to generate, allocate, and execute ephemeral CI (Continuous Integration) virtual machines with performance close to native. 
+The concept of Cilicon is built around a straightforward cycle:
+
+1. **Duplicate Image:**
+   Cilicon swiftly replicates your Virtual Machine bundle (folder) for each run. Thanks to a clever cloning feature in APFS, even handling large bundles is remarkably fast.
+
+2. **Provision Shared Folder:**
+   Depending on your chosen provisioner, Cilicon populates the bundle's resources folder with files necessary for your Guest OS. For instance, the GitHub Actions provisioner equips the image with the runner download URL, registration token, name, and labels. The process provisioner executes a specified executable during both the provisioning and de-provisioning stages of a bundle. If desired, you can omit a provisioner by setting the type to "none," suitable for services like Buildkite that use non-expiring registration tokens.
+
+3. **Start Virtual Machine:**
+   Cilicon initiates the virtual machine and automatically mounts the resources folder of the bundle on the guest OS.
+
+4. **Listen for Shutdown:**
+   Cilicon remains vigilant for any shutdown signals from the Guest OS. Upon shutdown, it removes the used image, preparing for a fresh start.
+
+The tool currently offers compatibility with GitHub Actions, Buildkite Agent, GitLab Runner, and arbitrary scripts. Clicon enables you to set up and activate your self-hosted CI within minutes.
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [created a Mac mini](/bare-metal/apple-silicon/how-to/create-mac-mini/)
+</Message>
+
+1. Connect to your mac Mini using [VNC](/bare-metal/apple-silicon/how-to/connect-to-mac-mini/).
+2. Download the latest release of the [Clicon installer (`Clicon.Installer.zip`)](https://github.com/traderepublic/Cilicon/releases/latest)
+3. Double click on the downloaded file to launch the installer.
+4. Configure the disk space allocated to Clicon (64 GB by default). Then click **Download latest image**. The tool downloads the lastest Clicon image and installs the application.
+
+
+   **Choosing a Source:**
+   Cilicon uses the tart container format and includes an integrated OCI client for fetching images from the internet. Consider the following options for selecting a source:
+
+   - Use tart (recommended for downloading, installing, editing, and uploading via OCI).
+   - Use Cilicon Installer (supports downloading and installing).
+   - Use Cilicon (supports editing by enabling editorMode in the configuration file).
+
+   **Important Tips:**
+   - When selecting an OCI hosted image, remember to prepend the `oci://` scheme to the URL. Otherwise, Cilicon assumes a local filesystem path.
+   - Avoid using the "latest" tag; instead, specify the version of Xcode you want to install (e.g., 14.3).
+   - Periodically clear the `~/.tart` folder of unused images.
+   - Images with newer macOS versions might have the same Xcode version. If upgrading, manually delete outdated images.
+
+   ⚙️ **Configuration:**
+   Cilicon expects a `cilicon.yml` file in the Host OS's home directory. Refer to `Config.swift` for available settings.
+
+   **GitHub Actions:**
+   To use GitHub Actions, create and install a GitHub App with Self-hosted runners Read & Write permissions. Download the private key file for reference in the configuration file.
+
+   ```yaml
+   source: oci://ghcr.io/cirruslabs/macos-ventura-xcode:14.3.1
+   provisioner:
+     type: github
+     config:
+       appId: <APP_ID>
+       organization: <ORGANIZATION_SLUG>
+       privateKeyPath: ~/github.pem
+   ```
+
+   **GitLab Runner:**
+   For GitLab Runner, create a runner with an authentication token. Customize the configuration as needed.
+
+   ```yaml
+   source: oci://ghcr.io/cirruslabs/macos-ventura-xcode:14.3.1
+   provisioner:
+     type: gitlab
+     config:
+       gitlabURL: <GITLAB_INSTANCE_URL>
+       runnerToken: <RUNNER_TOKEN>
+       # Additional configuration options...
+   ```
+
+   **Buildkite Agent:**
+   For Buildkite Agent, set your agent token in the provisioner config.
+
+   ```yaml
+   source: oci://ghcr.io/cirruslabs/macos-ventura-xcode:14.3.1
+   provisioner:
+     type: buildkite
+     config:
+       agentToken: <AGENT_TOKEN>
+   ```
+
+   **Script:**
+   If running a script, use the script provisioner.
+
+   ```yaml
+   source: oci://ghcr.io/cirruslabs/macos-ventura-xcode:14.3.1
+   provisioner:
+     type: script
+     config:
+        run: |
+        	echo "Hello World"
+        	sleep 10
+   ```
+
+**Setting Up the Host OS:**
+   For optimal performance, set up Cilicon on a dedicated macOS device. Follow these steps:
+
+   - Transfer Cilicon.app, `cilicon.yml`, and other referenced files to your Host OS.
+   - Add Cilicon.app as a launch item.
+   - Set up Automatic Login.
+   - Disable automatic software updates.
+   - Disable any screen lock, battery-saving features, etc.

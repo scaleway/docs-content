@@ -1,0 +1,133 @@
+---
+meta:
+  title: Getting started with Cilicon self-hosted CI on Apple silcion
+  description: This page explains how to set up a self-hosted CI on Apple silicon using Cilicon
+content:
+  h1: Getting started with Cilicon self-hosted CI on Apple silcion
+  paragraph: This page explains how to set up a self-hosted CI on Apple silicon using Cilicon
+categories:
+  - apple-silicon
+tags: bare-metal apple-silicon m1 m2pro
+dates:
+  validation: 2023-12-14
+  posted: 2023-12-14
+---
+
+Cilicon, a macOS application developed by Trade Republic, uses Apple's Virtualization Framework to create, allocate, and execute ephemeral CI (Continuous Integration) virtual machines with near-native performance. The underlying concept of Cilicon follows a simple cycle:
+
+1. **Duplicate Image:**
+   Cilicon rapidly replicates the Virtual Machine bundle (folder) for each run, using APFS's cloning feature for swift handling, even with large bundles.
+
+2. **Provision Shared Folder:**
+   Depending on the chosen provisioner, Cilicon populates the bundle's resources folder with files essential for the guest OS. For example, the GitHub Actions provisioner equips the image with the runner download URL, registration token, name, and labels. The process provisioner executes a specified executable during both provisioning and de-provisioning stages. If needed, provisioners can be omitted by setting the type to "none," suitable for services like Buildkite using non-expiring registration tokens.
+
+3. **Start Virtual Machine:**
+   Cilicon initiates the virtual machine and automatically mounts the resources folder of the bundle on the guest OS.
+
+4. **Listen for Shutdown:**
+   Cilicon actively monitors shutdown signals from the guest OS. Upon shutdown, it removes the used image, preparing for a fresh start.
+
+Cilicon uses the tart container format and integrates an OCI client for fetching images from the internet. The tool currently supports GitHub Actions, Buildkite Agent, GitLab Runner, and arbitrary scripts.
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com).
+  - You have [created a Mac mini](/bare-metal/apple-silicon/how-to/create-mac-mini/).
+</Message>
+
+## Installing Cilicon on macOS
+
+1. Connect to your Mac Mini using [VNC](/bare-metal/apple-silicon/how-to/connect-to-mac-mini/).
+2. Download the latest release of [Cilicon](https://github.com/traderepublic/Cilicon/releases/latest).
+3. Move the file `Cilicon.app` to the applications folder of your OS.
+4. Add `Cilicon.app` as a [launch item](https://support.apple.com/guide/mac-help/open-items-automatically-when-you-log-in-mh15189/13.0/mac/13.0) and set up [automatic login](https://support.apple.com/en-us/102316).
+   - Disable automatic software updates and any screen lock, battery-saving features, etc. to avoid issues with your Cilicon machine.
+   - Cilicon expects a `cilicon.yml` configuration file in the host OS's home directory. Refer to the [official documentation](https://github.com/traderepublic/Cilicon/blob/main/Cilicon/Config/Config.swift) for available settings.
+
+## Cilicon Configuration
+
+Cilicon uses YAML configuration files for settings, expected to be in a `cilicon.yml` file in the host OS's home directory.
+
+<Message type="tip">
+  - When using an OCI hosted image, ensure to include the `oci://` scheme at the beginning of the URL. Without it, Cilicon will interpret the path as a local filesystem location.
+  - Refrain from using the "latest" tag; instead, explicitly mention the desired Xcode version (e.g. 14.3).
+  - Regularly clean the `~/.tart` folder to remove any unused images.
+  - Be aware that images with more recent macOS versions may share the same Xcode version. If upgrading, remember to manually remove outdated images.
+</Message>
+
+### GitHub Actions Provisioner
+
+To use the GitHub Actions provisioner, create and install a new GitHub App with `Self-hosted runners` `Read & Write` permissions on the organization level. Download the private key file and reference it in the configuration file.
+
+```yaml
+source: oci://ghcr.io/cirruslabs/macos-ventura-xcode:14.3.1
+provisioner:
+  type: github
+  config:
+    appId: <APP_ID>
+    organization: <ORGANIZATION_SLUG>
+    privateKeyPath: ~/github.pem
+```
+
+### GitLab Runner Provisioner
+
+To use the GitLab Runner provisioner, create a runner with an authentication token.
+
+Here is a basic example:
+
+```yaml
+source: oci://ghcr.io/cirruslabs/macos-ventura-xcode:14.3.1
+provisioner:
+  type: gitlab
+  config:
+    gitlabURL: <GITLAB_INSTANCE_URL>
+    runnerToken: <RUNNER_TOKEN>
+```
+
+Or refer to a full configuration:
+
+```yaml
+source: oci://ghcr.io/cirruslabs/macos-ventura-xcode:14.3.1
+provisioner:
+  type: gitlab
+  config:
+    gitlabURL: <GITLAB_INSTANCE_URL>
+    runnerToken: <RUNNER_TOKEN>
+    executor: <EXECUTOR> # defaults to 'shell'
+    maxNumberOfBuilds: <MAX_BUILDS> # defaults to '1'
+    downloadLatest: <DOWNLOAD_LATEST> # defaults to 'true'
+    downloadURL: <DOWNLOAD_URL> # defaults to GitLab official S3 bucket
+    configToml: >
+      <CONFIG_TOML> # Advanced config as custom config.toml file to be appended to the basic config and copied to the runner.
+```
+
+### Buildkite Agent Provisioner
+
+To use the Buildkite Agent provisioner, set your agent token in the provisioner config.
+
+```yaml
+source: oci://ghcr.io/cirruslabs/macos-ventura-xcode:14.3.1
+provisioner:
+  type: buildkite
+  config:
+    agentToken: <AGENT_TOKEN>
+```
+
+### Script Provisioner
+
+If you want to run a script (e.g. to start a runner that is not natively supported), use the `script` provisioner.
+
+```yaml
+source: oci://ghcr.io/cirruslabs/macos-ventura-xcode:14.3.1
+provisioner:
+  type: script
+  config:
+    run: |
+      echo "Hello World"
+      sleep 10
+```
+
+## Conclusion
+
+This tutorial gives basic guidance for setting up and configuring provisioners for various CI platforms, enabling the use of this powerful macOS application for Continuous Integration (CI) on Apple silicon.
+For those seeking to further customize and optimize their Cilicon experience, it is strongly recommended to consult the [official documentation](https://github.com/traderepublic/Cilicon) to learn about advanced configurations, troubleshooting, and keeping you informed about any new features or updates.<br /><br />
+For a more in-depth exploration of practical tips, use cases, and a thorough exploration of Cilicon's capabilities, the article on Medium titled ["Self-Hosted CI on Apple Silicon with Cilicon"](https://engineering.traderepublic.com/easy-self-hosted-ci-on-apple-silicon-with-cilicon-6e7d9503c2d6) provides additional perspectives and real-world implementation scenarios, empowering you to maximize the potential of Cilicon in your CI workflows.

@@ -1,0 +1,169 @@
+---
+meta:
+  title: Setting IAM permissions and implement RBAC on a cluster
+  description: This page explains how to set IAM permissions and implement RBAC on a cluster
+content:
+  h1: Setting IAM permissions and implement RBAC on a cluster
+  paragraph: This page explains how to set IAM permissions and implement RBAC on a cluster
+tags: kubernetes kapsule-cluser
+dates:
+  validation: 2024-01-09
+  posted: 2024-01-09
+categories:
+  - kubernetes
+---
+
+Role-based access control (RBAC) is a native feature of Kubernetes and a method of regulating access to computer or network resources based on the roles of individual users within your Organization.
+The feature is activated on Scaleway Kubernetes Kapsule and Kosmos by default and is compatible with Scaleway's IAM service.
+IAM and RBAC work together by integrating Scaleway’s identity and access management with Kubernetes' native RBAC system. This integration ensures that access permissions are consistent across both the cloud infrastructure and the Kubernetes cluster, providing a secure access control mechanism.
+It allows you to assign roles to users, groups or `ServicesAccount` via `RoleBindings` and `ClusterRoleBindings`.
+
+Key components of RBAC in Kubernetes include:
+
+- **Roles and ClusterRoles:**
+   - **Roles:** These are specific to a namespace and define a set of permissions for resources within that namespace (e.g., pods, services).
+   - **ClusterRoles:** These are similar to roles but apply cluster-wide, spanning across all namespaces.
+- **RoleBindings and ClusterRoleBindings:**
+   - **RoleBindings:** These associate a set of permissions defined in a Role with a user, group, or service account within a specific namespace.
+   - **ClusterRoleBindings:** These associate a set of permissions defined in a ClusterRole with a user, group, or service account across the entire cluster.
+- **Subjects:**  A subject in RBAC can be a user, a group, or a service account to which roles or cluster roles are bound.
+- **Rules:** Rules are sets of permissions associated with roles or cluster roles. They specify what actions are allowed or denied on specific resources.
+
+RBAC works seamlessly with Scaleway's IAM (Identity and Access Maanagement) system. Refer to [How to manage Kubeconfig files with IAM](/containers/kubernetes/how-to/manage-kubeconfig-with-iam/) for information how to configure IAM permissions for your users.
+
+## Built-in IAM permissions
+
+<Message type="tip">
+  The cluster administrator can adjust each role's permissions by implementing a role binding for a specific user (e.g. `scaleway:bearer:773989c0-607c-4bb8-a5b8-867581b4e8d2`). This user will then acquire the permissions associated with the role.  
+  It is also possible to adjust the roles permissions by creating a role binding for a group (e.g. `scaleway:groups:773989c0-607c-4bb8-a5b8-867581b4e8d2:devops`). In doing so, all members of that group will be granted the corresponding permissions inherent to the role.
+</Message>
+
+### AllProductReadOnly or KubernetesReadOnly
+
+Users with the `AllProductReadOnly` or `KubernetesReadOnly` permission have no inherent permissions by default.
+
+<Message type="note">
+    Without the configuration of additional role bindings, users do not possess any operational capabilities within the cluster.
+</Message>
+
+### AllProductFullAccess
+
+The `AllProductFullAccess` permission grants full access to the Kubernetes cluster and all other Scaleway products of the user. Users with this permission can perform actions associated with the `scaleway:cluster-write` binding.  
+
+### AllProductReadOnly (or KubernetesReadOnly) and KubernetesFullAccess:
+
+The `KubernetesFullAccess` permission provides access rights to users within the Kubernetes system. Users with this permission can perform any actions associated with the `scaleway:cluster-write` binding.
+
+### AllProductFullAccess (or KubernetesFullAccess) and KubernetesSystemMastersGroupAccess:
+
+The `KubernetesSystemMastersGroupAccess` permission grants users unrestricted access and they can perform any action on any resource within the Kubernetes cluster.
+Users in this group are added to the `system:masters` cluster role.
+
+<Message type="important">
+  This role overrides any RBAC permissions, allowing users with this role to bypass any restrictions set by other roles.
+  Due to its extended privileges, assigning the `system:masters` role should be done cautiously and limited to trusted administrators who require unrestricted control over the Kubernetes environment.
+</Message>
+
+## Cluster role scaleway:cluster-write
+
+The custom `scaleway:cluster-write` cluster role, injected during cluster setup, provides users with write permissions for specific cluster-level resources.
+Its manifest can be modified within your cluster to configure its permissions according to your specific needs. The default setting, denoted by an asterisk `*`, grants unrestricted access to the resources by default. Adjustments can be made to limit permissions based on your required levels of access.
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: scaleway:cluster-write
+rules:
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - '*'
+- nonResourceURLs:
+  - '*'
+  verbs:
+  - '*'
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: scaleway:cluster-write
+subjects:
+- kind: Group
+  name: scaleway:cluster-write
+roleRef:
+  kind: ClusterRole
+  name: scaleway:cluster-write
+  apiGroup: rbac.authorization.k8s.io
+```
+
+### Role and binding examples for users and groups
+
+The following example grants access to the `example-namespace` namespace for the `Devops` group within the `scaleway:groups:3972be4a-43d9-43da-9a55-195f1de9b770`. It involves creating a role binding. This binding aligns the specified group with the necessary permissions, enabling access to resources within the specified namespace.
+
+```yaml
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: devops-example-namespace-full-access
+  namespace: example-namespace
+rules:
+- apiGroups: [""]
+  resources: ["*"]
+  verbs: ["*"]
+- apiGroups: ["extensions"]
+  resources: ["*"]
+  verbs: ["*"]
+
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: devops-rolebinding
+  namespace: example-namespace
+subjects:
+- kind: Group
+  name: scaleway:groups:3972be4a-43d9-43da-9a55-195f1de9b770:Devops
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: devops-example-namespace-full-access
+  apiGroup: rbac.authorization.k8s.io
+```
+
+The following example provides read access to the `example-namespace` namespace for the user identified as `scaleway:bearer:773989c0-607c-4bb8-a5b8-867581b4e8d2` and involves creating a role binding. This binding associates the specified user with the necessary permissions, allowing the user to read resources within the specified namespace.
+
+```yaml
+---
+kind: Role
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: toto-read
+  namespace: example-namespace
+rules:
+- apiGroups: [""]
+  resources: ["*"]
+  verbs: ["list", "get"]
+- apiGroups: ["extensions"]
+  resources: ["*"]
+  verbs: ["list","get"]
+
+---
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: toto-rolebinding
+  namespace: example-namespace
+subjects:
+- kind: User
+  name: scaleway:bearer:773989c0-607c-4bb8-a5b8-867581b4e8d2
+  apiGroup: rbac.authorization.k8s.io
+roleRef:
+  kind: Role
+  name: toto-read
+  apiGroup: rbac.authorization.k8s.io
+```
+
+For more information how to use RBAC with your Kubernetes clusters, refer to the official [Kubernetes documentation](https://kubernetes.io/docs/reference/access-authn-authz/rbac/).

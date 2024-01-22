@@ -1,0 +1,377 @@
+---
+meta:
+  title: Create a serverless architecture that manage large messages, with Scaleway Messaging and Queuing NATS, Serverless Functions and Object Storage.
+  description: This page show an example of serverless architecture for asynchronous files conversion based on messages, functions, and triggers.
+content:
+  h1: Create a serverless architecture that manage large messages, with Scaleway Messaging and Queuing NATS, Serverless Functions and Object Storage.
+  paragraph: This page show an example of serverless architecture for asynchronous files conversion based on messages, functions, and triggers.
+categories:
+  - messaging
+  - functions
+tags: message nats serverless serverless-functions functions serverless-triggers triggers storage object-storage terraform large-messages
+dates:
+  validation: 2024-01-22
+  posted: 2024-01-22
+---
+
+# Introduction
+
+<Macro id="iam-requirements" />
+ 
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [set up authentication for the Terraform provider](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs#authentication)
+</Message>
+
+In this tutorial, we will see how to create a simple architecture that stores images and converts them to PDF automatically. 
+The goal is to understand how to transfer large message through a messaging service. 
+To do this, we will use a NATS server available in the Scaleway messaging service. 
+We will also use the Object storage service to store our images and the Serverless Function service to convert them.
+You can retrieve the full source code in [this repository](https://github.com/rouche-q/serverless-examples/tree/main/projects/large-messages/README.md)
+
+## Prerequisites
+
+For this tutorial you will need: 
+
+- Terraform
+- Docker
+- [NATS Cli](https://github.com/nats-io/natscli)
+- [AWS Cli configured with Scaleway credentials](https://www.scaleway.com/en/docs/storage/object/api-cli/object-storage-aws-cli/#how-to-install-the-aws-cli)
+
+## Architecture
+
+<Lightbox src="scaleway-large-messages-architecture.webp" alt="" />
+
+The architecture of this tutorial is very basic. It's structured around 2 elements:
+
+- A producer which is a shell script that upload the image to the Object Storage bucket and send a message to the NATS server.
+- A consumer which is a serverless function in Python that receive the message, parse it,
+  extract the image url to download it from the bucket, convert it to a PDF and reupload it.
+
+Between this there important service needed to make everything work together:
+
+- An object container to store our image file.
+- A Nats server to receive and dispatch the message that our producer send.
+- A trigger NATS that pass our message to our consumer.
+
+## Prepare the infrastructure
+
+1. Create a `main.tf` file and paste this to import required providers.
+    ```terraform
+    terraform {
+      required_providers {
+        scaleway = {
+          source = "scaleway/scaleway"
+        }
+        null = {
+          source = "hashicorp/null"
+        }
+        random = {
+          source = "hashicorp/random"
+        }
+        archive = {
+          source = "hashicorp/archive"
+        }
+      }
+      required_version = ">= 0.13"
+    }
+    ```
+    The Scaleway provider is needed, but also three provider from Hashicorp that we will use later in the tutorial.
+
+2. Add two variable to be able to pass your Scaleway credentials as secret and init the Scaleway provider in the region `fr-par-1`.
+    ```terraform
+    variable "scw_access_key_id" {
+      type      = string
+      sensitive = true
+    }
+
+    variable "scw_secret_access_key" {
+      type      = string
+      sensitive = true
+    }
+
+    provider "scaleway" {
+      zone = "fr-par-1"
+    }
+    ```
+
+3. Create a `terraform.tfvars` and add your Scaleway access key and access key id.
+    ```terraform
+    scw_access_key_id     = "YOUR_SCW_SECRET_KEY_ID"
+    scw_secret_access_key = "YOUR_SCW_SECRET_KEY"
+    ```
+
+4. Still in `main.tf` add this terraform code to create a Object Storage bucket that you will use to store your images.
+    ```terraform
+    resource "random_id" "bucket" {
+      byte_length = 8
+    }
+
+    resource "scaleway_object_bucket" "large_messages" {
+      name = "large-messages-${random_id.bucket.hex}"
+    }
+
+    resource "scaleway_object_bucket_acl" "large_messages" {
+      bucket = scaleway_object_bucket.large_messages.id
+      acl    = "private"
+    }
+
+    output "bucket_name" {
+      value       = scaleway_object_bucket.large_messages.name
+      description = "Bucket name to use with the producer script"
+    }
+    ```
+    In this code, the ressource `random_id.bucket` create a random id, that you will pass to object bucket just after to be sure that the bucket name is unique.
+    An `scaleway_object_bucket_acl` is added on the bucket to make it private and output the bucket name to use it in your producer.
+
+5. Next, add these ressources to create a NATS account an your NATS credential file:
+    ```terraform
+    resource "scaleway_mnq_nats_account" "large_messages" {
+      name = "nats-acc-large-messages"
+    }
+
+    resource "scaleway_mnq_nats_credentials" "large_messages" {
+      name       = "nats-large-messages-creds"
+      account_id = scaleway_mnq_nats_account.large_messages.id
+    }
+
+    resource "local_file" "nats_credential" {
+      content         = scaleway_mnq_nats_credentials.large_messages.file
+      filename        = "large-messages.creds"
+      file_permission = 644
+    }
+
+    output "nats_url" {
+      value       = scaleway_mnq_nats_account.large_messages.endpoint
+      description = "NATS url to use with the producer script"
+    }
+    ```
+    We also output the NATS server url.
+
+6. You can run `terraform init` and `terraform apply` to create the ressources in your Scaleway account. 
+
+## Create the producer
+
+As said before, the producer will be a simple shell script.
+
+1. Create a file `upload_img.sh` 
+    In it create two variables that use terraform command to get bucket name and NATS Url:
+    ```bash
+    SCW_BUCKET="$(terraform output bucket_name)"
+    SCW_NATS_URL="$(terraform output nats_url)"
+    ```
+
+2. Next configure the NATS cli with the NATS url and the credentials file.
+    ```bash
+    nats context save large-messages --server=$SCW_NATS_URL --creds=./large-messages.creds
+    nats context select large-messages
+    ```
+    Our script take the file path that we want to upload as first parameter.
+
+3. To upload our file we gonna use the AWS cli configured with Scaleway endpoint and credentials because the Scaleway Object storage is fully compliant with S3.
+    Pass the path to the AWS cli command like that:
+    ```bash
+    aws s3 cp $1 s3://$SCW_BUCKET
+    ```
+
+4. Past this command to make the script send a message to your NATS server with the name of the uploaded file in it.
+    ```bash
+    nats pub large-messages $(basename $1)
+    ```
+
+## Create the consumer
+
+For the consumer, we will continue to play with the Scaleway ecosystem and we gonna use a Serverless Function in Python.
+1. create a folder `function`, in it create an other folder `handler` with a file named `large_messages.py`.
+2. Aside from the `handler` folder, create a `requirements.txt` file.
+    You should have a structure like that:
+    ```
+    function/
+    ├── handler/
+    │   └── large_messages.py
+    └── requirements.txt
+    ```
+
+3. In the serverless function we will use two python libraries, `boto3` also configured like AWS cli to download and upload files in the bucket and `img2pdf` to convert our image in pdf.
+    In the `requirements.txt` add:
+    ```
+    boto3
+    img2pdf
+    ```
+
+4. Next create the code of your function. In `large_messages.py`, import the librairies that we need and create a empty handler function.
+    ```python
+    import os
+    import boto3
+    from botocore.exceptions import ClientError
+    import img2pdf
+    from PIL import Image
+
+    def handle(event, context):
+        return {
+            "body": {
+                "message": "Hello world!"
+            },
+            "statusCode": 200
+        }
+    ```
+
+5. Before starting the logic of your function you should add a little bit more of terraform code.
+    Go back in `main.tf` and add theses ressources:
+    ```terraform
+    resource "null_resource" "install_dependencies" {
+      provisioner "local-exec" {
+        command = <<-EOT
+          cd function
+          [ -d "./function/package" ] && rm -rf ./package
+          PYTHON_VERSION=3.11
+          docker run --rm -v $(pwd):/home/app/function --workdir /home/app/function rg.fr-par.scw.cloud/scwfunctionsruntimes-public/python-dep:$PYTHON_VERSION \
+           pip3 install --upgrade -r requirements.txt --no-cache-dir --target ./package
+          cd ..
+        EOT
+      }
+
+      triggers = {
+        hash = filesha256("./function/handler/large_messages.py")
+      }
+    }
+
+    data "archive_file" "function_zip" {
+      type        = "zip"
+      source_dir  = "./function"
+      output_path = "./function.zip"
+
+      depends_on = [null_resource.install_dependencies]
+    }
+    ```
+    The `null_resource` is used to download and package the good versions of the libraries that we use with the function, you can learn more about that in the [Scaleway documentation.](https://www.scaleway.com/en/docs/serverless/functions/how-to/package-function-dependencies-in-zip/#specific-libraries-(with-needs-for-specific-c-compiled-code))
+
+6. Create the function namespace.
+    ```terraform
+    resource "scaleway_function_namespace" "large_messages" {
+      name        = "large-messages-function"
+      description = "Large messages namespace"
+    }
+    ```
+
+7. Add the ressource to setup the function.
+    ```terraform
+    resource "scaleway_function" "large_messages" {
+      namespace_id = scaleway_function_namespace.large_messages.id
+      runtime      = "python311"
+      handler      = "handler/large_messages.handle"
+      privacy      = "private"
+      zip_file     = "function.zip"
+      zip_hash     = data.archive_file.function_zip.output_sha256
+      deploy       = true
+      memory_limit = "2048"
+      environment_variables = {
+        ENDPOINT_URL  = scaleway_object_bucket.large_messages.api_endpoint
+        BUCKET_REGION = scaleway_object_bucket.large_messages.region
+        BUCKET_NAME   = scaleway_object_bucket.large_messages.name
+      }
+      secret_environment_variables = {
+        ACCESS_KEY_ID     = var.scw_access_key_id
+        SECRET_ACCESS_KEY = var.scw_secret_access_key
+      }
+
+      depends_on = [data.archive_file.function_zip]
+    }
+    ```
+    The ressource create and link the function in the namespace. It set the runtime to python3.11 and the handler (the function to run in the python file).
+    Essential environment variables and secret to use in our function logic are also added.
+
+8. Create the function trigger to "wake up" the function when a NATS message come in.
+    ```terraform
+    resource "scaleway_function_trigger" "large_messages" {
+      function_id = scaleway_function.large_messages.id
+      name        = "large-messages-trigger"
+      nats {
+        account_id = scaleway_mnq_nats_account.large_messages.id
+      subject    = "large-messages"
+      } 
+    } 
+    ```
+    It define which account id and subject to observe for getting messages.
+
+9. Go back to `large_messages.py` and get the environment variables outside the `hamdler` function
+    ```python
+    endpoint_url = os.getenv("ENDPOINT_URL")
+    bucket_region = os.getenv("BUCKET_REGION")
+    bucket_name = os.getenv("BUCKET_NAME")
+    access_key_id = os.getenv("ACCESS_KEY_ID")
+    secret_access_key = os.getenv("SECRET_ACCESS_KEY")
+    ```
+
+10. Get input file name from the body, define the pdf file name form this and set up the s3 client to upload the file with Scaleway credentials.
+    ```python
+    input_file = event['body']
+    output_file = os.path.splitext(input_file)[0] + ".pdf"
+    s3 = boto3.client('s3', endpoint_url=endpoint_url,
+                      region_name=bucket_region,
+                      aws_access_key_id=access_key_id,
+                      aws_secret_access_key=secret_access_key
+    ```
+
+11. Outside the `handle` function, create a new function `convert_img_to_pdf`.
+    ```python
+    def convert_img_to_pdf(img_path, pdf_path):
+        image = Image.open(img_path)
+        pdf_bytes = img2pdf.convert(image.filename)
+        file = open(pdf_path, "wb")
+        file.write(pdf_bytes)
+        image.close()
+        file.close()
+        print("Successfully made pdf file")
+    ```
+
+12. Download the image form the bucket using the s3 client.
+    ```python
+    s3.download_file(bucket_name, input_file, input_file)
+    print("Object " + input_file + " downloaded")
+    ```
+
+13. Convert the image with the dedicated function and reupload it in the bucket.
+    ```python
+    convert_img_to_pdf(input_file, output_file)
+    s3.upload_file(output_file, bucket_name, output_file)
+    print("Object " + input_file + " uploaded")
+    ```
+
+14. Put a `try/except` around the code to handle gracefully any error coming from the s3 client.
+    ```python
+    try:
+        s3.download_file(bucket_name, input_file, input_file)
+        print("Object " + input_file + " downloaded")
+        convert_img_to_pdf(input_file, output_file)
+        s3.upload_file(output_file, bucket_name, output_file)
+        print("Object " + input_file + " uploaded")
+    except ClientError as e:
+        print(e)
+      return {
+            "body": {
+               "message": e.response['Error']['Message']
+            },
+            "statusCode": e.response['Error']['Code']
+        }
+    ```
+
+## Test your work
+
+All the infrastructure and the code of your function is ready, you can test your converter.
+```bash
+# Make sure your infrastructure is provisioned
+terraform init
+terraform apply
+
+# Use your producer script
+./upload_img.sh test.png #It can be any type of image
+```
+
+## Conclusion, going further
+
+In this basic tutorial, we've shown how to use the NATS server from Messaging and Queuing and other servicefrom the Scaleway ecosystem to transfer large messages that exceed the maximum size of usual message.
+
+You can extend to this tutorial to other use case like:
+- Convert other type of document like `docx`` or 
+- Send an url directly to NATS and convert html to pdf

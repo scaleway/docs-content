@@ -1,0 +1,182 @@
+---
+meta:
+  title: Managing Serverless Jobs using Dagster
+  description: This page shows how to create and manage Serverless Jobs using Dagster.
+content:
+  h1: Creating and deploying an Angular application on Serverless Containers
+  paragraph: This page shows how to create and manage Serverless Jobs using Dagster.
+tags: serverless jobs dagster python sdk orchestrator serverless-database
+categories:
+  - container-registry
+  - jobs
+  - object-storage
+  - serverless-sqldb
+dates:
+  validation: 2024-01-23
+  posted: 2024-01-23
+---
+
+In this tutorial, we will create a [Serverless Job](/serverless/jobs/quickstart) using Dagster to scrape the Hacker News webstite to retrieve the top articles' titles and URL.
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have a [Container Registry namespace](/containers/container-registry/how-to/create-namespace/) in the Paris region and have [signed in to it](/containers/container-registry/how-to/connect-docker-cli/)
+  - You have created a [Serverless Database](/serverless/sql-databases/how-to/create-a-database/)
+  - You have installed [Docker](https://docs.docker.com/engine/install/) on your local machine to build and push the Docker image
+  - You have [configured your SSH key](/console/project/how-to/create-ssh-key)
+  - You have [created an Object Storage bucket](/storage/object/how-to/create-a-bucket/) in the Paris region
+</Message>
+
+## Creating the Dagster project
+
+1. Create a new folder and access it:
+    ```bash
+    mkdir dagster-tutorial && cd dagster-tutorial
+    ```
+2. ruh the command below to create the Dagster project:
+    ```bash
+    dagster project scaffold --name my-dagster-project
+    cd my-dagster-project
+    ```
+3. Create the Dockerfile to build the container image from:
+    ```bash
+    cat <<EOF > Dockerfile
+    FROM python:3.11-slim-bookworm
+    WORKDIR /app
+    COPY . .  
+    RUN pip install pandas==2.2.0
+    RUN pip install scaleway==1.4.1
+    RUN pip install dagster_aws==0.22.1
+    RUN pip install pendulum==2.0.3
+    RUN pip install dagster-postgres==0.22.1
+    RUN pip install dagster_scaleway==0.1.2
+    RUN pip install .
+    EOF
+    ```
+4. Copy the scraper code below and paste it in the `my-dagster-project/assets.py` file:
+
+    ```py
+    import pandas as pd
+    import requests
+    import os
+
+    from dagster_aws.s3 import S3PickleIOManager, S3Resource
+
+    from dagster import Definitions, asset, MetadataValue, Output
+    import scaleway
+
+    client = scaleway.Client.from_config_file_and_env()
+
+    S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME")
+
+
+    @asset
+    def hackernews_top_story_ids():
+        """
+        Get top stories from the HackerNews top stories endpoint.
+        API Docs: https://github.com/HackerNews/API#new-top-and-best-stories
+        """
+        top_story_ids = requests.get(
+            "https://hacker-news.firebaseio.com/v0/topstories.json"
+        ).json()
+        return top_story_ids[:10]
+
+
+    # asset dependencies can be inferred from parameter names
+    @asset
+    def hackernews_top_stories(hackernews_top_story_ids):
+        """Get items based on story ids from the HackerNews items endpoint"""
+        results = []
+        for item_id in hackernews_top_story_ids:
+            item = requests.get(
+                f"https://hacker-news.firebaseio.com/v0/item/{item_id}.json"
+            ).json()
+            results.append(item)
+
+        df = pd.DataFrame(results)
+
+        # recorded metadata can be customized
+        metadata = {
+            "num_records": len(df),
+            "preview": MetadataValue.md(df[["title", "by", "url"]].to_markdown()),
+        }
+
+        return Output(value=df, metadata=metadata)
+
+
+    defs = Definitions(
+        assets=[hackernews_top_story_ids, hackernews_top_stories],
+        resources={
+            "io_manager": S3PickleIOManager(
+                s3_resource=S3Resource(
+                    region_name="fr-par",
+                    endpoint_url="https://s3.fr-par.scw.cloud",
+                    aws_access_key_id=client.access_key,
+                    aws_secret_access_key=client.secret_key,
+                ),
+                s3_bucket=S3_BUCKET_NAME,
+            ),
+        },
+    )
+    ```
+
+## Setting up the environment and creating the image
+
+1. Retrieve the following elements:
+    - your [Serverless SQL Database connection string](/serverless/sql-databases/how-to/connect-to-a-database/#how-to-set-up-credentials)
+    - the [access key and secret key](/identity-and-access-management/iam/how-to/create-api-keys/) for your API key
+    - the name of the [Object Storage bucket](/storage/object/how-to/create-a-bucket/) you created
+2. Export the environment variables below:
+    ```bash
+    export PG_CONN_STRING=<your_serverless_database_connection_string>
+    export SCW_ACCESS_KEY=<your_scaleway_access_key>
+    export SCW_SECRET_KEY=<your_scaleway_secret_key>
+    export S3_BUCKET_NAME=<your_bucket_name>
+    ```
+
+3. Build and push the image to your container registry namespace:
+    ```bash
+    docker build -t rg.fr-par.scw.cloud/<your-namespace>/dagster-scaleway-example:latest . &&
+    docker push rg.fr-par.scw.cloud/<your-namespace>/dagster-scaleway-example:latest
+    ```
+    <Message type="note">
+    You can find your container registry name and endpoint in the [Scaleway console](https://console.scaleway.com/registry/namespaces)
+    </Message>
+4. Create a `dagster.yaml` file in the same folder to store the configuration and replace the container image with the one you pushed:
+
+  ```yml
+  run_launcher:
+    module: dagster_scaleway
+    class: ScalewayServerlessJobRunLauncher
+    config:
+      docker_image: rg.fr-par.scw.cloud/<your-namespace>/dagster-scaleway-example:latest
+      env_vars:
+      - PG_CONN_STRING
+      - SCW_ACCESS_KEY
+      - SCW_SECRET_KEY
+      - S3_BUCKET_NAME
+
+  storage:
+    postgres:
+      postgres_url:
+        # Can be obtained from the Scaleway Console
+        env: PG_CONN_STRING
+  ```
+
+## Executing Serverless Jobs using the Dagster interface
+
+1. run the command below to launch the Dagster user interface locally:
+    ```bash
+    dagster dev
+    ```
+    Once the output displays the Dagster UI URL, copy it and open it in your browser.
+    <Message type="note">
+      By default, the Dagster UI is hosted at `http://127.0.0.1:3000`.
+    </Message>
+2. In the Dagster UI, click **Materialize all** on the right to create the [Dagster assets](https://docs.dagster.io/concepts#software-defined-assets) and start your Serverless Job.
+
+3. Click **Runs** in the top menu, then click the **Run ID** you just created by materializing the assets.
+
+    From this page, you can monitor the execution of your job run.
+
+4. Once the job run is done, click **Show Markdown** in the **INFO** column to display the title, author, and URL of the top HackerNews articles.

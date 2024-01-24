@@ -1,0 +1,147 @@
+---
+meta:
+  title: Fixing DNS resolution with a routed IPv6-only setup on Debian Bullseye
+  description: This page helps you to fix DNS resolution with a routed IPv6-only setup on Debian Bullseye
+content:
+  h1: Fixing DNS resolution with a routed IPv6-only setup on Debian Bullseye
+  paragraph: This page helps you to fix DNS resolution with a routed IPv6-only setup on Debian Bullseye
+tags: dns ipv6 Instance debian bullseye
+dates:
+  validation: 2024-01-23
+  posted: 2024-01-23
+categories:
+  - compute
+---
+
+This guide outlines the steps to enable DNS resolution on a Scaleway Instance that uses the Debian Bullseye image, configured with one or more routed IPv6 addresses and without any IPv4 addresses.
+
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [an Instance](/compute/Instances/how-to/create-an-Instance) running Debian Bullseye (11) with an IPv6-only setup
+</Message>
+
+<Message type="important">
+    This guide explains how to switch from the traditional `ifupdown` toolset to the more modern `netplan` solution, which is used in recent Debian releases. The process is straightforward if your Instance is using the default network configuration provided by Scaleway metadata. 
+    However, if your Instance has a customized network setup, ensure you are comfortable with both `ifupdown` and `netplan` before proceeding. You can safely apply this procedure to a newly created Instance.
+</Message>
+
+## Technical explanation
+
+When a Scaleway Instance uses routed IP addresses, the IPv6 stack is automatically configured using [`SLAAC`](https://datatracker.ietf.org/doc/html/rfc4862). With this method, the Instance is periodically advertised with various network configuration details, including the DNS server addresses it should use. The Instance is then free to consume these advertisements or not. By default, the operating system images provided by Scaleway are configured to leverage these advertisements to configure the IPv6 networking and the related DNS servers. The Debian Bullseye image is no exception.
+
+When configuring the network at boot time, the `cloud-init` software detects the appropriate network configuration method used by the system at hand and writes and/or applies the necessary configuration files/parameters. On Debian Bullseye, and because of [`cloud-init`'s built-in order of detection](https://cloudinit.readthedocs.io/en/latest/reference/network-config.html#network-output-policy), the primary detected method is [ENI](https://cloudinit.readthedocs.io/en/latest/reference/network-config-format-eni.html), which configures the network through Debian's well known `/etc/network/interfaces*` set of files, along with the `ifupdown` toolset.
+
+This configuration method does not interact well with SLAAC's DNS advertisements. This results in an absence of DNS resolver configuration, thus breaking most of the network activities.
+
+Due to its modern nature and active maintenance, [`netplan` is a favorable option for configuring cloud systems](https://www.debian.org/doc/manuals/debian-reference/ch05.en.html#_the_modern_network_configuration_for_cloud) and conveniently addresses the current issue. However, in alignment with our image building policy, which aims to minimize alterations to the official upstream cloud image, `netplan` is intentionally not enabled by default in Scaleway's Debian Bullseye image.
+
+## Checking if your Instance is concerned
+
+You can check whether your Debian Bullseye Instance is concerned by running the following command, where `UUID` is the identifier of your Instance:
+
+```sh
+scw -o json Instance server get UUID | jq '.routed_ip_enabled and ([.public_ips[] | select(.family != "inet6")] == [])'
+```
+
+<Message type="tip">
+    Make sure you have installed the [Scaleway CLI tools](/developer-tools/scaleway-cli/quickstart/) on your local machine before running the command above.
+</Message>
+
+The command will output:
+
+* `true` if the Instance is concerned by the present procedure.
+* `false` otherwise.
+
+<Message type="note">
+    The above command must only be run against a Debian Bullseye Instance. It does not check for this condition itself.
+</Message>
+
+## Installing netplan
+
+The `netplan` package must be installed **before** you apply this procedure, or it will fail.
+
+<Message type="tip">
+    Latest Debian Bullseye images from Scaleway ship with `netplan` pre-installed.
+</Message>
+
+### Checking for netplan
+
+To check whether your Instance has `netplan` installed, run the following command:
+    ```sh
+    dpkg-query -W netplan.io
+    ````
+The command should return an output like this, where `<VERSION>` is the currently installed version of the package, meaning you can skip directly to the first step of the procedure:
+    ```sh
+    netplan.io	<VERSION>
+    ```
+If the tool is not installed, the command will print the following:
+    ```sh
+    dpkg-query: no packages found matching netplan.io
+    ````
+In this situation, proceed with the next section to install `netplan` before applying the procedure.
+
+### Installing the tool
+
+<Message type="note">
+    All steps below require super-user (`root`) privileges.
+</Message>
+
+1. *(optional)** If, **and only if**,  your Instance is already booted using a routed IPv6-only setup, you need to temporarily configure your DNS resolver so that it can reach the Debian repositories, in order to install `netplan`. The following uses Google's DNS server:
+    ```sh
+    > /etc/resolv.conf cat <<EOF
+    nameserver 2001:4860:4860::8888
+    EOF
+    ```
+
+2. Update your packages lists:
+    ```
+    apt-get update
+    ```
+3. Install `netplan`:
+    ```
+    apt-get -y install netplan.io
+    ```
+
+## Fixing the DNS resolution issue
+
+If your Instance is affected by the DNS resolution issue, follow the procedure below to fix it.
+
+<Message type="note">
+    All steps below require super-user (`root`) privileges.
+</Message>
+
+1. Force `cloud-init` to set up the network configuration using `netplan`.
+    ```sh
+    > /etc/cloud/cloud.cfg.d/99_scw_ip6dns.cfg cat <<EOF
+    system_info:
+    network:
+        renderers: [netplan, eni]
+        activators: [netplan, eni]
+    EOF
+    ```
+2. Remove any `ifupdown` configuration from `cloud-init`.
+    ```
+    rm -f /etc/network/interfaces.d/50-cloud-init
+    ```
+3. Optionally, port your custom `ifupdown` configuration (if any) to `netplan`.
+    <Message type="tip">
+        Refer to the [Debian NetworkConfiguration wiki](https://wiki.debian.org/NetworkConfiguration) and the [`netplan` documentation](https://netplan.readthedocs.io/en/stable/) if required.
+    </Message>
+4. Enable the necessary `systemd` units:
+    ```sh
+    systemctl enable systemd-networkd-wait-online.service systemd-resolved.service
+    ```
+5. Reboot the Instance:
+    ```
+    reboot
+    ```
+6. Reconnect to the Instance and ensure DNS resolution is working:
+    ```
+    host -W3 google.com
+    ```
+7. *(optional)* It is strongly recommended that you upgrade the `scaleway-ecosystem` package to at least version `0.0.6-10`.
+    ```
+    apt-get update
+    apt-get -y upgrade scaleway-ecosystem
+    reboot
+    ```

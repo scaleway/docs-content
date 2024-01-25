@@ -1,13 +1,14 @@
 ---
 meta:
-  title: Create a serverless architecture that manage large messages, with Scaleway Messaging and Queuing NATS, Serverless Functions and Object Storage.
-  description: This page show an example of serverless architecture for asynchronous files conversion based on messages, functions, and triggers.
+  title: Set up a serverless architecture for handling large messages using Scaleway's NATS, Serverless Functions, and Object Storage.
+  description: This page show an example of serverless architecture for asynchronous file conversion based on messages, functions, and triggers.
 content:
   h1: Create a serverless architecture that manage large messages, with Scaleway Messaging and Queuing NATS, Serverless Functions and Object Storage.
-  paragraph: This page show an example of serverless architecture for asynchronous files conversion based on messages, functions, and triggers.
+  paragraph: This page show an example of serverless architecture for asynchronous file conversion based on messages, functions, and triggers.
 categories:
   - messaging
   - functions
+  - object-storage
 tags: message nats serverless serverless-functions functions serverless-triggers triggers storage object-storage terraform large-messages
 dates:
   validation: 2024-01-22
@@ -23,40 +24,35 @@ dates:
   - You have [set up authentication for the Terraform provider](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs#authentication)
 </Message>
 
-In this tutorial, we will see how to create a simple architecture that stores images and converts them to PDF automatically. 
-The goal is to understand how to transfer large message through a messaging service. 
-To do this, we will use a NATS server available in the Scaleway messaging service. 
-We will also use the Object storage service to store our images and the Serverless Function service to convert them.
-You can retrieve the full source code in [this repository](https://github.com/rouche-q/serverless-examples/tree/main/projects/large-messages/README.md)
+In this tutorial, we will build a basic architecture to store and automatically convert images to PDF. The focus is on transferring large messages using a messaging service, specifically the NATS server from Scaleway. Our setup involves using the Object Storage service for image storage and the Serverless Function service for conversion.
+You can retrieve the full source code in [this repository](https://github.com/rouche-q/serverless-examples/tree/main/projects/large-messages/README.md), so you can choose to either jump straight into the code, or else follow along with the step-by-step explanation below to create the architecture yourself.
 
-## Prerequisites
-
-For this tutorial you will need: 
-
-- Terraform
-- Docker
-- [NATS Cli](https://github.com/nats-io/natscli)
-- [AWS Cli configured with Scaleway credentials](https://www.scaleway.com/en/docs/storage/object/api-cli/object-storage-aws-cli/#how-to-install-the-aws-cli)
+<Message type="requirement">
+  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+  - You have [Terraform](/developer-tools/terraform/quickstart/) installed on your local machine
+  - You have [Docker](/tutorials/install-docker-ubuntu-bionic/) installed on your local machine
+  - You have [NATS CLI](https://github.com/nats-io/natscli) installed on your local machine
+  - You have [AWS CLI configured with Scaleway credentials](https://www.scaleway.com/en/docs/storage/object/api-cli/object-storage-aws-cli/#how-to-install-the-aws-cli)
+</Message>
 
 ## Architecture
 
 <Lightbox src="scaleway-large-messages-architecture.webp" alt="" />
 
-The architecture of this tutorial is very basic. It's structured around 2 elements:
+This tutorial's architecture is very basic, consisting of two main components:
 
-- A producer which is a shell script that upload the image to the Object Storage bucket and send a message to the NATS server.
-- A consumer which is a serverless function in Python that receive the message, parse it,
-  extract the image url to download it from the bucket, convert it to a PDF and reupload it.
+1. A producer implemented as a shell script responsible for uploading an image to the Object Storage bucket and sending a message to the NATS server.
+2. A consumer implemented as a serverless Python function designed to receive the message, parse it, extract the image URL, download it from the bucket, convert it to a PDF, and then re-upload the resulting PDF.
 
-Between this there important service needed to make everything work together:
+Three essential services are required to ensure everything is working together:
 
-- An object container to store our image file.
-- A Nats server to receive and dispatch the message that our producer send.
-- A trigger NATS that pass our message to our consumer.
+- An Object Storage bucket for storing the image file.
+- A NATS server responsible for receiving and dispatching messages sent by our producer.
+- A triggering mechanism in NATS that forwards the message to our consumer.
 
 ## Prepare the infrastructure
 
-1. Create a `main.tf` file and paste this to import required providers.
+1. Create a `main.tf` file and paste the following code to import the necessary providers.
     ```terraform
     terraform {
       required_providers {
@@ -76,9 +72,9 @@ Between this there important service needed to make everything work together:
       required_version = ">= 0.13"
     }
     ```
-    The Scaleway provider is needed, but also three provider from Hashicorp that we will use later in the tutorial.
+    The Scaleway provider is needed, but also three providers from HashiCorp that we will use later in the tutorial.
 
-2. Add two variable to be able to pass your Scaleway credentials as secret and init the Scaleway provider in the region `fr-par-1`.
+2. Include two variables to enable the secure passage of your Scaleway credentials. Then initialize the Scaleway provider in the `fr-par-1` region..
     ```terraform
     variable "scw_access_key_id" {
       type      = string
@@ -95,7 +91,7 @@ Between this there important service needed to make everything work together:
     }
     ```
 
-3. Create a `terraform.tfvars` and add your Scaleway access key and access key id.
+3. Create a `terraform.tfvars` file and add your Scaleway access key and access key id to it.
     ```terraform
     scw_access_key_id     = "YOUR_SCW_SECRET_KEY_ID"
     scw_secret_access_key = "YOUR_SCW_SECRET_KEY"
@@ -121,8 +117,7 @@ Between this there important service needed to make everything work together:
       description = "Bucket name to use with the producer script"
     }
     ```
-    In this code, the ressource `random_id.bucket` create a random id, that you will pass to object bucket just after to be sure that the bucket name is unique.
-    An `scaleway_object_bucket_acl` is added on the bucket to make it private and output the bucket name to use it in your producer.
+    In this code, the resource `random_id.bucket` generates a random ID, which is then passed to the object bucket to ensure its uniqueness. Additionally, a `scaleway_object_bucket_acl` ACL is applied to the bucket, setting it to private and outputting the bucket name for use in your producer.
 
 5. Next, add these ressources to create a NATS account an your NATS credential file:
     ```terraform
@@ -148,28 +143,27 @@ Between this there important service needed to make everything work together:
     ```
     We also output the NATS server url.
 
-6. You can run `terraform init` and `terraform apply` to create the ressources in your Scaleway account. 
+6. You can run `terraform init` and `terraform apply` to create the resources in your Scaleway account. 
 
 ## Create the producer
 
-As said before, the producer will be a simple shell script.
+As mentioned earlier, the producer will be implemented as a straightforward shell script.
 
-1. Create a file `upload_img.sh` 
-    In it create two variables that use terraform command to get bucket name and NATS Url:
+1. Create a file named `upload_img.sh`. Inside it, define two variables using Terraform commands to retrieve the bucket name and the NATS URL.
     ```bash
     SCW_BUCKET="$(terraform output bucket_name)"
     SCW_NATS_URL="$(terraform output nats_url)"
     ```
 
-2. Next configure the NATS cli with the NATS url and the credentials file.
+2. Configure the NATS CLI with the NATS URL and the credentials file.
     ```bash
     nats context save large-messages --server=$SCW_NATS_URL --creds=./large-messages.creds
     nats context select large-messages
     ```
     Our script take the file path that we want to upload as first parameter.
 
-3. To upload our file we gonna use the AWS cli configured with Scaleway endpoint and credentials because the Scaleway Object storage is fully compliant with S3.
-    Pass the path to the AWS cli command like that:
+To upload the file, we will use the AWS CLI configured with the Scaleway endpoint and credentials, because the Scaleway Object storage is fully compliant with S3.
+3. Pass the path to the AWS CLI command as follows:
     ```bash
     aws s3 cp $1 s3://$SCW_BUCKET
     ```

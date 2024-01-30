@@ -41,17 +41,17 @@ It is important to differentiate between Kuberenetes **system volumes** and **pe
 | Ephemeral (lives and dies with the node) | Persistent (beyond the life of a pod/node) |
 | Auto-created                             | Must be provisioned                        |
 
-You can view your cluster's system volumes in the Instances > Volumes section of the console, and see how they are linked to the Instances that make up the nodes of your cluster. However, you shouldn't attempt to use or manage these volumes - leave it to Kubernetes Kapsule. 
+You can view your cluster's system volumes in the **Instances > Volumes** section of the [console](https://console.scaleway.com/), and see how they are linked to the Instances that make up the nodes of your cluster. However, you shouldn't attempt to use or manage these volumes - leave it to Kubernetes Kapsule. 
 
 ### Stateless applications vs stateful applications
 
 What kind of applications need to use persistent volumes? To answer this, we must understand the difference between stateless and stateful applications.
 
-Stateless applications do not need to load or save data: each request to the application is independent. There may be data in the payload of the request, but has not been retrieved from a previously saved state. A request to a search engine is a good example of this.
+**Stateless** applications do not need to load or save data: each request to the application is independent. There may be data in the payload of the request, but has not been retrieved from a previously saved state. A request to a search engine is a good example of this.
 
-Stateful applications **do** need to save and load data. Most modern applications are stateless, such as online banking which needs to be able to store and retrieve all your transaction history, and online shopping which stores and remembers your previous orders. In order to run stateful applications in Kubernetes, we need to provision persistent storage volumes where they can store the data that gives them their state.
+**Stateful** applications **do** need to save and load data. Most modern applications are stateless, such as online banking which needs to be able to store and retrieve all your transaction history, and online shopping which stores and remembers your previous orders. In order to run stateful applications in Kubernetes, we need to provision persistent storage volumes where they can store the data that gives them their state.
 
-| Stateless applications                                      | Stateful applications                                                |
+| Stateless applications                                      | Stateful applications                                            |
 | ----------------------------------------------------------- | -------------------------------------------------------------------- |
 | Do not load or save data                                    | Save and load data                                                   |
 | Each request is independent and doesn't use previous data   | Need to retrieve stored data                                         |
@@ -61,153 +61,187 @@ Stateful applications **do** need to save and load data. Most modern application
 
 ## How do we provision storage?
 
-### Using the CSI to dynamically provision Block Storage volumes
+### Provisioning Block Storage volumes
 
-Cloud providers such as Scaleway provide a **C**ontainer **S**torage **I**nterface (CSI) provisioner and default **StorageClasses** for their managed Kubernetes products. This defines the classes of storage the provider can offer for the cluster.
+Cloud providers such as Scaleway provide and default **StorageClasses** for their managed Kubernetes products. StorageClasses define the classes of storage the provider can offer for the cluster. The user can list the StorageClasses available to by using the command `kubectl get storageclass`.
 
-Scaleway provides [Block Storage](/storage/block/quickstart/) as its StorageClass, meaning that we offer persistent storage for Kapsule clusters via our Block Storage product. Thanks to dynamic volume provisioning, you can create storage volumes for your clusters on-demand: you simply describe the storage required and our CSI provisions it.
-
-You can list the StorageClasses available to your cluster by using the command `kubectl get storageclass`.
+Scaleway provides [Block Storage](/storage/block/quickstart/) as its StorageClass, meaning that we offer persistent storage for Kapsule clusters via our Block Storage product. 
 
 <Message type="note">
 Scaleway has upgraded the Block Storage used by our StorageClass, offering better performance. Our previous class was `scw-bss`, which has now been replaced by `sbs`, giving you faster read/write operations with lower latency.
 </Message>
 
-### Kubernetes objects: StatefulSets, PersistentVolumes and PersistentVolumeClaims
+Cloud providers also provide a **C**ontainer **S**torage **I**nterface (CSI) for their managed clusters. This is a standardized interface allowing communication between Kubernetes and the cloud provider's own storage products. CSI and StorageClasses make **dynamic volume provisioning** possible, whereby Kubernetes Kapsule users can create storage volumes for their clusters on-demand. They simply describe the storage required by referring to a StorageClass, and this is provisioned from Scaleway by the CSI.
 
-In order to provision persistent Block Storage resources in this tutorial, we will use a **PersistentVolumeClaim**. This is a request for, and claim to, a **PersistentVolume** resource. The PersistentVolumeClaim object request a specific size, access mode and StorageClass for the PersistentVolume, meaning we can describe what we want without needing to worry about how it's provisioned.
+### Kubernetes objects
 
-TODO: image
+In order to provision persistent Block Storage resources in this tutorial, we will use a **PersistentVolumeClaim**. This is a Kubernetes object, which requests and claims a **PersistentVolume** resource. The PersistentVolumeClaim object requests a specific size, access mode and StorageClass for the PersistentVolume, meaning we can describe what we want without needing to worry about how it's provisioned.
+
+<Lightbox src="scaleway-persistent-volume-claim.webp" alt ="" />
 
 In our [previous tutorial](/tutorials/get-started-deploy-kapsule/) we used a **Deployment** object to deploy a stateless application. In this tutorial, we will use a **StatefulSet** object to deploy a stateful application.
 
 Both Deloyments and StatefulSets manage the deployment and scaling of a set of pods with identical replications of a containerized application. But StatefulSets can also provision and manage persistent storage for thier pods, via PersistentVolumeClaims. What's more, in order to ensure data consistency and synchronicity as pods read and write to storage, the pods of a StatefulSet have sticky, persistent identities as shown below:
 
-TODO: image
+<Lightbox src="scaleway-stateful-set.webp" alt ="" />
 
+## Step 1: Create StatefulSet from YAML manifest
 
+1. Open a terminal, and run the following command to check that you can connect to your cluster:
 
-
-
-Kubernetes clusters 
-
-<Lightbox src="scaleway-nodeport.webp" alt="" />
-
-As mentioned, NodePort is a **Service**. It is important to differentiate between Services and Deployments in Kubernetes. Both oBy default, Kubernetes clusters are not exposed to the internet. This means that external users cannot access the application deployed in our cluster.
-
-In the previous tutorial, we solved this problem by creating a **NodePort** Service for our cluster. NodePort is a Kubernetes service which opens a port on each node that contains pods for the specified deployment. It then forwards any external traffic received on that port to the right pods. This allowed us to go to our node’s external IP address in a browser (specifying the open port), and we were served our web application.f these are Kubernetes abstractions:
-
-- **Deployments** keep a set of pods running with containerized applications
-- **Services** enable network access to a specified set of pods.
-
-Why then can’t we just keep using NodePort, why do we need a Load Balancer? 
-
-NodePort is great for quick testing and can be adequate for single node, uncomplicated clusters. It is also free. However, it is not ideal for production, for reasons of security and ease of management. You are limited in which port numbers can be opened, and as your cluster starts to scale in complexity, maybe containing many microservices, NodePort gets less practical to use.
-
-LoadBalancer is also a Kubernetes Service just like NodePort, and it is the standard service to use when you want to expose your cluster to the internet.
-
-The LoadBalancer Service within your cluster creates an external Load Balancer. This external Load Balancer has a single IP address that forwards all traffic to the LoadBalancer Service within your cluster, which then takes care of forwarding it to the right pods.
-
-<Lightbox src="scaleway-loadbalancer-service.webp" alt="" />
-
-LoadBalancer supports multiple protocols and multiple ports per service, and is much more secure than NodePort. It provides all those things that are important and valued when it comes to Cloud Native technology: predictability, scalability and high availability.
-
-## How do we create a Load Balancer?
-
-First we create the LoadBalancer Service on our cluster by connecting to it via `kubectl` and creating a YAML manifest to specify the Service.
-
-Then, the cluster’s Cloud Controller Manager (a component of the Kapsule’s control plane, managed by Scaleway) takes care of creating the external Scaleway Load Balancer, and is responsible for all of its configuration and management. We can check the console though, to see that the Load Balancer has indeed been created.
-
-We use `kubectl` to check the IP address of our Load Balancer, and then we are ready to test!
-
-<Message type="note">
-
-It is not possible to create the external Scaleway Load Balancer yourself via the console/API and then connect it to your cluster afterward. You must create the LoadBalancer Service in the cluster first, so that the Scaleway Cloud Controller Manager in your Kapsule’s control plane can handle the creation of the Scaleway Load Balancer, with the right configuration to direct its traffic to the correct pods of your cluster.
-
-</Message>
-
-## Step 1: Create Load Balancer from YAML manifest
-
-1. Open a terminal, and run the following command to check the state of your cluster:
     ```
     kubectl get all
     ```
-    You should see two pods, the NodePort Service created during the previous tutorial (along with the basic default ClusterIP Service), the deployment and the two ReplicaSets.
-2. Delete the NodePort Service with the following command:
-    ```
-    kubectl delete svc name-of-nodeport-service
-    ```
-    In our case, we called our NodePort service `mydeployment`, so the command is `kubectl delete svc mydeployment`.
-3. Create a new file called `lb.yaml`:
+
+2. Create a new file called ss.yaml:
+
     ```
     nano lb.yaml
     ```
-    This file will be a manifest for our LoadBalancer Service.
-4. Copy and paste the following text into the file:
-    ```
-    apiVersion: v1
-    kind: Service
+
+    This file will be a manifest for our StatefulSet object. It will describe the stateful application we want to deploy in the cluster, and the persistent storage volumes that are required for the application.
+
+3. Copy and paste the following text into the file:
+
+    ```yaml
+    apiVersion: apps/v1
+    kind: StatefulSet
     metadata:
-      name: myloadbalancer
-      labels:
-        app: mydeployment
+      name: ss-csi-scw
     spec:
-      type: LoadBalancer
-      ports:
-      - port: 8000
-        name: http
-        targetPort: 8000
+      serviceName: ss-csi-scw
+      replicas: 5
       selector:
-        app: mydeployment
+        matchLabels:
+          app: ss-csi-scw
+          provider: scaleway
+      template:
+        metadata:
+          labels:
+            app: ss-csi-scw
+            provider: scaleway
+        spec:
+          containers:
+          - name: busy-pvc-scw
+            image: busybox
+            volumeMounts:
+            - mountPath: "/data"
+              name: csi-vol-scw
+            command: ["sleep", "3600"]
+      volumeClaimTemplates:
+      - metadata:
+          name: csi-vol-scw
+        spec:
+          accessModes: ["ReadWriteOnce"]
+          storageClassName: sbs-default
+          resources:
+            requests:
+              storage: 1Gi
     ```
+
+    Essentially, we are creating a **StatefulSet** object, with **5 replica pods**, running a lightweight container called **busyboxùù that will just sleep int eh background for an hour. The StatefulSet will create a **PersistentVolumeClaim** for each pod, creating a 1GB Scaleway **Block Storage volume** for each pod, mounted at **/data**. For a full explanation of the various fields in the yaml manifest, see below:
+
     - **apiVersion** specifies which version of the Kubernetes API to use to create the object
-    - **kind** specifies the kind of object defined in this YAML file, here a Service
-    - **metadata** helps uniquely identify our Service object: we give it a name (`myloadbalancer`), and a label.
-    - **spec** specifies the Service. It is of LoadBalancer **type**. We then go on to specify its **ports**. We can define many ports if we want but here we just specify the necessary port `8000` for our `whoami` app. Since `8000` is an HTTP port, we add a name tag and call it `http`. **targetPort** is the port the container welcomes traffic (in our case necessarily `8000`), **port** is the abstracted Service port. For simplicity, we set both as `8000`, though we could change **port** to something else.
-    - **selector** tells the Service which pods to redirect to: in this case pods with containers running the app we called `mydeployment`
-  Save and exit the file.
-5. Tell Kubernetes to create the Load Balancer from the manifest we just created with the following command:
+    - **kind** specifies the kind of object defined in this YAML file, here a StatefulSet
+    - **metadata** helps uniquely identify our StatefulSet object: we give it a name (`ss-csi-scw`), and a label.
+    - **spec** specifies the desired behavior of the StatefulSet. There are many sub-parts here: 
+      - **serviceName** is the name used to create identities for the pods
+      - **replicas** defines the number of replica pods to create
+      - **selector** defines how the StatefulSet finds which pods to manage, using a label
+      - **template** describes the template for the pods that will be created:
+        - **metadata** helps uniquely identify the pods, with the label
+        - **spec** specifies the desired behavior of each pod.
+          - **containers** defines the container to use for each pod: we call the container `busy-pvw-scw` and tell it to use the `busybox` image. This is a minimalistic, lightweight image with just a shell environment. It will just be used as an easy example for this demo, without actually doing anything. The **volumeMount** is specified at location `/data`, for the storage volume called `csi-vol-scw`. We also give a **command** to the container to sleep for 3600 seconds (1 hour) to keep it active for our tutorial so that it doesn't simply launch and then shut down.
+      - **volumeClaimTemplates** define the templates for the PersistentVolumeClaims that the StatefulSet will create for each pod, which will themselves trigger the creation and management of corresponding persistent volumes.
+        - **metadata** helps uniquely identify the volume claim, we use the same label as before
+        - **spec** defines the desired specification of the volume.
+          - **accessMode** declares that the volume can be read-write by a single node
+          - **storageClassName** defines the name of the storage class to use 
+          - **resources** defines how much storage we want (1 gigabyte).
+
+4. Tell Kubernetes to create the StatefulSet from the manifest we just created with the following command:
+
     ```
-    kubectl create -f lb.yaml
+    kubectl create -f ss.yaml
     ```
 
-  A message displays to confirm the creation of the Load Balancer.
+    A message displays to confirm the creation of the StatefulSet.
 
-## Step 2: Check Load Balancer in the console
+## Step 2: Check creation of Block Storage volumes
 
-1. Open a browser and go to [console.scaleway.com](http://console.scaleway.com).
-2. Select **Network** > **Load Balancers** from the side menu.
-  A list of your Scaleway Load Balancers displays. You should see one with the tags `kapsule` and `cluster=xxxx`. This is the Load Balancer created by the Cloud Controller Manager of your Kubernetes Kapsule cluster when you created your LoadBalancer Service in the previous step.
-3. Click the LoadBalancer to view its details.
-  <Lightbox src="scaleway-load-balancer.webp" alt="" />
-  The Load Balancer is auto-managed by Kapsule, so no changes can be made here directly.
-  In the `IPv4` field, the Load Balancer's IP address displays.
 
-## Step 3: Check Load Balancer IP via kubectl
+1. Run the following command in the terminal to check the progress of creation of your StatefulSet:
 
-Let's check that the IP address seen in the console is also known to our cluster:
+    ```
+    kubectl get all
+    ```
 
-1. Run the following command:
-  ```
-  kubectl get svc
-  ```
-  An output similar to the following displays:
-  ```
-  NAME             TYPE           CLUSTER-IP      EXTERNAL-IP      PORT(S)          AGE
-  kubernetes       ClusterIP      10.32.0.1       <none>           443/TCP          13d
-  myloadbalancer   LoadBalancer   10.43.204.154   51.159.207.167   8000:31725/TCP   27h
-  ```
-  We see that the Load Balancer's external IP is the same as the one we saw in the console in the previous step.
+    It may take a few minutes for all 5 replica pods to be created, but when this process has finished you should see an output similar to the following:
 
-## Step 4: Test
+    ```
+    NAME                READY   STATUS    RESTARTS    AGE
+    pod/ss-csi-scw-0    1/1     Running   0           63s
+    pod/ss-csi-scw-1    1/1     Running   0           57s
+    pod/ss-csi-scw-2    1/1     Running   0           42s
+    pod/ss-csi-scw-3    1/1     Running   0           32s
+    pod/ss-csi-scw-4    1/1     Running   0           22s
 
-  In a browser, enter the external IP address of your Load Balancer, followed by the port 8000 that we opened, e.g. `158.58.37:8000`.
 
-  A text similar to the following should display, showing that the containerized `whoami` application is running on our cluster and accessible through our Load Balancer:
-  ```
-  I'm mydeployment-6579f975d55-fv4sx
-  ```
+    NAME                          READY   AGE
+    statefulset.apps/ss-csi-scw   5/5     63s
+    ```
+
+    Note that each pod has it's own identity.
+    
+    You can now check the creation of the volumes for the StatefulSet in the Scaleway console:
+
+2. Open a browser and go to [console.scaleway.com](https://console.scaleway.com).
+
+3. Select Storage > Block Storage from the side menu. You should see five Block Storage volumes, each linked to an Instance comprising a node of your cluster.  This shows that the CSI of your Kubernetes Kapsule has indeed created 5 Block Storage volumes, one for each of the pods specified for the StatefulSet.
+
+## Step 3: Resize cluster and note effect on Block Storage volumes
+
+Next, we see what happens if we resize our cluster to scale the number of replicas up or down, and what effect this has on the associated Block Storage volumes.
+
+1. Run the following command in the terminal, to reduce the number of replicas to 0:
+
+    ```
+    kubectl scale statefulsets ss-csi-scw --replicas=0
+    ```
+
+2. Run the following command in the terminal, to check that the pre-existing replica pods have terminated. You may need to run it a few times, as the process can take a few minutes:
+
+    ```
+    kubectl get all
+    ```
+
+    You should see each pod change to a status of `Terminating`, before disappearing from the list of cluster resources.
+
+3. In the browser, go back to the Block Storage section of the Scaleway console. You should see that the Block Storage volumes still exist, but are now detached from their corresponding pods.
+
+    Next, we see what happens if we resize the cluster again to scale back up to 5 pods.
+
+4. In the terminal, run the following command:
+
+    ```
+    kubectl scale ss-csi-scw --replicas=5
+    ```
+
+    As before, you can run a `kubectl get all` to check that the pods are being recreated.
+
+5. Return to the Block Storage section of the Scaleway console. You should see that all the volumes have reattached to a cluster node: they have found their corresponding pod thanks to their sticky identities, meaning any previous data stored is still available. 
+
+    This exemplifies the convenience of managing Kubernetes storage in this way, with a high level of automation to ensure that storage volumes and pods can easily find each other.
+
+
+## Going further - volume snapshots
+
+Try creating [snapshots](/storage/block/how-to/create-a-snapshot/) for your volumes. A snapshot is a consistent, instantaneous copy of a Block Storage volume at a certain point in time. Snapshots are useful for backing up data and facilitating data recovery.
+
+You can make snapshots by creating a manifest for a **VolumeSnapshot** object and applying it with kubectl. Refer to the [official Kubernetes documentation](https://kubernetes.io/docs/concepts/storage/volume-snapshots/) for help with this. You can then check creation of the snapshot in the Storage > Block Storage > Snapshots section of the console.
+
+It is also possible to create volumes from existing snapshots, again full details are available in the [official Kubernetes documentation](https://kubernetes.io/docs/concepts/storage/persistent-volumes/#volume-snapshot-and-restore-volume-from-snapshot-support).
 
 <Navigation title="See also">
-  <PreviousButton to="/tutorials/get-started-deploy-kapsule/">Getting started with Kubernetes Part 2 - Deploying an app with Kapsule</PreviousButton>
+  <PreviousButton to="/tutorials/get-started-kubernetes-loadbalancer/">Getting started with Kubernetes Part 3 - Load Balancers</PreviousButton>
 </Navigation>

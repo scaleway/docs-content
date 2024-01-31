@@ -18,21 +18,27 @@ dates:
 
 Dagster is an orchestrator designed for developing and maintaining data assets, such as tables, data sets, machine learning models, and reports.
 
-You declare jobs that you want to run and the data assets that those jobs produce or update. Dagster then helps you run your functions at the right time and keep your assets up-to-date.
+It allows you to declare jobs that you want to run and the data assets that those jobs produce or update. Dagster then helps you run your jobs at the right time and keep your assets up-to-date.
 
-In this tutorial, we will create a [Serverless Job](/serverless/jobs/quickstart) using Dagster to scrape the Hacker News webstite to retrieve the top articles' titles and URL.
+In this tutorial, we will create a [Serverless Job](/serverless/jobs/quickstart) using Dagster to scrape the [Hacker News webstite](https://news.ycombinator.com/) to retrieve the top articles' title, author, and URL.
+
+First, we will initialize the Dagster project locally and add the scraper's source code to it. Then, we will set up the environment, build the image and push it to the Scaleway registry. Finally, we will execute Dagster locally to scrape the Hacker News top stories through the Dagster UI. 
 
 <Message type="requirement">
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have a [Container Registry namespace](/containers/container-registry/how-to/create-namespace/) in the Paris region and have [signed in to it](/containers/container-registry/how-to/connect-docker-cli/)
   - You have created a [Serverless Database](/serverless/sql-databases/how-to/create-a-database/)
-  - You have installed [Docker](https://docs.docker.com/engine/install/) on your local machine to build and push the Docker image
+  - You have installed [Docker](https://docs.docker.com/engine/install/) on your local machine to build and push the image
   - You have [configured your SSH key](/console/project/how-to/create-ssh-key)
   - You have [created an Object Storage bucket](/storage/object/how-to/create-a-bucket/) in the Paris region
 </Message>
 
 ## Creating the Dagster project
 
+1. Run the following command to install Dagster:
+    ```
+    pip install dagster dagster-webserver
+    ```
 1. Create a new folder and access it:
     ```bash
     mkdir dagster-tutorial && cd dagster-tutorial
@@ -86,7 +92,7 @@ In this tutorial, we will create a [Serverless Job](/serverless/jobs/quickstart)
         return top_story_ids[:10]
 
 
-    # asset dependencies can be inferred from parameter names
+    # Asset dependencies can be inferred from parameter names
     @asset
     def hackernews_top_stories(hackernews_top_story_ids):
         """Get items based on story ids from the HackerNews items endpoint"""
@@ -99,7 +105,7 @@ In this tutorial, we will create a [Serverless Job](/serverless/jobs/quickstart)
 
         df = pd.DataFrame(results)
 
-        # recorded metadata can be customized
+        # The recorded metadata can be customized
         metadata = {
             "num_records": len(df),
             "preview": MetadataValue.md(df[["title", "by", "url"]].to_markdown()),
@@ -125,15 +131,15 @@ In this tutorial, we will create a [Serverless Job](/serverless/jobs/quickstart)
     ```
 
 5. Replace the content of the the `my-dagster-project/__init__.py` file with the code below to load the definitions from the `assets.py` file:
-```py
-from dagster import Definitions, load_assets_from_modules
+        ```py
+        from dagster import Definitions, load_assets_from_modules
 
-from . import assets
+        from . import assets
 
-all_assets = load_assets_from_modules([assets])
+        all_assets = load_assets_from_modules([assets])
 
-defs = assets.defs
-```
+        defs = assets.defs
+        ```
 
 ## Setting up the environment and creating the image
 
@@ -157,7 +163,7 @@ defs = assets.defs
     <Message type="note">
     You can find your container registry name and endpoint in the [Scaleway console](https://console.scaleway.com/registry/namespaces)
     </Message>
-4. Create a `dagster.yaml` file in the same folder to store the configuration and replace the container image with the one you pushed:
+4. Create a `dagster.yaml` file in the same folder to store the configuration, and replace the container image with the one you pushed:
 
   ```yml
   run_launcher:
@@ -194,20 +200,28 @@ defs = assets.defs
 
     From this page, you can monitor the execution of your job run.
 
-4. Once the job run is done, click **Show Markdown** in the **INFO** column to display a preview of the title, author, and URL of the top HackerNews articles. 
+4. Once the job run is done, click **Show Markdown** in the **INFO** column to display a preview of the title, author, and URL of the top Hacker News articles. 
 
 The binary file containing the dataframe created is stored in the Object Storage bucket. Each new run will overwrite the existing dataframe contained in the bucket.
+
+The Serverless Database ensures the communication between the different Dagster enements, especially to notify the UI that the scheduler has completed the execution of a job. It also stores the different events occurring during the execution.
 
 <Message type="important">
 Dagster writes small chunks of data in the Serverless SQL Database as long as the UI is active. Close the UI from the terminal to automatically stop your database.
 </Message>
 
-## Going further
+## Going Further
 
-### 
+- The source code is available in the [dagster-scaleway](https://github.com/cyclimse/dagster-scaleway) repository.
+
+- Refer to the [official Dagster documentation](https://docs.dagster.io/getting-started/what-why-dagster) for more information.
+
+- You can automate your Dagster deployment using Terraform. Refer to our [Terraform Quickstart](/developer-tools/terraform/quickstart/) and to the [Scaleway Provider registry](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs) for more information.
 
 ## Troubleshooting
 
-- Export variables
-- do not reuse tags for the image
-- make sure the assets and init file are properly configured (refer to example in repo)
+- Make sure that you have exported the environment variables, as they are cleared at the end of a terminal session.
+
+- Do not reuse tags for the image, and make sure you updated the `dagster.yaml` file with the correct image.
+
+- Make sure the `assets.py` and `__init__.py` file contain the corresponding code.

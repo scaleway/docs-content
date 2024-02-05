@@ -27,7 +27,7 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 1. Clone the `docs-content` repository by following the [cloning procedure](#cloning-the-project) below.
 
-2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, reference content or troubleshooting).
+2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
 
 3. Create your branch. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
 

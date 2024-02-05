@@ -1,100 +1,105 @@
 ---
 meta:
-  title: Installing a Github Actions runner on a Mac mini
-  description: How to set up and configure a bare metal Mac mini as a self-hosted runner for GitHub Actions
+  title: Configuring a GitHub Actions runner on a Mac mini for enhanced CI/CD
+  description: Discover the step-by-step process to set up and configure a hosted bare metal Mac mini as a self-hosted runner for GitHub Actions, optimizing your Continuous Integration and Continuous Deployment workflows.
 content:
-  h1: Installing a Github Actions runner on a Mac mini
-  paragraph: How to set up and configure a bare metal Mac mini as a self-hosted runner for GitHub Actions
+  h1: Configuring a GitHub Actions runner on a Mac mini for enhanced CI/CD
+  paragraph: Discover the step-by-step process to set up and configure a hosted bare metal Mac mini as a self-hosted runner for GitHub Actions, optimizing your Continuous Integration and Continuous Deployment workflows.
 tags: mac m1 github-actions
-categories: 
-  - bare-metal
+categories:
   - apple-silicon
 dates:
-  validation: 2023-08-11
-  posted: 2023-08-11
+  validation: 2024-01-31
+  posted: 2024-01-31
 ---
 
 <Macro id="iam-requirements" />
 
 <Message type="requirement">
-  You have:
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have [created a Mac mini](/bare-metal/apple-silicon/how-to/create-mac-mini/)
   - You have a Github repository with administrator rights.
   - You have installed a package manager. For the sake of this tutorial, we will use [Homebrew](https://brew.sh/index) which is a popular package manager for macOS.
 </Message>
 
-## Introduction
+GitHub Actions is a CI/CD platform that allows users to automate their software development workflows, connected to a Github organization or repository. While GitHub offers online runners with a pay-as-you-go model, self-hosted runners grant increased control over your CI/CD setup and enhanced customization. This is because you manage the runners yourself, rather than relying on GitHub’s infrastructure. This tutorial shows you how to set up, configure, and connect a self-hosted runner on a Mac mini to execute macOS pipelines.
 
-GitHub Actions is a CI/CD platform that allows users to automate their software development workflows, connected to a Github organization or repository. While GitHub offers online runners with a pay-as-you-go model, self-hosted runners grant increased control over your CI/CD setup and enhanced customization. This is because you manage the runners yourself, rather than relying on GitHub's infrastructure. This tutorial shows you how to set up, configure, and connect a self-hosted runner on a Mac mini to execute macOS pipelines.
-    <Message type="important">
-      Github [recommends](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners#self-hosted-runner-security) to only use self-hosted runners with private repositories for security reasons.
-    </Message>
+<Message type="tip">
+  GitHub [recommends](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/about-self-hosted-runners#self-hosted-runner-security) using self-hosted runners with private repositories for enhanced security.
+</Message>
 
-## Installing the runner
+## Preparing for installation
 
-1. Navigate to the main page of your [GitHub](https://github.com/) repository and click **Settings**.
-2. Click **Actions**, located under **Code and automation** on the left sidebar. A menu displays.
-3. Click **Runners**. 
-4. Click the **New self-hosted runner** button. You are redirected to the self-hosted runners configuration page. 
-5. Select **macOS** as a runner image and **ARM64** as an architecture.
-    <Message type="note">
-        After selecting the runner image and architecture, GitHub prompts you to execute a sequence of shell commands. Those commands serve to authenticate your machine with your Github repository, download the necessary runtime and set-up the runner within your environment. Take note of these commands, as you will need to execute them on your Mac mini.
-    </Message>
+Before starting the installation process, create a dedicated user account named "gh-runner" on your Mac mini and add it to the admin group. Execute the following terminal commands:
 
-6. [Connect](/bare-metal/apple-silicon/how-to/connect-to-mac-mini/) to your Mac mini using VNC. 
-    <Message type="note">
-      In this instance, SSH cannot be used as the runner service needs a graphical session to be started. 
-    </Message>
-7. Open a terminal and execute the commands previously prompted by Github. Don't launch the runner yet.
+```bash
+# Create the 'gh-runner' user account
+sudo dscl . -create /Users/gh-runner
+sudo dscl . -create /Users/gh-runner UserShell /bin/bash
+sudo dscl . -create /Users/gh-runner RealName "GitHub runner"
+sudo dscl . -create /Users/gh-runner UniqueID "1001"
+sudo dscl . -create /Users/gh-runner PrimaryGroupID 20
+sudo dscl . -create /Users/gh-runner NFSHomeDirectory /Users/gh-runner
+# Set the password of the user. Replace password with the actual password you want to configure for the user.
+sudo dscl . -passwd /Users/gh-runner password
+# Additional commands to create and configure the user...
 
-    <Message type="note">
-      This tutorial assumes that you picked the default settings when prompted during step 6.
-    </Message>
-
-## Configuring the runner
-
-Once the runner is installed, you must configure it to use the dependencies needed for your workflows.
-
-1. Install the dependencies needed for your workflows. For example, [Homebrew](https://brew.sh/) is a popular package manager for macOS that can be installed with the following command:
-    ```sh
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-    ```
-    Unlike online runners where dependencies have to be installed each time a workflow is run, self-hosted runners allow you to prepare all the dependencies that you need.
-
-2. Create a file named `.path` in the root of the runner directory and define the content of the runner's `$PATH` variable within it. As the runner uses an empty user profile, its path must be configured accordingly. This file is located in the root of the runner directory. To be able to use during a workflow the homebrew command previously installed, append this content at the end of the .path file:
-    ```
-    :/opt/homebrew/bin
-    ```
-3. Specify your environment variables in the `.env` file, following the same rationale as the path configuration. This file is also located in the root of the runner directory. To tell homebrew to avoid doing cleanups during workflow in order to not waste compute time, add the following variable to `.env`:
-    ```
-    HOMEBREW_NO_INSTALL_CLEANUP=TRUE
-    ```
-    <Message type="note">
-      The `.env` file follows the bash syntax to set variables.
-    </Message>
-
-4. You can create your own scripts to [execute before or after a job](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners/running-scripts-before-or-after-a-job).
-
-## Configuring the service
-
-After configuring the runner, you can configure it as a service in order to run it in the background and follow the lifecycle of your Mac mini from boot time to shut down, as well as restarts in case of failures.
-
-1. Your Mac must be configured to log-in automatically. Go to **System Preferences** > **Users and Groups** > **Login Options** and select the **m1** user in the **Automatic Login** picklist.
-    <Lightbox src="scaleway-github-runner-m1-automatic-login.webp" alt="" />
-
-2. Install and run the service:
-```sh
-./svc.sh install
-./svc.sh start
+# Add 'gh-runner' to the 'admin' group
+sudo dscl . -append /Groups/admin GroupMembership gh-runner
 ```
+
+Use `su` to enter the newly created `gh-runner` account for configuring the self-hosted runner.
+
+```bash
+su gh-runner
+```
+
+## Installing Git and Rosetta 2
+
+Ensure Git and Rosetta 2 are installed on your Mac mini:
+
+```bash
+git --version
+# We assume you have the homebrew package manager installed. If not, follow the guides on https://brew.sh/ for details how to install it.
+brew install git
+
+# Install Rosetta 2 if not already installed
+softwareupdate --install-rosetta
+```
+<Message type="note">
+  Rosetta 2 is a translation technology developed by Apple for Macs with Apple Silicon processors, enabling them to run applications designed for Intel-based Macs by dynamically translating the software's instructions to a format compatible with the new architecture.
+</Message>
+
+## Installing and configuring the Runner
+
+1. Navigate to your [GitHub repository](https://github.com/) and go to **Settings**.
+2. Click **Actions** under **Code and automation**, then select **Runners**. A list of your configured runners displays.
+3. Click **New self-hosted runner** to be redirected to the configuration page.
+4. Choose **macOS** as the runner image and **ARM64** as the architecture.
+5. Follow the prompted shell commands to authenticate your machine, download the necessary runtime, and set up the runner. Do not start your runner yet.
+    <Lightbox src="scaleway-gh-runner-mac-arm64.webp" alt="A sample version of the commands GitHub requires you to download and configure the runner binary" size="large" />
+    <Message type="note">
+        After selecting the runner image and architecture, GitHub prompts you to execute a sequence of shell commands. Those commands serve to authenticate your machine with your Github repository, download the necessary runtime, and set up the runner within your environment. Take note of these commands, as you will need to execute them on your Mac mini.
+    </Message>
+6. Create a `.env` file in the runner `_work` folder for essential environment variables:
+    ```bash
+    # _work/.env file
+    ImageOS=macos13
+    XCODE_15_DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
+    ```
+    Add any additional environment variables required by your actions.
+    <Message type="tip">
+      If you have not yet installed Xcode on your machine, follow the [official Apple Xcode documentation](https://developer.apple.com/documentation/safari-developer-tools/installing-xcode-and-simulators) for further details.
+    </Message>
+
+7. Execute the `run.sh` script in your runner directory to complete the setup.
+
+8. Check that the runner is up and listening for jobs in the terminal and check the GitHub repository settings for the runner's association and `Idle` status.
+    <Lightbox src="scaleway-gh-runner-status-idle.webp" alt="An example of a GitHub runner shown as Idle in the GitHub web interface" size="large" />
 
 ## Using the runner in a workflow
 
-The runner is already authenticated to your repository and referenced with the labels `self-hosted`, `macOS` and `ARM64`.
-You can use it in your workflows, by [populating `jobs.<job_id>.runs-on`](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idruns-on) with those labels.
-
-For example, the following workflow will use the self-hosted runner to install Node.js using Homebrew:
+The runner is authenticated to your repository and labeled with `self-hosted`, `macOS`, and `ARM64`. Use it in your workflows by specifying these labels in the `runs-on` field:
 
 ```yaml
 name: Sample workflow
@@ -111,6 +116,23 @@ jobs:
         run: brew install node
 ```
 
+## Sudoers configuration (optional)
+
+If actions require root privileges, configure the sudoers file using `sudo visudo`. For private repositories, add:
+
+```bash
+gh-runner ALL=(ALL) NOPASSWD: ALL
+```
+
+<Message type="tip">
+  Add application-level restrictions to avoid password prompts.
+  ```bash
+  runner ALL= NOPASSWD: /bin/hostname
+  # Or your additional applications with arguments:
+  runner ALL= NOPASSWD: /bin/hostname,/your_dir/your_bin your_args
+  ```
+</Message>
+
 ## Conclusion
 
-This tutorial showed you how to set up, configure, and connect a self-hosted runner on a Mac mini for executing macOS pipelines. The runner is now ready to be used in your workflows. For more information, visit [Managing self-hosted runners on Github Docs](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners).
+This tutorial guided you through setting up a self-hosted runner on an Apple silicon-based Mac mini for macOS pipelines. Your runner is now ready to be integrated into your workflows. For additional information, refer to the [managing self-hosted runners documentation on GitHub](https://docs.github.com/en/actions/hosting-your-own-runners/managing-self-hosted-runners).

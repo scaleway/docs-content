@@ -1,11 +1,11 @@
 ---
 meta:
   title: Managing a Block Storage volume
-  description: This page explains how to mount, use and dismount Block Storage volume
+  description: This page explains how to manage a Block Storage volume
 content:
   h1: Managing a Block Storage volume
-  paragraph: This page explains how to mount, use and dismount a Block Storage volume
-tags: volume block-storage block mount connect use
+  paragraph: This page explains how to manage a Block Storage volume
+tags: volume block-storage block mount format partition connect use
 dates:
   validation: 2023-11-23
   posted: 2019-11-29
@@ -18,16 +18,22 @@ categories:
 
 <Message type="requirement">
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
+<<<<<<< HEAD
   - You have [configured your SSH key](/identity-and-access-management/organizations-and-projects/how-to/create-ssh-key)
   - You have an [Instance](/compute/instances/concepts/#instance) with an [attached](/storage/block/how-to/attach-a-volume/) additional Block Storage volume
+=======
+  - You have [configured your SSH key](/console/project/how-to/create-ssh-key)
+  - You have an [Instance](/compute/instances/concepts/#instance)
+  - You have [attached](/storage/block/how-to/attach-a-volume/) an additional Block Storage volume to your Instance
+>>>>>>> 2b13c18b (docs(block): add info)
 </Message>
 
-This documentation only explains how to mount additional block volumes to your Instance, as the root volume of your Instance is already mounted at creation.
+This documentation only explains how to mount **additional block volumes to your Instance**, as the root volume of your Instance is already mounted at creation. The volume where your OS is running cannot be mounted.
 
 ## Mounting and using a Block Storage volume
 
-In order to mount and use your Block Storage volume, you need to connect to the Instance it is attached to via SSH.
-Then, check that the volume is available, format it and mount it, following the instructions below.
+In order to mount and use your Block Storage volume, you need to connect to the Instance it is attached to, via SSH.
+Then, check that the volume is available, format it, and mount it following the instructions below.
 
 ### Verifying device availability
 
@@ -40,7 +46,7 @@ Then, check that the volume is available, format it and mount it, following the 
     lsblk
     ```
 
-  You should see an output like the following. You can see your Block volume named `sda`, on which your OS is running, and your Block volume named `sdb` with the chosen storage size.
+  You should see an output similar to the following. The root Block volume `sda`, runs your OS. The Block volume named `sdb` is the one we will be mounting to the Instance.
 
   ```sh no-copy
   root@scw-festive-agnesi:~# lsblk
@@ -52,15 +58,77 @@ Then, check that the volume is available, format it and mount it, following the 
   ├─sda1    8:1    0  23.2G  0 part /
   ├─sda14   8:14   0     4M  0 part
   └─sda15   8:15   0   106M  0 part /boot/efi
-  sdb       8:16   0  18.6G  0 disk
+  sdb       8:16   0  27.9G  0 disk
   ```
 
 <Message type="note">
-  - The Scaleway ecosystem uses [GB](https://en.wikipedia.org/wiki/Gigabyte) to define storage sizes and not [GiB](https://en.wikipedia.org/wiki/Gibibyte) as the default on linux.
+  - The Scaleway ecosystem uses [GB](https://en.wikipedia.org/wiki/Gigabyte) to define storage sizes and not [GiB](https://en.wikipedia.org/wiki/Gibibyte) as the default on Linux.
 </Message>
 
+### Partitioning your volume
 
-### Formatting the Block volume
+Partitioning your volume allows you to organize its storage into units. You can partition your volumes using tools such as `fdisk` or `parted`. For the sake of this documentation, we are using `fdisk`.
+
+1. Connect to your Instance with `ssh`.
+    ```
+    ssh root@<your_instance_ip>
+    ```
+2. Install `fdisk`
+  ```
+  apt-get install fdisk
+  ```
+3. Run the following command to partition your volume. Make sure that you replace `/dev/sdb` with your the volume you want to partition.
+  ```
+  fdisk /dev/sdb
+  ```
+4. Type `n` to create a new partition.
+5. Type `p` or `e` to select between a `primary` or an `extended` partition type.
+6. Select a partition number from 1 to 4. Enter if you want to select the default number.
+7. Select a first sector. Enter if you want to select the default sector.
+8. Select the last sector. Enter if you want to select the default sector.
+9. Type `w` to save your changes.
+
+  ```sh no-copy
+  Command (m for help): n
+  Partition type
+   p   primary (0 primary, 0 extended, 4 free)
+   e   extended (container for logical partitions)
+  Select (default p): p
+  Partition number (1-4, default 1): 1
+  First sector (8192-58593749, default 8192):
+  Last sector, +/-sectors or +/-size{K,M,G,T,P} (8192-58593749, default 58593749):
+  ```
+
+
+  Created a new partition 1 of type 'Linux' and of size 27.9 GiB.
+
+  Command (m for help): w
+  The partition table has been altered.
+  Syncing disks.
+  ```
+10. Run the following command to see your partition:
+  ```
+  fdisk -l
+  ```
+  You should see an output similar to the following:
+
+  ``` sh no-copy
+  root@@scw-festive-agnesi:~# fdisk -l /dev/sdb
+  Disk /dev/sdb: 27.94 GiB, 30000000000 bytes, 58593750 sectors
+  Disk model: b_ssd
+  Units: sectors of 1 * 512 = 512 bytes
+  Sector size (logical/physical): 512 bytes / 4096 bytes
+  I/O size (minimum/optimal): 4096 bytes / 4194304 bytes
+  Disklabel type: dos
+  Disk identifier: 0xf29b4308
+
+  Device     Boot Start      End  Sectors  Size Id Type
+  /dev/sdb1        8192 58593749 58585558 27.9G 83 Linux
+  ```
+
+### Formatting your volume
+
+After partitioning your volume, you need to format the partitions with a filesystem. This step prepares the volume for storing files.
 
 1. Create a filesystem with the following command. This command uses the `ext4` filesystem, though you can choose another if you prefer.
     ```
@@ -71,7 +139,7 @@ Then, check that the volume is available, format it and mount it, following the 
     lsblk -f
     ```
 
-  You should see an output like the following. Check that the `FSTYPE` field matches `ext4` for your Block volume.
+  You should see an output similar to the following. Check that the `FSTYPE` field matches `ext4` for your Block volume.
 
   ```sh no-copy
   root@scw-festive-agnesi:~# lsblk -f
@@ -90,12 +158,12 @@ Then, check that the volume is available, format it and mount it, following the 
   │
   └─sda15
         vfat   FAT32 UEFI          267A-38EB                              98.3M     6% /boot/efi
-  sdb   ext4   1.0                 eb6eee38-6ea4-42dc-8567-43847b249e9f
+  sdb   ext4     1.0               bd70bdc9-7c40-4adb-9200-1a3aec86fc48
   ```
 
 ### Mounting the Block volume
 
-Once you have created your filesystem, you need to mount it.
+Once you have created your filesystem, you need to define where you want to mount your volume and create a mount point (directory) for it.
 
 1. Create the mount point. In this tutorial, we choose `/mnt/block-volume`.
     ```
@@ -119,33 +187,28 @@ Once you have created your filesystem, you need to mount it.
     lsblk
     ```
 
-    You should see an output like the following. Check the `MOUNTPOINT` field.
+    You should see an output similar to the following. Check the `MOUNTPOINTS` field to ensure your volume is mounted where you intended it to be.
 
     ```sh no-copy
-    root@scw-festive-agnesi:~# lsblk
-    NAME  FSTYPE FSVER LABEL         UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
-    loop0 squash 4.0                                                            0   100% /snap/core20/2015
-    loop1 squash 4.0                                                            0   100% /snap/lxd/24322
-    loop2 squash 4.0                                                            0   100% /snap/snapd/20290
-    loop3                                                                       0   100% /snap/core20/2105
-    loop4                                                                       0   100% /snap/snapd/20671
-    loop5                                                                       0   100% /snap/lxd/26741
-    sda
-    ├─sda1
-    │     ext4   1.0   cloudimg-rootfs
-    │                                d7ca195e-7879-4169-85bb-58237c1476e8     20G    11% /
-    ├─sda14
-    │
-    └─sda15
-          vfat   FAT32 UEFI          267A-38EB                              98.3M     6% /boot/efi
-    sdb   ext4   1.0                 eb6eee38-6ea4-42dc-8567-43847b249e9f   17.2G     0% /mnt/block-volume
+    NAME    MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+    loop0     7:0    0  63.5M  1 loop /snap/core20/2015
+    loop1     7:1    0  63.9M  1 loop /snap/core20/2105
+    loop3     7:3    0 114.4M  1 loop /snap/lxd/26741
+    loop4     7:4    0  40.9M  1 loop /snap/snapd/20290
+    loop5     7:5    0  40.4M  1 loop /snap/snapd/20671
+    loop6     7:6    0    87M  1 loop /snap/lxd/26881
+    sda       8:0    0  23.3G  0 disk
+    ├─sda1    8:1    0  23.2G  0 part /
+    ├─sda14   8:14   0     4M  0 part
+    └─sda15   8:15   0   106M  0 part /boot/efi
+    sdb       8:32   0  27.9G  0 disk /mnt/block-volume
     ```
 
 ### Using fstab for Persistent Mounting
 
-With the current configuration, the block device will not be mounted automatically upon reboot. Use the `fstab` file to make sure the reboot does not impact your filesystem.
+With the current configuration, your volume will not be mounted automatically upon reboot. Use the `/etc/fstab` file to make sure the reboot does not impact your filesystem.
 
-Add this line to the `/etc/fstab` file of your Instance:
+Run the following command to make sure your volume is automatically mounted to your Instance upon reboot:
 
 ```
 echo "UUID=$(blkid --output value /dev/sdb | head -n1) /mnt/block-volume ext4 defaults 0 0" >> /etc/fstab
@@ -184,22 +247,20 @@ You may wish to transfer files from your local machine to your Instance's remote
     nano hello-world.txt
     ```
 
-    Enter the text `Hello World!`, then save and exit the file.
-3. Enter the following command to transfer the file to your Instance's mounted block volume. Ensure that you use your own Instance's IP address:
+3. Enter the text `Hello World!`.
+4. Press `Ctrl O`, `Enter`, and `Ctrl X` to save and exit the file.
+5. Enter the following command to transfer the file to your Instance's mounted block volume. Ensure that you use your own Instance's IP address:
     ```
-    rsync -a hello-world.txt root@<your.IP.address.here>:/mnt/block-volume
+    rsync -a hello-world.txt root@<your_instance_ip>:/mnt/block-volume
     ```
 
 The file is now transferred. You can connect to your Instance again, and use the command `cd /mnt/block-volume ; ls` to check that the file appears in the directory.
 
-## Transferring data using logical volume management (LVM)
-
-You may wish to transfer your data from one volume to another. This can be achieved using LVM the `pvmove` command. 
-
 ## Increasing the partition size of the volume
 
-<Message type="tip">
-  We recommend that you make a backup of your data using the [snapshot](/storage/block/how-to/create-a-snapshot/) feature, before increasing the partition size of your volume. This helps you avoid any potential data loss.
+<Message type="important">
+  - We recommend that you make a backup of your data using the [snapshot](/storage/block/how-to/create-a-snapshot/) feature, before increasing the partition size of your volume. This helps you avoid any potential data loss.
+  - If the partition you want to resize is mounted, you need to [unmount it](/storage/block/api-cli/unmounting-a-volume/)
 </Message>
 
 1. Connect to your Instance using [SSH](/compute/instances/how-to/connect-to-instance/).
@@ -217,12 +278,12 @@ You may wish to transfer your data from one volume to another. This can be achie
     ├─sda1    8:1    0  23.2G  0 part /
     ├─sda14   8:14   0     4M  0 part
     └─sda15   8:15   0   106M  0 part /boot/efi
-    sdb       8:16   0  18.6G  0 disk /mnt/block-volume
+    sdb       8:16   0  27.69  0 disk /mnt/block-volume
     ```
 
 3. Use `growpart` to increase the partition size of your block storage volume (here `/dev/sdb1`):
     ```
-    growpart /dev/sdX 1
+    growpart /dev/sdb 1
     ```
 
     <Message type="tip">

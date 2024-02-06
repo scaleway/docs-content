@@ -15,8 +15,13 @@ dates:
 ---
 
 
-This tutorial shows you how to migrate your Instance's data from a Block Storage volume (b_ssd) to a Block Storage Low Latency volume using.
-Note that your Operating System and the volume on which you have stored it, cannot be migrated to a Block Storage Low Latency volume.
+This tutorial shows you how to migrate your Instance's data from a Block Storage volume (b_ssd) to a Block Storage Low Latency according to your needs and level of expertise. You will find out how to:
+
+- migrate your data without Logical Volume Management or Partition Table
+- migrate your data using **Logical Volume Management (LVM)**
+- migrate your data with Partition Table but without Logical Volume Management
+
+Note that your Operating System and the volume on which you have stored it, **cannot be migrated to a Block Storage Low Latency volume**.
 
 <Macro id="iam-requirements" />
 
@@ -24,62 +29,12 @@ Note that your Operating System and the volume on which you have stored it, cann
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have [created an SSH key](/console/project/how-to/create-ssh-key/)
   - You have [created an Instance](/compute/instances/how-to/create-an-instance/) and [attached a Block SSD volume](/storage/block/how-to/attach-a-volume/) to it, containing data to migrate
-  - Your Instance's OS is not hosted on the Block SSD volume that contains the data you want to migrate
+  - Your Instance's OS is **not hosted on the Block SSD volume that contains the data you want to migrate**
 </Message>
 
 <Message type="tip">
   We recommend that you make a backup of your data using the [snapshot](/storage/block/how-to/create-a-snapshot/) feature before migrating your data. This helps you avoid any potential data loss.
 </Message>
-
-## Migrating data with Logical Volume Management (LVM)
-
-Logical volume management combines physical volumes into volume groups to unify the storage space available on your Instance.
-
-1. Create a [Block Storage Low Latency volume](/storage/block/how-to/create-a-volume/) and [attach it](/storage/block/how-to/attach-a-volume/) to your Instance.
-2. Open a terminal and connect to your Instance using SSH:
-  ```
-  ssh root@<Your Instance's IP>
-  ```
-3. Use the following command to identify the Block SSD volume (source volume) and the Low Latency volume (target volume). In this tutorial, `/dev/sdb` is the SSD Block volume, and `dev/sdc` is the Low Latency volume.
-  ```
-  cat /proc/mounts
-  ```
-4. Run the following command to create physical volumes with LVM. Make sure that you replace `/dev/sdb` with your source volume and `/dev/sdc` with your target volume.
-  ```
-  # Create physical volumes with /dev/sdb being the source volume and /dev/sdc being the target volume
-  pvcreate /dev/sdb /dev/sdc
-
-5. Run the following command to create a volume group for both volumes:
-  ```
-  # Create a volume group (VG) for both volumes
-  vgcreate my_volume_group /dev/sdb /dev/sdc
-  ```
-6. Optionally, if you have already created a volume group with your source volume in it, run the following command to add your target volume to the same volume group:
-  ```
-  # Add your target volume in the same volume group as the source volume
-  vgextend my_volume_group /dev/sdc
-
-7. Use the following command to move your data from your source volume to your target volume:
-  ```
-  # Move your data from /dev/sdb to /dev/sdc
-  pvmove -b /dev/sdb/dev/sdc
-  ```
-8. Use the following command to monitor the data migration process:
-  ```
-  watch lvs -a -o+devices
-  ```
-9. Once the migration is complete, run the following command to remove your source volume from your volume group. This means your volume group will no longer consider your source volume as part of its storage pool.
-  ```
-  vgreduce my_volume_group /dev/sdb
-  ```
-10. Use the following command to remove the physical volume from your source volume:
-  ```
-  # Remove all LVM-related metadata from your source volume
-  pvremove /dev/sdb
-  ```
-11. Restart your applications.
-12. Reboot your Instance and check that your applications are running.
-13. Optionally, wait a few days and delete the SSD volume.
 
 ## Migrating data without Partition Table nor LVM
 
@@ -122,10 +77,60 @@ Logical volume management combines physical volumes into volume groups to unify 
   # This command mounts all filesystems listed in /etc/fstab that are not already mounted
   mount -a
   ```
-11. Start your applications/services, and check that they are running.
+11. Restart your applications/services, and check that they are running.
+12. Reboot your Instance and check that your applications are running correctly.
+13. Optionally, wait a few days and [delete the SSD volume](/storage/block/how-to/delete-a-volume/) using the Scaleway console.
 
 
-## Without LVM but with Partition Table
+## Migrating data with Logical Volume Management (LVM)
+
+1. Create a [Block Storage Low Latency volume](/storage/block/how-to/create-a-volume/) and [attach it](/storage/block/how-to/attach-a-volume/) to your Instance.
+2. Open a terminal and connect to your Instance using SSH:
+  ```
+  ssh root@<Your Instance's IP>
+  ```
+3. Use the following command to identify the Block SSD volume (source volume) and the Low Latency volume (target volume). For the sake of this tutorial, we are using `/dev/sdb` to refer to the SSD Block volume, and `dev/sdc` to refer to the Low Latency volume.
+  ```
+  cat /proc/mounts
+  ```
+4. Run the following command to create physical volumes with LVM. Make sure that you replace `/dev/sdb` with your source volume and `/dev/sdc` with your target volume.
+  ```
+  # Create physical volumes with /dev/sdb being the source volume and /dev/sdc being the target volume
+  pvcreate /dev/sdb /dev/sdc
+
+5. Run the following command to create a volume group for both volumes:
+  ```
+  # Create a volume group (VG) for both volumes
+  vgcreate my_volume_group /dev/sdb /dev/sdc
+  ```
+6. Optionally, if you have already created a volume group with your source volume in it, run the following command to add your target volume to the same volume group:
+  ```
+  # Add your target volume in the same volume group as the source volume
+  vgextend my_volume_group /dev/sdc
+
+7. Use the following command to move your data from your source volume to your target volume:
+  ```
+  # Move your data from /dev/sdb to /dev/sdc
+  pvmove -b /dev/sdb/dev/sdc
+  ```
+8. Use the following command to monitor the data migration process:
+  ```
+  watch lvs -a -o+devices
+  ```
+9. Once the migration is complete, run the following command to remove your source volume from your volume group. This means your volume group will no longer consider your source volume as part of its storage pool.
+  ```
+  vgreduce my_volume_group /dev/sdb
+  ```
+10. Use the following command to remove the physical volume from your source volume:
+  ```
+  # Remove all LVM-related metadata from your source volume
+  pvremove /dev/sdb
+  ```
+11. Restart your applications/services, and check that they are running.
+12. Reboot your Instance and check that your applications are running correctly.
+13. Optionally, wait a few days and [delete the SSD volume](/storage/block/how-to/delete-a-volume/) using the Scaleway console.
+
+## Migrating data without LVM but with Partition Table
 
 <Message type="important">
   To follow this procedure you must have:
@@ -175,5 +180,7 @@ Logical volume management combines physical volumes into volume groups to unify 
 
   mount -a
   ```
-11. Start your applications/services, and check that they are running correctly.
+11. Restart your applications/services, and check that they are running.
+12. Reboot your Instance and check that your applications are running correctly.
+13. Optionally, wait a few days and [delete the SSD volume](/storage/block/how-to/delete-a-volume/) using the Scaleway console.
 

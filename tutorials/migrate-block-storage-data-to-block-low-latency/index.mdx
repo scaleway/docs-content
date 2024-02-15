@@ -10,8 +10,8 @@ categories:
   - block-storage
 tags: block-storage data migration block-storage-low-latency
 dates:
-  validation: 2024-02-06
-  posted: 2024-02-06
+  validation: 2024-02-15
+  posted: 2024-02-15
 ---
 
 
@@ -32,11 +32,155 @@ Note that your Operating System and the volume on which you have stored it, **ca
   - Your Instance's OS is **not hosted on the Block SSD volume that contains the data you want to migrate**
 </Message>
 
-<Message type="tip">
-  We recommend that you make a backup of your data using the [snapshot](/storage/block/how-to/create-a-snapshot/) feature before migrating your data. This helps you avoid any potential data loss.
+<Message type="important">
+  We recommend that you make a [snapshot](/storage/block/how-to/create-a-snapshot/) of your volume before migrating your data. This helps you avoid any potential data loss.
 </Message>
 
-## Migrating data without Partition Table nor LVM
+## Preparing for migration
+
+1. Log in to your [Scaleway account](https://console.scaleway.com/).
+2. Click **Instances** in the **Compute** section of the side menu.
+3. Click the relevant Instance, then click the **Attached volumes** tab.
+4. Ensure that:
+
+    - you are not trying to migrate the **System volume**, which is the volume where the Instance's operating system is stored
+    - you have attached an additional Block SSD (`b_ssd`) volume to your Instance, containing the data you want to migrate
+
+
+### Identifying the volumes
+
+Before starting the migration process, it is important to **identify your source and target volumes**, as well as **how they are mounted** on the Instance.
+
+1. Open a terminal and connect to your Instance using SSH:
+    ```
+    ssh root@<Your Instance's IP>
+    ```
+2. Run the following command to list the volumes attached to your Instance, and take note of your volumes' **logical name** and their **size in GB** in the output.
+    ```
+    lshw -class disk
+    ```
+
+    An output similar to the following displays. In this example, we can identify four volumes: `/dev/sda ; 10GB`, `/dev/sdb ; 25GB`, `/dev/sdc ; 25GB`, and `/dev/sdd ; 25GB`.
+
+    ```
+    *-disk:0
+       description: SCSI Disk
+       product: b_ssd
+       vendor: SCW
+       physical id: 0.0.0
+       bus info: scsi@2:0.0.0
+       logical name: /dev/sda
+       version: v42
+       size: 9536MiB (10GB)
+       capabilities: 5400rpm gpt-1.00 partitioned partitioned:gpt
+       configuration: ansiversion=5 guid=d6b69d71-c8d0-4566-9551-6cf4ecc589e3 logicalsectorsize=512 sectorsize=4096
+    *-disk:1
+       description: SCSI Disk
+       product: b_ssd
+       vendor: SCW
+       physical id: 0.1.0
+       bus info: scsi@2:0.1.0
+       logical name: /dev/sdb
+       version: v42
+       size: 23GiB (25GB)
+       capabilities: 5400rpm
+       configuration: ansiversion=5 logicalsectorsize=512 sectorsize=4096
+    *-disk:2
+       description: SCSI Disk
+       product: b_ssd
+       vendor: SCW
+       physical id: 0.2.0
+       bus info: scsi@2:0.2.0
+       logical name: /dev/sdc
+       version: v42
+       size: 23GiB (25GB)
+       capabilities: 5400rpm
+       configuration: ansiversion=5 logicalsectorsize=512 sectorsize=4096
+    *-disk:3
+       description: SCSI Disk
+       product: b_ssd
+       vendor: SCW
+       physical id: 0.2.0
+       bus info: scsi@2:0.2.0
+       logical name: /dev/sdd
+       version: v42
+       size: 23GiB (25GB)
+       capabilities: 5400rpm
+       configuration: ansiversion=5 logicalsectorsize=512 sectorsize=4096
+
+3. Run the following command to retrieve your volumes' Scaleway IDs:
+
+    ```
+    ls -la /dev/disk/by-id/scsi-0SCW* -la
+    ```
+   An output similar to the following displays:
+
+   ```
+    lrwxrwxrwx 1 root root  9 Feb  7 16:25 /dev/disk/by-id/scsi-0SCW_b_ssd_volume-3a9f7296-637b-4e12-9f9f-306e3031d064 -> ../../sdb
+    lrwxrwxrwx 1 root root  9 Feb  7 16:25 /dev/disk/by-id/scsi-0SCW_b_ssd_volume-715131d8-60fe-4707-b199-71d0e005d76d -> ../../sdc
+    lrwxrwxrwx 1 root root  9 Feb  7 16:25 /dev/disk/by-id/scsi-0SCW_b_ssd_volume-7e1a9b98-b7ee-4bbc-8f8f-a7abbfffc937 -> ../../sda
+    lrwxrwxrwx 1 root root 10 Feb  7 16:25 /dev/disk/by-id/scsi-0SCW_b_ssd_volume-7e1a9b98-b7ee-4bbc-8f8f-a7abbfffc937-part1 -> ../../sda1
+    lrwxrwxrwx 1 root root 11 Feb  7 16:25 /dev/disk/by-id/scsi-0SCW_b_ssd_volume-7e1a9b98-b7ee-4bbc-8f8f-a7abbfffc937-part14 -> ../../sda14
+    lrwxrwxrwx 1 root root 11 Feb  7 16:25 /dev/disk/by-id/scsi-0SCW_b_ssd_volume-7e1a9b98-b7ee-4bbc-8f8f-a7abbfffc937-part15 -> ../../sda15
+    ```
+4. On the Scaleway console, click the <Icon name="more" /> icon next to your Instance's volume, then click **More info**. A pop-up displays with the volume's information.
+5. Check that for each volume, the ID displayed in the pop-up matches the one returned in the output in step 3. For example, the `/dev/sda` volume's ID on the console, matches the one returned in the output.
+
+    <Lightbox src="scaleway-volume-info.webp" alt="" />
+
+6. Optionally, compile a table with your volumes with the logical name, size in GB, and ID for each volume.
+
+| Logical name | Size in GB | ID                                   |
+|--------------|------------|--------------------------------------|
+| /dev/sda     | 10         | 7e1a9b98-b7ee-4bbc-8f8f-a7abbfffc937 |
+| /dev/sdb     | 25         | 3a9f7296-637b-4e12-9f9f-306e3031d064 |
+| /dev/sdc     | 25         | 715131d8-60fe-4707-b199-71d0e005d76d |
+
+
+### Identifying which migration procedure to use
+
+1. Run the following command to check if you can use the LVM migration method:
+
+    ```
+    pvs
+    ```
+
+    If an output similar to the following displays, we recommend that you migrate your data using the ## Migrating data with Logical Volume Management (LVM) procedure.
+
+        ```
+        PV         VG           Fmt  Attr PSize   PFree
+        /dev/sdb   volume-group lvm2 a--  <23.28g <22.28g
+        ```
+
+    <Message type="tip">
+      Take note of the volume group name (displayed under the `VG` section), as you will need it during the migration procedure.
+    </Message>
+
+2. Run the following command to retrieve the list of your mounted volumes:
+
+    ```
+    cat /proc/mounts  | grep '/sd'
+    ```
+
+An output similar to the following displays:
+
+    ```
+    /dev/sda1 / ext4 rw,relatime,discard,errors=remount-ro 0 0
+    /dev/sda15 /boot/efi vfat rw,relatime,fmask=0077,dmask=0077,codepage=437,iocharset=iso8859-1,shortname=mixed,errors=remount-ro 0 0
+    /dev/sdc /srv/docker ext2 rw,relatime,stripe=1024 0 0
+    /dev/sde1 /srv/docker ext2 rw,relatime,stripe=1024 0 0
+    ```
+
+For the sake of this tutorial, we have created different volumes according to the migration procedures available, to help you choose the migration procedure you should use:
+
+In the output, we can observe that:
+
+- the root system `/` is mounted using `/dev/sda1`, as `/dev/sda` is the System volume. As stated previously in this documentation, data contained in the volume containing the operating system, must not be migrated.
+- `/dev/sdc` is mounted as a non-partitioned raw device, since there is no number appended to the device path. For this use case, you must migrate your data using the ## Migrating data without Partition Table or LVM procedure.
+- `/dev/sde1` is a partitioned raw device. The naming convention used for it (sde1) is typical for identifying partitions on storage devices. For this use case, one must migrate date their date using the ## Migrating data without LVM but with Partition Table procedure.
+
+
+## Migrating data without Partition Table or LVM
 
 <Message type="important">
   To follow this procedure, you must have [mounted](/storage/block/api-cli/managing-a-volume/) your source volume to your Instance beforehand.
@@ -51,7 +195,7 @@ Note that your Operating System and the volume on which you have stored it, **ca
   ```
   # This command creates an exact copy of the /etc/fstab file named fstab.backup
 
-  cp /etc/fstab /etc/fstab.backup
+  cp -a /etc/fstab /etc/fstab.backup
   ```
 4. Stop any applications and/or services that may be accessing the data on the source volume.
 5. [Unmount your source volume](/storage/block/api-cli/unmounting-a-volume/) from your Instance.
@@ -93,42 +237,37 @@ Note that your Operating System and the volume on which you have stored it, **ca
   ```
   cat /proc/mounts
   ```
-4. Run the following command to create physical volumes with LVM. Make sure that you replace `/dev/sdb` with your source volume and `/dev/sdc` with your target volume.
+4. Run the following command to create your target physical volume with LVM. Make sure that you replace `/dev/sdc` with your target volume.
   ```
-  # Create physical volumes with /dev/sdb being the source volume and /dev/sdc being the target volume
-  pvcreate /dev/sdb /dev/sdc
+  # Create your target physical volume with /dev/sdc being the target volume
+  pvcreate /dev/sdc
 
-5. Run the following command to create a volume group for both volumes:
-  ```
-  # Create a volume group (VG) for both volumes
-  vgcreate my_volume_group /dev/sdb /dev/sdc
-  ```
-6. Optionally, if you have already created a volume group with your source volume in it, run the following command to add your target volume to the same volume group:
+5. Run the following command to add your target volume to the same volume group as your source volume:
   ```
   # Add your target volume in the same volume group as the source volume
   vgextend my_volume_group /dev/sdc
 
-7. Use the following command to move your data from your source volume to your target volume:
+6. Use the following command to move your data from your source volume to your target volume:
   ```
   # Move your data from /dev/sdb to /dev/sdc
-  pvmove -b /dev/sdb/dev/sdc
+  pvmove -b /dev/sdb /dev/sdc
   ```
-8. Use the following command to monitor the data migration process:
+7. Use the following command to monitor the data migration process:
   ```
   watch lvs -a -o+devices
   ```
-9. Once the migration is complete, run the following command to remove your source volume from your volume group. This means your volume group will no longer consider your source volume as part of its storage pool.
+8. Once the migration is complete, run the following command to remove your source volume from your volume group. This means your volume group will no longer consider your source volume as part of its storage pool.
   ```
   vgreduce my_volume_group /dev/sdb
   ```
-10. Use the following command to remove the physical volume from your source volume:
+9. Use the following command to remove the physical volume from your source volume:
   ```
   # Remove all LVM-related metadata from your source volume
   pvremove /dev/sdb
   ```
-11. Restart your applications/services, and check that they are running.
-12. Reboot your Instance and check that your applications are running correctly.
-13. Optionally, wait a few days and [delete the SSD volume](/storage/block/how-to/delete-a-volume/) using the Scaleway console.
+10. Restart your applications/services, and check that they are running.
+11. Reboot your Instance and check that your applications are running correctly.
+12. Optionally, wait a few days and [delete the SSD volume](/storage/block/how-to/delete-a-volume/) using the Scaleway console.
 
 ## Migrating data without LVM but with Partition Table
 
@@ -149,7 +288,7 @@ Note that your Operating System and the volume on which you have stored it, **ca
   ```
   # This command creates an exact copy of the /etc/fstab file named fstab.backup
 
-  cp /etc/fstab /etc/fstab.backup
+  cp -a /etc/fstab /etc/fstab.backup
   ```
 3. Stop any applications and/or services that may be accessing the data on the source volume.
 4. Unmount your Block SSD volume:

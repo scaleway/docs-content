@@ -17,6 +17,9 @@ dates:
 
 This tutorial shows you how to migrate your Instance's data from a Block Storage volume (b_ssd) to a Block Storage Low Latency according to your needs and level of expertise. You will find out how to:
 
+- prepare for migration
+- identify your volumes
+- identify which migration procedure to use, according to how your volumes are mounted
 - migrate your data without Logical Volume Management or Partition Table
 - migrate your data using **Logical Volume Management (LVM)**
 - migrate your data with Partition Table but without Logical Volume Management
@@ -33,7 +36,7 @@ Note that your Operating System and the volume on which you have stored it, **ca
 </Message>
 
 <Message type="important">
-  We recommend that you make a [snapshot](/storage/block/how-to/create-a-snapshot/) of your volume before migrating your data. This helps you avoid any potential data loss.
+  We recommend that you make a [snapshot](/storage/block/how-to/create-a-snapshot/) of all your volumes before migrating your data. This helps you avoid any potential data loss.
 </Message>
 
 ## Preparing for migration
@@ -47,7 +50,7 @@ Note that your Operating System and the volume on which you have stored it, **ca
     - you have attached an additional Block SSD (`b_ssd`) volume to your Instance, containing the data you want to migrate
 
 
-### Identifying the volumes
+## Identifying the volumes
 
 Before starting the migration process, it is important to **identify your source and target volumes**, as well as **how they are mounted** on the Instance.
 
@@ -139,13 +142,13 @@ Before starting the migration process, it is important to **identify your source
 
 ### Identifying which migration procedure to use
 
-1. Run the following command to check if you can use the LVM migration method:
+1. Run the following command to check if your volumes are managed by LVM:
 
     ```
     pvs
     ```
 
-    If an output similar to the following displays, we recommend that you migrate your data using the ## Migrating data with Logical Volume Management (LVM) procedure.
+    If an output similar to the following displays, with your source volume under the `PV`section, we recommend that you migrate your data using the [Migrating data with Logical Volume Management (LVM) procedure](#migrating-data-with-logical-volume-management-(lvm)).
 
         ```
         PV         VG           Fmt  Attr PSize   PFree
@@ -175,52 +178,60 @@ For the sake of this tutorial, we have created different volumes according to th
 
 In the output, we can observe that:
 
-- the root system `/` is mounted using `/dev/sda1`, as `/dev/sda` is the System volume. As stated previously in this documentation, data contained in the volume containing the operating system, must not be migrated.
-- `/dev/sdc` is mounted as a non-partitioned raw device, since there is no number appended to the device path. For this use case, you must migrate your data using the ## Migrating data without Partition Table or LVM procedure.
-- `/dev/sde1` is a partitioned raw device. The naming convention used for it (sde1) is typical for identifying partitions on storage devices. For this use case, one must migrate date their date using the ## Migrating data without LVM but with Partition Table procedure.
+- the root system `/` is mounted using `/dev/sda1`, as `/dev/sda` is the System volume. As stated previously in this documentation, data contained in this volume must not be migrated.
+- `/dev/sdc` is mounted as a non-partitioned raw device, since there is no number appended to the device path. For this use case, you must migrate your data using the [Migrating data without Partition Table or LVM procedure](#migrating-data-without-partition-table-or-lvm).
+- `/dev/sde1` is a partitioned raw device. The naming convention used for it (sde1) is typical for identifying partitions on storage devices. For this use case, one must migrate their data using the [Migrating data without LVM but with Partition Table procedure](#migrating-data-without-lvm-but-with-partition-table).
 
 
 ## Migrating data without Partition Table or LVM
 
 <Message type="important">
-  To follow this procedure, you must have [mounted](/storage/block/api-cli/managing-a-volume/) your source volume to your Instance beforehand.
+  - To follow this procedure, you must have [mounted](/storage/block/api-cli/managing-a-volume/) your source volume to your Instance beforehand.
+  - We recommend that you use `screen` or `tmux` while using this procedure to make sure the data migration completes even if your computer loses access to the internet.
 </Message>
 
 1. Create a [Block Storage Low Latency volume](/storage/block/how-to/create-a-volume/) and [attach it](/storage/block/how-to/attach-a-volume/) to your Instance.
 2. Open a terminal and connect to your Instance using SSH:
-  ```
-  ssh root@<Your Instance's IP>
-  ```
+    ```
+    ssh root@<Your Instance's IP>
+    ```
 3. Use the following command to make a copy of your Instance's `fstab` file:
-  ```
-  # This command creates an exact copy of the /etc/fstab file named fstab.backup
+    ```
+    # This command creates an exact copy of the /etc/fstab file named fstab.backup
 
-  cp -a /etc/fstab /etc/fstab.backup
-  ```
+    cp -a /etc/fstab /etc/fstab.backup
+    ```
 4. Stop any applications and/or services that may be accessing the data on the source volume.
 5. [Unmount your source volume](/storage/block/api-cli/unmounting-a-volume/) from your Instance.
-6. Use the following command to copy your source volume (`/dev/sdb`) to your target volume (`/dev/sdc`) block by block.
-  ```
-  # Replace /dev/sdb with your source volume and /dev/sdc with your target volume
-  # This command means that you are copying data from /dev/sdb to /dev/sdc, using a block size of 4 KB, and displaying progress information while copying.
+6. Use the following command to copy your source volume to your target volume, block by block. In our case, we are copying `/dev/sdb` to `/dev/sdc`.
 
-  dd if=/dev/sdb of=/dev/sdc bs=4096 status=progress
-  ```
-   <Message type="important">
-     We recommend that you always make a backup of your data, as `dd` can overwrite data irreversibly, if not used correctly.
-   </Message>
+      <Message type="important">
+        The following command could take up to several hours or days to complete, depending on your volume size. We thus recommend that you run it using `screen` or `tmux` to create a persistent session.
+        This will ensure that your data migration completes even if your computer loses internet or switches to sleep mode.
+      </Message>
+
+    ```
+    # Replace /dev/sdX with your source volume and /dev/sdY with your target volume
+    # This command means that you are copying data from /dev/sdX to /dev/sdY, using a block size of 4 KB, and displaying progress information while copying.
+
+    dd if=/dev/sdX of=/dev/sdY bs=4096 status=progress
+    ```
+    <Message type="important">
+      We recommend that you always make a backup of your data, as `dd` can overwrite data irreversibly, if not used correctly.
+    </Message>
 
 7. Run the following command to access your Instance's `fstab` file:
-  ```
-  nano /etc/fstab
-  ```
+    ```
+    nano /etc/fstab
+    ```
 8. In the `fstab` file, replace your source volume (`/dev/sdb`) with your target volume (`/dev/sdc`).
 9. Press `Ctrl O` and `Enter` to save your changes, then press `Ctrl X` to exit the file.
 10. Mount your volume:
-  ```
-  # This command mounts all filesystems listed in /etc/fstab that are not already mounted
-  mount -a
-  ```
+    ```
+    # This command mounts all filesystems listed in /etc/fstab that are not already mounted
+
+    mount -a
+    ```
 11. Restart your applications/services, and check that they are running.
 12. Reboot your Instance and check that your applications are running correctly.
 13. Optionally, wait a few days and [delete the SSD volume](/storage/block/how-to/delete-a-volume/) using the Scaleway console.
@@ -230,41 +241,43 @@ In the output, we can observe that:
 
 1. Create a [Block Storage Low Latency volume](/storage/block/how-to/create-a-volume/) and [attach it](/storage/block/how-to/attach-a-volume/) to your Instance.
 2. Open a terminal and connect to your Instance using SSH:
-  ```
-  ssh root@<Your Instance's IP>
-  ```
+    ```
+    ssh root@<Your Instance's IP>
+    ```
 3. Use the following command to identify the Block SSD volume (source volume) and the Low Latency volume (target volume). For the sake of this tutorial, we are using `/dev/sdb` to refer to the SSD Block volume, and `dev/sdc` to refer to the Low Latency volume.
-  ```
-  cat /proc/mounts
-  ```
+    ```
+    cat /proc/mounts
+    ```
 4. Run the following command to create your target physical volume with LVM. Make sure that you replace `/dev/sdc` with your target volume.
-  ```
-  # Create your target physical volume with /dev/sdc being the target volume
-  pvcreate /dev/sdc
+    ```
+    # Create your target physical volume with /dev/sdc being the target volume
+    pvcreate /dev/sdc
+    ```
 
 5. Run the following command to add your target volume to the same volume group as your source volume:
-  ```
-  # Add your target volume in the same volume group as the source volume
-  vgextend my_volume_group /dev/sdc
+    ```
+    # Add your target volume in the same volume group as the source volume
+    vgextend my_volume_group /dev/sdc
+    ```
 
 6. Use the following command to move your data from your source volume to your target volume:
-  ```
-  # Move your data from /dev/sdb to /dev/sdc
-  pvmove -b /dev/sdb /dev/sdc
-  ```
+    ```
+    # Move your data from /dev/sdb to /dev/sdc
+    pvmove -b /dev/sdb /dev/sdc
+    ```
 7. Use the following command to monitor the data migration process:
-  ```
-  watch lvs -a -o+devices
-  ```
+    ```
+    watch lvs -a -o+devices
+    ```
 8. Once the migration is complete, run the following command to remove your source volume from your volume group. This means your volume group will no longer consider your source volume as part of its storage pool.
-  ```
-  vgreduce my_volume_group /dev/sdb
-  ```
+    ```
+    vgreduce my_volume_group /dev/sdb
+    ```
 9. Use the following command to remove the physical volume from your source volume:
-  ```
-  # Remove all LVM-related metadata from your source volume
-  pvremove /dev/sdb
-  ```
+    ```
+    # Remove all LVM-related metadata from your source volume
+    pvremove /dev/sdb
+    ```
 10. Restart your applications/services, and check that they are running.
 11. Reboot your Instance and check that your applications are running correctly.
 12. Optionally, wait a few days and [delete the SSD volume](/storage/block/how-to/delete-a-volume/) using the Scaleway console.
@@ -281,44 +294,44 @@ In the output, we can observe that:
 </Message>
 
 1. Open a terminal and connect to your Instance using SSH:
-  ```
-  ssh root@<Your Instance's IP>
-  ```
+    ```
+    ssh root@<Your Instance's IP>
+    ```
 2. Use the following command to make a copy of your Instance's `fstab` file:
-  ```
-  # This command creates an exact copy of the /etc/fstab file named fstab.backup
+    ```
+    # This command creates an exact copy of the /etc/fstab file named fstab.backup
 
-  cp -a /etc/fstab /etc/fstab.backup
-  ```
+    cp -a /etc/fstab /etc/fstab.backup
+    ```
 3. Stop any applications and/or services that may be accessing the data on the source volume.
 4. Unmount your Block SSD volume:
-  ```
-  umount /dev/sdb
-  ```
+    ```
+    umount /dev/sdb
+    ```
 5. Use the following command to copy the content of your source volume's partitions to your target volume's partitions:
-  ```
-  # Replace /dev/sdb1 with your source volume's partition and /dev/sdc1 with your target volume's partition.
-  # This command means that you are copying data from /dev/sdb1 to /dev/sdc1, using a block size of 4 KB, and displaying progress information while copying.
+    ```
+    # Replace /dev/sdb1 with your source volume's partition and /dev/sdc1 with your target volume's partition.
+    # This command means that you are copying data from /dev/sdb1 to /dev/sdc1, using a block size of 4 KB, and displaying progress information while copying.
 
-  dd if=/dev/sdb1 of=/dev/sdc1 bs=4096 status=progress
-  # Repeat the command for other partitions if applicable/needed
-  ```
-    <Message type="important">
-     We recommend that you always make a backup of your data, as `dd` can overwrite data irreversibly, if not used correctly.
-    </Message>
+    dd if=/dev/sdb1 of=/dev/sdc1 bs=4096 status=progress
+    # Repeat the command for other partitions if applicable/needed
+    ```
+      <Message type="important">
+      We recommend that you always make a backup of your data, as `dd` can overwrite data irreversibly, if not used correctly.
+      </Message>
 6. Run the following command to access your Instance's `fstab` file:
-  ```
-  nano /etc/fstab
-  ```
+    ```
+    nano /etc/fstab
+    ```
 7. In the `fstab` file, replace your source partition (`/dev/sdb1`) with your target partition (`/dev/sdc1`). Repeat the procedure for other partitions if applicable/needed.
 8. Press `Ctrl O` and `Enter` to save your changes, then press `Ctrl X` to exit the file.
 9. Make sure that the data was correctly copied on the target partitions.
 10. Mount your target volume on your Instance:
-  ```
-  # This command mounts all filesystems listed in /etc/fstab that are not already mounted
+    ```
+    # This command mounts all filesystems listed in /etc/fstab that are not already mounted
 
-  mount -a
-  ```
+    mount -a
+    ```
 11. Restart your applications/services, and check that they are running.
 12. Reboot your Instance and check that your applications are running correctly.
 13. Optionally, wait a few days and [delete the SSD volume](/storage/block/how-to/delete-a-volume/) using the Scaleway console.

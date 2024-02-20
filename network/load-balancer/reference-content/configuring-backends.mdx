@@ -16,7 +16,7 @@ dates:
 
 ## Backend overview
 
-Each Load Balancer is configured with one or several backends. A backend represents a set of backend servers that the Load Balancer’s frontend(s) forwards requests to using the specified configuration (port, protocol, proxy protocol etc.).
+Each Load Balancer is configured with one or several backends. A backend represents a set of backend servers that the Load Balancer’s frontend(s) forwards requests to using the specified configuration (port, protocol, Proxy Protocol etc.).
 
 You can create and configure frontends and backends [while creating a Load Balancer](/network/load-balancer/how-to/create-frontends-backends/#how-to-create-a-backend-during-creation-of-your-load-balancer) or choose to create an “empty” Load Balancer and [add frontends and backends](/network/load-balancer/how-to/create-frontends-backends/#how-to-create-a-backend-after-creation-of-your-load-balancer) later on.
 
@@ -55,26 +55,47 @@ This setting mostly concerns those using self-signed certificates on the backend
 
 Note that the same Verify Certificate setting you select here will also be used for [health checks](/network/load-balancer/reference-content/configuring-health-checks/), and cannot be overridden.
 
-### Proxy protocol
+### Proxy Protocol
 
-Proxy protocol enables the original client IP address to be passed to the backend server in a standardized way. However, in order to work, the backend server must support the selected proxy protocol. 
+If you activate Proxy Protocol, the Load Balancer forwards information about the original client's connection, such as their IP address and port, to the backend servers. This is achieved by adding the information to the headers of the TCP stream. The exact information included in the header depends on the version of Proxy Protocol that is chosen (see below).
 
-If you choose to activate proxy protocol, the following versions are available:
+Passing client connection information to the backend servers is beneficial for use cases including:
+- Preserving the client's real IP address for your backend servers' logs and metrics
+- Applications which require the client's IP address for security measures or IP-based restrictions
+- Applications which require the client's IP address for geolocation or personalized content
 
-* **Proxy protocol v1**: Version one (text format).
-* **Proxy protocol v2**: Version two (binary format).
-* **Proxy protocol v2-ssl**: Version two with SSL information extension added, which provides information on SSL connection settings originally sent by the client.
-* **Proxy protocol v2-ssl-cn**:  Version two with SSL information extension added as above, as well as the common name from the subject of the client certificate (if any).
+If none of the use cases above apply to the applications or metrics running on your backend server, it may not be necessary for you to activate Proxy Protocol. 
+
+Also, note that Proxy Protocol is more commonly activated for Load Balancers using TCP protocol. Load Balancers using HTTP protocol already pass information about the client IP address to the backend servers via an HTTP `X-Forwarded-For` [header](https://en.wikipedia.org/wiki/X-Forwarded-For), without needing to activate Proxy Protocol. If your Load Balancer uses HTTP protocol and you do not require the standardized information in the Proxy Protocol headers at the backend server, the `X-Forwarded-For` headers may be sufficient.
+
+In order for Proxy Protocol to work, the backend server must support the selected Proxy Protocol. Different server softwares understand and process Proxy Protocol header information in different ways, and you may need to carry out specific configuration steps to ensure it is correctly received and processed. For example, for Nginx you might need to install and configure `ngx_http_realip_module`. Consult the documentation for your own server software.
+
+#### Proxy Protocol versions
+
+If you choose to activate Proxy Protocol on your Load Balancer, you are prompted to select one of the following versions:
+
+| Version           | Advantages                                                                                           | Disadvantages      |
+|-------------------|------------------------------------------------------------------------------------------------------|--------------------|
+| Proxy Protocol v1 | - Plain text (ASCII) human-readable headers <br /> - Widely supported <br /> - Easy to troubleshoot  | - Header format not as efficient as v2 |
+| Proxy Protocol v2 | - Binary, TLV format headers <br /> - Efficient header format, reduced overhead for high throughput scenarios <br /> - Extensible and future-proof <br />- Enhanced header security | - Less widely supported by backend servers <br /> - Not human-readable: harder to troubleshoot |
+| Proxy Protocol v2-ssl | - As for v2 <br /> - SSL information extension added: information on client's SSL connection settings | - As for v2 |
+| Proxy Protocol v2-ssl-cn | - As for v2-ssl <br /> - Common name from subject of client's certificate added (if any) | - As for v2 |
+
+For a full specification of the header formats in each case, see the [HAProxy](https://www.haproxy.org/download/1.8/doc/proxy-protocol.txt) documentation.
+
+Ensure that your backend server is correctly configured to handle whichever version of Proxy Protocol you choose.
 
 ## Configuring traffic management
 
 ### Balancing method
 
-Load Balancers support three different modes of balancing load (requests) between backend servers:
+Load Balancers support three different modes of balancing load (requests) between backend servers. The table below shows the methods, and their advantages and use-cases.
 
-* **Round-robin**: Requests are sent to each backend server in turn, with the Load Balancer acting like a turnstile. This is the most frequently used balancing method, and the easiest to implement. It is well-suited to infrastructures that have identical backend servers.
-* **Least connections**: Each request is assigned to the server with the fewest active connections. This method works best when it is expected that sessions will be long, e.g. LDAP, SQL TSE. It is less well-suited to protocols with typically short sessions like HTTP.
-* **First available**: Each request is directed towards the first backend server with [available connection slots](#backend-protection). Once a server reaches its limit of maximum simultaneous connections, requests are directed to the next server. This method uses the smallest number of servers at any given time, which can be useful if, for example, you sometimes want to power off extra servers during off-peak hours.
+| Method             | Description                              |Suitable for                                     |
+|--------------------|----------------------------------|---------------------------------------------------------|
+| Round robin        | Requests are sent to each backend server in turn, with the Load Balancer acting like a turnstile. <br/> This is the most frequently-used balancing method, and the easiest to implement. | The majority of infrastructures, where backend servers are identical or very similar. |
+| Least connections  | Each request is assigned to the server with the fewest active connections at the time. | Infrastructures where it is expected that sessions will be long, e.g. LDAP, SQL TSE. <br/> Less well-suited to protocols with typically short sessions, like HTTP. |
+| First available    | Each request is directed towards the first backend server with available connection slots, based on the [max connections](#backend-protection) setting. <br/> Once a server reaches its limit of maximum simultaneous connections, requests are directed to the next server. | Infrastructures where you want to use the smallest number of backend servers at any given time (e.g. you want to power off extra servers during off-peak hours.) |
 
 ### Server IPs (backend servers)
 
@@ -118,10 +139,17 @@ Retry settings define how the Load Balancer should retry to establish a connecti
 
 ### S3 failover
 
-Activating the S3 failover feature allows you to redirect users to a static website hosted on Scaleway Object Storage, in the case that none of your Load Balancer’s backend servers are available. This website could be a simple, single webpage or else something much more complex: you build it according to your own requirements. 
+Activating The **S3 failover** feature allows you to redirect users to a static website hosted on Scaleway Object Storage, in the case that none of your Load Balancer's backends are available to serve the requested content. This website could be a simple, single webpage or else something much more complex: you build it according to your own requirements. 
+
+If you do not set up an S3 failover, and none of your backend servers are available, your users will instead see a standard HTTP error displayed in their browser, e.g. `503 Service Unavailable`.
+
+Some benefits of creating a failover website include:
+- Displaying customized, branded and user-friendly error messages
+- Providing links to support resources or contact information
+- Providing information on service status or maintenance
+- Redirecting to a mirrored site or skeleton site
 
 Note that when entering the S3 link to redirect to, the URL of the bucket endpoint is not sufficient. The bucket website URL is specifically required (e.g.`https://my-bucket.s3-website.nl-ams.scw.cloud`). See our [dedicated documentation](/network/load-balancer/how-to/set-up-s3-failover/) for further help.
-
 
 ## Health checks 
 

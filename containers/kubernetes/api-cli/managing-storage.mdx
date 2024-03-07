@@ -136,24 +136,29 @@ The CSI driver allows you to use [Persistent Volumes](https://kubernetes.io/docs
 
 This plugin supports at rest encryption of the volumes with Cryptsetup/LUKS.
 
-<Message type="note">
-  Resizing an encrypted volume [does not work](https://github.com/container-storage-interface/spec/issues/445).
-</Message>
+### Storage Class parameters
 
-### Storage class parameters
+In order to have an encrypted volume, `encrypted: true` needs to be added to the
+StorageClass parameters. You will also need a passphrase to encrypt/decrypt the volume,
+which is taken from the secrets passed to the `NodeStageVolume` and `NodeExpandVolume` method.
 
-In order to have an encrypted volume, `encrypted: true` needs to be added to the `StorageClass` parameters.
-You will also need a passphrase to encrypt/decrypt the volume, which is taken from the secrets passed to the `NodeStageVolume` method.
+The [external-provisioner](https://github.com/kubernetes-csi/external-provisioner)
+can be used to [pass down the wanted secret to the CSI plugin](https://kubernetes-csi.github.io/docs/secrets-and-credentials-storage-class.html) (v1.0.1+).
 
-The [external-provisioner](https://github.com/kubernetes-csi/external-provisioner) can be used to [pass down the wanted secret to the CSI plugin](https://kubernetes-csi.github.io/docs/secrets-and-credentials-storage-class.html) (v1.0.1+).
+Some additional parameters are needed on the StorageClass:
 
-Two additional parameters are needed on the StorageClass:
 - `csi.storage.k8s.io/node-stage-secret-name`: The name of the secret
 - `csi.storage.k8s.io/node-stage-secret-namespace`: The namespace of the secret
+- `csi.storage.k8s.io/node-expand-secret-name`: The name of the secret (see note below).
+- `csi.storage.k8s.io/node-expand-secret-namespace`: The namespace of the secret (see note below).
+
+> Volume expansion for encrypted volumes is only supported with the `CSINodeExpandSecret`
+> feature gate which is available since `v1.25.0` and by default since `v1.27.0`.
 
 The secret needs to have the passphrase in the entry with the key `encryptionPassphrase`.
 
-For instance, with the following secret:
+For instance with the following secret:
+
 ```yaml
 apiVersion: v1
 kind: Secret
@@ -166,12 +171,14 @@ data:
 ```
 
 and the following StorageClass:
+
 ```yaml
-allowVolumeExpansion: false # not yet supported
+# Volume expansion is supported with CSINodeExpandSecret feature gate since v1.25.0 or by default since v1.27.0
+allowVolumeExpansion: true
 apiVersion: storage.k8s.io/v1
 kind: StorageClass
 metadata:
-  name: "scw-bssd-enc"
+  name: "sbs-default-enc"
 provisioner: csi.scaleway.com
 reclaimPolicy: Delete
 volumeBindingMode: Immediate
@@ -179,12 +186,24 @@ parameters:
   encrypted: "true"
   csi.storage.k8s.io/node-stage-secret-name: "enc-secret"
   csi.storage.k8s.io/node-stage-secret-namespace: "default"
+  # Required for volume expansion
+  csi.storage.k8s.io/node-expand-secret-name: "enc-secret"
+  csi.storage.k8s.io/node-expand-secret-namespace: "default"
 ```
 
-all the PVC created with the StorageClass `scw-bssd-enc` will be encrypted at rest with the passphrase `myawesomepassphrase`.
+all the PVC created with the StorageClass `sbs-default-enc` will be encrypted at
+rest with the passphrase `myawesomepassphrase`.
 
-The [Per Volume Secret](https://kubernetes-csi.github.io/docs/secrets-and-credentials-storage-class.html#per-volume-secrets) can also be used to avoid having one passphrase per StorageClass.
+The [Per Volume Secret](https://kubernetes-csi.github.io/docs/secrets-and-credentials-storage-class.html#per-volume-secrets)
+can also be used to avoid having one passphrase per StorageClass.
 
+<Message type="note">
+  Please note that prior to `v0.2.1` the expansion of encrypted volume was not possible,
+  `PersistentVolumes` created without the `csi.storage.k8s.io/node-stage-secret` annotations
+  will need to be patched manually if expansion is needed. Be sure to be extra careful doing
+  so as the needed fields are immutable and you'll need to force the patch (backup any data,
+  switch the `reclaimPolicy` of the volume to `Retain`, etc.).
+</Message>
 
 <Navigation title="See also">
   <PreviousButton to="/containers/kubernetes/api-cli/cluster-monitoring/">Monitoring clusters</PreviousButton>

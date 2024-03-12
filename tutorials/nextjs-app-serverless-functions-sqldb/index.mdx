@@ -666,96 +666,96 @@ To secure your deployment, we will now add a dedicated [IAM application](https:/
     ```
 9. Add the following code to your `main.tf` file:
     ```json
-      terraform {
-      required_providers {
-        scaleway = {
-          source = "scaleway/scaleway"
-        }
+    terraform {
+    required_providers {
+      scaleway = {
+        source = "scaleway/scaleway"
       }
-      required_version = ">= 0.13"
+    }
+    required_version = ">= 0.13"
+    }
+      
+    variable "REGISTRY_ENDPOINT" {
+    type = string
+    description = "Container Registry endpoint where your application container is stored"
+    }
+      
+    variable "DEFAULT_PROJECT_ID" {
+    type = string
+    description = "Project id where your resources will be created"
+    }
+      
+    resource scaleway_container_namespace main {
+      name = "tutorial-nextjs-blog-tf"
+      description = "Namespace created for full serverless Nextjs app deployment"
+    }
+      
+    resource scaleway_container main {
+      name = "tutorial-nextjs-blog-tf"
+      description = "Container for Nextjs blog"
+      namespace_id = scaleway_container_namespace.main.id
+      registry_image = "${var.REGISTRY_ENDPOINT}/my-nextjs-blog:latest"
+      port = 8080
+      cpu_limit = 560
+      memory_limit = 1024
+      min_scale = 0
+      max_scale = 5
+      timeout = 600
+      max_concurrency = 80
+      privacy = "public"
+      protocol = "http1"
+      deploy = true
+        
+      environment_variables = {
+          "PGUSER" = scaleway_iam_application.app.id,
+          "PGHOST" = trimsuffix(trimprefix(regex(":\\/\\/.*:",scaleway_sdb_sql_database.database.endpoint), "://"),":")
+          "PGDATABASE" = scaleway_sdb_sql_database.database.name,
+          "PGPORT" = trimprefix(regex(":[0-9]{1,5}",scaleway_sdb_sql_database.database.endpoint), ":")
       }
-       
-      variable "REGISTRY_ENDPOINT" {
-      type = string
-      description = "Container Registry endpoint where your application container is stored"
+      secret_environment_variables = {
+        "PGPASSWORD" = scaleway_iam_api_key.api_key.secret_key,
       }
-       
-      variable "DEFAULT_PROJECT_ID" {
-      type = string
-      description = "Project id where your resources will be created"
-      }
-       
-      resource scaleway_container_namespace main {
-        name = "tutorial-nextjs-blog-tf"
-        description = "Namespace created for full serverless Nextjs app deployment"
-      }
-       
-      resource scaleway_container main {
-        name = "tutorial-nextjs-blog-tf"
-        description = "Container for Nextjs blog"
-        namespace_id = scaleway_container_namespace.main.id
-        registry_image = "${var.REGISTRY_ENDPOINT}/my-nextjs-blog:latest"
-        port = 8080
-        cpu_limit = 560
-        memory_limit = 1024
-        min_scale = 0
-        max_scale = 5
-        timeout = 600
-        max_concurrency = 80
-        privacy = "public"
-        protocol = "http1"
-        deploy = true
-         
-        environment_variables = {
-            "PGUSER" = scaleway_iam_application.app.id,
-            "PGHOST" = trimsuffix(trimprefix(regex(":\\/\\/.*:",scaleway_sdb_sql_database.database.endpoint), "://"),":")
-            "PGDATABASE" = scaleway_sdb_sql_database.database.name,
-            "PGPORT" = trimprefix(regex(":[0-9]{1,5}",scaleway_sdb_sql_database.database.endpoint), ":")
-        }
-        secret_environment_variables = {
-          "PGPASSWORD" = scaleway_iam_api_key.api_key.secret_key,
-        }
-      }
-       
-      resource scaleway_iam_application "app" {
-      name = "tutorial-nextjs-app-tf"
-      }
-       
-      resource scaleway_iam_policy "db_access" {
-      name = "tutorial-nextjs-policy-tf"
-      description = "Gives tutorial Nextjs app access to Serverless SQL Database"
-      application_id = scaleway_iam_application.app.id
-      rule {
-        project_ids = ["${var.DEFAULT_PROJECT_ID}"]
-        permission_set_names = ["ServerlessSQLDatabaseReadWrite"]
-      }
-      }
-       
-      resource scaleway_iam_api_key "api_key" {
-      application_id = scaleway_iam_application.app.id
-      }
-       
-      resource scaleway_sdb_sql_database "database" {
-      name = "tutorial-nextjs-tf"
-      min_cpu = 0
-      max_cpu = 8
-      }
-       
-      output "database_connection_string" {
-      // Output as an example, you can give this string to your application
-      value = format("postgres://%s:%s@%s",
-        scaleway_iam_application.app.id,
-        scaleway_iam_api_key.api_key.secret_key,
-        trimprefix(scaleway_sdb_sql_database.database.endpoint, "postgres://"),
-      )
-      sensitive = true
-      }
-       
-      output "container_url" {
-      // Output as an example, you can give this string to your application
-      value = scaleway_container.main.domain_name
-      sensitive = true
-      }
+    }
+      
+    resource scaleway_iam_application "app" {
+    name = "tutorial-nextjs-app-tf"
+    }
+      
+    resource scaleway_iam_policy "db_access" {
+    name = "tutorial-nextjs-policy-tf"
+    description = "Gives tutorial Nextjs app access to Serverless SQL Database"
+    application_id = scaleway_iam_application.app.id
+    rule {
+      project_ids = ["${var.DEFAULT_PROJECT_ID}"]
+      permission_set_names = ["ServerlessSQLDatabaseReadWrite"]
+    }
+    }
+      
+    resource scaleway_iam_api_key "api_key" {
+    application_id = scaleway_iam_application.app.id
+    }
+      
+    resource scaleway_sdb_sql_database "database" {
+    name = "tutorial-nextjs-tf"
+    min_cpu = 0
+    max_cpu = 8
+    }
+      
+    output "database_connection_string" {
+    // Output as an example, you can give this string to your application
+    value = format("postgres://%s:%s@%s",
+      scaleway_iam_application.app.id,
+      scaleway_iam_api_key.api_key.secret_key,
+      trimprefix(scaleway_sdb_sql_database.database.endpoint, "postgres://"),
+    )
+    sensitive = true
+    }
+      
+    output "container_url" {
+    // Output as an example, you can give this string to your application
+    value = scaleway_container.main.domain_name
+    sensitive = true
+    }
     ```
 
 The terraform file creates several resources:

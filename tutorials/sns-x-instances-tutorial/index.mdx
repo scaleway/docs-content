@@ -4,7 +4,7 @@ meta:
   description: This tutorial introduces you to using SNS for notifications via a simulated CPU monitoring example with terraform.
 content:
   h1: Setting a notification system with terraform across instances using Scaleway's Instances and Messaging and Queuing SNS, through a simulated CPU monitoring example.
-  paragraph: This tutorial walks you through creating a notification system between instances with terraform, from a simulated CPU monitoring webserver to a notification-receiving webserver.
+  paragraph: This tutorial walks you through creating a notification system between instances, from a simulated CPU monitoring webserver to a notification-receiving webserver.
 categories:
   - messaging
   - instances
@@ -21,22 +21,23 @@ dates:
 <Message type="requirement">
   - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
   - You have [set up authentication for the Terraform provider](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs#authentication)
+    You have generated a public [SSH key](https://www.scaleway.com/en/docs/identity-and-access-management/organizations-and-projects/how-to/create-ssh-key/#how-to-upload-the-public-ssh-key-to-the-scaleway-interface) (steps 1 to 6)
 </Message>
 
-This tutorial demonstrates setting up a notification system with terraform, where a simulated CPU usage threshold triggers alerts sent to an HTTP server using Scaleway's serverless products.
+This tutorial demonstrates setting up a notification system, where a simulated CPU usage threshold triggers alerts sent to an HTTP server using Scaleway's serverless products.
 It involves two instances:
  - one simulates CPU load to trigger notifications, the publisher server,
  - the other serves as the receiver with an HTTP endpoint, the SNS topic's subscriber server.
 
 <Lightbox src="publication.png" alt="" />
 
-The focus of this tutorial is to set up SNS in an automated way, therefore all the infrastructure is handled with terraform.
+The focus of this tutorial is to set up SNS in an automated way, therefore all the infrastructure is handled with Terraform.
 To simplify this process, the web applications for each instance are downloaded through a docker image.
 If you're interested by the code of the publisher and the subscriber servers, you can find the code on [GitHub](https://github.com/scaleway/sns-x-instances-tutorial).
 
-# Create the terraform variable file
+# Create the Terraform variable file
 
-We will activate and SNS, create the two instances and link them with terraform.
+We will activate and SNS, create the two instances and link them with Terraform.
 
 ## Create the base for the project sns_tutorial
 
@@ -71,7 +72,7 @@ We will activate and SNS, create the two instances and link them with terraform.
  }
 ```
 
-5. 1. Create the ssh key that will be used in `sns_tutorial` project to access the instances:
+5. 1. Create the SSH key that will be used in `sns_tutorial` project to access the instances:
 
 ```
  resource "scaleway_iam_ssh_key" "main" {
@@ -101,7 +102,8 @@ We will activate and SNS, create the two instances and link them with terraform.
      can_receive = true // to subscribe a topic
      can_publish = true // to publish messages to the topic
    }
-   # TO WAIT THE ACTIVATION IS COMPLETED BEFORE CREATING THE CREDENTIALS
+   # Wait for activation completion before creating the credentials.
+   # If the credentials are created before the activation is completed, the project cannot be destroyed with terraform
    depends_on = [
      scaleway_mnq_sns.main
    ]
@@ -130,13 +132,13 @@ We start to create the subscriber instance and server, and then we subscribes to
    inbound_default_policy  = "drop"
    outbound_default_policy = "accept"
 
-   # FOR SSH CONNEXIONS
+   # FOR SSH CONNECTIONS
    inbound_rule {
      action = "accept"
      port = "22"
    }
 
-   # FOR HTTP CONNEXIONS
+   # FOR HTTP CONNECTIONS
    inbound_rule {
      action = "accept"
      port = "8081"
@@ -181,23 +183,17 @@ We start to create the subscriber instance and server, and then we subscribes to
            rg.fr-par.scw.cloud/sns-x-instance-tutorial/subscriber-server:1.0
    EOF
    }
-
-   # THE IP AND THE SECURITY GROUP MUST BE CREATED BEFOREHAND
-   depends_on = [
-     scaleway_instance_ip.subscriber_public_ip,
-     scaleway_instance_security_group.sns_www
-   ]
  }
 ```
 
-3. Create a `terraform_data` ressource to wait for the port 8081 to be opened on the subscriber server before subscribe to the topic:
+3. Create a `terraform_data` resource to wait for the port 8081 to be opened on the subscriber server before subscribe to the topic:
 ```
  resource "terraform_data" "bootstrap" {
    triggers_replace = [
      scaleway_instance_server.subscriber_sns_tuto_instance.id,
    ]
 
-   # WAIT FOR 8081 PORT TO BE OPENED AND TIMEOUT OF 3 MINUTES
+   # WAIT FOR 8081 PORT TO BE OPENED WITH A 3 MINUTES TIMEOUT
    provisioner "local-exec" {
      command = <<EOF
      #!/bin/bash
@@ -214,7 +210,7 @@ We start to create the subscriber instance and server, and then we subscribes to
  }
 ```
 This will allow the subscriber server to receive immediately the confirmation link to subscribe to the topic, and not wait for the retry policy when you will want to confirm the subscription.
-The confirmation step is be done manually for the purpose of the tutorial, but it can simply be automated with an HTTP client.
+The confirmation step is be done manually for the purpose of the tutorial, but it can be performed with an HTTP request as well.
 
 4. Create the SNS topic subscription with the subscriber server's endpoint:
 ```
@@ -225,10 +221,6 @@ The confirmation step is be done manually for the purpose of the tutorial, but i
    topic_id = scaleway_mnq_sns_topic.topic.id
    protocol = "http"
    endpoint = "http://${scaleway_instance_ip.subscriber_public_ip.address}:8081/notifications"
-
-   depends_on = [
-     terraform_data.bootstrap
-   ]
  }
 ```
 
@@ -282,24 +274,19 @@ The confirmation step is be done manually for the purpose of the tutorial, but i
            rg.fr-par.scw.cloud/sns-x-instance-tutorial/publisher-server:1.0
    EOF
    }
-
-   # Depends on topic  creation and instance creation
-   depends_on = [
-     scaleway_mnq_sns_topic.topic,
-     scaleway_instance_ip.publisher_public_ip,
-     scaleway_instance_security_group.sns_www
-   ]
  }
 ```
 
 # Use the publisher and subscriber websites to test your setup
 
-1. You need to confirm the subscription to the topic on the subscriber server. Go on the console, Instance, and copy the `subscriber_server` IP address.
-2. Then go on the home page of your subscriber server: ```http://<your_subscriber_ip_address:8081```
-3. Click on `Confirm subscription`
-4. Once you've arrived to the AWS subscription confirmation page, go back to the home page, and click on `Notifications`
-5. On the console, retrieve and copy the `publisher_server` IP address
-6. Go on the home page of your subscriber server: ```http://<your_publisher_ip_address:8081```
-7. Click on one or another CPU behavior, and check on the notification page of your subscriber server if the notification message appeared.
+1. Run the command `terraform apply`. You'll be prompt to enter your public SSH key. Paste the result of `cat ~/.ssh/id_ed25519.pub` and enter `yes`
+2. You need to confirm the subscription to the topic on the subscriber server. Go on the console, Instance, and copy the `subscriber_server` IP address.
+3. Then go on the home page of your subscriber server: ```http://<your_subscriber_ip_address>:8081```
+4. Click on `Confirm subscription`. If you have an error because the URL hasn't been received, you can reload the page. It should take less than 10 seconds to appear.
+5. Once you've arrived to the AWS subscription confirmation page, go back to the home page, and click on `Notifications`
+6. On the console, retrieve and copy the `publisher_server` IP address
+7. Go on the home page of your subscriber server: ```http://<your_publisher_ip_address>:8081```
+8. Click on one or another CPU behavior, and check on the notification page of your subscriber server if the notification message appeared.
+9. Once you're done testing, you can apply `terraform destroy` to clean and remove the project.
 
 [//]: # (# To go further)

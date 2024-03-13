@@ -32,9 +32,8 @@ You can configure the extension to log only what is relevant to your audits.
 
 ## Enabling and installing pgaudit
 
-
-1. Click **PostgreSQL and MySQL** under **Managed Databases** on the side menu. A list of your Database Instances displays.
-2. Click the Database Instance name or <Icon name="more" /> > **More info** to access Instance the information page.
+1. Click **PostgreSQL and MySQL** under **Managed Databases** on the side menu of the Scaleway console. A list of your Database Instances displays.
+2. Click the Database Instance name or <Icon name="more" /> > **More info** to access the Instance information page.
 3. Click the **Advanced settings** tab.
 4. Click <Icon name="edit" />.
 5. Click **+ Add parameters**.
@@ -92,12 +91,10 @@ The possible values include:
 <Tabs id="pgauditlog">
 
 
- <TabsTab label="for a Database Instance">
+ <TabsTab label="For a Database Instance">
 
 
-   1. Click **PostgreSQL and MySQL** under **Managed Databases** on the side menu. A list of your Database Instances displays.
-   2. Click the Database Instance name or <Icon name="more" /> > **More info** to access Instance the information page.
-   3. Click the **Advanced settings** tab.
+   1. Go to the **Advanced settings** of your Database Instance in the Scaleway console.
    4. Click <Icon name="edit" />.
    5. Click **+ Add parameters**.
    6. Select `pgaudit.log` in the drop-down.
@@ -107,13 +104,13 @@ The possible values include:
      </Message>
    8. Click <Icon name="validate" /> to validate.
      <Message type="note">
-       The configuration takes a few seconds to be applied. During this time the Database Instance connection remains uninterrupted. However, you must wait the few seconds before editing your advanced settings again.
+       The configuration takes a few seconds to be applied. During this time the Database Instance connection remains uninterrupted. However, you must wait the few seconds if you want to edit your advanced settings again.
      </Message>
    You can edit the `pgaudit.log` values in the advanced settings anytime.
  </TabsTab>
 
 
- <TabsTab label="for a specific database">
+ <TabsTab label="For a specific database">
 
 
    1. [Connect to your database](/managed-databases/postgresql-and-mysql/how-to/connect-database-instance/) as an admin user.
@@ -126,9 +123,18 @@ The possible values include:
      ```
      database=> \q
 
-
      $ psql -h <ip-address> -p <port> -d <database-name> -U <username>
      ```
+     <Message type="tip">
+       Run `\drds` to see a list of your settings. You should get an output like the following:
+       ```
+                                      List of settings
+        Role | Database |                   Settings
+        ------+----------+----------------------------------------------
+              | postgres | pgaudit.log=WRITE,FUNCTION,ROLE,DDL,MISC_SET
+       ```
+     </Message>
+
  </TabsTab>
 
 
@@ -137,39 +143,110 @@ The possible values include:
 
 ### Setting up `pgaudit.role`
 
-The `pgaudit.role` allows object audit logging setting through the roles system.
+Object audit logging is configured through the roles system. The `pgaudit.role` setting allows you to specify a principal audit role (also known as "master role").
 
-When database activity occurs, the auditing system checks the role of the user performing the action. If the user belongs to a role that has an associated audit policy, the action is logged according to the rules defined in that policy.
+An audit role refers to a role assigned to users or groups that grants them the authority to perform auditing tasks within a Database Instance. Assigning audit roles allows for the delegation of auditing responsibilities to different individuals or teams within an organization.
 
-specifies the master role for object audit logging.
+The primary function of the principal audit role is to oversee and manage the auditing process, including accessing audit logs and monitoring database activity.
 
-The master role can be granted multiple audit roles. An audit role refers to a specific role assigned to users or groups that grants them the authority to perform auditing tasks within the Database Instance. Assigning audit roles allows for the delegation of auditing responsibilities to different individuals or teams within an organization.
+Audit logging for an object (such as a `TABLE` or `VIEW`) takes place when the principal audit role has the necessary permissions to log the actions carried out on the object, or when it inherits these permissions from another role.
+
+Currently, only the `SELECT`, `INSERT`, `UPDATE`, and `DELETE` permissions are supported.
+
+  <Message type="note">
+    There is no default principal role. You must create a new role, or specify an existing one as the principal audit.
+  </Message>
+
+To set up and grant permissions to the principal audit role follow these instructions:
+
+1. [Connect to your database](/managed-databases/postgresql-and-mysql/how-to/connect-database-instance/) as an admin user.
+2. Run the following command to create a new user. If no output is returned, the operation was successful.
+    <Message type="note">
+      If you want to specify an existing role as the principal audit, you can skip this step.
+    </Message>
+
+    ```
+    CREATE ROLE auditor;
+    ```
+    You can replace `auditor` with your name of choice.
+
+    <Message type="tip">
+      Run `\du` to see a list of your database roles and check that the new role was created.
+    </Message>
+3. Set the role you created as `pgaudit.role`
+    ```
+    SET pgaudit.role = 'auditore';
+    ```
+    <Message type="note">
+      Alternatively you can follow these steps to confiure `pgaudit.role` from the Scaleway console:
+
+      1. Go to the **Advanced settings** of your Database Instance in the Scaleway console.
+      2. Click <Icon name="edit" />.
+      3. Click **+ Add parameters**.
+      4. Select `pgaudit.role` in the drop-down and type the name of the role you created to be the principal.
+      5. Click <Icon name="validate" /> to validate.
+          <Message type="note">
+            The configuration takes a few seconds to be applied. During this time the Database Instance connection remains uninterrupted. However, you must wait the few seconds if you want to edit your advanced settings again.
+          </Message>
+    </Message>
+    You can edit the `pgaudit.role` values in the advanced settings anytime.
+4. Run the following command in your Database Instance to grant the principal audit role permissions:
+    ```
+    GRANT PERMISSION1, PERMISSION2
+      on <object>
+      to <principal-role>;
+    ```
+    Replace `<PERMISSION1>` AND `<PERMISSION2>` with one or more of the supported permissions, `<object>` with the name of the data object you want to audit, and `auditor` with the `<principal-role>` with the name of the principal role.
+
+If the operation was successful you see `GRANT` as an output.
+
+## Accessing and handling logs
+
+Your logs are accessible via the Scaleway Observability dashboard, [Cockpit]().
+
+You can set up
 
 
+Object renames are logged under the name they were renamed to. (https://github.com/pgaudit/pgaudit/blob/master/README.md#caveats)
 
 
+### Optimizing disk usage
 
+- Audit logs are flushed and consume disk space. The [log ingestion rate](https://www.scaleway.com/en/docs/observability/cockpit/reference-content/cockpit-limitations/#limits-for-loki) is **4MB per second**.
 
+  To avoid log generation from exceeding ingestion, and the subsequent uncontrolled growth of disk usage, make sure you closely monitor the disk usage of the Database Instance. You can also update the `total_disk_retention` and `max_age_retention` attributes of the `log_policy` parameter to match your usage.
 
+  <Message type="important">
+    If the disk space becomes full, some audit logs may be lost.
+  </Message>
 
+- Before activating any audits, make sure you define exactly which statements are mandatory.
+
+  Some statements might not be important for auditing use cases, such as `SELECT`. while generating high volume logs, taking up disk space. When it comes to SELECT and DML statements, we recommend opting for an object audit logging configuration rather than a session audit one. For more information: https://github.com/pgaudit/pgaudit?tab=readme-ov-file#usage-considerations
 
 
 ## Deactivating pgaudit
-e- If you want to deactivate pgaudit, use `DROP EXTENSION pgaudit` and in your Advanced Settings, change the `rdb.enable_pgaudit` parameter to False. If you activate it again afterwards, the same configuration as the one that was live before the deactivation will be applied immediately.
 
+1. [Connect to your database](/managed-databases/postgresql-and-mysql/how-to/connect-database-instance/) as an admin user.
+2. Run the following command to deactivate the `pgaudit` extension in your Database Instance.
+    ```
+    DROP EXTENSION pgaudit
+    ```
+3. Go to the **Advanced settings** of your Database Instance in the Scaleway console.
+4. Click <Icon name="edit" />.
+5. Click **+ Add parameters**.
+6. Select `rdb.enable_pgaudit` in the drop-down and click the toggle to set it to `off`.
+7. Click <Icon name="validate" /> to validate. Your Database Instance restarts.
 
+<Message type="note">
+  If you reactivate the extension, your previous configuration is applied.
+</Message>
 
 
 ## Additional information
 Logs are accessible via the standard PostgreSQL logging facility.
 Logs format: https://github.com/pgaudit/pgaudit/blob/master/README.md#format
-Object renames are logged under the name they were renamed to. (https://github.com/pgaudit/pgaudit/blob/master/README.md#caveats)
 All management actions performed via API or console (e.g user/database creations and deletions) are logged, no matter the configuration. However the associated read statements are not logged (e.g select statements used to check that actions have been correctly executed).
-
-
-## Recommendations
-Audit logs are flushed, consuming disk space. Knowing that the log ingestion rate is 4MB per second (https://www.scaleway.com/en/docs/observability/cockpit/reference-content/cockpit-limitations/#limits-for-loki), the risk is log generation exceeding ingestion, leading to unwanted and uncontrolled growth of disk usage. If there is a risk, monitor closely the disk usage of the instance and think about updating accordingly the log_policy parameter (https://www.scaleway.com/en/developers/api/managed-database-postgre-mysql/#path-database-instances-update-a-database-instance). Keep also in mind that if the disk space is full, some audit logs may be lost.
-Before activating any audit, make sure to define exactly which statements are mandatory. Some statements might not be important for auditing use cases (e.g SELECT) while generating high volume logs, taking up disk space. When it comes to SELECT and DML statements, we recommend opting for an object audit logging configuration rather than a session audit one. For more information: https://github.com/pgaudit/pgaudit?tab=readme-ov-file#usage-considerations
 
 
 

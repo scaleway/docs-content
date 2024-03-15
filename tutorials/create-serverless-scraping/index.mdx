@@ -11,7 +11,7 @@ categories:
   - postgresql-and-mysql
 tags: serverless serverless-functions functions serverless-triggers triggers sqs-queue managed-database terraform tutorial
 dates:
-  validation: 2023-12-08
+  validation: 2024-03-15
   posted: 2023-12-08
 ---
 
@@ -34,20 +34,20 @@ We show how to provision all the required Scaleway resources via Terraform, but 
 
 This project exemplifies a decoupled architecture, where producer and consumer perform specific tasks independently. This kind of design is modular and allows for flexibility and scalability. It also adheres to the principles of microservices and serverless architectures, where individual functions or scripts focus on specific tasks.
 
-You can find all of the code on [GitHub](https://github.com/scaleway/serverless-scraping-tutorial), so feel free to dive right in, or else follow along with the step-by-step explanation below to create the architecture yourself. 
+You can find all of the code on [GitHub](https://github.com/scaleway/serverless-examples/tree/main/projects/serverless-scraping), so feel free to dive right in, or else follow along with the step-by-step explanation below to create the architecture yourself. 
 
 ## Create the scraper
 
 We start by creating the scraper program, or the "data producer".
 1. Create a directory called `scraper`.
-2. Inside it, create a file `requirements.txt`. We need the packages `requests`, `bs4` and `boto3==1.27`, as follows:
+2. Inside it, create a file `requirements.txt`. We need the packages `requests`, `bs4` and `boto3`, as follows:
     ```
-    boto3==1.27
+    boto3
     bs4
     requests
     ```
 3. Create a subdirectory `handlers` within the `scraper` directory, and add a `scrape_hn.py` file inside it.
-4. Complete the `scrape_hn.py` file by adding the function code [as shown in the repository](https://github.com/scaleway/serverless-scraping-tutorial/blob/main/scraper/handlers/scrape_hn.py). The main code blocks are briefly explained as follows:
+4. Complete the `scrape_hn.py` file by adding the function code [as shown in the repository](https://github.com/scaleway/serverless-examples/tree/main/projects/serverless-scraping/blob/main/scraper/handlers/scrape_hn.py). The main code blocks are briefly explained as follows:
 
     SQS credentials and queue URL are read by the function from environment variables. Those variables are set by Terraform as explained in [one of the next sections](#create-a-terraform-file-to-provision-the-necessary-scaleway-resources). *If you choose another deployment method, such as the [console](https://console.scaleway.com/), do not forget to set them.*
     ```python
@@ -84,7 +84,7 @@ We start by creating the scraper program, or the "data producer".
             body = json.dumps({'url': titleline.a["href"], 'title': titleline.a.get_text()})
             response = sqs.send_message(QueueUrl=queue_url, MessageBody=body)
     ```
-5. As explained in the [Scaleway Functions documentation](/serverless/functions/how-to/package-function-dependencies-in-zip/#how-to-configure-your-package-using-python), install the dependencies in a `package` folder and create the archive to be uploaded:
+As explained in the [Scaleway Functions documentation](/serverless/functions/how-to/package-function-dependencies-in-zip/#how-to-configure-your-package-using-python), dependencies need to be installed in a `package` folder, and uploaded as an archive. This is done via terraform, but if you decide to deploy using another system, you can create the archive as following:
     ```bash
     cd scraper
     pip install -r requirements.txt --target ./package
@@ -101,7 +101,7 @@ Next, let's create our consumer function. When receiving a message containing th
     bs4
     ```
 3. Create a subdirectory `handlers` within the `consumer` directory, and add a `consumer.py` file inside it.
-4. Complete the `consumer.py` file by adding the function code [as shown in the repository](https://github.com/scaleway/serverless-scraping-tutorial/blob/main/consumer/handlers/consumer.py). The main code blocks are briefly explained as follows:
+4. Complete the `consumer.py` file by adding the function code [as shown in the repository](https://github.com/scaleway/serverless-examples/tree/main/projects/serverless-scraping/blob/main/consumer/handlers/consumer.py). The main code blocks are briefly explained as follows:
 
     SQS credentials and queue URL are accessed by the function as environment variables. These variables are set by Terraform as explained in [one of the next sections](#create-a-terraform-file-to-provision-the-necessary-scaleway-resources). If you choose another deployment method, such as the [console](https://console.scaleway.com/), do not forget to set them.
     ```python
@@ -130,7 +130,7 @@ Next, let's create our consumer function. When receiving a message containing th
           if conn is not None:
               conn.close()
     ```
-5. As explained in the [Scaleway Functions documentation](/serverless/functions/how-to/package-function-dependencies-in-zip/#how-to-configure-your-package-using-python), install the dependencies in a folder `package` and create the archive to be uploaded:
+As explained in the [Scaleway Functions documentation](/serverless/functions/how-to/package-function-dependencies-in-zip/#how-to-configure-your-package-using-python), dependencies need to be installed in a `package` folder, and uploaded as an archive. This is done via terraform, but if you decide to deploy using another system, you can create the archive as following:
     ```bash
     cd consumer
     pip install -r requirements.txt --target ./package
@@ -165,6 +165,7 @@ If you do not want to use Terraform, you can also create the required resources 
 
     provider "scaleway" {
     }
+
     resource "scaleway_account_project" "mnq_tutorial" {
       name = "mnq-tutorial"
     }
@@ -216,11 +217,6 @@ If you do not want to use Terraform, you can also create the required resources 
       override_special = "_-"
     }
 
-    output db_password {
-      value = random_password.dev_mnq_pg_exporter_password.result
-      sensitive = true
-    }
-
     resource "scaleway_rdb_instance" "main" {
       name = "test-rdb"
       project_id   = scaleway_account_project.mnq_tutorial.id
@@ -232,7 +228,22 @@ If you do not want to use Terraform, you can also create the required resources 
       password = random_password.dev_mnq_pg_exporter_password.result
     }
 
-    resource "scaleway_rdb_database" "hn-database" {
+    output db_password {
+      value = random_password.dev_mnq_pg_exporter_password.result
+      sensitive = true
+    }
+
+    output db_ip {
+      value = scaleway_rdb_instance.main.endpoint_ip
+      sensitive = false
+    }
+
+    output db_port {
+      value = scaleway_rdb_instance.main.endpoint_port
+      sensitive = false
+    }
+
+    resource "scaleway_rdb_database" "main" {
       instance_id = scaleway_rdb_instance.main.id 
       name = "hn-database"
     }
@@ -247,16 +258,41 @@ If you do not want to use Terraform, you can also create the required resources 
     resource "scaleway_rdb_privilege" "mnq_user_role" {
       instance_id = scaleway_rdb_instance.main.id 
       user_name = scaleway_rdb_user.worker.name
-      database_name = scaleway_rdb_database.hn-database.name
+      database_name = scaleway_rdb_database.main.name
       permission = "all"
     }
     ```
-6. Add the code below to provision the functions resources. First activate the namespace, then create the functions. Note that we are referencing variables from other resources, to completely automate the deployment process:
+6. Add the code below to provision the functions resources. First activate the namespace, then locally zip the code and create the functions on the cloud. Note that we are referencing variables from other resources, to completely automate the deployment process:
     ```
+    locals {
+      scraper_folder_path = "../scraper"
+      consumer_folder_path = "../consumer"
+      archives_folder_path = "../archives"
+    }
+
     resource "scaleway_function_namespace" "mnq_tutorial_namespace" {
       project_id = scaleway_account_project.mnq_tutorial.id
       name        = "mnq-tutorial-namespace"
       description = "Main function namespace"
+    }
+    resource "null_resource" "pip_install_scraper" {
+      triggers = {
+        requirements = filesha256("${local.scraper_folder_path}/requirements.txt")
+      }
+
+      provisioner "local-exec" {
+        command = "pip3 install -r ${local.scraper_folder_path}/requirements.txt --upgrade --target ${local.scraper_folder_path}/package"
+      }
+    }
+
+    data "archive_file" "scraper_archive" {
+      depends_on = [ null_resource.pip_install_scraper ]
+
+
+      type = "zip"
+      output_path = "${local.archives_folder_path}/scraper.zip"
+
+      source_dir = local.scraper_folder_path
     }
 
     resource "scaleway_function" "scraper" {
@@ -267,8 +303,8 @@ If you do not want to use Terraform, you can also create the required resources 
       handler      = "handlers/scrape_hn.handle"
       privacy      = "private"
       timeout      = 10
-      zip_file     = "../scraper/functions.zip"
-      zip_hash     = filesha256("../scraper/functions.zip")
+      zip_file     = data.archive_file.scraper_archive.output_path
+      zip_hash     = data.archive_file.scraper_archive.output_sha256
       deploy       = true
       environment_variables = {
         QUEUE_URL = scaleway_mnq_sqs_queue.main.url
@@ -279,6 +315,26 @@ If you do not want to use Terraform, you can also create the required resources 
       }
     }
 
+    resource "null_resource" "pip_install_consumer" {
+      triggers = {
+        requirements = filesha256("${local.consumer_folder_path}/requirements.txt")
+      }
+
+      provisioner "local-exec" {
+        command = "pip3 install -r ${local.consumer_folder_path}/requirements.txt --upgrade --target ${local.consumer_folder_path}/package"
+      }
+    }
+
+    data "archive_file" "consumer_archive" {
+      depends_on = [ null_resource.pip_install_consumer ]
+
+
+      type = "zip"
+      output_path = "${local.archives_folder_path}/consumer.zip"
+
+      source_dir = local.consumer_folder_path
+    }
+
     resource "scaleway_function" "consumer" {
       namespace_id = scaleway_function_namespace.mnq_tutorial_namespace.id
       project_id   = scaleway_account_project.mnq_tutorial.id
@@ -287,12 +343,12 @@ If you do not want to use Terraform, you can also create the required resources 
       handler      = "handlers/consumer.handle"
       privacy      = "private"
       timeout      = 10
-      zip_file     = "../consumer/functions.zip"
-      zip_hash     = filesha256("../consumer/functions.zip")
+      zip_file     = data.archive_file.consumer_archive.output_path
+      zip_hash     = data.archive_file.consumer_archive.output_sha256
       deploy       = true
       max_scale    = 3
       environment_variables = {
-        DB_NAME = scaleway_rdb_database.hn-database.name
+        DB_NAME = scaleway_rdb_database.main.name
         DB_HOST = scaleway_rdb_instance.main.load_balancer[0].ip
         DB_PORT = scaleway_rdb_instance.main.load_balancer[0].port
         DB_USER = scaleway_rdb_user.worker.name
@@ -302,6 +358,7 @@ If you do not want to use Terraform, you can also create the required resources 
       }
     }
     ```
+    Note that a folder `archives` needs to be created manually if you started from scratch. It is included in the git repository. 
 7. Add the code below to provision the triggers resources. The cron trigger activates at the minutes `[0, 15, 30, 45]` of every hour. No arguments are passed, but we could do so by specifying them in JSON format in the `args` parameter. 
     ```
     resource "scaleway_function_cron" "scraper_cron" {

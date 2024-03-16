@@ -16,13 +16,11 @@ dates:
 
 ## Introduction
 
-<Macro id="iam-requirements" />
+<Macro id="requirements" />
 
-<Message type="requirement">
-  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
-  - You have [set up authentication for the Terraform provider](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs#authentication)
-  - You have generated an [SSH key](https://www.scaleway.com/en/docs/identity-and-access-management/organizations-and-projects/how-to/create-ssh-key/#how-to-upload-the-public-ssh-key-to-the-scaleway-interface)
-</Message>
+  - A Scaleway account logged into the [console](https://console.scaleway.com)
+  - [Set up authentication for the Terraform provider](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs#authentication)
+  - An [SSH key](/identity-and-access-management/organizations-and-projects/how-to/create-ssh-key/)
 
 This tutorial demonstrates how to set up a notification system, where a simulated CPU usage threshold triggers alerts which are sent to an HTTP server using Scaleway's serverless products.
 It involves two Scaleway [Instances](https://www.scaleway.com/en/virtual-instances/):
@@ -31,14 +29,18 @@ It involves two Scaleway [Instances](https://www.scaleway.com/en/virtual-instanc
 
 <Lightbox src="publication.webp" alt="" />
 
-The focus on setting up SNS with maximum automisation, therefore all the infrastructure is handled with Terraform.
+The focus on setting up SNS with maximum automation, therefore all the infrastructure is handled with Terraform.
 To simplify this process, the web applications for each Instance are downloaded through a Docker image.
 You can find the code for the publisher and the subscriber servers on [GitHub](https://github.com/scaleway/serverless-examples/tree/main/mnq/sns-instances-notification-system).
 
 ## Create the base Terraform repository and files
 
-First, we set up Terraform so we can use it to define our infrastructure.
+First, we export the SSH public key to a terraform environment variable:
+  ```
+  export TF_VAR_public_ssh_key=$(cat ~/.ssh/id_ed25519.pub)
+  ```
 
+Then, we set up Terraform so we can use it to define our infrastructure.
 1. Create a directory called `terraform`.
 2. Inside this directory, create a file named `variables.tf`. We need this to define a `public_ssh_key` variable, used to access the Instances we will create later:
     ```
@@ -72,7 +74,7 @@ First, we set up Terraform so we can use it to define our infrastructure.
     }
     ```
 
-2. Create the SSH key that will be used in `sns_tutorial` project to access the instances:
+2. Create the SSH key that will be used in the `sns_tutorial` Project to access the Instances:
 
     ```
     resource "scaleway_iam_ssh_key" "main" {
@@ -111,7 +113,7 @@ Continue to add code to your `main.tf` file as shown below in order to create th
       ]
     }
     ```
-3. Finalise the SNS set up by creating the topic:
+3. Finalize the SNS set up by creating the topic:
     ```
     resource "scaleway_mnq_sns_topic" "topic" {
       project_id = scaleway_account_project.sns_tutorial.id
@@ -134,13 +136,13 @@ We continue to add to our `main.tf` file to create the subscriber and publisher 
       inbound_default_policy  = "drop"
       outbound_default_policy = "accept"
 
-      # FOR SSH CONNECTIONS
+      # For SSH connections
       inbound_rule {
         action = "accept"
         port = "22"
       }
 
-      # FOR HTTP CONNECTIONS
+      # For HTTP connections
       inbound_rule {
         action = "accept"
         port = "8081"
@@ -169,7 +171,7 @@ We continue to add to our `main.tf` file to create the subscriber and publisher 
     ip_id = scaleway_instance_ip.subscriber_public_ip.id
     security_group_id= scaleway_instance_security_group.sns_www.id
 
-    # USER DATA TO RUN THE SERVER AT START-UP
+    # User data to run the server at start-up
     user_data = {
       cloud-init = <<-EOF
       #cloud-config
@@ -195,7 +197,7 @@ We continue to add to our `main.tf` file to create the subscriber and publisher 
       scaleway_instance_server.subscriber_sns_tuto_instance.id,
     ]
 
-    # WAIT FOR 8081 PORT TO BE OPENED WITH A 3 MINUTES TIMEOUT
+    # Wait for 8081 port to be opened with a 3 minutes timeout
     provisioner "local-exec" {
       command = <<EOF
       #!/bin/bash
@@ -279,23 +281,21 @@ The confirmation step is done manually for the purposes of this tutorial, but it
   }
   ```
 
-7. Check that your `main.tf` file looks like the fully completed example shown on the [GitHub repository](https://github.com/scaleway/serverless-examples/tree/main/mnq/sns-x-instances)
-
+7. Check that your `main.tf` file looks like the fully completed example shown on the [GitHub repository](https://github.com/scaleway/serverless-examples/tree/main/mnq/sns-instances-notification-system).
 
 
 # Run and test your setup
 
-We are now ready to run the command to create all of the infrastructure and resources we have defined in our Terraform files, and carry out the additional steps necessary to test that the publisher is indeed pushing alerts which are being received by the subscriber. The web applications that we defined for each Instance (downloaded from a Docker image) allow us to easily view and check what is going on with each Instance.
-1. Run the command `terraform apply`. You are prompted to enter your public SSH key. Execute in your terminal `cat ~/.ssh/`, select with `<tab>` the `*.pub`, paste the result on your local machine to easily access this key, and enter `yes`
+We are now ready to run the command to create the infrastructure and resources we have defined in our Terraform files and test if the publisher is pushing alerts that are being received by the subscriber. The web applications we defined for each Instance (downloaded from a Docker image) allow us to easily view and check what is going on with each Instance.
+1. Run the command `terraform apply`.
 2. From the [Instances section](https://console.scaleway.com/instance/servers) of the Scaleway console, access and copy the public IP address of the Instance we created via Terraform (identifiable from its name: `subscriber_server`).
 3. In a browser, go to home page of your subscriber Instance by inserting the IP address copied in the previous step into the following address: ```http://<your_subscriber_ip_address>:8081```.
-4. Still in the browser, click `Confirm subscription` to confirm tue subscription to the SNS topic we created. If you have an error because the URL hasn't been received, you can reload the page. It should take less than 10 seconds to appear.
+4. Still in the browser, click `Confirm subscription` to confirm the subscription to the SNS topic we created. You are directed to an AWS page which confirms the confirmation of your subscription. If you have an error because the URL hasn't been received, you can reload the page. It should take less than 30 seconds to appear.
 <Lightbox src="subscriber-home.webp" alt="" />
-5. Once you've arrived to the AWS subscription confirmation page, go back to the home page, and click on `Notifications`
-6. Back in the Scaleway console, retrieve and copy the IP address of the Instance called `publisher_server`
+5. Go back to the Instance subscriber's home page at ```http://<your_subscriber_ip_address>:8081``` and click `Notifications`. Keep this page open while you carry out the next steps in a new browser tab.
+6. Back in the Scaleway console, retrieve and copy the IP address of the Instance called `publisher_server`.
 7. Go on the home page of your publisher server: ```http://<your_publisher_ip_address>:8081```
 <Lightbox src= "publisher-home.webp" alt=""/>
 8. Click on a CPU behavior, and check the notification page of your subscriber server. A notification about the behavior should have appeared.
 9. Once you're done testing, you can apply `terraform destroy` to clean and remove the project.
-
 [//]: # (# To go further)

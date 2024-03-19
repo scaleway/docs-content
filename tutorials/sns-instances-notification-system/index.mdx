@@ -1,10 +1,10 @@
 ---
 meta:
-  title: Creating a notification system with Scaleway SNS and Instances.
-  description: This tutorial introduces you to using SNS for notifications via a simulated CPU monitoring example with terraform.
+  title: Creating a simulated CPU monitor notification system with Terraform using Scaleway Instances and Messaging and Queuing SNS
+  description: This tutorial introduces you to using SNS for notifications via a simulated CPU monitoring example with Terraform.
 content:
-  h1: Setting a notification system with terraform across instances using Scaleway's Instances and Messaging and Queuing SNS, through a simulated CPU monitoring example.
-  paragraph: This tutorial walks you through creating a notification system between instances, from a simulated CPU monitoring webserver to a notification-receiving webserver.
+  h1: Creating a simulated CPU monitor notification system with Terraform using Scaleway Instances and Messaging and Queuing SNS
+  paragraph: This tutorial walks you through creating a notification system between Instances, from a simulated CPU monitoring webserver to a notification-receiving webserver.
 categories:
   - messaging
   - instances
@@ -65,8 +65,9 @@ Then, we set up Terraform so we can use it to define our infrastructure.
     }
     ```
 
-## Create the base for the project sns_tutorial
+### Create the base for the project sns_tutorial
 
+Still in the `main.tf`, we set up Terraform so we can use it to define our infrastructure.
 1. Create the project `sns_tutorial` in your organization dashboard:
     ```
     resource "scaleway_account_project" "sns_tutorial" {
@@ -151,143 +152,140 @@ We continue to add to our `main.tf` file to create the subscriber and publisher 
     ```
 
 2. Create the subscriber Instance's IP address:
-  ```
-  resource "scaleway_instance_ip" "subscriber_public_ip" {
-    project_id = scaleway_account_project.sns_tutorial.id
-    zone = "fr-par-1"
-  }
-  ```
-
-2. Create the subscriber Instance itself, with all the tools it will need when it starts up:
-  ```
-  resource "scaleway_instance_server" "subscriber_sns_tuto_instance" {
-    project_id = scaleway_account_project.sns_tutorial.id
-    name = "suscriber-server"
-    type  = "PLAY2-PICO"
-    image = "debian_bookworm"
-    # private_network {
-    #pn_id = scaleway_vpc_private_network.sns_tutorial_pn.id
-    #}
-    ip_id = scaleway_instance_ip.subscriber_public_ip.id
-    security_group_id= scaleway_instance_security_group.sns_www.id
-
-    # User data to run the server at start-up
-    user_data = {
-      cloud-init = <<-EOF
-      #cloud-config
-      runcmd:
-        - |
-          apt-get update && apt-get install -y docker.io
-          systemctl start docker
-          systemctl enable docker
-          docker pull rg.fr-par.scw.cloud/sns-x-instance-tutorial/subscriber-server:1.0
-          docker run -d --restart=always \
-            --name subscriber-server \
-            -p 8081:8081 \
-            rg.fr-par.scw.cloud/sns-x-instance-tutorial/subscriber-server:1.0
-    EOF
+    ```
+    resource "scaleway_instance_ip" "subscriber_public_ip" {
+      project_id = scaleway_account_project.sns_tutorial.id
+      zone = "fr-par-1"
     }
-  }
-  ```
+    ```
 
-3. Create a `terraform_data` resource to wait for the port 8081 to be opened on the subscriber Instance before subscribing to the topic we previously created:
-  ```
-  resource "terraform_data" "bootstrap" {
-    triggers_replace = [
-      scaleway_instance_server.subscriber_sns_tuto_instance.id,
-    ]
+3. Create the subscriber Instance itself, with all the tools it will need when it starts up:
+    ```
+    resource "scaleway_instance_server" "subscriber_sns_tuto_instance" {
+      project_id = scaleway_account_project.sns_tutorial.id
+      name = "suscriber-server"
+      type  = "PLAY2-PICO"
+      image = "debian_bookworm"
+      ip_id = scaleway_instance_ip.subscriber_public_ip.id
+      security_group_id= scaleway_instance_security_group.sns_www.id
 
-    # Wait for 8081 port to be opened with a 3 minutes timeout
-    provisioner "local-exec" {
-      command = <<EOF
-      #!/bin/bash
-      TIMEOUT=180
-      START_TIME=$(date +%s)
-      while [ $(($(date +%s) - $START_TIME)) -lt $TIMEOUT ]; do
-        nc -z ${scaleway_instance_server.subscriber_sns_tuto_instance.public_ip} 8081 && exit 0
-        sleep 1
-      done
-      echo "Timeout reached"
-      exit 1
+      # User data to run the server at start-up
+      user_data = {
+        cloud-init = <<-EOF
+        #cloud-config
+        runcmd:
+          - |
+            apt-get update && apt-get install -y docker.io
+            systemctl start docker
+            systemctl enable docker
+            docker pull rg.fr-par.scw.cloud/sns-x-instance-tutorial/subscriber-server:1.0
+            docker run -d --restart=always \
+              --name subscriber-server \
+              -p 8081:8081 \
+              rg.fr-par.scw.cloud/sns-x-instance-tutorial/subscriber-server:1.0
       EOF
+      }
     }
-  }
-  ```
+    ```
+
+4. Create a `terraform_data` resource to wait for the port 8081 to be opened on the subscriber Instance before subscribing to the topic we previously created:
+    ```
+    resource "terraform_data" "bootstrap" {
+      triggers_replace = [
+        scaleway_instance_server.subscriber_sns_tuto_instance.id,
+      ]
+
+      # Wait for 8081 port to be opened with a 3 minutes timeout
+      provisioner "local-exec" {
+        command = <<EOF
+        #!/bin/bash
+        TIMEOUT=180
+        START_TIME=$(date +%s)
+        while [ $(($(date +%s) - $START_TIME)) -lt $TIMEOUT ]; do
+          nc -z ${scaleway_instance_server.subscriber_sns_tuto_instance.public_ip} 8081 && exit 0
+          sleep 1
+        done
+        echo "Timeout reached"
+        exit 1
+        EOF
+      }
+    }
+    ```
 This will allow the subscriber Instance to immediately receive the [confirmation link](/serverless/messaging/how-to/create-manage-subscriptions/#how-to-confirm-an-http-or-https-subscription) to subscribe to the topic, and not wait for the retry policy to confirm the subscription.
 The confirmation step is done manually for the purposes of this tutorial, but it could also be performed with an HTTP request.
 
-4. Create the SNS topic subscription with the subscriber Instance's endpoint:
-  ```
-  resource scaleway_mnq_sns_topic_subscription main {
-    project_id = scaleway_account_project.sns_tutorial.id
-    access_key = scaleway_mnq_sns_credentials.main.access_key
-    secret_key = scaleway_mnq_sns_credentials.main.secret_key
-    topic_id = scaleway_mnq_sns_topic.topic.id
-    protocol = "http"
-    endpoint = "http://${scaleway_instance_ip.subscriber_public_ip.address}:8081/notifications"
-  }
-  ```
-
-5. Create the publisher Instance's IP address:
-  ```
-  resource "scaleway_instance_ip" "publisher_public_ip" {
-    project_id = scaleway_account_project.sns_tutorial.id
-    zone = "fr-par-1"
-  }
-  ```
-
-6. Create the publisher Instance itself, with all the environment variables it will need to publish the notifications to the topic:
-  ```
-  resource "scaleway_instance_server" "publisher_sns_tuto_instance" {
-    project_id = scaleway_account_project.sns_tutorial.id
-    name       = "publisher-server"
-    type       = "PLAY2-PICO"
-    image      = "debian_bookworm"
-    ip_id      = scaleway_instance_ip.publisher_public_ip.id
-    security_group_id= scaleway_instance_security_group.sns_www.id
-
-    # USER DATA TO RUN THE SERVER AT START-UP WITH A SCRIPT TO SET THE SNS ENVIRONMENT VARIABLES RELATED TO THE TOPIC
-    user_data = {
-      cloud-init = <<-EOF
-      #cloud-config
-      write_files:
-        - content: |
-            #!/bin/bash
-            export TOPIC_ARN="${scaleway_mnq_sns_topic.topic.arn}"
-            export AWS_ACCESS_KEY="${scaleway_mnq_sns_credentials.main.access_key}"
-            export AWS_SECRET_KEY="${scaleway_mnq_sns_credentials.main.secret_key}"
-          owner: root:root
-          path: /etc/profile.d/publisher-server_env.sh
-          permissions: '0755'
-      runcmd:
-        - apt-get update && apt-get install -y docker.io
-        - systemctl start docker
-        - systemctl enable docker
-        - chmod +x /etc/profile.d/publisher-server_env.sh
-        # Using 'source' command doesn't work in cloud-init runcmd because each command runs in a separate shell.
-        # this is why environment variables will be passed directly in the docker run command
-        - docker pull rg.fr-par.scw.cloud/sns-x-instance-tutorial/publisher-server:1.0
-        - |
-          . /etc/profile.d/publisher-server_env.sh
-          docker run -d --restart=always \
-            --name publisher-server \
-            -p 8081:8081 \
-            -e TOPIC_ARN=$TOPIC_ARN \
-            -e AWS_ACCESS_KEY=$AWS_ACCESS_KEY \
-            -e AWS_SECRET_KEY=$AWS_SECRET_KEY \
-            rg.fr-par.scw.cloud/sns-x-instance-tutorial/publisher-server:1.0
-    EOF
+5. Create the SNS topic subscription with the subscriber Instance's endpoint:
+    ```
+    resource scaleway_mnq_sns_topic_subscription main {
+      project_id = scaleway_account_project.sns_tutorial.id
+      access_key = scaleway_mnq_sns_credentials.main.access_key
+      secret_key = scaleway_mnq_sns_credentials.main.secret_key
+      topic_id = scaleway_mnq_sns_topic.topic.id
+      protocol = "http"
+      endpoint = "http://${scaleway_instance_ip.subscriber_public_ip.address}:8081/notifications"
     }
-  }
-  ```
+    ```
 
-7. Check that your `main.tf` file looks like the fully completed example shown on the [GitHub repository](https://github.com/scaleway/serverless-examples/tree/main/mnq/sns-instances-notification-system).
+6. Create the publisher Instance's IP address:
+    ```
+    resource "scaleway_instance_ip" "publisher_public_ip" {
+      project_id = scaleway_account_project.sns_tutorial.id
+      zone = "fr-par-1"
+    }
+    ```
+
+7. Create the publisher Instance itself, with all the environment variables it will need to publish the notifications to the topic:
+    ```
+    resource "scaleway_instance_server" "publisher_sns_tuto_instance" {
+      project_id = scaleway_account_project.sns_tutorial.id
+      name       = "publisher-server"
+      type       = "PLAY2-PICO"
+      image      = "debian_bookworm"
+      ip_id      = scaleway_instance_ip.publisher_public_ip.id
+      security_group_id= scaleway_instance_security_group.sns_www.id
+
+      # User_data to run the server at start-up with a script to set the environment needed by the subscriber docker image
+      user_data = {
+        cloud-init = <<-EOF
+        #cloud-config
+        write_files:
+          - content: |
+              #!/bin/bash
+              export TOPIC_ARN="${scaleway_mnq_sns_topic.topic.arn}"
+              export AWS_ACCESS_KEY="${scaleway_mnq_sns_credentials.main.access_key}"
+              export AWS_SECRET_KEY="${scaleway_mnq_sns_credentials.main.secret_key}"
+            owner: root:root
+            path: /etc/profile.d/publisher-server_env.sh
+            permissions: '0755'
+        runcmd:
+          - apt-get update && apt-get install -y docker.io
+          - systemctl start docker
+          - systemctl enable docker
+          - chmod +x /etc/profile.d/publisher-server_env.sh
+          # Using 'source' command doesn't work in cloud-init runcmd because each command runs in a separate shell.
+          # this is why environment variables will be passed directly in the docker run command
+          - docker pull rg.fr-par.scw.cloud/sns-x-instance-tutorial/publisher-server:1.0
+          - |
+            . /etc/profile.d/publisher-server_env.sh
+            docker run -d --restart=always \
+              --name publisher-server \
+              -p 8081:8081 \
+              -e TOPIC_ARN=$TOPIC_ARN \
+              -e AWS_ACCESS_KEY=$AWS_ACCESS_KEY \
+              -e AWS_SECRET_KEY=$AWS_SECRET_KEY \
+              rg.fr-par.scw.cloud/sns-x-instance-tutorial/publisher-server:1.0
+      EOF
+      }
+    }
+    ```
+
+8. Check that your `main.tf` file looks like the fully completed example shown on the [GitHub repository](https://github.com/scaleway/serverless-examples/tree/main/mnq/sns-instances-notification-system).
 
 
 # Run and test your setup
 
 We are now ready to run the command to create the infrastructure and resources we have defined in our Terraform files and test if the publisher is pushing alerts that are being received by the subscriber. The web applications we defined for each Instance (downloaded from a Docker image) allow us to easily view and check what is going on with each Instance.
-1. Run the command `terraform apply`.
+1. Run the commands `terraform init`, `terraform plan` and  `terraform apply`.
 2. From the [Instances section](https://console.scaleway.com/instance/servers) of the Scaleway console, access and copy the public IP address of the Instance we created via Terraform (identifiable from its name: `subscriber_server`).
 3. In a browser, go to home page of your subscriber Instance by inserting the IP address copied in the previous step into the following address: ```http://<your_subscriber_ip_address>:8081```.
 4. Still in the browser, click `Confirm subscription` to confirm the subscription to the SNS topic we created. You are directed to an AWS page which confirms the confirmation of your subscription. If you have an error because the URL hasn't been received, you can reload the page. It should take less than 30 seconds to appear.

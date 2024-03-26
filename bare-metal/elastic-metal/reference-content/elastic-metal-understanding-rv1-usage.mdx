@@ -1,0 +1,105 @@
+---
+meta:
+  title: Understanding Elastic Metal RV1 usage
+  description: This page provides more information and advanced ways for using EM-RV1 servers.
+content:
+  h1: Understanding Elastic Metal RV1 usage
+  paragraph: This page provides more information and advanced ways for using EM-RV1 servers.
+tags: elastic-metal server riscv em-rv1
+dates:
+  validation: 2024-03-15
+  posted: 2024-03-15
+categories:
+  - bare-metal
+---
+
+## Boot process
+
+EM-RV1 servers do not support standard UEFI or BIOS boot, therefore the boot
+process might slightly differ from other servers. At boot, the bootloader
+expects the eMMC to be partitioned as GPT, and will look for a `boot.itb` file
+in the first or second partition. The partition that contains this boot file
+must be formatted as EXT4.
+
+This `boot.itb` file is in fact a [FIT
+Image](https://docs.u-boot.org/en/latest/usage/fit/source_file_format.html)
+that must contain the following sections:
+
+  - **kernel**: A Linux kernel image.
+  - **fdt**: A [device tree](https://en.wikipedia.org/wiki/Devicetree).
+  - **opensbi**: The SBI as defined by [RISC-V SBI
+      specification](https://github.com/riscv-non-isa/riscv-sbi-doc/).
+  - **env**: A text-based environment file that defines the following keys:
+      - `usr_bootargs`: Command-line arguments to pass to the kernel.
+      - `usr_has_ramdisk`: Set to `1` if we should load the ramdisk from the FIT
+        image.
+  - **ramdisk** (optional): A ramdisk image.
+
+The following section will explain in details how to create your own boot FIT image.
+
+## Boot a custom kernel
+
+In this section, you will build a boot image based off a close-to-mainline
+Linux kernel.
+
+<Message type="note">
+  Mainline Linux is not fully compatible with EM-RV1 servers yet.
+</Message>
+
+<Macro id="requirements" />
+
+- Installed an EM-RV1 server with Ubuntu
+- Proficient knowledge of Linux systems
+- A few hours of availability to build a Linux kernel
+
+1. Connect to your EM-RV1 server using SSH.
+2. Install the build dependencies.
+    ```bash
+    sudo apt update
+    sudo apt install -y \
+      autoconf bc bison dwarves flex gawk git make \
+      libelf-dev libssl-dev \
+      u-boot-tools device-tree-compiler
+    ```
+3. Clone the projects to build.
+    ```bash
+    git clone --depth=1 https://github.com/revyos/th1520-linux-kernel.git linux
+    git clone https://github.com/revyos/thead-opensbi.git opensbi
+    git clone https://github.com/scaleway/em-rv1.git
+    ```
+4. Build the Linux kernel.
+    ```bash
+    cd linux/
+    make revyos_defconfig
+    # This can take several hours.
+    make -j
+    sudo make modules_install
+    cd ..
+    ```
+5. Build OpenSBI.
+   ```bash
+   cd opensbi/
+   make PLATFORM=generic -j
+   cd ..
+   ```
+6. Build and install the FIT image.
+   ```bash
+   cd em-rv1/fit/
+
+   # Build the device tree
+   cpp \
+    -nostdinc \
+    -I ../linux/arch/riscv/boot/dts/thead/ \
+    -I ../linux/include/ \
+    -undef \
+    -x assembler-with-cpp \
+    em-rv1-c4m16s128-a.dts \
+    | dtc -o em-rv1-c4m16s128-a.dtb
+
+   # Build the FIT image
+   sudo mv /boot/boot.itb /boot/boot.itb.bak
+   sudo mkimage -f em-rv1-c4m16s128-a-boot.its /boot/boot.itb
+
+   cd -
+   ```
+7. Reboot the server to load the new kernel.

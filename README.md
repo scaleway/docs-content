@@ -2,7 +2,7 @@
 ![GitHub commit activity](https://img.shields.io/github/commit-activity/w/scaleway/docs-content)
 
 # Welcome to the Scaleway Documentation Platform
-
+test
 ![](./docs/images/prof_mascotte@2x.webp)
 
 ## What is the Scaleway Documentation Platform?

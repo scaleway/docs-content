@@ -7,7 +7,11 @@ title: Contributing
 
 ## Who can contribute?
 
-Anyone who has a GitHub account can contribute to the documentation content.
+Anyone who has a GitHub account can contribute to the documentation content:
+
+- Users within the Scaleway organization can open pull requests directly in the docs-content repository.
+
+- External users (i.e. not part of the Scaleway organization) must fork the repository and open a pull request from the forked repository.
 
 ## How to contribute?
 
@@ -19,7 +23,7 @@ Anyone who has a GitHub account can contribute to the documentation content.
 - You have [Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown) and [MDX](https://mdxjs.com/guides/) syntax knowledge
 - You have read [the writing guidelines](#writing-guidelines)
 
-### Contribution procedure
+### Contribution procedure for internal Scaleway users
 
 :warning: **Important**  
   - All rules below concern this repository.
@@ -29,7 +33,44 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
 
-3. Create your branch. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
+3. Create your branch locally. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
+
+    - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors).
+
+    - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
+
+    - `product`: the name of the product that corresponds to the documentation page you will edit.
+
+    :information_source: **Example:**  
+      in the branch `int-add-instances`, an internal contributor will add information to a documentation page of the Instances product category.
+
+4. Make your edits to the documentation. Refer to the [writing guidelines](#writing-guidelines) below to ensure your changes comply with our style guide.
+
+5. Run `git commit -m "type(module): description with some words <BRANCH_NAME>"`. Refer to the [commit naming conventions](#commit-conventions) below to properly name your commit.
+
+6. Run `git push --set-upstream origin <YOUR_BRANCH_NAME>`, and go to [the pull requests page](https://github.com/scaleway/docs-content/pulls) to open a pull request.
+
+    All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
+
+
+:warning: **Important**  
+  All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
+
+---
+
+### Contribution procedure for external users
+
+:warning: **Important**  
+  - All rules below concern this repository.
+  - Any PRs which do not comply with the rules below will be rejected.
+
+1. Access the [docs-content repository](https://github.com/scaleway/docs-content/), and click **Fork** in the top right corner. A form appears.
+
+2. Keep the default values in the form, and click **Create Fork**.
+
+3. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
+
+4. Create your branch locally. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
 
     - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors). If you are not a Scaleway staff member, please use `ext`.
 
@@ -44,10 +85,21 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 5. Run `git commit -m "type(module): description with some words <BRANCH_NAME>"`. Refer to the [commit naming conventions](#commit-conventions) below to properly name your commit.
 
-6. Run `git push --set-upstream origin <YOUR_BRANCH_NAME>`, and go to [the pull requests page](https://github.com/scaleway/docs-content/pulls) to open a pull request.
+6. Run `git push --set-upstream origin <YOUR_BRANCH_NAME>`, and go to the pull request page of the **forked** repository to open a pull request.
+
+7. Click **Create pull request**, then select
+
+  - base repository: `scaleway/docs-content`
+
+  - base: `main`
+
+  - head repository: `<your-account>/docs-content`
+
+  - compare: `<your-branch-with-changes>`
+
+8. Click **Create pull request**.
 
     All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
-
 
 :warning: **Important**  
   All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.

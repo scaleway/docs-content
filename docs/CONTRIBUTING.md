@@ -19,7 +19,7 @@ Anyone who has a GitHub account can contribute to the documentation content:
 
 - You have [Git](https://git-scm.com/) installed
 - You have a [GitHub](https://github.com/signup) personal account
-- You have installed [Yarn](https://yarnpkg.com/getting-started) package manager
+- You have installed [yarn](https://yarnpkg.com/getting-started) package manager
 - You have [Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown) and [MDX](https://mdxjs.com/guides/) syntax knowledge
 - You have read [the writing guidelines](#writing-guidelines)
 
@@ -160,7 +160,7 @@ Here is the list of `type` to use (commons in bold):
 
 `fix(iot): wrong image in quickstart`
 
-`style: add bold at scaleway name occurences MTA-1337`
+`style: add bold at scaleway name occurrences MTA-1337`
 
 ---
 
@@ -180,7 +180,7 @@ MDX components are useful for adding rich content and interactions within your c
 
 #### Components
 
-This section shows code details listed in a full page.
+This section shows code details listed on a full page.
 
 🔎 [See the full Components page](https://scaleway.com/en/docs/components/).
 
@@ -211,13 +211,13 @@ dates:
 Here starts the content…
 ```
 
-- `meta` part is used for SEO `title` and `description`, it don't appear inside the website
-- `content` part which contain `h1` and `paragraph` is used for title and description inside website pages.
-- `h1` is used as H1 in pages, in the html head element as the browser tab title and for SEO.
+- `meta` part is used for SEO `title` and `description`, it doesn't appear inside the website
+- `content` part which contains `h1` and `paragraph` is used for title and description inside website pages.
+- `h1` is used as H1 in pages, in the HTML head element as the browser tab title and for SEO.
 - `paragraph` is used in pages and in the head element for SEO.
-- `image` is used for Hero section image in tutorials pages. Path could be relative to file.
+- `image` is used for the hero section image in tutorial pages. The image path can be relative to the file.
 - `tags` are used to help populate search result lists or pages top.
-- `dates` are showed in pages under titles. `validation` must be a date later than the `posted`. Format should be `AAAA-MM-DD`
+- `dates` are shown on pages under titles. `validation` must be a date later than the `posted`. Its format should be `AAAA-MM-DD`.
 
 ## Writing Guidelines
 
@@ -272,7 +272,7 @@ Bold text is used to represent where a user should click or highlight other text
 
 Example:
 
-Click **+Create an Instance to proceed.**
+Click **+ Create an Instance to proceed.**
 
 ## Code Snippets
 

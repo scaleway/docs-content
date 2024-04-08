@@ -7,7 +7,11 @@ title: Contributing
 
 ## Who can contribute?
 
-Anyone who has a GitHub account can contribute to the documentation content.
+Anyone who has a GitHub account can contribute to the documentation content:
+
+- Users within the Scaleway organization can [open pull requests directly in the docs-content repository](#contribution-procedure-for-internal-scaleway-users).
+
+- External users (i.e. not part of the Scaleway organization) must [fork the repository and open a pull request from the forked repository](#contribution-procedure-for-external-users).
 
 ## How to contribute?
 
@@ -15,11 +19,11 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 - You have [Git](https://git-scm.com/) installed
 - You have a [GitHub](https://github.com/signup) personal account
-- You have installed [Yarn](https://yarnpkg.com/getting-started) package manager
+- You have installed [yarn](https://yarnpkg.com/getting-started) package manager
 - You have [Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown) and [MDX](https://mdxjs.com/guides/) syntax knowledge
 - You have read [the writing guidelines](#writing-guidelines)
 
-### Contribution procedure
+### Contribution procedure for internal Scaleway users
 
 :warning: **Important**  
   - All rules below concern this repository.
@@ -29,16 +33,16 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
 
-3. Create your branch. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
+3. Create your branch locally. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
 
-    - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors). If you are not a Scaleway staff member, please use `ext`.
+    - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors).
 
     - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
 
     - `product`: the name of the product that corresponds to the documentation page you will edit.
 
     :information_source: **Example:**  
-      in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
+      in the branch `int-add-instances`, an internal contributor will add information to a documentation page of the Instances product category.
 
 4. Make your edits to the documentation. Refer to the [writing guidelines](#writing-guidelines) below to ensure your changes comply with our style guide.
 
@@ -51,6 +55,54 @@ Anyone who has a GitHub account can contribute to the documentation content.
 
 :warning: **Important**  
   All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
+
+---
+
+### Contribution procedure for external users
+
+:warning: **Important**  
+  - All rules below concern this repository.
+  - Any PRs which do not comply with the rules below will be rejected.
+
+1. Access the [docs-content repository](https://github.com/scaleway/docs-content/), and click **Fork** in the top right corner. A form appears.
+
+2. Keep the default values in the form, and click **Create Fork**.
+
+3. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
+
+4. Create your branch locally. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
+
+    - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors). If you are not a Scaleway staff member, use `ext`.
+
+    - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
+
+    - `product`: the name of the product that corresponds to the documentation page you will edit.
+
+    :information_source: **Example:**  
+      in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
+
+4. Make your edits to the documentation. Refer to the [writing guidelines](#writing-guidelines) below to ensure your changes comply with our guidelines.
+
+5. Run `git commit -m "type(module): description of what you performed <BRANCH_NAME>"`. Refer to the [commit naming conventions](#commit-conventions) below to properly name your commit.
+
+6. Run `git push --set-upstream origin <YOUR_BRANCH_NAME>`, and go to the pull request page of the **forked** repository to open a pull request.
+
+7. Click **Create pull request**, then select
+
+  - base repository: `scaleway/docs-content`
+
+  - base: `main`
+
+  - head repository: `<your-account>/docs-content`
+
+  - compare: `<your-branch-with-changes>`
+
+8. Click **Create pull request**.
+
+    All pull requests names must comply with the following naming convention: `docs(<PRODUCT_NAME>): <ACTION> <EXPLANATION> <BRANCH_NAME>`.
+
+:warning: **Important**  
+  All pull requests are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
 
 ---
 
@@ -108,7 +160,7 @@ Here is the list of `type` to use (commons in bold):
 
 `fix(iot): wrong image in quickstart`
 
-`style: add bold at scaleway name occurences MTA-1337`
+`style: add bold at scaleway name occurrences MTA-1337`
 
 ---
 
@@ -128,7 +180,7 @@ MDX components are useful for adding rich content and interactions within your c
 
 #### Components
 
-This section shows code details listed in a full page.
+This section shows code details listed on a full page.
 
 🔎 [See the full Components page](https://scaleway.com/en/docs/components/).
 
@@ -159,13 +211,13 @@ dates:
 Here starts the content…
 ```
 
-- `meta` part is used for SEO `title` and `description`, it don't appear inside the website
-- `content` part which contain `h1` and `paragraph` is used for title and description inside website pages.
-- `h1` is used as H1 in pages, in the html head element as the browser tab title and for SEO.
+- `meta` part is used for SEO `title` and `description`, it doesn't appear inside the website
+- `content` part which contains `h1` and `paragraph` is used for title and description inside website pages.
+- `h1` is used as H1 in pages, in the HTML head element as the browser tab title and for SEO.
 - `paragraph` is used in pages and in the head element for SEO.
-- `image` is used for Hero section image in tutorials pages. Path could be relative to file.
+- `image` is used for the hero section image in tutorial pages. The image path can be relative to the file.
 - `tags` are used to help populate search result lists or pages top.
-- `dates` are showed in pages under titles. `validation` must be a date later than the `posted`. Format should be `AAAA-MM-DD`
+- `dates` are shown on pages under titles. `validation` must be a date later than the `posted`. Its format should be `AAAA-MM-DD`.
 
 ## Writing Guidelines
 
@@ -220,7 +272,7 @@ Bold text is used to represent where a user should click or highlight other text
 
 Example:
 
-Click **+Create an Instance to proceed.**
+Click **+ Create an Instance to proceed.**
 
 ## Code Snippets
 

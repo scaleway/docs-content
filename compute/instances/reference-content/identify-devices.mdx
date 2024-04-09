@@ -1,0 +1,193 @@
+---
+meta:
+  title: Identifiying devices of an Instance
+  description: This page explains how to identify devices on an Instance
+content:
+  h1: Identifying devices of an Instance
+  paragraph: This page explains how to identify devices on an Instance
+tags: instance
+dates:
+  validation: 2024-03-15
+  posted: 2024-03-15
+categories:
+  - compute
+---
+
+An Instance is composed of a multitude of devices. Some of them can be configured, such as network interfaces and block devices, for example by attaching an SBS volume to the Instance or attaching the Instance to a Private Network.
+
+On a Linux host, devices are named by the kernel in the order they are discovered. The order in which devices are discovered is dependent on things such as the topology of the PCI hierarchy which are *not* guaranteed to be stable across poweroff/poweron/reboot actions.
+
+This guide aims to provide tips to help you identify devices in a stable manner on a Linux host.
+
+# Identifying Instance block storage volumes (b_ssd)
+
+Instance block storage (`b_ssd`) volumes are connected to the Instance as SCSI disks. They will therefore appear as devices handled by the sd driver in the dev filesystem, i.e. as `/dev/sd{a,b,c...}` devices.
+
+SCSI disks have multiple attributes, such as vendor and product/model. They also have a serial. Instance block storage (`b_ssd`) volumes have the vendor name `SCW`, the model/product name `b_ssd`, and a serial set to `volume-<uuid>` where `<uuid>` is the ID of the volume.
+
+The `lsblk` can be used to list SCSI devices and will show these attributes:
+
+```sh
+root@test-instance:~# lsblk --scsi
+NAME HCTL       TYPE VENDOR   MODEL  REV SERIAL                                      TRAN
+sda  2:0:0:0    disk SCW      b_ssd v42  volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478
+```
+
+Through `udev` and the sets of configured `udev` rules, these attributes will be retrieved and symlinks will be automatically created for the `/dev/sdX` devices. As the attributes are stable, these symlinks provide a stable path to the devices, as long as the udev rule does not change.
+
+For example, at the time of writing, the `60-persistent-storage.rules` ruleset shipped with systemd on most distributions contains rules which will create symlinks under `/dev/disk/by-id/`. Specifically of interest are the following rules:
+
+```
+# SCSI devices
+KERNEL=="sd*[!0-9]|sr*", ENV{ID_SERIAL}!="?*", IMPORT{program}="scsi_id --export --whitelisted -d $devnode", ENV{ID_BUS}="scsi"
+KERNEL=="cciss*", ENV{DEVTYPE}=="disk", ENV{ID_SERIAL}!="?*", IMPORT{program}="scsi_id --export --whitelisted -d $devnode", ENV{ID_BUS}="cciss"
+KERNEL=="sd*|sr*|cciss*", ENV{DEVTYPE}=="disk", ENV{ID_SERIAL}=="?*", SYMLINK+="disk/by-id/$env{ID_BUS}-$env{ID_SERIAL}"
+KERNEL=="sd*|cciss*", ENV{DEVTYPE}=="partition", ENV{ID_SERIAL}=="?*", SYMLINK+="disk/by-id/$env{ID_BUS}-$env{ID_SERIAL}-part%n"
+```
+
+In the first rule, the `sdX` kernel name is matched, and the `scsi_id` command is executed. Its output will be imported into the `udev` environment for the following rules. Let's see what the command outputs:
+
+```sh
+root@test-instance:~# /lib/udev/scsi_id --export --whitelisted -d /dev/sda
+ID_SCSI=1
+ID_VENDOR=SCW
+ID_VENDOR_ENC=SCW\x20\x20\x20\x20\x20
+ID_MODEL=b_ssd
+ID_MODEL_ENC=b_ssd\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20
+ID_REVISION=v42
+ID_TYPE=disk
+ID_SERIAL=0SCW_b_ssd_volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478
+ID_SERIAL_SHORT=volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478
+```
+
+The third and fourth rules create the symlinks proper, using these attributes. This will result in the following symlinks being created:
+
+```sh
+root@test-instance:~# ls -l /dev/disk/by-id/
+total 0
+lrwxrwxrwx 1 root root  9 Mar  7 16:13 scsi-0SCW_b_ssd_volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478 -> ../../sda
+lrwxrwxrwx 1 root root 10 Mar  7 16:13 scsi-0SCW_b_ssd_volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478-part1 -> ../../sda1
+lrwxrwxrwx 1 root root 11 Mar  7 16:13 scsi-0SCW_b_ssd_volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478-part14 -> ../../sda14
+lrwxrwxrwx 1 root root 11 Mar  7 16:13 scsi-0SCW_b_ssd_volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478-part15 -> ../../sda15
+```
+
+In this setup, we can see an entry named after the `f7a6f113-aaf6-4540-ac5a-9e18d7f61478` volume, pointing to the `/dev/sda` device node, along with three entries also created automatically which point to the individual partitions on the volume.
+
+Note that these rulesets are shipped by the distributions and are out of the control of Scaleway. Their stability is not guaranteed.
+
+Though symlinks are created based on rules which are packaged by distributions, it is also possible to create your own rules to fit your preferred naming. For example, if we create a rule such as:
+
+```
+/etc/udev/rules.d/99-scw-volumes.rules
+
+# Create custom symlink for Scaleway volumes
+KERNEL=="sd*", ENV{ID_VENDOR}=="SCW", SYMLINK+="disk/scw/$env{ID_SERIAL_SHORT}"
+```
+
+This rule will create a symlink `/dev/disk/scw/volume-<uuid>` (where `uuid` is the ID of the volume) for each volume:
+
+```sh
+root@test-instance:~# ls -l /dev/disk/scw/
+total 0
+lrwxrwxrwx 1 root root  9 Mar  7 16:18 volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478 -> ../../sda
+```
+
+Note that this rule relies on `ID_VENDOR` and `ID_SERIAL_SHORT` being in the environment, and thus relies on the execution of `scsi_id` and the importing of its output.
+
+For more details on writing `udev` rules, please see `man 7 udev`.
+
+
+# Identifying VPC Private Network interfaces
+
+VPC Private Networks to which the Instance is connected will appear as virtio PCI network devices, handled by the `virtio-net` driver.
+
+As all PCI devices, they can be listed with the `lspci` command:
+
+```sh
+
+root@test-instance:~# lspci -d '::0200'
+00:02.0 Ethernet controller: Red Hat, Inc. Virtio network device
+00:05.0 Ethernet controller: Red Hat, Inc. Virtio network device
+00:06.0 Ethernet controller: Red Hat, Inc. Virtio network device
+```
+
+The filter selects the Network controller device class/Ethernet controller device subclass. Three PCI devices are visible, which correspond to the public network device, and two VPC Private Network devices.
+By itself, the output of this command is not enough to distinguish between public and private networks, and can not distinguish between multiple private networks either: this simply confirms their existence in the PCI hierarchy of the Instance.
+
+More interestingly, network interfaces can be listed generically using the `ip link show` command:
+
+```sh
+root@test-instance:~# ip link show
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN mode DEFAULT group default qlen 1000
+    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00
+2: ens2: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+    link/ether de:00:00:e1:7e:f2 brd ff:ff:ff:ff:ff:ff
+    altname enp0s2
+3: ens5: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+    link/ether 02:00:00:b7:c8:a5 brd ff:ff:ff:ff:ff:ff
+    altname enp0s5
+4: ens6: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP mode DEFAULT group default qlen 1000
+    link/ether 02:00:00:c1:72:51 brd ff:ff:ff:ff:ff:ff
+    altname enp0s6
+```
+
+Here, four interfaces are listed, one of which (`lo`) is the virtual loopback interface and can be disregarded. The three other correspond to the aforementioned public network interface, and VPC Private Network interfaces.
+
+A simple and effective way to distinguish the public network interface from the VPC Private Network interfaces is the MAC address prefix. VPC Private Network interfaces always have a MAC address starting with `02:00:00`.
+
+Using the JSON output mode of the `ip` command  and filtering with the `jq` JSON parser, we can thus list VPC Private Network interfaces:
+
+```sh
+root@test-instance:~# ip -j link | jq -r '.[] | select(.address | test("02:00:00:.*")) | .ifname'
+ens5
+ens6
+```
+
+Using the MAC address of the interfaces, it is also possible to distinguish between the different VPC Private Network interfaces. The MAC address of each interface is available through the API.
+For example, querying `/instances/v1/<zone>/servers/<uuid>/private_nics`, where `<zone>` is the zone of the server and `<uuid>` is the ID of the Instance gives:
+
+```sh
+{
+  "private_nics": [
+    {
+      "id": "d950f973-8b36-4e96-8b86-d8130f9bab36",
+      "private_network_id": "b3ae4ae0-dbbc-45cc-be9d-f2d37afbf8a2",
+      "server_id": "02f28852-b7b3-4cfc-9682-c7d14a044f29",
+      "mac_address": "02:00:00:b7:c8:a5",
+      "state": "available",
+      "creation_date": "2024-03-13T14:42:55.822512+00:00",
+      "modification_date": "2024-03-13T14:42:57.401901+00:00",
+      "zone": "fr-par-1",
+      "tags": []
+    },
+    {
+      "id": "733af716-75bc-4da6-9097-d75a5973f569",
+      "private_network_id": "4fa5577d-ef7a-4235-b642-c5f8cfaa8aba",
+      "server_id": "02f28852-b7b3-4cfc-9682-c7d14a044f29",
+      "mac_address": "02:00:00:c1:72:51",
+      "state": "available",
+      "creation_date": "2024-03-13T15:24:07.686223+00:00",
+      "modification_date": "2024-03-13T15:24:08.647484+00:00",
+      "zone": "fr-par-1",
+      "tags": []
+    }
+  ]
+}
+```
+
+Two entries are listed, which correspond to the interfaces given by the output of `ip link show` above. The output contains the ID of the VPC Private Network, which helps distinguishing between the two.
+
+Through the use of `udev` rules, it is possible to rename the interfaces if desired. For example, the following rule would assign the static name `priv0` to the interface with MAC address `02:00:00:b7:c8:a5`:
+
+```
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="02:00:00:b7:c8:a5", NAME="priv0"
+```
+
+If a more complex scheme is desired, such as including part of the name of the corresponding VPC Private Network, the rule could instead be:
+
+```
+SUBSYSTEM=="net", ACTION=="add", DRIVERS=="?*", ATTR{address}=="02:00:00:*", ENV{SYSTEMD_WANTS}="my-vpc-script@$env{ID_NET_NAME}.service"
+```
+
+This rule would start the systemd service `my-vpc-service@<ifname>` when a new interface with name `<ifname>` is added and has a MAC address matching the VPC Private Network prefix.
+The systemd service can then execute complex operations (retrieving the server's `private_nics` informations, the VPC Private Network information through the VPC API, applying custom logic, etc.)

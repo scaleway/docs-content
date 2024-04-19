@@ -17,19 +17,27 @@ categories:
 
 VPC routing allows Private Networks in the same VPC to communicate with each other via automatically-created and managed routes.
 
-Every time you create a Private Network in a VPC in which you have activated routing, a managed route is automatically created and added to the VPC’s route table. This route allows the VPC to automatically route packets to resources attached to that Private Network, even if they originate from a resource attached to a different Private Network on the VPC.
+Every time you create a Private Network in a VPC with routing activated, a managed route is automatically created and added to the VPC’s route table. This route allows the VPC to automatically route packets to resources attached to that Private Network, even if they originate from a resource attached to a different Private Network on the VPC.
 
 Managed routes are also automatically added to the VPC’s routing table when you attach a Public Gateway to a Private Network, and tell it to advertise the default route. This type of managed route allows traffic on the given Private Network to be forwarded to addresses outside the VPC (i.e. the public internet) via the Public Gateway.
 
-You can choose to [activate routing](/network/vpc/how-to/manage-routing/) on any new or pre-existing VPC. More features are planned for the future, such as the ability to create custom routes.
+Routing is activated by default whenever you create a new VPC, and can be activated on pre-existing VPCs by [following these steps](/network/vpc/how-to/manage-routing/#how-to-activate-routing-on-an-existing-vpc). More routing features are planned for the future, such as the ability to create custom routes.
+
+TODO-INSERT-ROUTING-DIAGRAM
 
 ## Route table
 
-Every VPC has an associated **route table**, used to manage and control the routing of traffic within a VPC. The routes within a route table tell the VPC where to send traffic trying to get to a specific destination IP address. One line in the route table corresponds to one route. A route consists of:
+<Lightbox src="scaleway-route-table.webp" alt="A screenshot of a route table from the Scaleway console is shown, exemplifying the principles described in the text below." />
+
+Every VPC has an associated **route table**, used to manage and control the routing of traffic within the VPC. The routes within a route table tell the VPC where to send traffic trying to get to a specific destination IP address. One line in the route table corresponds to one route. A route consists of:
 
 - A **destination** IP or IP range. This specifies that the route applies to traffic with a matching destination IP.
 - A **next hop**. This specifies where the VPC should forward traffic that is trying to reach the destination IP. If the destination IP falls within the [CIDR block](#cidr-block) of a Private Network, its next hop will be that Private Network, where it will find the attached resource with the specific private IP address specified by the destination. If the destination IP is not known on the VPC (represented by the `0.0.0.0/0` address), its next hop will be a Public Gateway so that it can reach the public internet (as long as a Public Gateway set to advertise the default route has been attached to the Private Network).
 - A **description**. This helps to describe the type of route, e.g. `Local subnet route` for routes to Private Networks, or `Default route to internet` for routes to Public Gateways. 
+
+<Message type="important">
+Public Gateways remain scoped to the Private Network to which they are attached. They do not advertise the default route on other Private Networks in the VPC. For example, an Instance attached to Private Network A will not be able to access the internet via a Public Gateway in Private Network B.
+</Message>
 
 When deciding which route to apply, the route table reads the routes from most specific to least specific, in terms of destination IP range. The first matching route encountered is the one that determines the path for the traffic. Therefore, a route to destination `172.16.8.0/22` is applied before a default route to `0.0.0.0/0`.
 
@@ -37,19 +45,42 @@ Scaleway VPC routing supports both IPv4 and IPv6 protocols. Managed routes to Pr
 
 A VPC's route table displays in the **Routing** tab of the console. The route table is populated with routes when you either create a Private Network in the VPC, or attach a Public Gateway to a Private Network and set it to advertise a default route. These routes are fully managed by Scaleway. Currently, only auto-created, managed routes are available, though in the future you will also be able to create your own custom routes.
 
+## Usage considerations
 
+Bear in mind the following when activating VPC routing:
 
+- Once activated on a given VPC, routing cannot be deactivated on that VPC.
+- When routing is activated, all Private Networks on the VPC can communicate.
+- We do not currently offer a ACL/firewall feature to prevent communication between certain Private Networks/resources once routing is activated. However, users may choose to configure ACLs directly on certain resources (e.g. Instances, Elastic Metal servers) using tools such as `iptables` or `nftables`.
+- Public Gateways remain scoped to the Private Network to which they are attached. They do not advertise the default route on other Private Networks in the VPC. For example, an Instance attached to Private Network A will not be able to access the internet via a Public Gateway in Private Network B.
 
+## Best practices
 
+We recommend that you build your VPC infrastructure with **separation of concerns** in mind. Separation of concerns is a fundamental design principle aimed at breaking down large complex systems into smaller, distinct components each with clear responsibilities and interfaces. Separating resources into different Private Networks according to function and usage can:
+- Improve network performance by reducing broadcast traffic and congestion
+- Enhance manageability via a logical organization of resources
+- Enable easier troubleshooting, monitoring and maintenance
+- Allow for easier scalability
 
+Below, a three-tier architecture is presented, with one Private Network for the frontend, one for the backend and one for Managed Database.
 
-Public Gateways remain scoped to the Private Network to which they are attached. They do not advertise the default route on other Private Networks in the VPC. For example, an Instance attached to Private Network A will not be able to access the internet via a Public Gateway in Private Network B.
+TODO-INSERT-DIAGRAM
 
-Note that routing cannot be deactivated after creation of the VPC. More routing features are planned for the future, including custom routes, routing on existing VPCs and more.
+## Terraform
 
-Read more about how routing works in the route table concept, or learn how you can activate this feature in our how-to guide. To understand the current limitations of the feature, see the limitations documentation.
+TODO
 
+- When creating a new VPC via Terraform, check that routing will be activated by default
+- Can we provide a TF template for the three-tier architecture above?
 
+## Limitations
 
-Note that routing cannot be deactivated after creation of the VPC. More routing features are planned for the future, including custom routes, routing on existing VPCs and more.
+TODO CHECK IF THESE STILL APPLY FOR GA:
+
+The following limitations apply to VPC routing:
+
+- Managed Databases are not currently compatible with routing. The VPC cannot automatically route between Managed Databases on different Private Networks, or (for example) between a Managed Database on one Private Network and an Instance on a different Private Network.
+- DNS resolution is not yet available. VPC routing currently works with IP addressing only.
+- We are aware of some instabilities with IPv6 routing, and are working to stabilize this.
+
 

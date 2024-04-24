@@ -12,7 +12,7 @@ categories:
   - domains-and-dns
   - load-balancer
 dates:
-  validation: 2024-04-22
+  validation: 2024-04-24
   posted: 2020-07-01
 ---
 
@@ -42,13 +42,15 @@ This tutorial is divided in two parts:
   You need a Kubernetes Kapsule cluster deployed with Traefik 2 to follow this tutorial. To deploy your cluster with Traefik 2, use the [Easy Deploy feature](/containers/kubernetes/how-to/enable-easy-deploy/).
 </Message>
 
-1. Click the **Easy Deploy** tab on your clusters overview page. The Easy Deploy feature displays.
-2. Click **Deploy an Application**. The application deployment wizard displays.
-3. Select **Application Library**, type **Traefik** in the search bar and select the **Traefik 2 Ingress** application. 
+1. Click **Kubernetes** in the **Containers** section of the [Scaleway console](https://console.scaleway.com/) side menu. The Kubernetes dashboard displays.
+2. Click the name of your cluster. The cluster overview page displays.
+3. Click the **Easy Deploy** tab on your clusters overview page. The Easy Deploy feature displays.
+4. Click **Deploy an Application**. The application deployment wizard displays.
+5. Select **Application Library**, type **Traefik** in the search bar and select the **Traefik 2 Ingress** application. 
     <Lightbox src="scaleway_choose_application.webp" alt="" />
-4. Enter the name `traefik` for the application and type the `kube-system` namespace name.
+6. Enter the name `traefik` for the application and type the `kube-system` namespace name.
     <Lightbox src="scaleway_application_name.webp" alt="" />
-5. Click **Deploy an application** to deploy the Load Balancer on your cluster.
+7. Click **Deploy an application** to deploy the Load Balancer on your cluster.
 
 ## Creating a wildcard DNS record and pointing your domain name to the IP address
 
@@ -122,7 +124,7 @@ In this step, we deploy a test application called "tea coffee" which is only pri
     kubectl delete ing cafe-ingress
     ```
 
-## Deploying Cert Manager
+## Creating the Let's Encrypt issuer
 
 Cert-manager is in charge of creating [Let's Encrypt](https://www.letsencrypt.org/) TLS certificates to make your website secure, to sum-up:
 
@@ -132,76 +134,8 @@ Cert-manager is in charge of creating [Let's Encrypt](https://www.letsencrypt.or
 - When the challenge is ok, the certificate is created and added in a certificate object.
 - You can then use this certificate object to serve your website securely (HTTPS).
 
-<Message type="note">
-  Any modification to the Traefik2 deployed by Kapsule may be overwritten by the reconciliation process, consider [installing it yourself](https://doc.traefik.io/traefik/getting-started/install-traefik/) for a production usage.
-</Message>
+Since Cert Manager is already deployed on your cluster, you can directly proceed to create Let's Encrypt certificates for securing your applications.
 
-1. Modify the default Traefik 2 daemonset running on Kapsule to do that, add `--entrypoints.websecure.http.tls` in the cmd stanza.
-    ```
-    kubectl edit ds traefik -n kube-system
-    daemonset.apps/traefik edited
-    []
-            - --global.checknewversion
-            - --global.sendanonymoususage
-            - --entryPoints.traefik.address=:9000
-            - --entryPoints.web.address=:8000
-            - --entryPoints.websecure.address=:8443
-            - --entrypoints.websecure.http.tls
-            - --api.dashboard=true
-            - --ping=true
-            - --providers.kubernetescrd
-            - --providers.kubernetesingress
-    []
-    ```
-2. Delete the existing Traefik pods in order to get the new arguments.
-    ```
-    kubectl -n kube-system delete pod -l app.kubernetes.io/name=traefik
-    ```
-3. Use the command below to install cert-manager and its needed CRD ([Custom Resource Definitions](https://kubernetes.io/docs/concepts/extend-kubernetes/api-extension/custom-resources/)):
-    ```
-    kubectl apply --validate=false -f https://github.com/jetstack/cert-manager/releases/download/v1.7.2/cert-manager.yaml
-    customresourcedefinition.apiextensions.k8s.io/certificaterequests.cert-manager.io created
-    customresourcedefinition.apiextensions.k8s.io/certificates.cert-manager.io created
-    customresourcedefinition.apiextensions.k8s.io/challenges.acme.cert-manager.io created
-    customresourcedefinition.apiextensions.k8s.io/clusterissuers.cert-manager.io created
-    customresourcedefinition.apiextensions.k8s.io/issuers.cert-manager.io created
-    customresourcedefinition.apiextensions.k8s.io/orders.acme.cert-manager.io created
-    namespace/cert-manager created
-    serviceaccount/cert-manager-cainjector created
-    serviceaccount/cert-manager created
-    serviceaccount/cert-manager-webhook created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-cainjector created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-issuers created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-clusterissuers created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-certificates created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-orders created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-challenges created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-controller-ingress-shim created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-view created
-    clusterrole.rbac.authorization.k8s.io/cert-manager-edit created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-cainjector created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-issuers created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-clusterissuers created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-certificates created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-orders created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-challenges created
-    clusterrolebinding.rbac.authorization.k8s.io/cert-manager-controller-ingress-shim created
-    role.rbac.authorization.k8s.io/cert-manager-cainjector:leaderelection created
-    role.rbac.authorization.k8s.io/cert-manager:leaderelection created
-    role.rbac.authorization.k8s.io/cert-manager-webhook:dynamic-serving created
-    rolebinding.rbac.authorization.k8s.io/cert-manager-cainjector:leaderelection created
-    rolebinding.rbac.authorization.k8s.io/cert-manager:leaderelection created
-    rolebinding.rbac.authorization.k8s.io/cert-manager-webhook:dynamic-serving created
-    service/cert-manager created
-    service/cert-manager-webhook created
-    deployment.apps/cert-manager-cainjector created
-    deployment.apps/cert-manager created
-    deployment.apps/cert-manager-webhook created
-    mutatingwebhookconfiguration.admissionregistration.k8s.io/cert-manager-webhook created
-    validatingwebhookconfiguration.admissionregistration.k8s.io/cert-manager-webhook created
-    ```
-
-## Creating the Let's Encrypt issuer
 
 1. Create a cluster issuer that allow you to specify:
     - the Let's Encrypt server, if you want to replace the production environment with the staging one.

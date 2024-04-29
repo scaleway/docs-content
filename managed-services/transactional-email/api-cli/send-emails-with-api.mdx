@@ -1,0 +1,131 @@
+---
+meta:
+  title: Sending an email using the Transactional Email API
+  description: This page explains how to send an email to multiple recipients using the Transactional Email API
+content:
+  h1: Sending an email using the Transactional Email API
+  paragraph: This page explains how to send an email to multiple recipients using the Transactional Email API
+tags: transactional email send multiple-headers send-emails
+dates:
+  validation: 2024-04-24
+  posted: 2024-04-24
+categories:
+  - managed-services
+---
+
+This page shows you how to send a simple transactional email in `JSON` format to multiple recipients using the `additional_headers` parameter and the Scaleway Transactional Email API.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Configured your API key](/identity-and-access-management/iam/how-to/create-api-keys/)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Installed curl](https://curl.se/download.html)
+- [Configured](/managed-services/transactional-email/how-to/configure-domain-with-transactional-email/) your domain name with Transactional Email
+- [Added SPF, DKIM](/managed-services/transactional-email/how-to/add-spf-dkim-records-to-your-domain/), [MX](/managed-services/transactional-email/how-to/add-mx-record-to-your-domain/) and [DMARC](/managed-services/transactional-email/how-to/add-mx-record-to-your-domain/) records to your domain
+
+
+1. Open a terminal and paste the following code to configure your environment variables. Make sure that you add your own values.
+
+        ```
+        export SCW_ACCESS_KEY="<API access key>"
+        export SCW_SECRET_KEY="<API secret key>"
+        export SCW_PROJECT_ID="<Scaleway Project ID>"
+        ```
+
+2. Run the following command to retrieve your domain's ID, as you will need it in the next step. The output should return your domain's information.
+
+        ```
+        curl -X GET \
+        -H "X-Auth-Token: $SCW_SECRET_KEY" \
+        "https://api.scaleway.com/transactional-email/v1alpha1/regions/fr-par/domains"
+        ```
+
+
+3. Run the following command to ensure that your domain is verified:
+
+        ```
+        curl -X GET "https://api.scaleway.com/transactional-email/v1alpha1/regions/$REGION/domains/<domain-id>" \
+        -H "X-Auth-Token: $SCW_SECRET_KEY"
+        ```
+
+4. Copy the following template. Make sure that you replace the placeholder information with your own.
+
+        ```
+        cat > mail.json <<EOF
+        {
+            "from": {
+                "name": "Me", # Replace 'Me' with your own name
+                "email": "me@my.domain.example.com"  # Replace 'me@my.domain.example.com' with your email address
+            },
+            "to": [
+                {
+                    "name": "Your recipient", # Replace 'Your recipient' with your recipient's name
+                    "email": "your.recipient@mail.fr" # Replace 'your.recipient@mail.fr' with your recipient's email address
+                }
+            ],
+            "subject": "This is a subject", # Replace with your subject. Subjects must have at least 10 characters
+            "project_id": "<Scaleway Project ID>", # Replace '<Scaleway Project ID>' with your Scaleway Project ID
+            "text": "This is a short sentence.", # Replace with the body of your email
+            "html": "<html><body><p>This is a short sentence.</p></body></html>", # Replace with the content you want to send,
+            "attachments": [
+		{
+			"name": "test.pdf",
+			"type": "application/pdf",
+			"content": "AAAA==" # Your PDF encoded in Base64
+		}
+            ],
+            "additional_headers": [
+                {
+                    "key": "Reply-To",
+                    "value": "user1@example.com, user2@example.com, user3@example.com" # Replace the email addresses with the relevant ones
+                }
+            ]
+        }
+        EOF
+
+        curl -X POST "https://api.scaleway.com/transactional-email/v1alpha1/regions/$REGION/emails" \
+            -H "X-Auth-Token: $SCW_SECRET_KEY" \
+            -d @mail.json
+        ```
+
+5. Once you have added your own information to the template above, run it in your terminal. An output similar to the following should display:
+
+        ```
+        {"emails":[{"id":"655c27f2-b2a3-4a9f-8e1f-3e6dc268b1c4","message_id":"3d928e21-187a-4539-b303-403156e37911","project_id":"8j512135-9f5f-42b3-a900-9fdf0195b563","mail_from":"me@my.domain.example.com","rcpt_to":"your.recipient@mail.fr","rcpt_type":"to","created_at":"2024-04-01T07:55:36.758671147Z","updated_at":"2024-04-01T07:55:36.758671147Z","status":"new","status_details":"not yet processed","try_count":0,"last_tries":[]}]}
+        ```
+
+6. Run the following command to check that your email has been sent. Make sure that you replace `$EMAIL_ID` with the ID of the email you retrieved in the output of the previous step.
+
+        ```
+        curl --request GET \
+        --url https://api.scaleway.com/transactional-email/v1alpha1/regions/fr-par/emails/$EMAIL_ID \
+        --header 'X-Auth-Token: $SCW_SECRET_KEY'
+
+        ```
+
+    You should get an output similar to the following:
+
+            ```
+            {
+                "id": "655c27f2-b2a3-4a9f-8e1f-3e6dc268b1c4",
+                "message_id": "3d928e21-187a-4539-b303-403156e37911",
+                "project_id": "8j512135-9f5f-42b3-a900-9fdf0195b563",
+                "mail_from": "me@my.domain.example.com",
+                "rcpt_to": "your.recipient@mail.fr",
+                "rcpt_type": "to",
+                "created_at": "2024-04-01T07:55:36.758671Z",
+                "updated_at": "2024-04-01T07:55:41.266916Z",
+                "status": "sent",
+                "status_details": "success",
+                "try_count": 1,
+                "last_tries": [
+                    {
+                        "rank": 1,
+                        "tried_at": "2024-04-01T07:55:41.266916Z",
+                        "code": 250,
+                        "message": "Ok"
+                    }
+                ]
+            }
+            ```

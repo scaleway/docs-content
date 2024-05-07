@@ -64,7 +64,7 @@ curl https://ipfs.io/ipfs/<YOUR_PINNED_CID>
 
 ## Retrieving content using a Go client
 
-You can also retrieve pinned content via the Go program. To do so, we recommend using the official [go-ipfs-api package](https://github.com/ipfs/go-ipfs-api).
+You can also retrieve pinned content via the Go program. To do so, we recommend using the official [kubo client rpc](https://github.com/ipfs/kubo/tree/master/client/rpc).
 
 In this case, you need to run an IPFS node (like Kubo) to perform operations with the IPFS network.
 
@@ -72,21 +72,47 @@ In this case, you need to run an IPFS node (like Kubo) to perform operations wit
 package main
 
 import (
-  "fmt"
-  "os"
-
-
-  ipfs "github.com/ipfs-pinning/go-ipfs-pinning-api"
+	"context"
+	"fmt"
+	"os"
+	"github.com/ipfs/boxo/files"
+	"github.com/ipfs/kubo/client/rpc"
+	"github.com/ipfs/kubo/core/commands/cmdutils"
 )
 
-
 func main() {
-	// Where your local node is running on localhost:5001
-	sh := ipfs.NewShell("localhost:5001")
-	err := sh.Get("<YOUR_PINNED_CID>", "myFile")
+	// Create an IPFS RPC client for the local API
+	api, err := rpc.NewLocalApi()
 	if err != nil {
-          fmt.Fprintf(os.Stderr, "error: %s", err)
-          os.Exit(1)
+		fmt.Println("Error creating IPFS RPC client:", err)
+		return
 	}
+
+	// CID of the content you want to retrieve
+	cid := "<YOUR_PINNED_CID>"
+
+	// Convert the CID to a path
+	p, err := cmdutils.PathOrCidPath(cid)
+	if err != nil {
+		fmt.Println("Error resolving path:", err)
+		return
+	}
+
+	// Send get command to ipfs node
+	ctx := context.Background()
+	file, err := api.Unixfs().Get(ctx, p)
+	if err != nil {
+		fmt.Println("Error getting content:", err)
+		return
+	}
+
+	// Write the content to the file
+	err = files.WriteTo(file, "myFile")
+	if err != nil {
+		os.Exit(1)
+	}
+
+	// Write the content to the file with cid filename by default
+	//res := files.ToFile(file)
 }
 ```

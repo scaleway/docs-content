@@ -1,0 +1,137 @@
+---
+meta:
+    title: Encode videos using Serverless Jobs and FFMPEG
+    description: In this tutorial you will learn how to deploy a Serverless Job that encodes videos using FFMPEG
+content:
+    h1: Encode videos using Serverless Jobs and FFMPEG
+    paragraph: In this tutorial you will learn how to deploy a Serverless Job that encodes videos using FFMPEG
+tags: serverless jobs ffmpeg video encoding
+categories:
+  - container-registry
+  - jobs
+  - object-storage
+dates:
+    validation: 2024-05-15
+    posted: 2024-05-15
+---
+
+This tutorial demonstrates the process of encoding videos retrieved from Object Storage using Serverless Jobs: media encoding is a resource-intensive tasks over prolonged durations, making it suitable for Serverless Jobs. The job takes a video file as its input, encodes it using a Docker image based on [FFMPEG](https://ffmpeg.org/), then uploads the encoded video back to the S3 bucket.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An [Object Storage bucket](/storage/object/how-to/create-a-bucket/) 
+- A valid [API key](/identity-and-access-management/iam/how-to/create-api-keys/)
+- Installed [Docker engine](https://docs.docker.com/engine/install/)
+
+
+## Creating the job image
+
+The initial step involves defining a Docker image for interacting with the S3 Object Storage using [MinIO](https://min.io/) and performing a video encoding task using [FFMPEG](https://ffmpeg.org/).
+
+1. Create a bash script `encode.sh` with the following content:
+    ```bash
+    #!/bin/sh
+    set -e
+
+    echo "Configuring S3 access for MinIO"
+    mc config host add scw "https://$JOB_S3_ENDPOINT/" "$JOB_S3_ACCESS_KEY" "$JOB_S3_SECRET_KEY"
+
+    echo "Downloading the file from S3"
+    mc cp "scw/$JOB_INPUT_PATH/$JOB_INPUT_FILENAME" "/tmp/$JOB_INPUT_FILENAME"
+
+    echo "Encoding the file"
+    ffmpeg -i "/tmp/$JOB_INPUT_FILENAME" -vcodec libx264 -acodec aac "/tmp/$JOB_OUTPUT_FILENAME"
+
+    echo "Uploading the encoded file to the S3"
+    mc cp "/tmp/$JOB_OUTPUT_FILENAME" "scw/$JOB_OUTPUT_PATH/$JOB_OUTPUT_FILENAME"
+    ```
+
+    That bash script downloads a video from a S3 bucket, encodes that video using FFMPEG, then uploads the encoded video into the bucket, by leveraging a couple of environment variables which will be detailed in the following sections.
+
+    <Message type="note">
+    For illustration purposes, this script encodes a video using the x264 video codec and the AAC audio codec. Encoding settings can be modified using command-line parameters to FFMPEG.
+    </Message>
+
+2. Use that script as an entrypoint for a new Docker image, by creating the following Dockerfile:
+    ```dockerfile
+    FROM linuxserver/ffmpeg:amd64-latest
+
+    # Install the MinIO S3 client
+    RUN curl https://dl.min.io/client/mc/release/linux-amd64/mc -o /usr/local/bin/mc
+    RUN chmod +x /usr/local/bin/mc
+
+    # Define the image entrypoint
+    COPY encode.sh /encode.sh
+    RUN chmod +x /encode.sh
+
+    ENTRYPOINT /encode.sh
+    ```
+
+    This Dockerfile uses `linuxserver/ffmpeg` as a base image bundled with FFMPEG along with a variety of encoding codecs and installs [MinIO](https://min.io/) as a command-line S3 client to copy files over Object Storage.
+
+3. Build and [push the image](/containers/container-registry/how-to/push-images/) to your Container Registry:
+    ```
+    docker build . -t <registry and image name>
+    docker push <registry and image name>
+    ```
+    <Message type="note">
+    You can find the name and endpoint of your Container Registry from the [Scaleway console](https://console.scaleway.com/registry/namespaces)
+    </Message>
+
+
+## Creating the Serverless Job
+
+1. In the Scaleway Console, click **Jobs** in the **Serverless** section of the side menu, then **Create job** to display the job creation wizard.
+
+2. Select the **Scaleway** Container Registry and your Container Registry namespace from the drop-down list, then select the image from the previous section.
+
+    <Lightbox src="scaleway-encoding_job_image.webp" alt="" />
+
+3. Choose your Job name, description, and region. In the **Resources** section, pick a reasonable amount of resources.
+    <Message type="note">
+    The allocated CPU defines the speed of the encoding process. The allocated memory depends on the encoding codec and bitrate. For instance, encoding a Full HD video with the x264 codec takes about 3 GB of memory.
+    </Message>
+
+4. Toggle the **Advanced options** section and add 3 environment variables: 
+    - `JOB_S3_ENDPOINT` is your S3 endpoint (e.g. `s3.nl-ams.scw.cloud`).
+    - `JOB_S3_ACCESS_KEY` is your API access key.
+    - `JOB_S3_SECRET_KEY` is your API secret key.
+
+    <Lightbox src="scaleway-encoding_job_env.webp" alt="" />
+
+5. Leave the other sections empty, then click `Create job`.
+
+
+## Triggering the Serverless Job
+
+Ensure that your S3 bucket contains at least one video that can be encoded.
+
+1. In the Scaleway Console, go to **Serverless Jobs** and click on the name of your job. The job **Overview** tab displays.
+2. Click the **Actions** button, then click **Run job with options** in the drop-down menu.
+3. Add 4 environment variables:
+    - `JOB_INPUT_PATH` is the folder containing the video to encode, including your S3 bucket name.
+    - `JOB_INPUT_FILENAME` is the file name of the video to encode, including the file extension.
+    - `JOB_OUTPUT_PATH` is the folder containing the encoded video that will be uploaded, including your S3 bucket name.
+    - `JOB_OUTPUT_FILENAME` is the file name of the encoded video that will be uploaded.
+
+    <Lightbox src="scaleway-encoding_run_env.webp" alt="" />
+
+4. Click **Run job**
+
+The progress and details for your Job run can be viewed in the **Job runs** section of the job **Overview** tab in the [Scaleway console](https://console.scaleway.com]. You can also access the detailed logs of your job in [Cockpit](/observability/cockpit/quickstart/).
+
+Once the run status is **Succeeded**, the encoded video can be found in your S3 bucket under the folder and file name specified above in the environment variables.
+
+<Message type="note">
+Your job can also be triggered [through Scaleway's API](https://www.scaleway.com/en/developers/api/serverless-jobs/#path-job-definitions-run-an-existing-job-definition-by-its-unique-identifier-this-will-create-a-new-job-run) using the same environment variables:
+
+```
+curl -X POST \
+  -H "X-Auth-Token: <API Key>" \
+  -H "Content-Type: application/json" \
+  -d '{ "environment_variables": { "JOB_INPUT_FILENAME": "...", "JOB_INPUT_PATH" : "...", "JOB_OUTPUT_FILENAME" : "...", "JOB_OUTPUT_PATH" : "..." } }' \
+  "https://api.scaleway.com/serverless-jobs/v1alpha1/regions/<Region>/job-definitions/<Job ID>/start"
+```
+</Message>

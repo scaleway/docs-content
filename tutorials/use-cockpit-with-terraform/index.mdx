@@ -1,0 +1,115 @@
+---
+meta:
+  title: Using Cockpit with Terraform
+  description: Discover how to use Terraform to configure your Scaleway Cockpit. This detailed guide walks you through creating a token, setting up a Grafana user, and configuring internal and external data sources.
+content:
+  h1: Using Cockpit with Terraform
+  paragraph: Master the steps needed to monitor and analyze your infrastructure efficiently with our comprehensive tutorial.
+tags: observability cockpit terraform grafana-user data-source infrastructure-monitoring
+categories:
+  - observability
+dates:
+  validation: 2024-05-27
+  posted: 2024-05-27
+---
+
+In this tutorial, you will learn how to get started with Cockpit using a Terraform configuration file containing all the code you need to create your Cockpit resources.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Downloaded Terraform
+
+
+## Configuring the Terraform file
+
+1. Open a terminal on your local machine and use the following command to create a directory. For the sake of this documentation, we are naming our directory `cockpit-terraform`.
+
+    ```
+    mkdir cockpit-terraform
+    ```
+2. Access the directory and create a file named `main.tf` inside of it. You can also create the file manually if you prefer.
+
+    ```
+    # Access your cockpit-terraform directory
+    cd cockpit-terraform
+    # Create the main.tf file
+    touch main.tf
+    ```
+3. Ensure that the file has been created inside the intended directory. The output should return the content of the `cockpit-terraform` directory, with the `main.tf` file.
+
+    ```
+    ls
+    ```
+4. Access the `main.tf` file.
+
+    ```
+    nano main.tf
+    ```
+5. Copy the following code and paste it inside `main.tf`.
+
+    ```
+    ## Define the Project ID where we will create our resources
+    variable "project_id" {
+    type        = string
+    description = "ID of the Scaleway Project"
+    default = "63d6b2f7-e587-47b6-bec8-18cb4a3adc07"
+    }
+
+    terraform {
+    required_providers {
+        scaleway = {
+        source = "scaleway/scaleway"
+        }
+        grafana = {
+        source = "grafana/grafana"
+        }
+    }
+    required_version = ">= 0.13"
+    }
+
+    ## Defines which Cockpit to use
+    resource "scaleway_cockpit" "main" {
+    project_id = var.project_id
+    }
+
+    ## Creates a Grafana user in the defined Project
+    resource "scaleway_cockpit_grafana_user" "main" {
+    project_id = var.project_id
+    login      = "my-grafana-user"
+    role       = "editor"
+    }
+
+    provider "grafana" {
+    url  = scaleway_cockpit.main.endpoints.0.grafana_url
+    auth = "${scaleway_cockpit_grafana_user.main.login}:${scaleway_cockpit_grafana_user.main.password}"
+    }
+
+    ## Creates a Grafana folder
+    resource "grafana_folder" "folder_test" {
+    title    = "Test Folder"
+    }
+
+    ## Creates a push token to query and push metrics in the defined Project
+    resource "scaleway_cockpit_token" "main" {
+    project_id = var.project_id
+    name       = "my-push-token"
+    scopes {
+        query_metrics = true
+        write_metrics = true
+        query_logs = false
+        write_logs = false
+    }
+    }
+
+    ## Creates a metric data source
+    resource "scaleway_cockpit_source" "main" {
+    project_id = var.project_id
+    name       = "my-data-source"
+    type       = "metrics"
+    }
+    ```
+
+
+

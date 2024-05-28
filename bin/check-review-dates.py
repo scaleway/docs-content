@@ -115,7 +115,7 @@ def main():
     docs_to_review = process_files(".")
     docs_to_review_by_cat = organize_docs_by_category(docs_to_review)
     message = prep_message(docs_to_review_by_cat)
-    if os.environ["DRY_RUN"] != "true":
+    if os.environ.get("DRY_RUN") != "true":
         send_message(message)
 
 if __name__ == "__main__":

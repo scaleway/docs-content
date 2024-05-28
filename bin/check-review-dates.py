@@ -6,7 +6,7 @@ from datetime import timedelta, date, datetime
 DEFAULT_VAL_FREQ = 6
 
 def convert_to_date_and_delta(val_date, val_freq):
-    logging.info("Converts validation date string to datetime and validation frequency string (months) to timedelta.")
+    print("Converts validation date string to datetime and validation frequency string (months) to timedelta.")
     try:
         val_date_conv = datetime.strptime(val_date.rstrip('\n'), '%Y-%m-%d').date()
         val_freq_conv = timedelta(days=int(val_freq) * 30.4)
@@ -16,7 +16,7 @@ def convert_to_date_and_delta(val_date, val_freq):
         return None, None
 
 def needs_review(val_date, val_freq):
-    logging.info("Returns true if doc needs to be reviewed, based on val date and frequency")
+    print("Returns true if doc needs to be reviewed, based on val date and frequency")
     val_date_conv, val_freq_conv = convert_to_date_and_delta(val_date, val_freq)
     if val_date_conv is None or val_freq_conv is None:
         return False
@@ -27,7 +27,7 @@ def needs_review(val_date, val_freq):
     return delta >= val_freq_conv
 
 def extract_metadata(filepath):
-    logging.info("Extracts validation date and validation frequency from a document.")
+    print("Extracts validation date and validation frequency from a document.")
     with open(filepath) as doc:
         meta_limiters = 0
         has_val_date = False
@@ -48,7 +48,7 @@ def extract_metadata(filepath):
     return has_val_date, val_date if has_val_date else None, val_freq
 
 def process_files(directory):
-    logging.info("Processes files in the content directory to check for those needing review.")
+    print("Processes files in the content directory to check for those needing review.")
     docs_to_review=[]
     for subdir, dirs, files in os.walk(directory):
         for file in files:
@@ -60,7 +60,7 @@ def process_files(directory):
     return docs_to_review
 
 def get_doc_cat_name(filepath):
-    logging.info("Returns a document-to-review's category and tidied-up filepath, based on its raw filepath.")
+    print("Returns a document-to-review's category and tidied-up filepath, based on its raw filepath.")
     trimmed_filepath = filepath[11:-4]
     filepath_list = trimmed_filepath.split("/")
 
@@ -74,7 +74,7 @@ def get_doc_cat_name(filepath):
     return category, trimmed_filepath
 
 def organize_docs_by_category(docs_to_review):
-    logging.info("Organizes docs to review by category into a dictionary.")
+    print("Organizes docs to review by category into a dictionary.")
     dict_by_cat = {}
 
     for filepath in docs_to_review:
@@ -91,7 +91,7 @@ def organize_docs_by_category(docs_to_review):
     return dict_by_cat_sorted
 
 def prep_message(docs_to_review_by_cat):
-    logging.info("Prepares the message to sent to the Slack channel, containing the docs to review")
+    print("Prepares the message to sent to the Slack channel, containing the docs to review")
     message = ":wave: Hi doc team, here are some docs to review: \n \n"
 
     for key in docs_to_review_by_cat:
@@ -99,11 +99,11 @@ def prep_message(docs_to_review_by_cat):
         for doc in docs_to_review_by_cat[key]:
             message += doc + "\n"
         message += "\n"
-    logging.info(message)
+    print(message)
     return(message)
 
 def send_message(message):
-    logging.info("Sends the message containing docs to review to the Slack channel")
+    print("Sends the message containing docs to review to the Slack channel")
     client = WebClient(token=os.environ['SLACK_BOT_TOKEN'])
     client.chat_postMessage(
         channel = "#review-doc",

@@ -62,9 +62,7 @@ def process_files(directory):
 
 def get_doc_cat_name(filepath):
     "Returns a document-to-review's category and tidied-up filepath, based on its raw filepath."
-    print(filepath)
-    trimmed_filepath = filepath[3:-4]
-    print(trimmed_filepath)
+    trimmed_filepath = filepath[2:-4]
     filepath_list = trimmed_filepath.split("/")
 
     if filepath_list[0] == "tutorials":

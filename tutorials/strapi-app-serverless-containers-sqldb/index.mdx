@@ -1,0 +1,833 @@
+---
+meta:
+  title: Deploy a Strapi headless CMS using Serverless Containers and Serverless SQL Databases
+  description: This page explains how to deploy a fully serverless Strapi headless CMS using Serverless Containers and Serverless SQL Databases
+content:
+  h1: Deploy a Strapi headless CMS using Serverless Containers and Serverless SQL Databases
+  paragraph: This page explains how to deploy a fully serverless Strapi headless CMS using Serverless Containers and Serverless SQL Databases
+dates:
+  validation: 2024-05-21
+  posted: 2024-05-21
+---
+
+This tutorial will guide you through deploying a fully serverless Strapi headless CMS using a Serverless Container and a Serverless SQL Database.
+
+You can either deploy your application:
+  - [step by step using the Scaleway CLI](#deploy-strapi-headless-cms-using-scaleway-cli) to understand each action performed in details, and the resources required
+  - [using a Terraform template](#deploy-strapi-using-scaleway-terraform-templates) to deploy your application faster and have ready-to-use Infrastructure as Code.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/identity-and-access-management/iam/how-to/create-api-keys/)
+- Installed and initialized the [Scaleway CLI](/developer-tools/scaleway-cli/quickstart/)
+- Installed [Docker Engine](https://docs.docker.com/engine/install/)
+- Installed [Node 18 or newer](https://nodejs.org/en/download)
+
+## Deploy a Strapi headless CMS using the Scaleway CLI
+
+### Initializing the project
+
+1. Run the command below in a terminal to export your API access and secret keys as environment variables:
+    ```sh
+    export SCW_ACCESS_KEY=$(scw config get access-key)
+    export SCW_SECRET_KEY=$(scw config get secret-key)
+    ```
+
+2. Run the command below to make sure the environment variables are properly set:
+
+    ```sh
+    scw info 
+    ```
+
+    This command displays your access key and secret key in the last two lines of the output. The `ORIGIN` column should display `env (SCW_ACCESS_KEY)` and `env (SCW_SECRET_KEY)`, and not `default profile`.
+      
+    ```bash
+    KEY                      VALUE                                       ORIGIN
+    (...)
+    access_key               SCWF9DETBF829TAFB1TB                        env (SCW_ACCESS_KEY)
+    secret_key               9a1bcf92-xxxx-xxxx-xxxx-xxxxxxxxxxxx        env (SCW_SECRET_KEY)
+    ```
+
+### Setting up the database
+
+1. Run the following command to create a [Serverless SQL Database](/serverless/sql-databases/reference-content/serverless-sql-databases-overview/) and export its attributes as variables:
+
+    ```bash
+    export DATABASE_HOST=$(scw sdb-sql database create name=tutorial-strapi-blog-db cpu-min=0 cpu-max=4 -o json | jq -r '.endpoint' | cut -d "/" -f3 | cut -d ":" -f1 )
+    export DATABASE_PORT='5432'
+    export DATABASE_NAME='tutorial-strapi-blog-db'
+    export DATABASE_USERNAME=$(scw iam api-key get $SCW_ACCESS_KEY -o json | jq -r '.user_id')
+    export DATABASE_PASSWORD=$SCW_SECRET_KEY
+    export DATABASE_CLIENT='postgres'
+    export DATABASE_SSL='true'
+    ```
+
+    These environment variables are default Strapi variables, and will be automatically recognized by Strapi to connect to your database.
+
+    <Message type="tip">
+    You can already check that you are able to connect to your database using a PostgreSQL-compatible client. For instance, with the psql client using the following command:
+    ```
+    export PGPASSWORD=$DATABASE_PASSWORD \
+    && psql -h $DATABASE_HOST -p $DATABASE_PORT \
+    -d $DATABASE_NAME -U $DATABASE_USERNAME
+    ```
+    An input field with the name of your database should display: 
+    ```
+    psql (15.3, server 16.1 (Debian 16.1-1.pgdg120+1))
+    SSL connection (protocol: TLSv1.3, cipher: TLS_AES_128_GCM_SHA256, compression: off)
+    Type "help" for help. 
+
+    tutorial-strapi-blog-db=>
+    ```
+    </Message>
+   
+### Running Strapi locally
+
+1. Create a Strapi blog template
+    ```bash
+    npx create-strapi-app my-blog --template blog \
+    --dbclient=postgres --dbhost=$DATABASE_HOST \
+    --dbport=$DATABASE_PORT --dbname=$DATABASE_NAME \
+    --dbusername=$DATABASE_USERNAME \
+    --dbpassword=$DATABASE_PASSWORD --dbssl=true 
+    ```
+
+2. Access the folder you just created:
+    ```bash
+    cd my-blog
+    ```
+
+3. Start Strapi in development mode:
+    ```bash
+    npm run develop
+    ```
+
+    Your browser should open automatically at the [http://localhost:1337](http://localhost:1337) address to create a local administrator account.
+    Define your credentials and create the account.
+
+4. You can now access the Strapi Administration Panel at [http://localhost:1337/admin](http://localhost:1337/admin). Once connected with your local administrator account, you can browse and edit content.
+
+### Building the Strapi container
+
+1. Run the following command to create a `Dockerfile`:
+    ```bash
+    touch Dockerfile
+    ```
+2. Add the code below to your file, save it and exit.
+    ```bash
+    # Creating a multi-stage build for production
+    FROM node:20-alpine as build
+    RUN apk update && apk add --no-cache build-base gcc autoconf automake zlib-dev libpng-dev vips-dev git > /dev/null 2>&1
+    ARG NODE_ENV=production
+    ENV NODE_ENV=${NODE_ENV}
+
+    WORKDIR /opt/
+    # Copy package-lock.json only if it exists
+    COPY package.json package-lock.json* ./
+    RUN npm install -g node-gyp
+    RUN npm config set fetch-retry-maxtimeout 600000 -g && npm install --only=production
+    ENV PATH /opt/node_modules/.bin:$PATH
+    WORKDIR /opt/app
+    COPY . .
+    RUN npm run build
+
+    # Creating final production image
+    FROM node:20-alpine
+    RUN apk add --no-cache vips-dev
+    ARG NODE_ENV=production
+    ENV NODE_ENV=${NODE_ENV}
+    WORKDIR /opt/
+    COPY --from=build /opt/node_modules ./node_modules
+    WORKDIR /opt/app
+    COPY --from=build /opt/app ./
+    ENV PATH /opt/node_modules/.bin:$PATH
+
+    RUN chown -R node:node /opt/app
+    USER node
+    EXPOSE 1337
+    CMD ["npm", "run", "start"]
+    ```
+
+3. Create a `.dockerignore` file:
+    ```bash
+    touch .dockerignore
+    ```
+
+4. Add the following code to it:
+    ```bash
+    .tmp/
+    .cache/
+    .git/
+    .env
+    build/
+    node_modules/
+    backup/
+    ```
+
+    Docker will now ignore Node dependencies and other unnecessary files during the build process.
+
+    At this stage, your application folder should be called `my-blog` and structured as follows:
+      ```bash
+        my-blog/
+        ├── build/
+        ├── config/
+        ├── data/
+        ├── database/
+        ├── node_modules/
+        ├── public/
+        ├── src/
+        ├── types/
+        ├── .dockerignore
+        ├── Dockerfile
+        ├── favicon.png
+        ├── jsconfig.json
+        ├── package.json
+        ├── README.md
+        └── yarn.lock			        
+      ```
+
+5. Build your application container:
+    ```bash
+    docker build -t my-strapi-blog .   
+    ```
+    <Message type="tip">
+    The docker build image process can take a few minutes, particularly during the `npm install` step, since Strapi requires around 1 GB of node modules to be built.
+    </Message>
+
+6. Run the following command to create random secrets required by Strapi and export their attributes as variables:
+    ```bash
+    export APP_KEYS=$(openssl rand -base64 16)
+    export API_TOKEN_SALT=$(openssl rand -base64 16)
+    export ADMIN_JWT_SECRET=$(openssl rand -base64 16)
+    export TRANSFER_TOKEN_SALT=$(openssl rand -base64 16)
+    export JWT_SECRET=$(openssl rand -base64 16)
+    ```
+
+7. Check that your container runs locally:
+    ```bash
+    docker run -p 1337:1337 -e DATABASE_HOST -e DATABASE_PORT -e DATABASE_NAME -e DATABASE_USERNAME -e DATABASE_PASSWORD -e DATABASE_CLIENT -e DATABASE_SSL -e APP_KEYS -e API_TOKEN_SALT -e ADMIN_JWT_SECRET -e TRANSFER_TOKEN_SALT -e JWT_SECRET my-strapi-blog
+    ```
+
+    <Message type="tip">
+    The first run of this container will raise a database constraints error such as `error: YupValidationError: This attribute must be unique`, which will not alter any data. This occurs because we use the same [Serverless SQL Database](/serverless/sql-databases/) for development and production environments. Hence, initial sample data loading happens twice, once in `NODE_ENV=development` when running `npm run develop` initially and once in `NODE_ENV=production` when running `docker build -t my-strapi-blog .` The second loading triggers errors as data already exists, but will not happen again afterwards for these environments.
+    </Message>
+
+8. Access [http://localhost:1337/admin](http://localhost:1337/admin) in a browser. The Strapi Administration Panel displays.
+
+
+### Pushing the image to Scaleway Container Registry
+
+1. Run the following command to create a [Container Registry namespace](/containers/container-registry/concepts/#namespace) and export its endpoint as a variable:
+    ```bash
+    export REGISTRY_ENDPOINT=$(scw registry namespace create -o json | jq -r '.endpoint')
+    ```
+2. Run the following command to log in to your [Container Registry](/containers/container-registry/concepts/#container-registry):
+    ```bash
+    docker login $REGISTRY_ENDPOINT -u nologin --password-stdin <<< "$SCW_SECRET_KEY"
+    ```
+    The following output displays:
+    ```sh
+    Login Succeeded
+    ```
+
+3. Tag and push your container image to your Container Registry namespace:
+    ```bash
+    docker tag my-strapi-blog:latest $REGISTRY_ENDPOINT/my-strapi-blog:latest
+    docker push $REGISTRY_ENDPOINT/my-strapi-blog:latest
+    ```
+
+### Deploying the container with Scaleway Serverless Containers
+
+1. Run the following command to create a [Serverless Containers namespace](/serverless/containers/concepts/#namespace) and export its ID as a variable:
+    ```bash
+    export CONTAINER_NAMESPACE_ID=$(scw container namespace create name="my-strapi-blog-ns" -o json | jq -r '.id')
+    ```
+
+2. Create and deploy a Serverless Container with your application image:
+    ```bash
+    scw container container create name="my-strapi-blog" \
+    namespace-id=$CONTAINER_NAMESPACE_ID \
+    registry-image=$REGISTRY_ENDPOINT/my-strapi-blog:latest \
+    port=1337 environment-variables.DATABASE_HOST=$DATABASE_HOST \
+    environment-variables.DATABASE_PORT=$DATABASE_PORT \
+    environment-variables.DATABASE_NAME=$DATABASE_NAME \
+    environment-variables.DATABASE_CLIENT=$DATABASE_CLIENT \
+    environment-variables.DATABASE_SSL=$DATABASE_SSL \
+    environment-variables.DATABASE_USERNAME=$DATABASE_USERNAME \
+    secret-environment-variables.0.key='DATABASE_PASSWORD' \
+    secret-environment-variables.0.value=$DATABASE_PASSWORD \
+    secret-environment-variables.1.key='APP_KEYS' \
+    secret-environment-variables.1.value=$APP_KEYS \
+    secret-environment-variables.2.key='API_TOKEN_SALT' \
+    secret-environment-variables.2.value=$API_TOKEN_SALT \
+    secret-environment-variables.3.key='ADMIN_JWT_SECRET' \
+    secret-environment-variables.3.value=$ADMIN_JWT_SECRET \
+    secret-environment-variables.4.key='TRANSFER_TOKEN_SALT' \
+    secret-environment-variables.4.value=$TRANSFER_TOKEN_SALT \
+    secret-environment-variables.5.key='JWT_SECRET' \
+    secret-environment-variables.5.value=$JWT_SECRET
+    ```
+
+    <Message type="tip">
+    The first deployment can take a few minutes. You can check the deployment status with the following command:
+    ```sh
+    scw container container list name=my-strapi-blog -o human=Status
+    ```
+    When the status appears as `ready`, you can access the Strapi Administration Panel via your browser.
+    </Message>
+  
+3. Copy the endpoint URL displayed next to the `DomainName` property, and paste it into your browser. The main Strapi page displays. Click "Open the administration" or add `/admin` to your browser URL to access the Strapi Administration Panel.
+
+4. (Optional) You can check that Strapi APIs are working with the following command, or by accessing `https://{container_url}/api/articles` in your browser:
+    ```bash
+    curl -X GET https://{container_url}/api/articles | jq
+    ```
+
+    The available articles should display in JSON format:
+    ```json
+    {
+      "data": [
+      {
+        "id": 1,
+        "attributes": {
+          "title": "What's inside a Black Hole",
+          "description": "Maybe the answer is in this article, or not...",
+          "slug": "what-s-inside-a-black-hole",
+          "createdAt": "2024-04-16T15:49:14.525Z",
+          "updatedAt": "2024-04-16T15:49:14.525Z",
+          "publishedAt": "2024-04-16T15:49:14.457Z"
+        }
+      },
+        (...)
+      ]
+    }
+    ```
+
+Your Strapi headless CMS for a blog is now online. You can already edit stored content, or consume it from a frontend application.
+
+Moreover, your textual content data is already stored in serverless storage, so that your full application only runs when you connect to the administration panel or perform requests to the Strapi API.
+
+However, your Strapi container currently connects to your database with your [user credentials](/identity-and-access-management/iam/concepts/#user), which is not a recommended security practice.
+
+## Secure and redeploy your application
+
+To secure your deployment, we will now add a dedicated [IAM application](/identity-and-access-management/iam/concepts/#application), give it the minimum required permissions, and provide its credentials to your Strapi container.
+
+1. Run the following command to create an [IAM application](/identity-and-access-management/iam/concepts/#application) and export it as a variable: 
+    ```bash
+    export SCW_APPLICATION_ID=$(scw iam application create name=tutorial-strapi-blog -o json | jq -r '.id')
+    ```
+    The `SCW_APPLICATION_ID` environment variable will store the IAM application ID so you can use it in the next commands.
+
+2. Create an [IAM policy](/identity-and-access-management/iam/concepts/#policy) giving your application rights to access the database:
+    ```bash
+    scw iam policy create application-id=$SCW_APPLICATION_ID name=tutorial-strapi-policy rules.0.organization-id=$(scw config get default-organization-id) rules.0.permission-set-names.0=ServerlessSQLDatabaseFullAccess
+    ```
+    The `ServerlessSQLDatabaseFullAccess` permission lets your application read and write data or create new databases. You can restrict this later to fit your database use cases, using the `ServerlessSQLDatabaseRead` or `ServerlessSQLDatabaseReadWrite` permissions sets.
+
+3. Create an [IAM API Key](/identity-and-access-management/iam/concepts/#api-key) and export its secret key as an environment variable:
+    ```bash
+    export SCW_APPLICATION_SECRET=$(scw iam api-key create application-id=$SCW_APPLICATION_ID -o json | jq -r '.secret_key')
+    ```
+
+4. Retrieve your container's ID:
+    ```bash
+    export CONTAINER_ID=$(scw container container list name="my-strapi-blog" -o json | jq -r '.[0].id')
+    ```
+
+5. Redeploy your Serverless Container:
+    ```bash
+    scw container container update $CONTAINER_ID \
+    environment-variables.DATABASE_HOST=$DATABASE_HOST \
+    environment-variables.DATABASE_PORT=$DATABASE_PORT \
+    environment-variables.DATABASE_NAME=$DATABASE_NAME \
+    environment-variables.DATABASE_CLIENT=$DATABASE_CLIENT \
+    environment-variables.DATABASE_SSL=$DATABASE_SSL \
+    environment-variables.DATABASE_USERNAME=$SCW_APPLICATION_ID \
+    secret-environment-variables.0.key='DATABASE_PASSWORD' \
+    secret-environment-variables.0.value=$SCW_APPLICATION_SECRET \
+    secret-environment-variables.1.key='APP_KEYS' \
+    secret-environment-variables.1.value=$APP_KEYS \
+    secret-environment-variables.2.key='API_TOKEN_SALT' \
+    secret-environment-variables.2.value=$API_TOKEN_SALT \
+    secret-environment-variables.3.key='ADMIN_JWT_SECRET' \
+    secret-environment-variables.3.value=$ADMIN_JWT_SECRET \
+    secret-environment-variables.4.key='TRANSFER_TOKEN_SALT' \
+    secret-environment-variables.4.value=$TRANSFER_TOKEN_SALT \
+    secret-environment-variables.5.key='JWT_SECRET' \
+    secret-environment-variables.5.value=$JWT_SECRET redeploy=true
+    ```
+
+6. Refresh your browser page displaying the Strapi Administration Panel. An updated version displays. 
+
+  You have now deployed a full serverless Strapi blog example!
+   
+## Going further with containers
+
+- Inspect your newly created resources in the Scaleway console:
+
+  - You can display your **Registry namespace** and **container image** in the [Container Registry section](https://console.scaleway.com/registry/namespaces).
+
+  - You can display your **Serverless Containers namespace** and **container deployment** in the [Serverless Containers section](https://console.scaleway.com/containers/namespaces).
+
+  - You can display your **Serverless SQL Database** in the [Serverless SQL Databases section](https://console.scaleway.com/serverless-db/databases).
+
+- **Fine tune deployment options** such as autoscaling, targeted regions, and more. You can find more information by typing `scw container deploy --help` in your terminal, or by referring to the [dedicated documentation](/serverless/containers/how-to/manage-a-container/).
+
+- Create a secondary development environment by duplicating your built container, building it in `NODE_ENV=development` environment, running `npm run develop`, and plugging it onto another **Serverless SQL Database**. This will let you, for instance, edit content types, which is not possible in production.
+
+## Deploy Strapi using Scaleway Terraform templates
+
+<Message type="note">
+  You must have [Terraform](https://developer.hashicorp.com/terraform/tutorials/aws-get-started/install-cli) installed and configured with the [Scaleway Terraform Provider](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs) for this part.
+</Message>
+
+### Initialize the project
+
+1. Run the command below to export your access key and secret key as environment variables:
+    ```sh
+    export SCW_ACCESS_KEY=$(scw config get access-key)
+    export SCW_SECRET_KEY=$(scw config get secret-key)
+    ```
+
+2. Run the command below to make sure the environment variables are properly set:
+
+    ```sh
+    scw info 
+    ```
+
+    This command displays your access_key and secret_key in the two last lines of the output. The `ORIGIN` column should display `env (SCW_ACCESS_KEY)` and `env (SCW_SECRET_KEY)`, and not `default profile`.
+    
+    ```bash
+    KEY                      VALUE                                       ORIGIN
+    (...)
+    access_key               SCWF9DETBF829TAFB1TB                        env (SCW_ACCESS_KEY)
+    secret_key               9a1bcf92-xxxx-xxxx-xxxx-xxxxxxxxxxxx        env (SCW_SECRET_KEY)
+    ```
+
+### Building Strapi container
+
+1. Run the command below to create a Strapi blog template:
+    ```bash
+    npx create-strapi-app my-blog --template blog --dbclient=sqlite
+    ```
+    For now, the database of the blog template is stored locally.
+
+
+2. Access the folder you just created:
+    ```bash
+    cd my-blog
+    ```
+
+3. Install and save the ```node-postgres``` dependency:
+    ```bash
+    npm install pg --save
+    ```
+
+4. Run the following command to create a `Dockerfile`:
+    ```bash
+    touch Dockerfile
+    ```
+5. Add the following code to it:
+    ```bash
+    # Creating a multi-stage build
+    FROM node:20-alpine as build
+    RUN apk update && apk add --no-cache build-base gcc autoconf automake zlib-dev libpng-dev vips-dev git > /dev/null 2>&1
+    ARG NODE_ENV=development
+    ENV NODE_ENV=${NODE_ENV}
+
+    WORKDIR /opt/
+    #Copy package-lock.json only if it exists
+    COPY package.json package-lock.json* ./
+    RUN npm install -g node-gyp
+    RUN npm config set fetch-retry-maxtimeout 600000 -g && npm install
+    ENV PATH /opt/node_modules/.bin:$PATH
+    WORKDIR /opt/app
+    COPY . .
+    RUN npm run build
+
+    # Creating the final image
+    FROM node:20-alpine
+    RUN apk add --no-cache vips-dev
+    ARG NODE_ENV=development
+    ENV NODE_ENV=${NODE_ENV}
+    WORKDIR /opt/
+    COPY --from=build /opt/node_modules ./node_modules
+    WORKDIR /opt/app
+    COPY --from=build /opt/app ./
+    ENV PATH /opt/node_modules/.bin:$PATH
+
+
+    RUN chown -R node:node /opt/app
+    USER node
+    EXPOSE 1337
+
+    ENV ADMIN_EMAIL=admin@example.com
+    ENV ADMIN_FIRSTNAME=John
+    ENV ADMIN_LASTNAME=Doe
+
+    # Before starting the server, creates an admin user or updates its credentials if a user already exists with this email
+    # --silent option is used to avoid leaking credentials in logs.
+    CMD npm run --silent strapi admin:create-user -- --firstname=$ADMIN_FIRSTNAME --lastname=$ADMIN_LASTNAME --email=$ADMIN_EMAIL --password=$ADMIN_PASSWORD ; (npm run --silent strapi admin:reset-user-password -- --email=$ADMIN_EMAIL --password=$ADMIN_PASSWORD && npm run develop)
+    ```
+
+6. Create a `.dockerignore` file:
+    ```bash
+    touch .dockerignore
+    ```
+
+7. Add the following code to it:
+    ```bash
+    .tmp/
+    .cache/
+    .git/
+    .env
+    build/
+    node_modules/
+    backup/
+    ```
+
+    Docker will now ignore node dependencies and other unnecessary files during the build process.
+
+    At this stage, your application folder should be called `my-blog` and structured as follows:
+      ```bash
+      my-blog/
+      ├── build/
+      ├── config/
+      ├── data/
+      ├── database/
+      ├── node_modules/
+      ├── public/
+      ├── src/
+      ├── types/
+      ├── .dockerignore
+      ├── Dockerfile
+      ├── favicon.png
+      ├── jsconfig.json
+      ├── package.json
+      ├── README.md
+      └── yarn.lock					
+      ```
+
+8. Build your application container:
+    ```bash
+    docker build -t my-strapi-blog .   
+    ```
+    <Message type="tip">
+    The docker build image process can take a few minutes, particularly during the `npm install` step since Strapi requires around 1 GB of node modules to be built.
+    </Message>
+
+### Pushing the image to Scaleway Container Registry
+
+1. Run the following command to create a [Container Registry namespace](/containers/container-registry/concepts/#namespace) and export its endpoint as a variable:
+    ```bash
+    export REGISTRY_ENDPOINT=$(scw registry namespace create -o json | jq -r '.endpoint')
+    ```
+
+2. Log in to your [Container Registry](/containers/container-registry/concepts/#container-registry) from your local terminal:
+    ```bash
+    docker login $REGISTRY_ENDPOINT -u nologin --password-stdin <<< "$SCW_SECRET_KEY"
+    ```
+    The following output displays:
+    ```sh
+    Login Succeeded
+    ```
+
+3. Tag and push your container image to your Container Registry namespace:
+    ```bash
+    docker tag my-strapi-blog:latest $REGISTRY_ENDPOINT/my-strapi-blog:latest
+    docker push $REGISTRY_ENDPOINT/my-strapi-blog:latest
+    ```
+
+  
+### Creating the Terraform configuration
+
+1. Run the following command to create a new folder to store your Terraform files, and access it:
+    ```bash
+    cd ..
+    mkdir terraform-strapi-blog &&
+    cd terraform-strapi-blog
+    ``` 
+
+2. Create an empty `main.tf` Terraform file inside the folder.
+
+    Your application folder should now be structured as follows:
+    ```bash
+    my-blog/
+    └── terraform-strapi-blog/
+        └── main.tf
+    ```
+
+3. Add the following code to your `main.tf` file:
+    ```json
+    terraform {
+        required_providers {
+            scaleway = {
+            source = "scaleway/scaleway"
+            }
+            random = {
+            source = "hashicorp/random"
+            }
+        }
+        required_version = ">= 0.13"
+    }
+    
+    variable "REGISTRY_ENDPOINT" {
+        type = string
+        description = "Container Registry endpoint where your application container is stored"
+    }
+    
+    variable "DEFAULT_PROJECT_ID" {
+        type = string
+        description = "Project ID where your resources will be created"
+    }
+
+    variable "ADMIN_EMAIL" {
+        type = string
+        description = "Strapi administrator email. Will be created at each container start."
+    }
+
+    variable "ADMIN_PASSWORD" {
+        type = string
+        description = "Strapi administrator password. Will be updated at each container start."
+    }
+
+    locals {
+        secrets = ["app_keys","api_token_salt","admin_jwt_secret","transfer_token_salt","jwt_secret"]
+    }
+
+    resource "random_bytes" "generated_secrets" {
+        for_each = toset(local.secrets)
+        length = 16
+    }
+    
+    resource scaleway_container_namespace main {
+        name = "tutorial-strapi-blog-tf"
+        description = "Namespace created for full serverless Strapi blog deployment"
+    }
+    
+    resource scaleway_container main {
+
+        name = "tutorial-strapi-blog-tf"
+        description = "Container for Strapi blog"
+        namespace_id = scaleway_container_namespace.main.id
+        registry_image = "${var.REGISTRY_ENDPOINT}/my-strapi-blog:latest"
+        port = 1337
+        cpu_limit = 1120
+        memory_limit = 4096
+        min_scale = 0
+        max_scale = 5
+        timeout = 600
+        max_concurrency = 80
+        privacy = "public"
+        protocol = "http1"
+        deploy = true
+            
+        environment_variables = {
+            "DATABASE_CLIENT"="postgres",
+            "DATABASE_USERNAME" = scaleway_iam_application.app.id,
+            "DATABASE_HOST" = trimsuffix(trimprefix(regex(":\\/\\/.*:",scaleway_sdb_sql_database.database.endpoint), "://"),":")
+            "DATABASE_NAME" = scaleway_sdb_sql_database.database.name,
+            "DATABASE_PORT" = trimprefix(regex(":[0-9]{1,5}",scaleway_sdb_sql_database.database.endpoint), ":"),
+            "DATABASE_SSL" = "true",
+            "ADMIN_EMAIL" = "${var.ADMIN_EMAIL}"
+        }
+        secret_environment_variables = {
+            "DATABASE_PASSWORD" = scaleway_iam_api_key.api_key.secret_key,
+            "ADMIN_PASSWORD" = "${var.ADMIN_PASSWORD}",
+            "APP_KEYS" = random_bytes.generated_secrets["app_keys"].base64,
+            "API_TOKEN_SALT" = random_bytes.generated_secrets["api_token_salt"].base64,
+            "ADMIN_JWT_SECRET" = random_bytes.generated_secrets["admin_jwt_secret"].base64,
+            "TRANSFER_TOKEN_SALT" = random_bytes.generated_secrets["transfer_token_salt"].base64,
+            "JWT_SECRET" = random_bytes.generated_secrets["jwt_secret"].base64
+        }
+    }
+    
+    resource scaleway_iam_application "app" {
+        name = "tutorial-strapi-blog-tf"
+    }
+    
+    resource scaleway_iam_policy "db_access" {
+        name = "tutorial-strapi-policy-tf"
+        description = "Gives tutorial Strapi blog access to Serverless SQL Database"
+        application_id = scaleway_iam_application.app.id
+        rule {
+            project_ids = ["${var.DEFAULT_PROJECT_ID}"]
+            permission_set_names = ["ServerlessSQLDatabaseReadWrite"]
+        }
+    }
+    
+    resource scaleway_iam_api_key "api_key" {
+        application_id = scaleway_iam_application.app.id
+    }
+    
+    resource scaleway_sdb_sql_database "database" {
+        name = "tutorial-strapi-tf"
+        min_cpu = 0
+        max_cpu = 8
+    }
+    
+    output "database_connection_string" {
+        // Output as an example, you can give this string to your application
+        value = format("postgres://%s:%s@%s",
+            scaleway_iam_application.app.id,
+            scaleway_iam_api_key.api_key.secret_key,
+            trimprefix(scaleway_sdb_sql_database.database.endpoint, "postgres://"),
+        )
+        sensitive = true
+    }
+    
+    output "container_url" {
+        // Output as an example, you can give this string to your application
+        value = scaleway_container.main.domain_name
+        sensitive = true
+    }
+    ```
+
+The Terraform file creates several resources:
+
+- A [Serverless Containers namespace](/serverless/containers/concepts/#namespace), that contains a [Serverless Container](/serverless/containers/quickstart/), which hosts your Strapi application
+
+- A [Serverless SQL Database](/serverless/sql-databases/reference-content/serverless-sql-databases-overview/) which stores posts data
+
+- An [IAM policy](/identity-and-access-management/iam/concepts/#policy) which grants your application the right permissions
+
+- An [IAM application](/identity-and-access-management/iam/concepts/#application), used as a principal for your IAM policy
+
+- An [API key](/identity-and-access-management/iam/concepts/#api-key) used as credentials to authenticate your application to the database
+
+### Deploying the app with Terraform
+
+1. Run the following command to initialize the Terraform working directory:
+    ```bash
+    terraform init
+    ```
+
+2. Add the `REGISTRY_ENDPOINT`, `DEFAULT_PROJECT_ID`, `ADMIN_EMAIL` and `ADMIN_PASSWORD` environment variables to Terraform:
+    ```bash
+    export TF_VAR_REGISTRY_ENDPOINT=$REGISTRY_ENDPOINT
+    export TF_VAR_DEFAULT_PROJECT_ID=$(scw config get default-project-id)
+    export TF_VAR_ADMIN_EMAIL=admin@example.com
+    export TF_VAR_ADMIN_PASSWORD=Y0ur_P@ssw0rd
+    ```
+    Edit the `ADMIN_EMAIL` and `ADMIN_PASSWORD` values with your own email and password. Optionally, you can also edit `ADMIN_FIRSTNAME` and `ADMIN_LASTNAME` values to change the default admin first and last name.
+    <Message type="note">
+        Strapi admin password requires at least 8 characters including one uppercase, one lowercase, one number, and one special character. 
+        If the admin password or email does not meet the requirements, the container will not start.
+    </Message>
+
+3. Create and review the Terraform execution plan of your infrastructure:
+    ```bash
+    terraform plan
+    ```
+
+4. Deploy your application by executing the actions listed in your Terraform plan:
+    ```bash
+    terraform apply
+    ```
+
+    The output will provide the URL with which you can access your application, and the connection string for your database. Since they contain sensitive data, they are hidden by default.
+
+5. Run the following command to display them:
+    ```
+    terraform output -json
+    ```
+
+    A similar output displays:
+
+    ```json
+    {
+     "container_url": {
+       "sensitive": true,
+       "type": "string",
+       "value": "tutorialstrapiblogtfaxtypxrf-tutorial-strapi-blog-tf.functions.fnc.fr-par.scw.cloud"
+     },
+     "database_connection_string": {
+       "sensitive": true,
+       "type": "string",
+       "value": "postgres://example-f6b7-40cc-9ae8-7f24e64c6531:example-c770-46ea-b785-94bf39536e6a@650c9680-1100-48e4-b5a6-ff2ff5bcf142.pg.sdb.fr-par.scw.cloud:5432/tutorial-strapi-tf?sslmode=require"
+     }
+    }
+    ```
+
+6. Copy the container URL from the output and paste it into your browser. The main Strapi page displays. Click on "Open the administration" or add `/admin` to the container URL to access the Strapi Administration Panel.
+
+    <Message type="tip">
+    The first deployment can take a few minutes. You can check the deployment status with the following command:
+    ```sh
+    scw container container list name=tutorial-strapi-blog-tf -o human=Name,Status
+    ```
+    When the status appears as `ready`, you can access the Strapi Administration Panel via your browser.
+    </Message>
+
+7. (Optional) You can check that Strapi APIs are working with the following command, or by going to `https://{container_url}/api/articles` in your browser:
+    ```bash
+    curl -X GET https://{container_url}/api/articles | jq
+    ```
+
+    The available articles display in JSON format:
+    ```json
+    {
+      "data": [
+      {
+        "id": 1,
+        "attributes": {
+          "title": "What's inside a Black Hole",
+          "description": "Maybe the answer is in this article, or not...",
+          "slug": "what-s-inside-a-black-hole",
+          "createdAt": "2024-04-16T15:49:14.525Z",
+          "updatedAt": "2024-04-16T15:49:14.525Z",
+          "publishedAt": "2024-04-16T15:49:14.457Z"
+        }
+      },
+        (...)
+      ]
+    }
+    ```
+
+Your Strapi headless CMS for a blog is now online. You can already edit stored content, or consume it from a frontend application.
+
+Moreover, your textual content data is already stored in serverless storage, so that your full application only runs when you connect to the administration panel or perform requests to Strapi API.
+
+Once you are done, run the following command to stop all your resources:
+    ```hcl
+    terraform destroy
+    ```
+
+### Going further
+
+- Inspect your newly created resources in the Scaleway console:
+
+  - You can display your **Registry namespace** and **container image** in the [Container Registry section](https://console.scaleway.com/registry/namespaces)
+
+  - You can display your **Serverless Containers namespace** and **container deployment** in the [Serverless Containers section](https://console.scaleway.com/containers/namespaces)
+
+  - You can display your **Serverless SQL Database** in the [Serverless SQL Databases section](https://console.scaleway.com/serverless-db/databases)
+
+- **Fine-tune deployment options** such as autoscaling, targeted regions, and more. You can find more information by typing `scw container deploy --help` in your terminal, or by referring to the [dedicated documentation](/serverless/containers/how-to/manage-a-container/)
+
+- Create a secondary production environment by duplicating your built container, building it in `NODE_ENV=production` environment, running `npm run start`, and plugging it onto another **Serverless SQL Database**. For instance, this will allow you to edit content-types which is not possible in production.
+ 
+## Troubleshooting
+
+If you happen to encounter any issues, first check that you meet all the requirements.
+
+- You have installed and configured the [Scaleway CLI](/developer-tools/scaleway-cli/quickstart/). Running the `scw account project get` command should return the following output:
+    ```
+    ID              example-7afa-4a5d-9f6c-27db072f1527
+    Name            default
+    OrganizationID  example-7afa-4a5d-9f6c-27db072f1527
+    CreatedAt       1 year ago
+    UpdatedAt       1 year ago
+    Description     -
+    ```
+  <Message type="tip">  
+  You can also find and compare your Project and Organization ID in the [Scaleway console settings](https://console.scaleway.com/project/settings).
+  </Message>
+- You have **Docker Engine** installed. Running the `docker -v` command in a terminal should display your currently installed docker version:
+    ```
+    Docker version 24.0.6, build ed223bc820
+    ```
+- You have the right [IAM permissions](/identity-and-access-management/iam/reference-content/policy/), specifically **ContainersRegistryFullAccess**, **ContainersFullAccess** and **ServerlessSQLDatabaseFullAccess**.

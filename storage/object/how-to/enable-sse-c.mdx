@@ -1,15 +1,107 @@
 ---
 meta:
   title: How to enable SSE-C
-  description: This page explains how to enable SSE-C
-content:
-  h1: How to edit storage class
-  paragraph: This page explains how to enable SSE-C
+  description: This page explains how to enable Server Side Encryption with customer-provided keys (SSE-C)
+  h1: How to enable SSE-C
+  paragraph: This page explains how to enable Server Side Encryption with customer-provided keys (SSE-C)
 tags: object storage server side encryption sse sse-c
 dates:
-  validation: 2023-11-23
-  posted: 2021-05-27
+  validation: 2024-05-30
+  posted: 2024-05-30
 categories:
   - storage
   - object-storage
 ---
+
+**Server-Side Encryption with Customer-Provided Keys** (SSE-C) is a method of encryption provided by Scaleway Object Storage to protact your data at rest. It allows you to supply your own encryption keys to encrypt data when it is uploaded, and to decrypt data when it is accessed.
+
+Managing SSE-C using the `aws s3api` command set requires 3 arguments:
+- A 256-bit (32-byte) base64-encoded key
+- The base64-encoded 128-bit MD5 digest of the encryption key, according to the [RFC 1321](https://datatracker.ietf.org/doc/html/rfc1321) norm.
+- The encryption algorithm used to encrypt/decrypt your data. It must be `AES256`
+
+<Message type="note">
+Currently, Scaleway does not support other types of server-side encryption methods, such as SSE-KMS, or SSE-S3.
+</Message>
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An [Object Storage bucket](/storage/object/how-to/create-a-bucket/)
+- installed and initialized the [AWS CLI](/storage/object/api-cli/object-storage-aws-cli/)
+
+## How to generate an encryption key
+
+SSE-C requires a 256-bit (32-byte) base64-encoded key. This key is used to encrypt and decrypt your data. If you already have a compatible encryption key, you can skip directly to the [next section](#how-to-upload-and-download-objects-with-sse-c).
+
+1. In a terminal, run the following command to generate a random base64-encoded 32-byte key and store it as an environment variable:
+
+    ```sh
+    export ENCRYPTION_KEY=$(openssl rand -base64 32)
+    ```
+
+2. Run the following command to generate the base64-encoded 128-bit MD5 digest of your encryption key:
+
+    ```sh
+    export KEY_DIGEST=$(echo -n $KEY | openssl dgst -md5 -binary | base64)
+    ```
+
+## How to upload and download objects with SSE-C
+
+1. Run the command below to upload an object and encrypt it. Make sure to replace `<your-bucket-name>`, `<your-object-key>`, and `<path/to/your/file>` with the correct values. 
+
+    ```sh
+    aws s3api put-object \
+    --bucket <your-bucket-name> \
+    --key <your-object-key> \
+    --body <path/to/your/file> \
+    --sse-customer-algorithm AES256 \
+    --sse-customer-key $ENCRYPTION_KEY \
+    --sse-customer-key-md5 $KEY_DIGEST
+    ```
+
+    <Message type="note">
+    The `--sse-customer-algorithm` argument is required, and only accepts `AES256` as a value.
+    </Message>
+
+2. (Optional) Run the command below to check that you **cannot** download your object without the encryption key and its digest. Make sure to replace `<your-bucket-name>`, `<your-object-key>`, and `<path/to/destination/file>` with the correct values.
+
+    ```sh
+    aws s3api put-object \
+    --bucket <your-bucket-name> \
+    --key <your-object-key> \
+    <path/to/your/file> \
+    ```
+    An error message similar to the following should display:
+    ```
+    An error occurred (400) when calling the HeadObject operation: Bad Request
+    ```
+
+3. Run the command below to download the previously uploaded object and decrypt it. Make sure to replace `<your-bucket-name>`, `<your-object-key>`, and `<path/to/destination/file>` with the correct values. 
+
+    ```sh
+    aws s3api put-object \
+    --bucket <your-bucket-name> \
+    --key <your-object-key> \
+    <path/to/destination/file> \
+    --sse-customer-algorithm AES256 \
+    --sse-customer-key $ENCRYPTION_KEY \
+    --sse-customer-key-md5 $KEY_DIGEST
+    ```
+
+    Your object is now located at the specified destination.
+
+    <Message type="note">
+    You can store your keys in files and pass them as arguments using the format below:
+    ```sh
+    --sse-customer-key file://path/to/file \
+    --sse-customer-key-md5 file://path/to/file
+    ```
+    </Message>
+
+## How to require SSE-C using bucket policies
+
+[Bucket policies](/storage/object/concepts/#bucket-policy) allow you to require SSE-C when performing actions on a specific bucket. Operations made without this encryption mechanism will be rejected by the API.
+ 
+TODO not sure tho, check with SME

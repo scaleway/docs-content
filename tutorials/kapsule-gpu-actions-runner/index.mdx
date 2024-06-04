@@ -1,0 +1,161 @@
+---
+meta:
+  title: Setting-up GitHub Actions Runner with Scaleway Kapsule and NVIDIA CUDA Image
+  description: Learn how to set up a GitHub Actions self-hosted runner using a Scaleway Kapsule Kubernetes cluster with NVIDIA CUDA image. This tutorial covers creating a Scaleway Kapsule cluster, installing NVIDIA device plugins, deploying the Actions Runner Controller, configuring GitHub App authentication, and deploying a GPU-accelerated runner for your CI/CD workflows. Perfect for developers looking to enhance their GitHub Actions with powerful GPU resources.
+content:
+  h1: Setting-up GitHub Actions Runner with Scaleway Kapsule and NVIDIA CUDA Image
+  paragraph: Learn how to set up a GitHub Actions self-hosted runner using a Scaleway Kapsule Kubernetes cluster with NVIDIA CUDA image. This comprehensive tutorial covers creating a Scaleway Kapsule cluster, installing NVIDIA device plugins, deploying the Actions Runner Controller, configuring GitHub App authentication, and deploying a GPU-accelerated runner for your CI/CD workflows. Perfect for developers looking to enhance their GitHub Actions with powerful GPU resources.
+categories:
+  - gpu-instances
+tags: Scaleway-GPU AI inference Super-Resolution
+dates:
+  validation: 2024-06-04
+  posted: 2024-06-04
+---
+
+In this tutorial, we will walk you through the process of setting up a GitHub Actions self-hosted runner using Scaleway Kapsule (Kubernetes) with an NVIDIA CUDA image.
+By using powerful GPU Instances, you can accelerate your CI/CD workflows, especially for tasks that require intensive computation, such as machine learning model training, data analysis, and high-performance computing applications.
+
+Self-hosted runners allow you to use your own infrastructure for GitHub Actions, providing greater control over hardware and environment configurations.
+
+In this tutorial we cover the following steps:
+
+- Creating a Scaleway Kapsule Kubernetes cluster.
+- Deploying the Actions Runner Controller to manage self-hosted runners.
+- Configuring a GitHub App to authenticate the Actions Runner Controller.
+- Setting up and deploying the runner with an NVIDIA CUDA image.
+- Verifying the runner's status and ensuring it is correctly integrated with your GitHub repository.
+
+By the end of this tutorial, you will have a fully functional GitHub Actions runner capable of executing workflows with GPU acceleration, enhancing your development and deployment processes.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A GitHub repository
+- `kubectl` installed on your local machine
+- `helm` installed on your local machine
+- Basic understanding of Kubernetes and GitHub Actions
+
+## Creating a Scaleway Kapsule Kubernetes cluster
+
+1. Click **Kubernetes** in the **Containers** section of the [Scaleway console](https://console.scaleway.com/). The Kubernetes dashboard displays.
+2. Click **Create cluster** to open the cluster creation wizard.
+3. Configure your cluster with the following details:
+    * **Cluster type**: Select **Kubernetes Kapsule**.
+    * **Region**: Select the geographical region for the cluster.
+    * **Kubernetes version**: Choose the desired version.
+4. Configure the **Private Network** for secure, isolated communication:
+    * Attach an existing Private Network (VPC) in the same Availability Zone from the drop-down menu.
+    * Or, attach a new Private Network to the cluster.
+      > **Important:** The Private Network cannot be detached or moved to another network after creation.
+5. Enter the **name** for the cluster, and optionally, a description and tags for better organization.
+6. Click **Next** to proceed to the cluster pool settings.
+7. Configure the pool with the following:
+    * **Availability Zone**: Select where your pool's nodes will be created.
+    * **Node type**: Choose a GPU Instance type.
+    * **Node options**: Set the number of nodes, and configure autoscale and autoheal options. You can also link the cluster to a placement group or leave these settings as default.
+8. Click **Create cluster**. Your cluster will be deployed and appear in the clusters list once ready.
+9. Download the `kubeconfig` file to your local machine once the cluster is created.
+10. Set up your kubeconfig:
+   ```sh
+   export KUBECONFIG=/path/to/your/kubeconfig
+   ```
+
+## Installing the Actions Runner Controller
+
+1. Add the Actions Runner Controller Helm repository:
+   ```sh
+   helm repo add actions-runner-controller https://actions-runner-controller.github.io/actions-runner-controller
+   helm repo update
+   ```
+
+2. Install the Actions Runner Controller using `helm`:
+   ```sh
+   helm install actions-runner-controller actions-runner-controller/actions-runner-controller --namespace actions-runner-system --create-namespace
+   ```
+
+3. Install Custom Resource Definitions (CRDs):
+   ```sh
+   kubectl apply -f https://github.com/actions/actions-runner-controller/releases/latest/download/actions-runner-controller.yaml
+   ```
+
+## Creating a GitHub App for Actions Runner Controller
+
+1. Create a GitHub App:
+   - Navigate to your [GitHub organization](https://github.com/settings/organizations) or user settings.
+   - Go to **Developer settings** > **GitHub Apps** > **New GitHub App**.
+   - Set permissions for the app as per the [documentation](https://github.com/actions/actions-runner-controller#github-app-authentication).
+   - Generate a private key and save it.
+
+2. Configure your GitHub App credentials:
+   ```sh
+   export GITHUB_APP_ID=<your-github-app-id>
+   export GITHUB_APP_INSTALLATION_ID=<your-github-app-installation-id>
+   export GITHUB_APP_PRIVATE_KEY=$(cat /path/to/your/private-key.pem)
+   ```
+
+## Configuring the Runner Deployment
+
+1. Create a Secret for GitHub App credentials:
+   ```sh
+   kubectl create secret generic controller-manager -n actions-runner-system \
+     --from-literal=github_app_id=$GITHUB_APP_ID \
+     --from-literal=github_app_installation_id=$GITHUB_APP_INSTALLATION_ID \
+     --from-literal=github_app_private_key="$GITHUB_APP_PRIVATE_KEY"
+   ```
+
+2. Deploy the Runner:
+   Create a `runner-deployment.yaml` file with the following content:
+   ```yaml
+   apiVersion: actions.summerwind.dev/v1alpha1
+   kind: RunnerDeployment
+   metadata:
+     name: example-runner-deployment
+     namespace: actions-runner-system
+   spec:
+     replicas: 1
+     template:
+       spec:
+         repository: your-github-username/your-repo
+         image: nvidia/cuda:11.0-base
+         nodeSelector:
+           nvidia.com/gpu.present: "true"
+         containers:
+         - name: runner
+           image: summerwind/actions-runner-dind:latest
+           resources:
+             limits:
+               nvidia.com/gpu: 1
+           env:
+           - name: RUNNER_NAME
+             value: "example-runner"
+           - name: RUNNER_WORKDIR
+             value: "/tmp/github-runner"
+           - name: RUNNER_GROUP
+             value: "default"
+           - name: ORGANIZATION_NAME
+             value: "your-github-org"
+           - name: GITHUB_TOKEN
+             valueFrom:
+               secretKeyRef:
+                 name: controller-manager
+                 key: github_token
+   ```
+
+3. Apply the Runner deployment using `kubectl`:
+   ```sh
+   kubectl apply -f runner-deployment.yaml
+   ```
+
+## Verifying the Runner status
+
+1. Check the Runner status:
+   ```sh
+   kubectl get runners -n actions-runner-system
+   ```
+
+2. Confirm in GitHub by navigating to your GitHub repository settings under **Actions** > **Runners** to see your self-hosted runner listed.
+
+
+You have successfully set up a GitHub Actions self-hosted runner using Scaleway Kapsule with an NVIDIA CUDA image. This setup allows you to leverage the power of an H100 GPU for your CI/CD workflows.

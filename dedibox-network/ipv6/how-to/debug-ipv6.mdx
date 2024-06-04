@@ -1,86 +1,76 @@
 ---
 meta:
   title: How to resolve IPv6 connection issues
-  description: This page explains how to resolve IPv6 connection issues.
+  description: Learn how to troubleshoot and resolve common IPv6 connection issues on your Dedibox server with our step-by-step guide.
 content:
   h1: How to resolve IPv6 connection issues
-  paragraph: This page explains how to resolve IPv6 connection issues.
+  paragraph: Learn how to troubleshoot and resolve common IPv6 connection issues on your Dedibox server with our step-by-step guide.
 tags: dedibox ipv6
 dates:
-  validation: 2023-11-20
+  validation: 2024-06-03
   posted: 2021-08-03
 categories:
   - dedibox-network
 ---
 
 <Macro id="requirements" />
-
 - A Dedibox account logged into the [console](https://console.online.net)
 - A [Dedibox dedicated server](https://www.scaleway.com/en/dedibox)
 - An [RPN SAN](https://www.scaleway.com/en/dedibox/storage/)
-- [Requested](/dedibox-network/ipv6/how-to/request-prefix) a /48 IPv6 prefix
+- A [requested /48 IPv6 prefix](/dedibox-network/ipv6/how-to/request-prefix)
 - Configured the `systemd-networkd` [DHCPv6 client](/dedibox-network/ipv6/how-to/configure-ipv6-linux)
 
 ## How to debug IPv6 connection issues from rescue mode
 
 If you experience IPv6 connection issues, you can test the network connectivity from [rescue mode](/dedibox/dedicated-servers/how-to/use-rescue-mode/).
 
-To test IPv6 connectivity on your server in rescue mode, reboot the server into a “Ubuntu rescue” mode. The `dhclient` is preinstalled in these images.
+To test IPv6 connectivity on your server in rescue mode, reboot the server into "Ubuntu rescue" mode. The `dhclient` is preinstalled in these images.
 
 1. Get the name of your internet interface using the following command:
-    ```
+    ```bash
     ip address show
     ```
-2. Create a file which will contain your DUID. The DUID is a unique "key" allowing access to your IPv6 prefix. You can find your DUID in your console.
-    ```
+2. Create a file to contain your DUID. The DUID is a unique "key" allowing access to your IPv6 prefix. You can find your DUID in your console.
+    ```bash
     sudo nano /etc/dhcp/dhclient6.conf
     ```
-3. Paste the following code into the file and edit the interface name (here `eno1`) and the DUID (here `DUID`) before saving the file and exiting the editor:
-    ```
+3. Paste the following code into the file, editing the interface name (here `eno1`) and the DUID (here `DUID`) before saving the file and exiting the editor:
+    ```conf
     interface "eno1" {
-    send dhcp6.client-id DUID;
+      send dhcp6.client-id DUID;
     }
     ```
-4. Start the DHCPv6 client using the previously created configuration file. Remember to replace `eno1` with the name of your internet interface:
-    ```
+4. Start the DHCPv6 client using the configuration file you created. Replace `eno1` with the name of your internet interface:
+    ```bash
     dhclient -cf /etc/dhcp/dhclient6.conf -6 -P -v eno1
     ```
-5. Add an IPv6 address to your network interface. Remember to replace `eno1` with the name of your internet interface and `IPV6ADDRESS/PREFIXLENGTH` with an IPv6 address from your prefix and the length of your prefix:
-    ```
+5. Add an IPv6 address to your network interface. Replace `eno1` with the name of your internet interface and `IPV6ADDRESS/PREFIXLENGTH` with an IPv6 address from your prefix and the length of your prefix:
+    ```bash
     /sbin/ifconfig eno1 inet6 add IPV6ADDRESS/PREFIXLENGTH
     ```
 6. Use `ping6` to validate the IPv6 connectivity of your server:
-    ```
+    ```bash
     ping6 ipv6.google.com
     ```
 
 ## How to debug IPv6 connection issues in normal mode
 
 If you experience IPv6 connection issues, start by verifying the internet interface name in your configuration. You can check the names of your interfaces using the following command:
-
-```
+```bash
 ip address show
 ```
 
-In addition, your server needs to be configured to accept RA (Router Advertisement).
+Additionally, your server needs to be configured to accept RA (Router Advertisement). By default, your server will not forward packets from one interface to another if it is automatically configured (through DHCPv6).
 
-By default, your server will not accept to forward packets from an interface to another if it is automatically configured (through DHCPv6).
-
-If you need to forward IPv6 packets and use an automated configuration, you will need to set your `net.ipv6.conf.all.accept_ra` to `2` in `/etc/sysctl.conf`. This is useful for hypervisor hosts such as Proxmox.
+If you need to forward IPv6 packets and use an automated configuration, set `net.ipv6.conf.all.accept_ra` to `2` in `/etc/sysctl.conf`. This is useful for hypervisor hosts such as Proxmox.
 
 ## How to avoid DHCPv6 floods
 
-In certain cases, some DHCPv6 clients may unfortunately send several requests per second (especially `dchp6c`).
+In some cases, certain DHCPv6 clients may send several requests per second (especially `dhcp6c`). This can trigger blocking of your server's network port by our automatic protection, as it will be seen as a source of a UDP flood.
 
-This triggers blocking of your server's network port by our automatic protection, as it will be seen as a source of a UDP flood.
-
-To avoid this problem, we invite you to limit the traffic sent from your dhclient6 directly in your firewall configuration.
-
-Following an example for IPTABLES:
-
-```
+To avoid this problem, limit the traffic sent from your `dhclient6` directly in your firewall configuration. Here is an example for IPTABLES:
+```bash
 ip6tables -A OUTPUT -p udp --dport 547 -m limit --limit 10/min --limit-burst 5 -j ACCEPT
 ip6tables -A OUTPUT -p udp --dport 547 -j DROP
 ```
-
 

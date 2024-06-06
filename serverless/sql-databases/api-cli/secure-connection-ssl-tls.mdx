@@ -1,0 +1,171 @@
+---
+meta:
+  title: Secure connections using SSL/TLS
+  description: This page explains how to configure SSL/TLS to encrypt traffic between your client and Serverless SQL Databases
+content:
+  h1: Secure connections using SSL/TLS
+  paragraph: This page explains how to configure SSL/TLS to encrypt traffic between your client and Serverless SQL Databases
+dates:
+  validation: 2024-06-03
+  posted: 2024-06-03
+---
+
+This documentation will guide you through SSL/TLS configuration in your PostgreSQL-compatible client to ensure your traffic with Scaleway's Serverless SQL Databases is encrypted.
+
+Configuration examples for languages, frameworks and tools: 
+  - [Python](#pythonpsycopg2)
+  - [Python](#pythondjango)
+  - [Node.js](#nodejsnode-postgres)
+  - [Node.js](#nodejspostgresjs)
+  - [Node.js](#javajdbc)
+  - [psql](#psql)
+
+## Generic configuration settings
+
+Starting from PostgreSQL 16, you can set up SSL/TLS to rely on the default certification authority certificates trusted by your operating system. To do so, use the additional configuration parameters `sslmode=verify-full` and `sslrootcert=system`. 
+
+For instance, your full connection string should be:  
+  ```sh
+  postgresql://{username}:{password}@{host}:{port}/{databasename}?sslmode=verify-full&sslrootcert=system
+  ```
+<Message type="tip">
+Support for `sslmode=verify-full` and `sslrootcert=system` options can vary among SQL drivers. Refer to the documentation below or to your official SQL driver's documentation for workarounds if these options are not supported.
+</Message>
+
+With this configuration, on your SQL client side, you will not need to download, update or renew certificates separately for PostgreSQL.
+
+Keeping your operating system up to date is enough to ensure your traffic is encrypted, and that your client sends messages to the right server (protecting you against [Eavesdropping](https://en.wikipedia.org/wiki/Network_eavesdropping) and [Man In The Middle Attacks](https://en.wikipedia.org/wiki/Man-in-the-middle_attack)).
+
+Alternatively, you can also download the trusted root Certificate used to sign our domain: [Let's Encrypt ISRG Root X1 (pem format)](https://letsencrypt.org/certs/isrgrootx1.pem), and use `sslmode=verify-full` and `sslrootcert=~/.postgresql/isrgx1root.pem`. 
+
+Your full connection string should be the output of this command:
+
+```sh
+echo "postgresql://{username}:{password}@{host}:{port}/{databasename}?sslmode=verify-ca&sslrootcert=$(echo ~/.postgresql/isrgx1root.pem)"
+```
+
+Refer to the official [PostgreSQL documentation](https://www.postgresql.org/docs/current/libpq-ssl.html) for more information.
+
+## Examples by SQL Drivers
+
+### Python/psycopg2
+
+As [psycopg2](https://pypi.org/project/psycopg2/) uses [libpq](https://www.postgresql.org/docs/current/libpq.html), the same official PostgreSQL parameter can be used. 
+
+Edit your connection parameters to add `sslmode=verify-full` and `sslrootcert=system` as shown below:  
+```python
+conn = psycopg2.connect(host={host},port={port},database={port},user={username},password={password},sslmode="verify-full",sslrootcert="system")
+```
+
+### Python/Django
+
+Django supports the same parameters as the Python driver you are using. For instance, with [psycopg2](https://pypi.org/project/psycopg2/), you can add the following options to your `settings.py` file in your database connection settings:
+```python
+'OPTIONS': {
+    'sslmode':'verify-full',
+    'sslrootcert':'system',
+  }
+```
+
+ Your complete settings should look like the following:  
+```python
+DATABASES = {
+'default': {
+  'ENGINE': 'django.db.backends.postgresql',
+  'NAME': {databasename},
+  'USER': {username}, #IAM principal ID of the user or application your are connecting with
+  'PASSWORD': {password}, #IAM Secret Key of the user or application your are connecting with
+  'HOST': {host}, #Host formated as {database-id}.pg.sdb.{region}.scw.cloud
+  'PORT': {port}, #Default port for PostgreSQL is supported: 5432
+  'OPTIONS': {
+      'sslmode':'verify-full',
+      'sslrootcert':'system',
+    }
+  }
+}
+```
+
+### Node.js/node-postgres
+
+[node-postgres](https://node-postgres.com/) doesn't support `sslmode=verify-full` and `sslrootcert=system`, but either the default connection string option `sslmode=require` or the driver-specific parameter `ssl:true` option checks for certificate validity.
+
+To ensure SSL/TLS is enforced and your server certificate is valid, add `ssl:true` to your connection parameters:  
+```js
+const client = new Client({
+  host: {host}, //Host formated as {database-id}.pg.sdb.{region}.scw.cloud
+  port: {port}, //Default port for PostgreSQL is supported: 5432
+  database: {databasename},
+  user: {username}, //IAM principal ID of the user or application you are connecting with
+  password: {username}, //IAM Secret Key of the user or application you are connecting with
+  ssl:true
+});
+```
+
+### Node.js/Postgres.js
+
+[Postgres.js](https://github.com/porsager/postgres) doesn't support `sslmode=verify-full` and `sslrootcert=system`, but either the default connection string option `sslmode=require` or the driver-specific parameter `ssl:true` option checks for certificate validity.
+
+To ensure SSL/TLS is enforced and the server certificate is valid, edit your connection parameters to add `ssl:true` parameters:
+
+```js
+const sql = postgres({
+  host: {host}, //Host formated as {database-id}.pg.sdb.{region}.scw.cloud
+  port: {port}, //Default port for PostgreSQL is supported: 5432
+  database: {username},
+  user: {username}, //IAM principal ID of the user or application you are connecting with
+  password: {username}, //IAM Secret Key of the user or application you are connecting with
+  ssl:true
+});
+```
+
+### Node.js/Prisma
+
+You can use several drivers with [Prisma](https://www.prisma.io/docs/orm/overview/databases/postgresql#configuring-an-ssl-connection), refer to their official documentation for more information on how to configure SSL/TLS.
+
+By default, Prisma uses its built-in PostgreSQL driver which doesn't support `sslmode=verify-full` and `sslrootcert=system`, but can perform certificate validity checks by using the `sslmode=require` and `sslaccept=strict` parameters. 
+
+To ensure SSL/TLS is enforced and the server certificate is valid, add these two parameters to your connection string in your `.env` file:
+
+```sh
+DATABASE_URL=postgresql://{username}:{password}@{host}:{port}/{databasename}?sslmode=require&sslaccept=strict
+```
+
+### Java/JDBC
+
+JDBC driver does not support the `sslrootcert=system` option, but supports the `ssl=true` option which, when enabled, performs certificate checks by default against the certificate named `root.crt` stored in `~/.postgresql`.
+
+To ensure SSL/TLS is enforced and your server certificate is valid, edit your connection parameters to set `ssl=true`, download the [Let's Encrypt ISRG Root X1 (pem format)](https://letsencrypt.org/certs/isrgrootx1.pem), rename it `root.crt`, and store it in `~/.postgresql/root.crt`:
+
+  ```java
+  String url = "jdbc:postgresql://{host}:{port}/{databasename}";
+  Properties props = new Properties();
+  props.setProperty("user", {username});
+  props.setProperty("password", {password});
+  props.setProperty("ssl", "true");
+  Connection conn = DriverManager.getConnection(url,props);
+  ```
+
+Alternatively, you can add the property `"sslrootcert=full/path/to/certificate/isrgrootx1.pem"` to specify the full path to the certificate without renaming it `root.crt`:
+
+  ```java
+  String url = "jdbc:postgresql://{host}:{port}/{databasename}";
+  Properties props = new Properties();
+  props.setProperty("user", {username});
+  props.setProperty("password", {password});
+  props.setProperty("ssl", "true");
+  props.setProperty("sslrootcert", "full/path/to/certificate/isrgrootx1.pem");
+  Connection conn = DriverManager.getConnection(url,props);
+  ```
+
+## Examples for SQL Client tools
+
+### psql
+
+As the official client bundled with PostgreSQL, [psql](https://www.postgresql.org/docs/current/app-psql.html) supports the default PostgreSQL connections parameters.
+
+Edit your connection parameters to add `sslmode=verify-full` and `sslrootcert=system` parameters: 
+
+  ```sh
+  psql "postgresql://{username}:{password}@{host}:{port}/{databasename}?sslmode=verify-full&sslrootcert=system"
+  ```
+   

@@ -13,11 +13,18 @@ dates:
 This documentation will guide you through SSL/TLS configuration in your PostgreSQL-compatible client to ensure your traffic with Scaleway's Serverless SQL Databases is encrypted.
 
 Configuration examples for languages, frameworks and tools: 
-  - [Python](#pythonpsycopg2)
-  - [Python](#pythondjango)
-  - [Node.js](#nodejsnode-postgres)
-  - [Node.js](#nodejspostgresjs)
-  - [Node.js](#javajdbc)
+  - [Python/psycopg2](#pythonpsycopg2)
+  - [Python/Django](#pythondjango)
+  - [Python/asyncpg](#pythonasyncpg)
+  - [Node.js/node-postgres](#nodejsnode-postgres)
+  - [Node.js/Postgres.js](#nodejspostgresjs)
+  - [Node.js/Prisma](#nodejspostgresjs)
+  - [Go/pq](#gopq)
+  - [Go/pgx](#gopgx)
+  - [PHP/pgsql](#phppgsql)
+  - [Java/JDBC](#javajdbc)
+  - [C#/.NET/Npgsql](#cnetnpgsql)
+  - [Rust/rust-postgres](#rustrust-postgres)
   - [psql](#psql)
 
 ## Generic configuration settings
@@ -85,6 +92,17 @@ DATABASES = {
 }
 ```
 
+### Python/asyncpg
+
+[asyncpg](https://github.com/MagicStack/asyncpg) supports `sslmode=verify-full` but doesn't support yet `sslrootcert=system` option. To ensure SSL / TLS is enforced and server certificate is valid, edit your connection parameters to set `sslmode=verify-full`, download the [Let's Encrypt ISRG Root X1 (pem format)](https://letsencrypt.org/certs/isrgrootx1.pem), rename it `root.crt`, and store it in `~/.postgresql/root.crt`:  
+    ```python
+    conn = await asyncpg.connect("postgresql://{username}:{password}@{host}:{port}/{databasename}?sslmode=verify-full")
+    ```
+     Alternatively, you can also add the property "sslrootcert=full/path/to/certificate/isrgrootx1.pem" to specify the full path to the certificate without renaming it `root.crt`:  
+    ```python
+    conn = await asyncpg.connect("postgresql://{username}:{password}@{host}:{port}/{databasename}?sslmode=verify-full&sslrootcert=full/path/to/certificate/isrgrootx1.pem")
+    ```
+
 ### Node.js/node-postgres
 
 [node-postgres](https://node-postgres.com/) doesn't support `sslmode=verify-full` and `sslrootcert=system`, but either the default connection string option `sslmode=require` or the driver-specific parameter `ssl:true` option checks for certificate validity.
@@ -130,6 +148,29 @@ To ensure SSL/TLS is enforced and the server certificate is valid, add these two
 DATABASE_URL=postgresql://{username}:{password}@{host}:{port}/{databasename}?sslmode=require&sslaccept=strict
 ```
 
+### Go/pq
+
+[pq](https://github.com/lib/pq) supports `sslmode=verify-full` option but not `sslrootcert=system`. However, when using `sslmode=verify-full`, checks will also be made againt default Certification Authority certificates trusted by your Operating System as if `sslrootcert=system` parameter was set. To ensure SSL / TLS is enforced and server certificate is valid, edit your connection parameters to set `sslmode=verify-full` parameter:  
+    ```go
+    connString := "postgresql://{username}:{password}@{host}:{port}/{databasename}?sslmode=verify-full"
+    conn, err := pgx.Connect(context.Background(), connString)
+    ```
+
+### Go/pgx
+
+[pgx](https://github.com/jackc/pgx) supports `sslmode=verify-full` option but not `sslrootcert=system`. However, when using `sslmode=verify-full`, checks will also be made againt default Certification Authority certificates trusted by your Operating System as if `sslrootcert=system` parameter was set. To ensure SSL / TLS is enforced and server certificate is valid, edit your connection parameters to set `sslmode=verify-full` parameter:  
+    ```go
+    connString := "postgresql://{username}:{password}@{host}:{port}/{databasename}?sslmode=verify-full"
+    db, err := sql.Open("postgres", connString)
+    ```
+
+### PHP/pgsql
+
+As the default PostgreSQL driver bundled with PHP, [pgsql](https://www.php.net/manual/en/book.pgsql.php) uses [libpq](https://www.postgresql.org/docs/current/libpq.html), the same official PostgreSQL parameter can be used. Edit your connecton parameters to add `sslmode=verify-full` and `sslrootcert=system` parameters:  
+    ```php
+    $dbconn = pg_connect("host={host} port={port} dbname={databasename} user={username} password={password} sslmode=verify-full sslrootcert=system")
+    ```
+
 ### Java/JDBC
 
 JDBC driver does not support the `sslrootcert=system` option, but supports the `ssl=true` option which, when enabled, performs certificate checks by default against the certificate named `root.crt` stored in `~/.postgresql`.
@@ -156,6 +197,42 @@ Alternatively, you can add the property `"sslrootcert=full/path/to/certificate/i
   props.setProperty("sslrootcert", "full/path/to/certificate/isrgrootx1.pem");
   Connection conn = DriverManager.getConnection(url,props);
   ```
+
+### C#/.NET/Npgsql
+
+[Npgsql](https://www.npgsql.org/) supports `sslmode=verify-full` option but not `sslrootcert=system`. However, when using `sslmode=verify-full`, checks will also be made againt default Certification Authority certificates trusted by your Operating System as if `sslrootcert=system` parameter was set. To ensure SSL / TLS is enforced and server certificate is valid, edit your connection parameters to set `sslmode=verify-full` parameter:  
+    ```cs
+    var connString = "Host={host};Username={username};Password={password};Database={databasename};Port=5432;SSL Mode=VerifyFull;";
+    var dataSourceBuilder = new NpgsqlDataSourceBuilder(connString);
+    ```
+
+### Rust
+
+[rust-postgresql](https://github.com/sfackler/rust-postgres) doesn't support `sslmode=verify-full` and `sslrootcert=system`.  However, when using `sslmode=require`, you can also pass a `TlsConnector` object to performed certificate verification and when using the standard [rust-openssl](https://github.com/sfackler/rust-openssl) library, checks will also be made against default Certification Authority certificates trusted by your Operating System as if `sslrootcert=system` parameter was set. To ensure SSL / TLS is enforced and server certificate is valid, edit your connection parameters to set `sslmode=require`:    
+    ```rust
+    use postgres::{Client};
+    use openssl::ssl::{SslConnector, SslMethod};
+    use postgres_openssl::{MakeTlsConnector};
+
+    fn main() {
+      let builder = SslConnector::builder(SslMethod::tls()).expect("unable to create sslconnector builder");
+      let connector = MakeTlsConnector::new(builder.build());
+      let mut client = Client::connect("postgresql://{username}:{password}@{host}:{port}/{databasename}?sslmode=require", connector).expect("Connection failed");
+    }
+    ```
+    Alternatively, you can also download the [Let's Encrypt ISRG Root X1 (pem format)](https://letsencrypt.org/certs/isrgrootx1.pem), store it in `~/.postgresql/isrgrootx1.pem` and specify the certificate directly using:   
+    ```rust
+    use postgres::{Client};
+    use openssl::ssl::{SslConnector, SslMethod};
+    use postgres_openssl::{MakeTlsConnector};
+
+    fn main() {
+      let mut builder = SslConnector::builder(SslMethod::tls()).expect("unable to create sslconnector builder");
+      builder.set_ca_file("full/path/to/certificate/isrgrootx1.pem").expect("unable to locate certificate file");
+      let connector = MakeTlsConnector::new(builder.build());
+      let mut client = Client::connect("postgresql://{username}:{password}@{host}:{port}/{databasename}?sslmode=require", connector).expect("Connection failed");
+    }
+    ```
 
 ## Examples for SQL Client tools
 

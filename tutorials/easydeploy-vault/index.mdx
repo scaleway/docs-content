@@ -1,36 +1,184 @@
 ---
 meta:
-  title: Deploy Vault on Scaleway Kubernetes clusters using the Easy Deploy feature
-  description: Discover how to use the Docker InstantApp on your Scaleway Instance. Unlock the power of containerization with Docker, and follow our step-by-step instructions for deployment and management of your applications.
+  title: Deploy HashiCorp Vault on Scaleway Kubernetes clusters using Easy Deploy
+  description: Learn how to securely deploy and manage HashiCorp Vault on Scaleway Kubernetes clusters using the Easy Deploy feature. Follow our comprehensive guide for step-by-step instructions.
 content:
-  h1: Deploy Vault on Scaleway Kubernetes clusters using the Easy Deploy feature
-  paragraph: Discover how to use the Docker InstantApp on your Scaleway Instance. Unlock the power of containerization with Docker, and follow our step-by-step instructions for deployment and management of your applications.
-tags: gaming Docker InstantApp
+  h1: Deploy HashiCorp Vault on Scaleway Kubernetes clusters using Easy Deploy
+  paragraph: Learn how to securely deploy and manage HashiCorp Vault on Scaleway Kubernetes clusters using the Easy Deploy feature. Follow our comprehensive guide for step-by-step instructions.
+tags: hashicorp vault kubernetes k8s easy deploy
 categories:
   - instances
 dates:
-  validation: 2024-06-11
-  posted: 2024-06-11
+  validation: 2024-06-13
+  posted: 2024-06-13
 ---
 
-HashiCorp Vault is an identity-based secrets and encryption management system. It provides encryption services that are gated by authentication and authorization methods to ensure secure, auditable and restricted access to secrets. It is used to secure, store and protect secrets and other sensitive data using a UI, CLI, or HTTP API.
+HashiCorp Vault is an identity-based secrets and encryption management system.
+It provides encryption services that are gated by authentication and authorization methods to ensure secure, auditable and restricted access to secrets.
+Vault is used to secure, store and protect secrets and other sensitive data using a UI, CLI, or HTTP API.
 
-
+<Macro id="requirements" />
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - A valid [API key](/identity-and-access-management/iam/how-to/create-api-keys/)
 - Created a Scaleway Kubernetes [Kapsule](/containers/kubernetes/how-to/create-cluster/) or [Kosmos](/containers/kubernetes/how-to/create-kosmos-cluster/) cluster
 
-1. Click **Kubernetes** in the **Containers** section of the [Scaleway console](https://console.scaleway.com) side menu. The Kubernetes Kapsule dashboard displays.
-2. Click the name of the cluster you wish to deploy your image on. The **Cluster information** tab displays.
-3. Click the **Easy Deploy** tab.
-4. Click **Deploy application**. The application deployment wizard displays.
-5. Select **Application library** to view a list of the available applications.
-6. Select the **Vault** application.
-    <Message type="tip">
-        If you can not see the application on the first page of the library you can either type its name into the search bar to search for it or navigate through the library by using the arrow buttons.
-    </Message>
-7. Optionally, edit the default configuration for your application to customize it towards your needs. Easy Deploy uses [Helm Charts](/tutorials/kubernetes-package-management-helm/) to specify the application configuration. 
-8. Enter a name and the Kubernetes namespace for your application. If no name is entered the application will be installed in the default namespace of the cluster.
-9. Click **Deploy application** to deploy the application on your Kubernetes cluster.
+## Deploying the Vault application using Easy Deploy
 
+1. In the [Scaleway console](https://console.scaleway.com/), navigate to the **Kubernetes** section under **Containers**.
+2. Click the name of the cluster where you wish to deploy Grafana. The **Cluster Information** tab will display.
+3. Click the **Easy Deploy** tab. The application dashboard displays.
+4. Click **Deploy Application**. The application deployment wizard displays.
+5. Choose **Application Library** to see the list of available applications.
+6. Select the **Grafana** application.
+    <Message type="tip">
+        If you cannot find Grafana on the first page, use the search bar or navigate through the library using the arrow buttons.
+    </Message>
+7. Optionally, customize the default configuration for Grafana using [Helm Charts](/tutorials/kubernetes-package-management-helm/). If you do not require any customized configuration you can skip this
+8. Enter a name and a Kubernetes namespace for your application. If no name is entered, Grafana will be installed in the default namespace of the cluster.
+9. Click **Deploy Application** to deploy Grafana on your Kubernetes cluster.
+
+Sure, I can provide a step-by-step tutorial on how to use HashiCorp Vault on Kubernetes in a private network for storing secret information. Here's an outline of what we'll cover:
+
+1. **Set Up Kubernetes Cluster**: Ensure you have a Kubernetes cluster running in a private network.
+2. **Install Helm**: Helm is a package manager for Kubernetes.
+3. **Install Vault using Helm**: Use Helm to install Vault on your Kubernetes cluster.
+4. **Initialize and Unseal Vault**: Initialize and unseal the Vault to make it ready for use.
+5. **Configure Vault for Kubernetes Authentication**: Set up Vault to use Kubernetes service accounts for authentication.
+6. **Store and Retrieve Secrets**: Create a simple application to store and retrieve secrets from Vault.
+
+## Initializing and unsealing Vault
+
+1. Check the status of your Vault using the `kubectl` command.
+    ```sh
+    kubectl get pods -l app.kubernetes.io/name=vault
+    ```
+    <Message type="tip">
+      If you choose anothter name for your Vault application ensure to replace the application name with the corresponding value.
+    </Message>
+
+2. Initialize Vault:
+    ```sh
+    kubectl exec -it vault-0 -- vault operator init
+    ```
+    <Message type="important">
+      Save the unseal keys and the initial root token provided by the command.
+    </Message>
+
+2. Unseal Vault using three unseal keys retrieved in the previous step:
+    ```sh
+    kubectl exec -it vault-0 -- vault operator unseal <unseal-key-1>
+    kubectl exec -it vault-0 -- vault operator unseal <unseal-key-2>
+    kubectl exec -it vault-0 -- vault operator unseal <unseal-key-3>
+    ```
+
+3. Login to Vault using the initial root token generated in step two:
+    ```sh
+    kubectl exec -it vault-0 -- vault login <initial-root-token>
+    ```
+
+4. Enable the the KV secrets engine at `secret/`:
+    ```sh
+    kubectl exec -it vault-0 -- vault secrets enable -path=secret kv-v2
+    ```
+
+## Configure Vault for Kubernetes authentication
+
+1. Enable Kubernetes authentication:
+    ```sh
+    kubectl exec -it vault-0 -- vault auth enable kubernetes
+    ```
+
+2. Configure Vault with the Kubernetes API:
+    ```sh
+    kubectl exec -it vault-0 -- sh
+    vault write auth/kubernetes/config \
+        kubernetes_host="https://<KUBERNETES_PORT_443_TCP_ADDR>:443" \
+        token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+        kubernetes_ca_cert="$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)"
+    exit
+    ```
+    Replace `<KUBERNETES_PORT_443_TCP_ADDR>` with the IP address of your Vault pod. You can retrieve it using the `kubectl get svc` command.
+
+3. Create a policy:
+    ```sh
+    kubectl exec -it vault-0 -- sh
+    vault policy write myapp-kv-ro -<<EOF
+    path "secret/data/myapp/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+    EOF
+    exit
+    ```
+
+4. Create a role:
+    ```sh
+    kubectl exec -it vault-0 -- sh
+    vault write auth/kubernetes/role/myapp \
+        bound_service_account_names=myapp-sa \
+        bound_service_account_namespaces=default \
+        policies=myapp-kv-ro \
+        ttl=24h
+    exit
+    ```
+
+## Storing and retrieving secrets
+
+1. Store a secret in Vault:
+    ```sh
+    kubectl exec -it vault-0 -- sh
+    vault kv put secret/myapp/config username='myuser' password='mypassword'
+    exit
+    ```
+
+2. Deploy an application with a service account that has access to the secrets stored in Vault.
+
+    * Create Service Account:
+        ```sh
+        kubectl create serviceaccount myapp-sa
+        ```
+
+    * Deploy Your Application:
+        ```yaml
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: myapp
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: myapp
+          template:
+            metadata:
+              labels:
+                app: myapp
+            spec:
+              serviceAccountName: myapp-sa
+              containers:
+              - name: myapp
+                image: your-application-image
+                env:
+                - name: VAULT_ADDR
+                  value: "http://vault.default.svc.cluster.local:8200"
+                - name: VAULT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: myapp-sa-token
+                      key: token
+        ```
+
+3. Use a Vault client to retrieve the secrets within your application:
+    ```python
+    import hvac
+
+    client = hvac.Client(url='http://vault.default.svc.cluster.local:8200')
+    client.token = os.getenv('VAULT_TOKEN')
+
+    secret = client.secrets.kv.v2.read_secret_version(path='myapp/config')
+    username = secret['data']['data']['username']
+    password = secret['data']['data']['password']
+    ```
+
+By following these steps, you have been able to set up Vault on Kubernetes in a Private Network, store secret information, and securely retrieve it in your applications.
+For more information, refer to the official [Vault documentation](https://developer.hashicorp.com/vault/docs)

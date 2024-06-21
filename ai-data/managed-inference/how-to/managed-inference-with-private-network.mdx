@@ -1,0 +1,149 @@
+---
+meta:
+  title: How to use your Managed Inference deployment with a Private Network
+  description: This page explains how to monitor a Managed Inference deployment
+content:
+  h1: How to use your Managed Inference deployment with a Private Network
+  paragraph: This page explains how to monitor a Managed Inference deployment
+tags: managed-inference ai-data private-network
+dates:
+  validation: 2024-06-18
+  posted: 2024-06-18
+categories:
+  - ai-data
+---
+
+In this tutorial, we will guide you through the process of attaching a Private Network to your Managed Inference deployment. 
+This can be done during the initial setup or added later to an existing deployment.
+Using a Private Network for communications between your Instances hosting your applications and the Managed Inference deployment ensures secure communication between resources with low latency.
+
+
+<Macro id="requirements" />
+
+  - A Scaleway account logged into the [console](https://console.scaleway.com)
+  - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+ - An [SSH key](/identity-and-access-management/organizations-and-projects/how-to/create-ssh-key/)
+  - A [Managed Inference deployment](/ai-data/managed-inference/quickstart/)
+
+
+## How to attach a Private Network to a Managed Inference deployment
+
+### Attaching a Private Network during deployment setup
+
+1. Click **Managed Inference** in the **AI & Data** section of the [Scaleway console](https://console.scaleway.com) side menu. A list of your deployments displays.
+2. Navigate to the **Deployments** section and click **Create New Deployment**. The setup wizard displays.
+3. During the [setup process](/ai-data/managed-inference/how-to/create-deployment), you access the **Networking** section.
+4. You will be asked to **attach a Private Network**. Two options are available:
+    - **Attach an existing Private Network**: Select from the list of available networks.
+    - **Add a new Private Network**: Choose this option if you need to create a new network.
+5. **Confirm your selection** and complete the deployment setup process.
+
+### Attaching a Private Network to an existing deployment
+
+1. Click **Managed Inference** in the **AI & Data** section of the [Scaleway console](https://console.scaleway.com) side menu. A list of your deployments displays.
+2. Click a deployment name or <Icon name="more" /> > **More info** to access the deployment dashboard.
+3. Go to the **Overview** tab and locate the **Endpoints** section.
+4. Click **Attach Private Network**. Two options are available:
+    - **Attach an existing Private Network**: Select from the list of available networks.
+    - **Add a new Private Network**: Choose this option if you need to create a new network.
+    <Message type="tip">
+      Alternatively, you can access the **Security tab** and attach a network from the **Private Network** section.
+    </Message>
+5. **Save your changes** to apply the new network configuration.
+
+### Verifying the Private Network connection
+
+1. After attaching a Private Network, go to the **Security** tab.
+2. You should see the **Private Network** connected to the deployment resource and its **allocated IPs** listed.
+    <Lightbox src="scaleway-inference-pn-connected.webp" alt="A screenshot of the Scaleway console, hightlighting the Private Network configuration of the Managed Inference deployment" size="medium" />
+
+## How to send inference requests in a Private Network
+
+1. [Create an Instance](/compute/instances/how-to/create-an-instance/) which will host the inference application. 
+    <Message type="important">
+      Ensure the Instance [is attached to the same Private Network](/compute/instances/how-to/use-private-networks/) as your Managed Inference deployment.
+    </Message>
+2. Download the TLS certificate from your Managed Inference deployment, available from the **Overview** tab in the **Endpoints** section.
+    <Lightbox src="scaleway-inference-tls-dl.webp" alt="A screenshot of the Managed Interface product overview tab in the Scaleway console, highlighting the TLS certificate download section" size="medium" />
+3. Transfer the TLS certificate to the Instance using the `scp` (secure copy) command to securely transfer the certificate from your local machine to the Scaleway Instance.
+   - Example command:
+     ```bash
+     scp -i ~/.ssh/id_rsa /home/user/certs/cert_file.pem root@51.115.xxx.yyy:/root
+     ```
+   - Replace placeholders in the command above as follows:
+     - `-i ~/.ssh/id_rsa`: Path to your private SSH key.
+     - `/home/user/certs/cert_file.pem`: Path to the certificate file.
+     - `root`: Your Scaleway Instance username (`root` for default configuration).
+     - `51.115.xxx.yyy`: Public IP address of your Scaleway Instance.
+     - `/root`: Destination directory on the Scaleway Instance.
+    <Message type="note">
+      Ensure the destination directory exists and you have write permissions. Create the directory if necessary.
+    </Message>
+4. Connect to your Instance [using SSH](/compute/instances/how-to/connect-to-instance/).
+5. Open a text editor and create a file named `inference.py` using the following command:
+     ```bash
+     nano inference.py
+     ```
+6. Paste the following Python code sample into your `inference.py` file:
+    <Message type="tip">
+    This script takes an example of a conversational task with a request sent to an [LLM through the Chat Completions API](/ai-data/managed-inference/reference-content/openai-compatibility/#chat-completions-api).
+    </Message>
+    ```py
+    import requests
+
+    PAYLOAD = {
+        "model": "<MODEL_DEPLOYED>", # EXAMPLE= meta/llama-3-8b-instruct:bf16
+        "messages": [
+            {"role": "system",
+            "content": "You are a helpful, respectful and honest assistant."},
+            {"role": "user",
+            "content": "How can I use large language models to improve customer service?"}
+        ],
+        "max_tokens": 500,
+        "temperature": 0.7,
+        "stream": False
+    }
+
+    headers = {"Authorization": "Bearer " + "<SCW_SECRET_KEY>"} # ADD IAM KEY IF NECESSARY
+
+    response = requests.post("<PRIVATE_ENDPOINT_URL>/v1/chat/completions",
+                            headers=headers, json=PAYLOAD, stream=False, verify='<CERT_NAME>.pem')
+
+    if response.status_code == requests.codes.ok:
+        # EXTRACT RESPONSE DATA
+        data = response.json()
+        content = data['choices'][0]['message']['content']
+        print(content)
+    else:
+        print("Error occurred:", response.text)
+    ```
+   Edit the script as follows:
+     - **PAYLOAD**: Update the model name and inference parameters.
+     - **headers**: Add your IAM secret key if IAM authentication is enabled.
+     - **response**: Update with your private endpoint URL and certificate file path.
+
+7. Save your changes using `CONTROL+O`, then exit with `CONTROL+X`.
+8. Make your script executable using the following command:
+     ```bash
+     chmod +x inference.py
+     ```
+
+9. Run the script:
+     ```bash
+     python3 inference.py
+     ```
+
+## Detaching a Private Network from a Managed Inference deployment
+
+1. Click **Managed Inference** in the **AI & Data** section of the [Scaleway console](https://console.scaleway.com) side menu. A list of your deployments displays.
+2. Click a deployment name or <Icon name="more" /> > **More info** to access the deployment dashboard.
+3. Go to the **Overview** tab and locate the **Endpoints** section.
+4. Click **Detach Private Network**. A pop-up displays.
+    <Lightbox src="scaleway-inference-pn-detach.webp" alt="A screenshot of the Managed Interface product overview tab in the Scaleway console, highlighting the Private Network detach section" size="medium" />
+5. Click **Detach Private Network** to confirm removal of the private endpoint for your deployment.
+    <Message type="tip">
+      Alternatively, you can access the **Security** tab and detach a network from the **Private Network** section.
+    </Message>
+    <Message type="important">
+      Managed Inference deployments must have at least one endpoint, either public or private. Consequently, users cannot detach their private endpoint without having a public one.
+    </Message>

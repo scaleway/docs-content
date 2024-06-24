@@ -1,0 +1,308 @@
+---
+meta:
+  title: Import data into Serverless SQL Databases
+  description: This page explains how to import your data into Serverless SQL Databases from another database or backup files
+content:
+  h1: Import Data into Serverless SQL Database
+  paragraph: This page explains how to import your data into Serverless SQL Databases from another database or backup files
+dates:
+  validation: 2024-06-24
+  posted: 2024-06-24
+---
+
+Serverless SQL Databases offers near-complete PostgreSQL compatibility, and allows you to import your data from any PostgreSQL-compatible database.
+
+The import procedure depends on your data source:
+  - [Import data from an existing PostgreSQL database](#import-data-from-an-existing-postgresql-database)
+    - [Using pg_dump](#using-pgdump)
+    - [Using pgAdmin](#using-pgadmin)
+    - [Using Airbyte](#using-airbyte)
+    - [Using Fivetran](#using-fivetran)
+    - [Using Meltano](#using-meltano)
+    - [Using Apache NiFi](#using-apache-nifi)
+  - [Import Data from a PostgreSQL backup file](#import-data-from-a-postgresql-backup)
+  - [Import Data from a file (.csv, .txt, etc.)](#import-data-from-a-file-csv-txt)
+
+## Importing data from an existing PostgreSQL database
+
+### Using pg_dump
+
+#### Before you start
+
+To complete the actions presented below, you must have:
+
+- Installed PostgreSQL 16 (or newer) with [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) and [pg_restore](https://www.postgresql.org/docs/current/app-pgrestore.html) (bundled with the default PostgreSQL installation).
+
+- [Created a target Serverless SQL Database](/serverless/sql-databases/how-to/create-a-database) to import your data into.
+
+- Checked that the target database your are importing into is empty, or contains data you can overwrite.
+
+<Message type="note">
+This method is suited for database size below ~100 GB. Above this size, you might require to use dedicated tooling to perform the operation as your local storage size and bandwidth will be a botteneck and the operation might last a few hours.
+</Message>
+
+#### Downloading and importing data into a Serverless SQL Database
+
+1. Run the following command to download a local export of your database with `pg_dump`, then enter your password when prompted:
+
+    ```
+    pg_dump --no-privileges --no-owner -U {username} -h {host} --port {port} -Fc {databasename} > my-backup
+    ```
+
+    <Message type="tip">
+    You can download specific tables using the `-t` option:
+
+      ```
+      pg_dump -t table1name -t table2name --no-privileges --no-owner -U {username} -h {host} --port {port} -Fc {databasename} > my-backup
+      ```
+    </Message>
+
+2. When finished, make sure the backup was downloaded on your local machine. The default location is in the current directory, under `/my-backup`.
+
+3. Run the command below to import data into your Serverless SQL Database using `pg_restore`. Make sure to replace the placeholders with your Serverless SQL Database connection parameters:
+
+    ```
+    pg_restore --no-privileges --no-owner --clean --if-exists -U {username} -h {host} --port 5432 -d {databasename} my-backup
+    ```
+
+4. Enter the database password when prompted. 
+
+    <Message type="note">    
+    The password is the [IAM secret Key](/identity-and-access-management/iam/concepts/#api-key) corresponding to the [IAM user](/identity-and-access-management/iam/concepts/#user) or [IAM application](/identity-and-access-management/iam/concepts/#application) you are connecting with.
+    </Message>
+
+5. When finished, make sure your data is stored in your new database by [connecting to it](/serverless/sql-databases/how-to/connect-to-a-database/), and performing a query.
+
+### Using pgAdmin
+
+#### Before you start
+
+To complete the actions presented below, you must:
+
+- Ensure your PGAdmin version is compatible with the PostgreSQL version of the database you will import your data into. Currently, pgAdmin 7.8 or newer is required to fully work with PostgreSQL 16.
+
+- Ensure the database your are importing to is empty, or that you accept to overwrite existing data stored inside your database
+
+<Message type="note">
+This method is suited for database size below ~100 GB. Above this size, you might require to use dedicated tooling to perform the operation as your local storage size and bandwidth will be a botteneck and the operation might last a few hours.
+</Message>
+
+
+#### Download your backup on your local machine
+1. Open pgAdmin
+2. Connect to your existing database server and select it on the left menu (Left-click) to connect to it.
+3. Expand the "Databases" submenu, and select the database you want to export (Left-click) to connect to it.
+4. In the left menu, right-click on the database you want to export, and select **Backup**.
+5. Fill the filename - for instance "my-backup" and keep default format and compression options (ie. Custom Format)
+6. Click on **Backup**. The backup creation process will start, and you can follow its progress by Clicking on **View processes**.
+7. When the process is finished, you can check your backup is downloaded on your local machine by locating the corresponding file. The default location is `Users/{username}/my-backup` on MacOS.
+
+#### Load your data in your Serverless SQL Database
+1. Register your new database in pgAdmin. You can find more information to connect in [How to connect to a Serverless SQL Database](https://www.scaleway.com/en/docs/serverless/sql-databases/how-to/connect-to-a-database/#how-to-set-up-credentials).
+2. Select the database server on the left menu (Left-click) to connect to it.
+3. Expand the "Databases" submenu, and select your database.
+4. In the left menu, right-click on your new database name, and select **Restore**.
+5. Fill in the filename of your backup - for instance "my-backup" in this example, and keep default options.
+6. Click on the **Data options** tab, and activate the **Do not save - Owner** and **Do not save - Privileges** option.
+7. Optional - If your new database is not empty, click on the **Query Options** tab, and activate the **Clean before restore** option. This option will make sure your database is emptied before loading data to avoid potential conflicts with existing data (such as table names or primary key constraints).
+8. Click on **Restore**. The restore process will start, and you can follow its progress by Clicking on **View processes**.
+9. When the process is finished, you can check your data is now stored in your new database by connecting to it and performing a query.
+
+If the process fails and some data were partly already transfered, we suggest you activate the **Clean before restore** option in the **Data options** tab to remove partly transfered data.
+
+**(Doesn't work currently for Serverless SQL Database, only for Managed Database)**
+### Using Airbyte
+
+Requirements: 
+- You have access to [Airbyte Cloud](https://cloud.airbyte.com/) or have [Airbyte installed](https://docs.airbyte.com/deploying-airbyte/quickstart) on your machine.
+- On Managed Database for PostgreSQL, to avoid any statement timeout errors (eg. `ERROR: canceling statement due to statement timeout`), we recommend you setup the PostgreSQL parameter `statement_timeout` to `1200000` (20 minutes) as recommended by Airbyte for other PostgreSQL-compatible data sources. You can modify this parameter in your [database overview in Scaleway Console](https://console.scaleway.com/rdb/instances), by clicking on **More** and then **Advanced Settings**.
+
+
+#### Add your existing database as source
+
+1. Click on **Sources**
+2. Select **Postgres**
+3. Fill in the required information to connect to your existing database:
+  - Host, Port, Database Name, Username, Password
+  - Security options SSL Modes and SSH Tunnel Method
+  - Select **Detect Changes with Xmin System Column** as **Update Method** (other methods are not yet supported)
+4. Click on **Set up source**
+
+#### Add your new Serverless SQL Database as destination
+1. Click on **Create a connection**
+2. Select **Postgres**
+3. Fill in the required information to connect to your existing database:
+  - Host, Port, Database Name, Username, Password
+  - Security options SSL Modes and SSH Tunnel Method
+  - Select **Detect Changes with Xmin System Column** as **Update Method** (other methods are not yet supported)
+4. Click on **Set up destination**
+5. Select the streams (tables) you want to load in your new Serverless SQL Database and click on **Next**
+6. Change remaining options if required and click on **Finish & Sync**
+7. When the process is finished, you can check your data is now stored in your new database by connecting to it and performing a query.
+
+
+**(Doesn't work currently for Serverless SQL Database, only for Managed Database)**
+### Using Fivetran
+
+Requirements: 
+- You have a Fivetran account and can connect to [Fivetran console](https://fivetran.com/dashboard)
+
+#### Connect Fivetran to your Serverless SQL Database
+1. From [Fivetran destinations list](https://fivetran.com/dashboard/destinations), click on **Add destination**
+2. Enter the destination name (for instance `my-new-database`) and click **Add**
+3. Select PostgreSQL and click on **Select**
+4. Fill in the required information to connect to your Serverless SQL Database: 
+  - Host, Port, User, Password, Database. You can find these information in the [Scaleway Console Overview page](https://console.scaleway.com/serverless-db/databases) for your database. The password is the [IAM Secret Key](https://www.scaleway.com/en/docs/identity-and-access-management/iam/concepts/#api-key) corresponding to the [IAM user](https://www.scaleway.com/en/docs/identity-and-access-management/iam/concepts/#user) or [IAM application](https://www.scaleway.com/en/docs/identity-and-access-management/iam/concepts/#application) you are connecting with. 
+  - Select **Connect directly** as **Connection method**
+  - Select **Detect Changes via XMIN** as **Update Method** (other methods are not yet supported)
+  - If you have setup IP adress access restrictions from your IAM policies, copy the adresses from Fivetran IPs and edit your IAM policies to whitelist them.
+5. Click on **Save & Continue**
+6. Select the certificate in the list corresponding to `CN=sdb.{region}.scw.cloud`, check its validity and confirm it by clicking on **Confirm**. You can ensure the certificate is fully valid only if all of following checks are true:
+  - Origin is Let's Encrypt
+  - CN field is `sdb.{region}.scw.cloud`
+  - complete certificate value is the same as the one hosted on `sdb.{region}.scw.cloud`
+  - root certificate is the same as [Let's Encrypt ISRG X1 Root certificate](https://letsencrypt.org/certs/isrgrootx1.pem)
+
+#### Connect Fivetran to your existing database
+1. From [Fivetran connectors list](https://fivetran.com/dashboard/connectors), click on **Add connector**
+2. Select your destination (for instance `my-new-database`) and click on **Select**
+3. Select PostgreSQL and click on **Set up**
+4. Fill in the required information to connect to your existing database: 
+  - Schema, Host, Port, User, Password, Database and Connection method.
+  - Select **Detect Changes via XMIN** as **Update Method** (other methods are not yet supported)
+  - Copy the adresses from Fivetran IPs to whitelist in your firewall if required
+5. Click on **Save & Continue**
+6. When the database schemas and tables displays, select the one you want to import, then click on **Save & Continue**
+7. Select your prefered way of synchronizing future schemas changes and then click on **Save & Continue**.
+8. Click on **Start Initial Sync**
+9. When the process is finished, you can check your data is now stored in your new database by connecting to it and performing a query.
+
+**(Doesn't work currently for Serverless SQL Database, only for Managed Database)**
+### Using Meltano
+
+Requirements: 
+- You have installed [Meltano](https://docs.meltano.com/getting-started/installation/)
+
+#### Initialize your Meltano project
+
+1. Initialize a Meltano project, for instance named `migrate-postgresql`:
+    ```sh
+    meltano init migrate-postgresql
+    ```
+2. Go into the newly created directory:
+   ```sh
+    cd migrate-postgresql
+   ```
+3. Add a PostgreSQL-compatible extractor and loader:
+   ```sh
+   meltano add extractor tap-postgres
+   meltano add loader target-postgres
+   ```
+
+#### Configure extractor to connect to your existing database
+
+1. Fill in the information required to connect to your existing database:
+   ```sh
+   meltano config tap-postgres set --interactive
+   ```
+   `database`, `host`, `password`, `port` and `user` fields are mandatory
+2. Select the tables you want to load:
+   ```sh
+   meltano select tap-postgres {schema-name}-{table1name}
+   meltano select tap-postgres {schema-name}-{table2name}
+   ...
+   ```
+   for instance `meltano select tap-postgres public-cities` if you are importing the table `cities` from the schema `public`.
+   You can check the selected tables and columns with `meltano select tap-postgres --list --all`.
+
+<Message type="tip">
+  Tools like Meltano are more suited to load data only and without keeping constraints on columns types or relations. If you want to load all PostgreSQL objects (such as table constraints, users...), you should use other tools such as [pg_dump/pg_restore](#using-pgdump).
+</Message>
+
+#### Configure loader to connect to your new Serverless SQL Database
+1. Fill in the information required to connect to your new Serverless SQL Database:
+   ```sh
+   meltano config target-postgres set --interactive
+   ```
+   `database`, `host`, `password`, `port` and `user` fields are mandatory
+
+#### Execute data import and loading
+1. Execute data import and loading with:
+   ```sh
+   meltano run tap-postgres target-postgres
+   ```
+2. When the process is finished, you can check your data is now stored in your new database by connecting to it and performing a query. By default, with the `tap-postgres` extractor, data will be loaded in the `tap_postgres` schema and not the `public` schema. Hence you can find your loaded tables with a command such as `SELECT * from tap-postgres.{table1name} LIMIT 10;`.
+
+
+**(To be finished to test and document)**
+### Using Apache NiFi
+
+Requirements:
+- You have installed or have access to [Apache Nifi](https://nifi.apache.org/)
+
+#### Configure Processor to connect to your existing database
+1. Drag and drop a **Processor** onto the main interface.
+2. Right click and select **Configure**.
+3. Go to **Properties** tab.
+4. Fill in the required information:
+  - Database Type: Select **PostgreSQL**
+  - Table Name: The name of the table you want to load content from
+  - Database Connection Pooling Service: Click on **Create new service**, select **DBCPConnectionPool**, click on **OK** and click on the arrow to the right to access DBCPConnectionPool configuration
+5. Click on **Configure** icon for DBCPConnectionPool and fill in the required information:
+  - Database Connection URL: Connection string for your database in the form `jdbc:postgresql://{host}:{port}/{databasename}`
+  - Database Driver Class Name: org.postgresql.Driver
+  - Database Driver Location(s): full path to your postgresql compatible driver
+  - Database User and Password: Credentials to login to your database
+  You can check your connection works by clicking on the checkbox icon, and then on **Verify**
+6. Enable your DBCPConnectionPool by clicking on the thunder icon and then **Enable**
+
+
+## Import Data from an existing PostgreSQL backup
+
+### Using pg_restore
+
+Requirements:
+- [pg_restore](https://www.postgresql.org/docs/current/app-pgrestore.html) tool is installed on your local machine (it is bundled with default PostgreSQL installation), with a version compatible with the PostgreSQL version you will import your database to. Currently, pg_restore version above 16 is required to work fully with PostgreSQL 16.
+- Make sure the database your are importing to is empty, for instance by creating a new Serverless SQL Database.
+- This method is suited for database size below ~100 GB. Above this size, you might require to use dedicated tooling to perform the operation as your local storage size and bandwidth will be a botteneck and the operation might last a few hours.
+
+1. Assuming you have a file named `my-backup` in your current directory, use pg_restore to import data to your Serverless SQL Database:
+   ```sh
+    pg_restore --no-privileges --no-owner --clean --if-exists -U {username} -h {host} --port 5432 -d {databasename} my-backup
+   ```
+   where `username`, `host` and `databasename` are your Serverless SQL Database connection parameters. You can find them in the [Scaleway Console Overview page](https://console.scaleway.com/serverless-db/databases) for your database.
+   Provide your database password when prompted for it. The password is the [IAM Secret Key](https://www.scaleway.com/en/docs/identity-and-access-management/iam/concepts/#api-key) corresponding to the [IAM user](https://www.scaleway.com/en/docs/identity-and-access-management/iam/concepts/#user) or [IAM application](https://www.scaleway.com/en/docs/identity-and-access-management/iam/concepts/#application) you are connecting with. 
+2. When the process is finished, you can check your data is now stored in your new database by connecting to it and performing a query.
+
+## Import Data from a file (.csv, .txt...)
+
+### Using psql
+
+Requirements:
+- [psql](https://www.postgresql.org/docs/current/app-psql.html) tool is installed on your local machine (it is bundled with default PostgreSQL installation), with a version compatible with the PostgreSQL version you will import your database to. Currently, psql version above 16 is required to work fully with PostgreSQL 16.
+- You have a data file corresponding to a single table in your current directory. For instance a csv file named `my-table.csv`.
+- Make sure the database your are importing to is empty, or that you accept to overwrite existing data stored inside your database
+- This method is suited for file size below ~100 GB. Above this size, you might require to use dedicated tooling to perform the operation as your local storage size and bandwidth will be a botteneck and the operation might last a few hours.
+
+<Message type="tip">
+  You can create a csv file from an existing PostgreSQL table using the same process as below, using `\copy ... TO ...` instead of `\copy ... FROM ...` after connecting to the database using `psql`. In this example, the full command would be `\copy {tablename} TO './my-table.csv' WITH DELIMITER ',' CSV;`.
+</Message>
+
+1. Connect to your Serverless SQL Database using psql:
+    ```sh
+    psql "postgresql://{username}:{password}@{host}:5432/{databasename}?sslmode=require"
+    ```
+    where `username`, `host` and `databasename` are your Serverless SQL Database connection parameters. You can find them in the [Scaleway Console Overview page](https://console.scaleway.com/serverless-db/databases) for your database.
+    and `password` is the [IAM Secret Key](https://www.scaleway.com/en/docs/identity-and-access-management/iam/concepts/#api-key) corresponding to the [IAM user](https://www.scaleway.com/en/docs/identity-and-access-management/iam/concepts/#user) or [IAM application](https://www.scaleway.com/en/docs/identity-and-access-management/iam/concepts/#application) you are connecting with. 
+2. Create the table structure corresponding to your file columns types:
+   ```sql
+   CREATE TABLE {tablename} (column1name type1, column2name type2, ...);
+   ```
+3. Assuming you have a .csv file located on your current directory `./my-table.csv`, load its data to your Serverless SQL Database using [psql \copy command](https://www.postgresql.org/docs/current/app-psql.html#APP-PSQL-META-COMMANDS-COPY):
+    ```sh
+    \copy {tablename} FROM './my-table.csv' WITH DELIMITER ',' CSV;
+    ```
+
+<Message type="tip">
+  The PostgreSQL [command `COPY`](https://www.postgresql.org/docs/current/sql-copy.html) cannot be used directly since it requires the source file to be available on the PostgreSQL instance itself. 
+</Message>

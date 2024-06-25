@@ -10,7 +10,7 @@ categories:
   - domains-and-dns
 tags: hosting ISPconfig Ubuntu Linux
 dates:
-  validation: 2023-12-18
+  validation: 2024-06-25
   posted: 2019-01-25
 ---
 
@@ -28,374 +28,58 @@ ISPConfig is an open-source, transparent, free, stable, and secure administratio
 
 ## Installing ISPConfig
 
-1. [Connect to your Instance](/compute/instances/how-to/connect-to-instance/) via SSH.
+1. [Log into your Instance](/compute/instances/how-to/connect-to-instance/) via SSH using the root account.
 2. Update and upgrade the software already installed on the Instance.
     ```
     apt update && apt upgrade -y
     ```
-3. Change the default shell. `/bin/sh` is a symlink to `/bin/dash`, but ISPConfig requires **bash** as shell. Reconfigure it to `/bin/bash`:
+3. Configure the hostname of your Instance.
+    * Open the `/etc/hosts` file in a text editor and ensure it looks like the following example: `IP address - space - subdomain.domain.tld - space - subdomain`.
+      ```s
+      127.0.0.1 localhost.localdomain   localhost
+      # This line should be changed to the correct servername:
+      127.0.1.1 server1.example.com server1
+
+      # The following lines are desirable for IPv6 capable hosts
+      ::1     localhost ip6-localhost ip6-loopback
+      ff02::1 ip6-allnodes
+      ff02::2 ip6-allrouters
+      ```
+      <Message type="note">
+        Ensure the hostname of your Instance is a subdomain like `server1.example.com`. Do not use a domain name without a subdomain part like `example.com` as hostname, as this will cause issues later with your setup.
+      </Message>
+    * Edit the file `/etc/hostname` and make sure it contains only the subdomain part of the hostname (e.g. `server1`).
+4. Reboot the Instance to apply the hostname configuration.
     ```
-    dpkg-reconfigure dash
+    systemctl reboot
     ```
-4. Answer the following question, with **No**: `Use dash as the default system shell (/bin/sh)?`.
+5. Login again and check the hostname configuration using the following commands:
+    ```
+    hostname
+    hostname -f
+    ```
+    The output of the commands above shall be like this:
+    ```
+    server1
+    server1.example.com
+    ```
     <Message type="important">
-      If you skip this step, the ISPConfig installation will fail.
+      Ensure a corresponding DNS record (A and/or AAAA) for the subdomain exists in your DNS zone and is pointing to the IP of your Instance.
     </Message>
-5. Disable and remove [AppArmor](https://wiki.ubuntu.com/AppArmor) as it might cause conflicts during the installation of ISPConfig:
+6. Download and run the ISPConfig autoinstaller to install the panel with Nginx web server, a port range for passive FTP and unattended upgrades: 
     ```
-    update-rc.d -f apparmor remove
-    apt-get remove apparmor apparmor-utils
+    wget -O - https://get.ispconfig.org | sh -s -- --use-nginx --use-ftp-ports=40110-40210 --unattended-upgrades
     ```
-6. Install [Postfix](/tutorials/setup-postfix-ubuntu-bionic/#configuring-postfix), [Dovecot](/tutorials/setup-postfix-ubuntu-bionic/#configuring-dovecot), [MariaDB](/tutorials/mariadb-ubuntu-bionic), [rkhunter](/tutorials/install-rkhunter), [binutils](https://www.gnu.org/software/binutils/) and other required software on the Instance.
-    ```
-    apt install postfix postfix-mysql postfix-doc mariadb-client mariadb-server openssl getmail4 rkhunter binutils dovecot-imapd dovecot-pop3d dovecot-mysql dovecot-sieve dovecot-lmtpd sudo -y
-    ```
-
-    During the installation, you will be asked some questions regarding the configuration of Postfix, answer them as follows:
-      - `General type of mail configuration:` **Internet Site**
-      - `System mail name:` **server.yourdomain.com** (Your FQDN)
-7. Edit the file `/etc/postfix/master.cf` by uncommenting the line `-o smtpd_client_restrictions=permit_sasl_authenticated,reject` in both, `submission` and `smtps`, sections and leave everything thereafter commented. Make sure to place the whitespaces before each line, as they are required:
-    ```
-    [...]
-    submission inet n       -       -       -       -       smtpd
-      -o syslog_name=postfix/submission
-      -o smtpd_tls_security_level=encrypt
-      -o smtpd_sasl_auth_enable=yes
-      -o smtpd_client_restrictions=permit_sasl_authenticated,reject
-    #  -o smtpd_reject_unlisted_recipient=no
-    #  -o smtpd_client_restrictions=$mua_client_restrictions
-    #  -o smtpd_helo_restrictions=$mua_helo_restrictions
-    #  -o smtpd_sender_restrictions=$mua_sender_restrictions
-    #  -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
-    #  -o milter_macro_daemon_name=ORIGINATING
-    smtps     inet  n       -       -       -       -       smtpd
-      -o syslog_name=postfix/smtps
-      -o smtpd_tls_wrappermode=yes
-      -o smtpd_sasl_auth_enable=yes
-      -o smtpd_client_restrictions=permit_sasl_authenticated,reject
-    #  -o smtpd_reject_unlisted_recipient=no
-    #  -o smtpd_client_restrictions=$mua_client_restrictions
-    #  -o smtpd_helo_restrictions=$mua_helo_restrictions
-    #  -o smtpd_sender_restrictions=$mua_sender_restrictions
-    #  -o smtpd_recipient_restrictions=permit_sasl_authenticated,reject
-    #  -o milter_macro_daemon_name=ORIGINATING
-    [...]
-    ```
-8. Save the file, exit your text editor, and restart postfix.
-    ```
-    service postfix restart
-    ```
-### Configuring MariaDB
-
-1. Open the file `/etc/mysql/mariadb.conf.d/50-server.cnf` in a text editor and comment out the line `bind-address` as follows to enable connections from other hosts. Also add the value `sql-mode="NO_ENGINE_SUBSTITUTION"`, as this SQL mode is required by ISPConfig3:
-    ```
-    [...]
-    # Instead of skip-networking the default is now to listen only on
-    # localhost which is more compatible and is not less secure.
-    #bind-address           = 127.0.0.1
-    # Requred SQL Mode for ISPConfig3
-    sql-mode                ="NO_ENGINE_SUBSTITUTION"
-    [...]
-    ```
-2. Initialize the MariaDB server:
-    ```
-    mysql_secure_installation
-    ```
-
-    You will be asked several questions that should be answered as follows:
-      - `Enter current password for root (enter for none):` _Press Enter_
-      - `Set root password? [Y/n]` _Y_
-      - `New password:` _Enter the new MariaDB root password_
-      - `Re-enter new password:` _Repeat the password_
-      - `Remove anonymous users? [Y/n]` _Y_
-      - `Disallow root login remotely? [Y/n]` _Y_
-      - `Reload privilege tables now? [Y/n]` _Y_
-3. Set the password authentication method to Native.
-    ```
-    echo "update mysql.user set plugin = 'mysql_native_password' where user='root';" | mysql -u root
-    ```
-4. Open the file `/etc/mysql/debian.cnf` and add your password to the configuration.
-    ```
-    # Automatically generated for Debian scripts. DO NOT TOUCH!
-    [client]
-    host = localhost
-    user = root
-    password = MY_SECRET_PASSWORD
-    socket = /var/run/mysqld/mysqld.sock
-    [mysql_upgrade]
-    host = localhost
-    user = root
-    password = MY_SECRET_PASSWORD
-    socket = /var/run/mysqld/mysqld.sock
-    basedir = /usr
-    ```
-
-    Replace `MY_SECRET_PASSWORD` with the password you have set in a previous step.
-5. Save the file, exit your text editor, and restart the MariaDB service:
-    ```
-    service mysql restart
-    ```
-
-### Configuring antivirus
-
-1. Install [Amavisd-new](https://en.wikipedia.org/wiki/Amavis), [SpamAssassin](https://en.wikipedia.org/wiki/Apache_SpamAssassin), [ClamAV](https://en.wikipedia.org/wiki/Clam_AntiVirus) and the additional software required for these services:
-    ```
-    apt install amavisd-new spamassassin clamav clamav-daemon unzip bzip2 arj nomarch lzop cabextract apt-listchanges libnet-ldap-perl libauthen-sasl-perl clamav-docs daemon libio-string-perl libio-socket-ssl-perl libnet-ident-perl zip libnet-dns-perl postgrey -y
-    ```
-2. Stop Amavisd-new from loading the SpamAssassin filter library internally, if you wish to free up some RAM.
-    ```
-    service spamassassin stop
-    update-rc.d -f spamassassin remove
-    ```
-3. Update the antivirus signatures and start the service:
-    ```
-    freshclam
-    service clamav-daemon start
-    ```
-
-### Setting up the web server
-
-1. Install the [Nginx](http://nginx.org/) web server, [fcgiwrap](https://help.ubuntu.com/community/FcgiWrap), [HHVM](https://hhvm.com/) and [PHP7.0](https://secure.php.net/) with its different modules:
-    ```
-    apt install nginx fcgiwrap php7.0 php7.0-common php7.0-fpm php7.0-gd php7.0-mysql php7.0-imap php7.0-cli php7.0-cgi php-pear mcrypt imagemagick libruby php7.0-curl php7.0-intl php7.0-pspell php7.0-recode php7.0-sqlite3 php7.0-tidy php7.0-xmlrpc php7.0-xsl memcached php-memcache php-imagick php-gettext php7.0-zip php7.0-mbstring php-soap php7.0-soap -y
-    ```
-
-    <Message type="important">
-      It is possible to reduce the list of PHP modules if you do not require all of them.
+    <Message type="tip">
+      If you want to install the Apache web server instead of Nginx run the following command instead:
+      ```
+      wget -O - https://get.ispconfig.org | sh -s -- --use-ftp-ports=40110-40210 --unattended-upgrades
+      ```
     </Message>
-2. Open the file **/etc/php/7.0/fpm/php.ini** in a text editor, add the line `cgi.fix_pathinfo=0` and edit your timezone. The file should look like the following example:
+    Once the installation preparation is completed, you see a message as follows. Type `yes` and hit enter to continue the installation.
     ```
-    [...]
-    ; cgi.fix_pathinfo provides *real* PATH_INFO/PATH_TRANSLATED support for CGI.  $
-    ; previous behaviour was to set PATH_TRANSLATED to SCRIPT_FILENAME, and to not $
-    ; what PATH_INFO is.  For more information on PATH_INFO, see the cgi specs.  Se$
-    ; this to 1 will cause PHP CGI to fix its paths to conform to the spec.  A sett$
-    ; of zero causes PHP to behave as before.  Default is 1.  You should fix your s$
-    ; to use SCRIPT_FILENAME rather than PATH_TRANSLATED.
-    ; http://php.net/cgi.fix-pathinfo
-    cgi.fix_pathinfo=0
-    [...]
-    [Date]
-    ; Defines the default timezone used by the date functions
-    ; http://php.net/date.timezone
-    date.timezone ="Europe/Paris"
-    [...]
+    WARNING! This script will reconfigure your complete server!
+    It should be run on a freshly installed server and all current configuration that you have done will most likely be lost!
+    Type 'yes' if you really want to continue:
     ```
-3. Install phpMyAdmin.
-    ```
-    apt install phpmyadmin php-mbstring php-gettext -y
-    ```
-
-    During the installation, you will be asked if you want to configure a web server automatically, skip this step as Nginx is used. When asked if the database should be configured with dbconfig-common, choose yes and press Enter to generate a random password. Alternatively, you can choose your own password when prompted.
-
-    <Message type="important">
-      Once ISPConfig is installed, you can access phpMyAdmin at `http://YOUR_FQDN.TLD:8081/phpmyadmin`.
-    </Message>
-4. Install `certbot` to manage [Let's Encrypt SSL certificates](https://letsencrypt.org/):
-    ```
-    apt install software-properties-common -y
-    add-apt-repository universe
-    add-apt-repository ppa:certbot/certbot
-    apt update
-    apt install certbot -y
-    ```
-
-    Once installed create a Let's Encrypt account by running the following command and answering the questions:
-
-    ```
-    certbot register
-    ```
-
-### Configuring storage
-
-1. Install the [PureFTPd](https://www.pureftpd.org/project/pure-ftpd) FTP-server and quotas by running the following command.
-    ```
-    apt install pure-ftpd-common pure-ftpd-mysql quota quotatool -y
-    ```
-    Once installed, open the file `/etc/default/pure-ftpd-common` in your favorite text editor and enable `VIRTUALCHROOT` by setting the value to _true_:
-    ```
-    [...]
-    # VIRTUALCHROOT:
-    # whether to use binary with virtualchroot support
-    # valid values are "true" or "false"
-    # Any change here overrides the setting in debconf.
-    VIRTUALCHROOT=true
-    [...]
-    ```
-    Enable TLS by typing:
-    ```
-    echo 1 > /etc/pure-ftpd/conf/TLS
-    ```
-    In order to use an SSL certificate is required. To create one, a corresponding directory must be created first. Run the following command to create it.
-    ```
-    mkdir -p /etc/ssl/private/
-    ```
-    Then generate the certificate by running the following command:
-    ```
-    openssl req -x509 -nodes -days 7300 -newkey rsa:2048 -keyout /etc/ssl/private/pure-ftpd.pem -out /etc/ssl/private/pure-ftpd.pem
-    ```
-    Answer the questions to generate the request:
-      - `Country Name (2 letter code) [AU]:` Enter the [two-letter country code](https://www.worldatlas.com/aatlas/ctycodes.htm) of your country. For example **FR**
-      - `State or Province Name (full name) [Some-State]:` Enter the name of your region. For example **Ile de France**
-      - `Locality Name (eg, city) []:` Enter the name of your locality or city. For example: **Paris**
-      - `Organization Name (eg, company) [Internet Widgits Pty Ltd]:` Enter the name of your company or organization. For example: **Scaleway**
-      - `Organizational Unit Name (eg, section) []:` Enter the name of your unit or department. For example: **Documentation & Tutorials**
-      - `Common Name (e.g. server FQDN or YOUR name) []:` Enter the FQDN of your instance. For exeample, **ispcp.mydomain.tld**
-      - `Email Address []:` Enter your email address. For example, **me@mydomain.tld**
-
-    Update the permissions of the SSL certificate:
-    ```
-    chmod 600 /etc/ssl/private/pure-ftpd.pem
-    ```
-    Restart PureFTPd:
-    ```
-    service pure-ftpd-mysql restart
-    ```
-2. Edit the `/etc/fstab` file by adding `usrjquota=quota.user,grpjquota=quota.group,jqfmt=vfsv0` it should look like the following example:
-    ```
-    # Generated by Scaleway's build system
-    PARTUUID=9d906626-d654-4523-adac-6a66ebcb016f / ext4 rw,relatime,usrjquota=quota.user,grpjquota=quota.group,jqfmt=vfsv0 0 1
-    PARTUUID=2c2cbf1f-5411-4834-95aa-68674958199c /boot/efi vfat rw,relatime,errors=remount-ro,nofail 0 2
-    ```
-    Then enable quotas by running the following commands:
-    ```
-    mount -o remount /
-    quotacheck -avugm
-    quotaon -avug
-    ```
-
-### Setting up the rest of the stack
-
-1. Install the BIND DNS server, as well as [AWStats](/tutorials/deploy-awstats), [vlogger](https://directory.fsf.org/wiki/Vlogger), and [Webalizer](http://www.webalizer.org/) with the following command:
-    ```
-    apt install bind9 dnsutils haveged vlogger webalizer awstats geoip-database libclass-dbi-mysql-perl -y
-    ```
-2. Open the file `/etc/cron.d/awstats` and edit it as the following example:
-    ```
-    MAILTO=root
-
-    /10 * * * * www-data [ -x /usr/share/awstats/tools/update.sh ] && /usr/share/awstats/tools/update.sh
-
-    # Generate static reports:
-    10 03 * * * www-data [ -x /usr/share/awstats/tools/buildstatic.sh ] && /usr/share/awstats/tools/buildstatic.sh
-    ```
-3. Install [Jailkit](https://olivier.sessink.nl/jailkit/) to [chroot](https://en.wikipedia.org/wiki/Chroot) your users by running the following commands:
-    ```
-    apt install build-essential autoconf automake1.11 libtool flex bison debhelper binutils python -y
-    cd /tmp
-    wget http://olivier.sessink.nl/jailkit/jailkit-2.19.tar.gz
-    tar xvfz jailkit-2.19.tar.gz
-    cd jailkit-2.19
-    echo 5 > debian/compat
-    ```
-    Build the Jailkit package by running
-    ```
-    ./debian/rules binary
-    ```
-    Then install the tool and by running the following commands:
-    ```
-    cd ..
-    dpkg -i jailkit_2.19-1_*.deb
-    rm -rf jailkit-2.19*
-    ```
-4. Install [Fail2Ban](/tutorials/protect-server-fail2ban/) and a [UFW Firewall](/tutorials/installation-uncomplicated-firewall/) on the Instance:
-    ```
-    apt install fail2ban ufw -y
-    ```
-5. Create and open the file `/etc/fail2ban/jail.local` in your favorite text editor and paste the following content into it to monitor SSH, PureFTPd, and Dovecot:
-    ```
-    [ssh]
-    enabled  = true
-    port     = ssh
-    filter   = sshd
-    logpath  = /var/log/auth.log
-    maxretry = 3
-
-    [pure-ftpd]
-    enabled  = true
-    port     = ftp
-    filter   = pure-ftpd
-    logpath  = /var/log/syslog
-    maxretry = 3
-
-    [dovecot]
-    enabled = true
-    filter = dovecot
-    action = iptables-multiport[name=dovecot-pop3imap, port="pop3,pop3s,imap,imaps", protocol=tcp]
-    logpath = /var/log/mail.log
-    maxretry = 3
-
-    [postfix]
-    enabled  = true
-    port     = smtp
-    filter   = postfix
-    logpath  = /var/log/mail.log
-    maxretry = 3
-    ```
-    Restart file2ban to apply the configuration.
-    ```
-    service fail2ban restart
-    ```
-6. Install the [Roundcube](https://roundcube.net/) webmail interface via apt:
-    ```
-    apt install roundcube roundcube-core roundcube-mysql roundcube-plugins javascript-common libjs-jquery-mousewheel php-net-sieve tinymce -y
-    ```
-
-    When asked if you want to configure the database with dbconfig-common, choose `Yes`, then press enter on your keyboard to generate a random password for the Roundcube database.
-
-    Open the file **/etc/roundcube/config.inc.php** in a text editor and change the `default_host` value to `localhost`:
-    ```
-    $config['default_host'] = 'localhost';
-    ```
-    Create a symlink to use the SquirrelMail configuration in ISPConfig for Roundcube:
-
-    ```
-    ln -s /usr/share/roundcube /usr/share/squirrelmail
-    ```
-
-    <Message type="important">
-      After installation of ISPConfig, your webmail will be available at `http://YOUR_FQDN:8081/webmail`.
-    </Message>
-7. Download and unpack ISPConfig3 by running the following commands:
-    ```
-    cd /tmp
-    wget https://ispconfig.org/downloads/ISPConfig-3.2.8p1.tar.gz
-    tar xfz ISPConfig*.tar.gz
-    cd ispconfig3*/install/
-    ```
-
-    The installer will guide you to the setup of ISPConfig3 and configure all required services. Start it with the following command:
-
-    ```
-    php -q install.php
-    ```
-
-    The installer will ask you several questions about the configuration of ISPConfig3. The values in brackets are pre-filled:
-      - `Select language (en,de) [en]:` Select the default language for the interface. During installation, you can choose between English (en) and German (de). Other languages can be installed from the admin interface once the software is installed.
-      - `Installation mode (standard,expert) [standard]:` Select the installation mode: Standard or Expert. You can keep the default value and validate it by pressing Enter.
-      - `Full qualified hostname (FQDN) of the server, eg server1.domain.tld [ispcp.mydomain.tld]:` Enter the FQDN of your instance. Normally this value is pre-filled, and you can confirm it by pressing Enter on your keyboard.
-      - `MySQL server hostname [localhost]:` Enter the hostname of the database server. Since MariaDB is running on the local host, validate the default value by pressing Enter on your keyboard.
-      - `MySQL server port [3306]:` The MySQL server port. As the server is running on the standard port, validate the default value by pressing Enter on your keyboard.
-      - `MySQL root username [root]:` The MySQL username. Validate the default value by pressing Enter on your keyboard.
-      - `MySQL root password []:` Enter the password of the MySQL user that you have configured at the beginning of the tutorial.
-      - `MySQL database to create [dbispconfig]:` The name of the database ISPConfig will use. Validate the default value by pressing Enter on your keyboard.
-      - `MySQL charset [utf8]:` The charset of your database. Validate the default value by pressing Enter on your keyboard.
-      - `ISPConfig Port [8080]:` The port on which ISPConfig will listen. Validate the default value by pressing Enter on your keyboard.
-      - `Admin password [admin]:` The administrator password. You can keep the default value and change the password after installation from the web interface. Validate the default value by pressing Enter on your keyboard.
-      - `Do you want a secure (SSL) connection to the ISPConfig web interface (y,n) [y]:` Provide an SSL encrypted connection to the admin interface. Validate the default value by pressing Enter on your keyboard.
-
-    During setup, you will be asked to enter information about the SSL certificate for the web interface. Enter the required information as done previously.
-
-    You can now open a web browser and type https://YOUR*FQDN:8080/ (for example, *`https://ispconfig.example.com:8080/`\_). The login screen will appear:
-
-    <Lightbox src="scaleway-ispconfig_login.webp" alt="" />
-
-    Login with the following credentials:
-    - User: **admin**
-    - Password: **admin**
-
-You are now logged into ISPConfig and can change your password, create users, sites, mailboxes, etc.:
-
-<Lightbox src="scaleway-ispconfig_admin.webp" alt="" />
-
-For more information on how to manage your websites with ISPConfig, refer to the [official documentation](https://www.ispconfig.org/documentation/).
+    

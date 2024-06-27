@@ -1,0 +1,131 @@
+---
+meta:
+  title: Deploy GitLab Runner on Scaleway Kubernetes clusters using Easy Deploy
+  description: Learn how to deploy GitLab Runner on Scaleway Kubernetes clusters using the Easy Deploy feature. 
+content:
+  h1: Deploy GitLab Runner on Scaleway Kubernetes clusters using Easy Deploy
+  paragraph: Learn how to deploy GitLab Runner on Scaleway Kubernetes clusters using the Easy Deploy feature. 
+categories:
+  - containers
+dates:
+  validation: 2024-06-20
+  posted: 2024-06-20
+---
+
+GitLab Runner is a powerful tool that executes CI/CD jobs in GitLab.
+When hosted on Kubernetes, it leverages the scalability and resilience of container orchestration to efficiently manage and run your pipelines.
+By deploying GitLab Runner on a Kubernetes cluster, you can dynamically scale the number of runners based on demand, ensure high availability, and seamlessly integrate with your existing Kubernetes infrastructure.
+This setup enables you to optimize resource utilization, reduce overhead, and enhance the performance of your continuous integration and deployment processes.
+
+<Macro id="requirements" />
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/identity-and-access-management/iam/how-to/create-api-keys/)
+- Created a Scaleway Kubernetes [Kapsule](/containers/kubernetes/how-to/create-cluster/) or [Kosmos](/containers/kubernetes/how-to/create-kosmos-cluster/) cluster
+- A GitLab repository
+
+## Deploying the GitLab Runner application using Easy Deploy
+
+1. In the [Scaleway console](https://console.scaleway.com/), navigate to the **Kubernetes** section under **Containers**.
+2. Click the name of the cluster where you wish to deploy GitLab Runner. The **Cluster Information** tab will display.
+3. Click the **Easy Deploy** tab. The application dashboard displays.
+4. Click **Deploy Application**. The application deployment wizard displays.
+5. Choose **Application Library** to see the list of available applications.
+6. Select the **GitLab Runner** application.
+    <Message type="tip">
+        If you cannot find GitLab Runner on the first page, use the search bar or navigate through the library using the arrow buttons.
+    </Message>
+7. Optionally, customize the default configuration for GitLab Runner using [Helm Charts](/tutorials/kubernetes-package-management-helm/). If you do not need any customized configuration you can skip this step.
+8. Enter a name (e.g. `gitlab-runner`) and a Kubernetes namespace for your application. If no name is entered, GitLab Runner will be installed in the default namespace of the cluster.
+9. Click **Deploy Application** to deploy GitLab Runner on your Kubernetes cluster.
+10. Verify that the GitLab Runner is successfully installed and running:
+    ```bash
+    kubectl get pods -n default # replace "default" with the name of the Kubernetes namespace in which you have installed your GitLab Runner.
+    ```
+    You should see a pod with a name similar to `gitlab-runner-xxxxxx-xxxxx` in the `Running` state.
+
+## Configuring a GitLab CI/CD pipeline to use your Kubernetes Runner
+
+<Message type="tip">
+  If you do not have a GitLab repository yet, you can deploy a [GitLab server using Easy Deploy](/tutorials/gitlab-server/) on your Kubernetes cluster.
+</Message>
+
+### Register the GitLab Runner with GitLab
+
+Before your GitLab Runner can start executing jobs from your GitLab repository, it needs to be registered with your GitLab server, as shown below:
+
+1. Obtain the GitLab Runner Registration Token:
+   - Go to your GitLab project.
+   - Navigate to **Settings** > **CI/CD** > **Runners**.
+   - Under the **Specific Runners** section, you will see the registration token.
+
+2. Register the GitLab Runner:
+   - Connect to your Kubernetes cluster where the GitLab Runner is deployed.
+   - Use the following command to start the registration process:
+     ```bash
+     kubectl exec -it <gitlab-runner-pod-name> -- gitlab-runner register
+     ```
+   - When prompted, enter the following details:
+     - **GitLab instance URL:** The URL of your GitLab server (e.g., `https://gitlab.com` or your self-hosted GitLab URL).
+     - **Registration Token:** The token you obtained in the previous step.
+     - **Description:** A description for this runner (e.g., `k8s-runner`).
+     - **Tags:** Tags for the runner (e.g., `k8s-runner`). These tags should match the tags specified in your `.gitlab-ci.yml` file.
+     - **Executor:** Select `kubernetes` as the executor.
+
+### Verify Runner registration
+
+After registering the runner, verify that it is correctly registered and active:
+
+1. In your GitLab project, navigate to **Settings** > **CI/CD** > **Runners**.
+2. You should see your newly registered runner listed under the **Specific Runners** section.
+
+### Configure the GitLab CI/CD pipeline
+
+1. Create/Edit the `.gitlab-ci.yml` file:
+    - Ensure your `.gitlab-ci.yml` file includes jobs with tags that match your runner’s tags. Refer to the configuration example below to picture what your file should look like:
+    ```yaml
+    stages:
+      - build
+      - test
+
+    build:
+      stage: build
+      script:
+        - echo "Building the project..."
+        - # Add your build steps here
+      tags:
+        - k8s-runner
+
+    test:
+      stage: test
+      script:
+        - echo "Running tests..."
+        - # Add your test steps here
+      tags:
+        - k8s-runner
+    ```
+
+2. Push the configuration to GitLab:
+    - Push your `.gitlab-ci.yml` file to your GitLab repository:
+    ```bash
+    git add .gitlab-ci.yml
+    git commit -m "Add CI/CD pipeline configuration"
+    git push origin main
+    ```
+
+### Monitor the pipeline
+
+Navigate to **CI/CD** > **Pipelines** in your GitLab project to view the status of your pipeline.
+
+<Message type="tip">
+  If the pipeline fails, you can check the logs of the GitLab Runner pod for more information:
+   ```bash
+   kubectl logs -n default <gitlab-runner-pod-name>
+   ```
+</Message>
+
+# Conclusion
+
+You have successfully set up a GitLab Runner hosted on Kubernetes and configured your GitLab CI/CD pipeline to use it. This setup allows you to leverage the scalability and flexibility of Kubernetes for your CI/CD workflows.
+
+For more detailed information on configuring your GitLab Runner, refer to the [official GitLab documentation](https://docs.gitlab.com/runner/install/kubernetes.html#configuring-gitlab-runner-using-the-helm-chart).

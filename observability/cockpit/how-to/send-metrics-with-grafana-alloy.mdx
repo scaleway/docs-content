@@ -1,0 +1,116 @@
+---
+meta:
+  title: Send metrics to Cockpit using Grafana Alloy
+  description: Learn to configure Grafana Alloy to push metrics and visualize them in your Grafana dashboard with this step-by-step tutorial.
+content:
+  h1: Send metrics to Cockpit using Grafana Alloy
+  paragraph:  Learn to configure Grafana Alloy to push metrics and visualize them in your Grafana dashboard with this step-by-step tutorial.
+tags: cockpit observability grafana-alloy agent push-metrics
+dates:
+  validation: 2024-06-28
+  posted: 2024-06-28
+categories:
+  - observability
+---
+
+
+The Grafana Alloy agent is a component used in observability and monitoring setups, to collect and send metrics, logs, and traces from your applications, services, and infrastructure to observability platforms, such as Cockpit.
+
+This page explains how to configure the Grafana Alloy agent to push your metrics and visualize them in Grafana. You can use it to **push your data from Scaleway resources or external resources**.
+
+For the sake of this documentation, we are using Grafana Alloy on macOS. Refer to the [official Grafana documentation](https://grafana.com/docs/alloy/latest/get-started/) to find the commands to use depending on your operating system of choice.
+
+<Macro id="requirements" />
+
+  - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+  - A Scaleway account logged into the [console](https://console.scaleway.com)
+  - [Retrieved your Grafana credentials](/observability/cockpit/how-to/retrieve-grafana-credentials/)
+  - [Installed Grafana Alloy](https://grafana.com/docs/alloy/latest/get-started/install/)
+  - [Created a data source of the metrics type](/observability/cockpit/how-to/create-external-data-sources/)
+  - A [token](/observability/cockpit/how-to/create-token/) with push permissions for metrics in the **same region as your metrics**
+
+<Message type="important">
+ - Having the default configuration on your agents might lead to more of your resources' metrics being sent, a high consumption and a high bill at the end of the month.
+
+ - Sending metrics and logs for Scaleway resources or personal data using an external path is a billable feature. In addition, any data that you push yourself is billed, even if you send data from Scaleway products. Refer to the [product pricing](https://www.scaleway.com/en/pricing/?tags=available,managedservices-observability-cockpit) for more information.
+</Message>
+
+## Configuring Grafana Alloy
+
+1. Create a folder named `config` on your local machine.
+2. Create a file named `cockpit.river` inside the `config` folder.
+3. Paste the following template inside `cockpit.river`:
+        ```
+        prometheus.exporter.unix "node" {
+            set_collectors = [
+                "uname",
+                "cpu",
+                "cpufreq",
+                "loadavg",
+                "meminfo",
+                "filesystem",
+                "netdev",
+            ]
+        }
+
+        prometheus.scrape "node" {
+            scrape_interval = "60s"
+            scrape_timeout  = "4s"
+
+            targets    = prometheus.exporter.unix.node.targets
+            forward_to = [prometheus.remote_write.cockpit.receiver]
+        }
+
+        prometheus.remote_write "cockpit" {
+            endpoint {
+                url = "https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.metrics.cockpit.fr-par.scw.cloud/api/v1/push"
+                headers = {
+                    "X-TOKEN" = "COCKPIT_TOKEN_SECRET_KEY",
+                }
+            }
+        }
+        ```
+3. Replace `https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.metrics.cockpit.fr-par.scw.cloud/api/v1/push` with your metrics' URL. You can retrieve it in the [Data sources tab](https://console.scaleway.com/cockpit/dataSource) of the Scaleway console.
+4. Replace `COCKPIT_TOKEN_SECRET_KEY` with your Cockpit token's secret key, then save your changes.
+        <Message type="important">
+          Make sure that your token and your metrics data source were both created in the same region.
+        </Message>
+5. Open a terminal and [start Alloy](https://grafana.com/docs/alloy/latest/get-started/run/):
+        ```
+        brew services start alloy
+        ```
+6. In the same terminal, run the following command.
+        ```
+        alloy run config/cockpit.river
+        ```
+        The two last lines of your output should look similar to the following.
+        ```
+        ts=2024-06-27T14:23:05.542081Z level=info msg="now listening for http traffic" service=http addr=127.0.0.1:12345
+        ts=2024-06-27T14:23:13.432896Z level=info msg="Done replaying WAL" component_path=/ component_id=prometheus.remote_write.cockpit subcomponent=rw remote_name=aa0551 url=https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.metrics.cockpit.fr-par.scw.cloud/api/v1/push duration=12.900498616s
+        ```
+
+## Visualizing your metrics
+
+1. Click **Cockpit** in the Observability section of the [console](https://console.scaleway.com/) side menu. The **Cockpit** overview page displays.
+2. Click **Open dashboards** to open your managed dashboards in Grafana. You are redirected to the Grafana website.
+3. Enter your [Grafana credentials](/observability/cockpit/how-to/retrieve-grafana-credentials/).
+4. Click **Log in**. The Grafana overview page displays.
+5. Click the **Toggle menu**.
+6. Click **Dashboards**, then click **New** in the top right corner of your screen.
+7. Click **Import** to import a dashboard.
+8. In the **Import via grafana.com** field, enter `1869`, then click **Load**
+
+    <Message type="note">
+      `1869` is the ID of the [Node Exporter Full dashboard](https://grafana.com/grafana/dashboards/1860-node-exporter-full/) provided by Grafana.
+    </Message>
+
+9. Enter a name for your dashboard or leave the default one, then select a folder in which to store your dashboard.
+10. In the **Prometheus** field, select your metrics data source in the drop-down.
+11. Click **Import**. Your dashboard should load and display.
+12. In the drop-down next to **Datasource**, select your metrics data source. By default, your dashboard retrieves your data source's data from the last 24 hours.
+    <Lightbox src="scaleway-alloy-datasource.webp" alt="" />
+13. If your data source was created less than 24 hours ago, click the clock icon and adjust the time range to match its creation time.
+
+    Your dashboard should look similar to the one in the image below.
+
+    <Lightbox src="scaleway-alloy-dashboard.webp" alt="" />

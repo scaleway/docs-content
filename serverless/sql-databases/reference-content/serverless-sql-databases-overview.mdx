@@ -18,9 +18,13 @@ Scaleway Serverless SQL Databases are fully managed databases that automatically
 <Lightbox src="serverless-sql-databases-schema.webp" alt="" />
 
 ## Idle state
-After receiving no query for 5 minutes, a Serverless SQL Database will enter into an idle state. It switches from **Running** to **Ready to use**, even if your client applications are still connected. When switching to **Ready to use**, client connections are maintained, but all temporary data stored at the connection level (i.e. the PostgreSQL session) are deleted (such as the session variables defined using `SET {variable} TO {value}`).
+After receiving no query for 5 minutes, a Serverless SQL Database will enter into an idle state. It switches from **Running** to **Ready to use**, even if your client applications are still connected. 
 
 While your database is in an idle state, you will not be billed for compute resources (vCPU and RAM). You will however still be billed for storage resources.
+
+<Message type="note">
+  All query processing needs to finished to switch database to an idle state. For example, a long-running transaction (such as updating millions of rows) taking one minute will delay switching to an idle state by one minute.
+</Message>
 
 ## Technical specifications
 
@@ -39,19 +43,19 @@ While your database is in an idle state, you will not be billed for compute reso
 
 Autoscaling is triggered automatically, based on your database vCPU consumption:
 
-  - **Scaling up**: after using more than a certain percentage of the currently allocated vCPU for 10 seconds, the vCPU and RAM allocated to your database will increase by 1 vCPU and 4 GB RAM each time, up to a maximum of 15 vCPUs and 60 GB RAM.
+  - **Scaling up**: after using more than 90% of the currently allocated vCPU for 10 seconds, the vCPU and RAM allocated to your database will increase by 25% (rounded up to the nearest vCPU integer value), up to a maximum of 15 vCPUs and 60 GB RAM.
 
-  - **Scaling down**: after using less than a certain percentage of the currently allocated vCPU for 10 seconds, the vCPU and RAM allocated to your database will decrease by 1 vCPU and 4 GB RAM each time, down to a minimum of 1 vCPU and 4 GB RAM while your database is active.
+  - **Scaling down**: after using less than 70% of the currently allocated vCPU for 10 seconds, the vCPU and RAM allocated to your database will decrease by 25% (rounded down to the nearest vCPU integer value), down to a minimum of 1 vCPU and 4 GB RAM while your database is active.
   
 <Message type="note">
-  The autoscaling thresholds rely on the [CPU pressure](https://docs.kernel.org/accounting/psi.html) metric. The current values are not displayed as they are subject to change for optimization purposes.
+  Scaling (up or down) operations happens at most once every minute. Moreover, for low vCPU values, scale-down operations happens only if the current workload can be absorbed by the nearest vCPU integer value rounded down. For instance, a database with 2 vCPUs consuming only 1.2 vCPU on average (60% of provisioned vCPU) will not scale-down to 1 vCPU as current load couldn't be absorbed.
 </Message>
 
-Automatic scaling operations only happen **between** atomic transactions. For example, a long-running transaction (such as updating millions of rows) taking one minute will delay the next scaling operation by one minute. The next transaction performed will, however, benefit from the upscaled/downscaled database performance.
+Automatic scaling operations may need to happen **between** atomic transactions. For example, a long-running transaction (such as updating millions of rows) taking one minute may delay the next scaling operation by one minute. The next transaction performed will, however, benefit from the upscaled/downscaled database performance. For optimal autoscaling reactivity and performance, we recommend you limit each transaction duration to a few seconds at most.
 
 ## Compatibility
 
-Serverless SQL Database is compatible with most PostgreSQL-compatible clients and tools. Due to connection pooling support, some minor features are disabled or will not work as expected. Check out the [Known differences](/serverless/sql-databases/reference-content/known-differences/)
+Serverless SQL Database is compatible with most PostgreSQL-compatible clients and tools. Due to connection pooling support, some minor features relying on PostgreSQL sessions and temporary data storage are disabled or will not work as expected. Check out the [Known differences](/serverless/sql-databases/reference-content/known-differences/)
 
 If you require strict compatibility with all PostgreSQL features, you can use [Managed Databases for PostgreSQL](/managed-databases/postgresql-and-mysql/quickstart/) instead.
 

@@ -1,0 +1,188 @@
+---
+meta:
+  title: Deploy HashiCorp Vault on Scaleway Kubernetes clusters using Easy Deploy
+  description: Securely deploy and manage HashiCorp Vault on Scaleway Kubernetes clusters with Easy Deploy. Follow our guide for step-by-step instructions.
+content:
+  h1: Deploy HashiCorp Vault on Scaleway Kubernetes clusters using Easy Deploy
+  paragraph: Securely deploy and manage HashiCorp Vault on Scaleway Kubernetes clusters with Easy Deploy. Follow our guide for step-by-step instructions.
+tags: hashicorp vault kubernetes k8s easy deploy
+categories:
+  - containers
+dates:
+  validation: 2024-06-13
+  posted: 2024-06-13
+---
+
+HashiCorp Vault is an identity-based secrets and encryption management system.
+It provides encryption services that are gated by authentication and authorization methods to ensure secure, auditable and restricted access to secrets.
+Vault is used to secure, store and protect secrets and other sensitive data using a UI, CLI, or HTTP API.
+
+<Macro id="requirements" />
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/identity-and-access-management/iam/how-to/create-api-keys/)
+- Created a Scaleway Kubernetes [Kapsule](/containers/kubernetes/how-to/create-cluster/) or [Kosmos](/containers/kubernetes/how-to/create-kosmos-cluster/) cluster
+
+## Deploying the Vault application using Easy Deploy
+
+1. In the [Scaleway console](https://console.scaleway.com/), navigate to the **Kubernetes** section under **Containers**.
+2. Click the name of the cluster where you wish to deploy Grafana. The **Cluster Information** tab will display.
+3. Click the **Easy Deploy** tab. The application dashboard displays.
+4. Click **Deploy Application**. The application deployment wizard displays.
+5. Choose **Application Library** to see the list of available applications.
+6. Select the **Vault** application.
+    <Message type="tip">
+        If you cannot find Vault on the first page, use the search bar or navigate through the library.
+    </Message>
+7. Optionally, customize the default configuration for Vault using [Helm Charts](/tutorials/kubernetes-package-management-helm/). If you do not need any customized configuration you can skip this step.
+8. Enter a name and a Kubernetes namespace for your application. If no name is entered, Grafana will be installed in the default namespace of the cluster.
+9. Click **Deploy Application** to deploy Grafana on your Kubernetes cluster.
+
+## Initializing and unsealing Vault
+
+1. Check the status of your Vault using the `kubectl` command.
+    ```sh
+    kubectl get pods -l app.kubernetes.io/name=vault
+    ```
+    <Message type="tip">
+      If you choose another name for your Vault application ensure to replace the application name with the corresponding value.
+    </Message>
+
+2. Initialize Vault. Replace `vault-0` with the name of your application. If your application is called `vault-application` the value will be `vault-application-0`.
+    ```sh
+    kubectl exec -it vault-0 -- vault operator init
+    ```
+    <Message type="important">
+      Save the unseal keys and the initial root token provided by the command.
+    </Message>
+
+3. Unseal Vault using three unseal keys retrieved in the previous step:
+    ```sh
+    kubectl exec -it vault-0 -- vault operator unseal <unseal-key-1>
+    kubectl exec -it vault-0 -- vault operator unseal <unseal-key-2>
+    kubectl exec -it vault-0 -- vault operator unseal <unseal-key-3>
+    ```
+
+4. Login to Vault using the initial root token generated in step two:
+    ```sh
+    kubectl exec -it vault-0 -- vault login <initial-root-token>
+    ```
+
+5. Enable the KV secrets engine at `secret/`:
+    ```sh
+    kubectl exec -it vault-0 -- vault secrets enable -path=secret kv-v2
+    ```
+
+## Configure Vault for Kubernetes authentication
+
+1. Enable Kubernetes authentication:
+    ```sh
+    kubectl exec -it vault-0 -- vault auth enable kubernetes
+    ```
+
+2. Enter the Vault shell:
+    ```sh
+    kubectl exec -it vault-0 -- sh
+    ```
+3. Paste the following configuration to configure Vault with the Kubernetes API:
+    ```
+    vault write auth/kubernetes/config \
+        kubernetes_host="https://<KUBERNETES_PORT_443_TCP_ADDR>:443" \
+        token_reviewer_jwt="$(cat /var/run/secrets/kubernetes.io/serviceaccount/token)" \
+        kubernetes_ca_cert="$(cat /var/run/secrets/kubernetes.io/serviceaccount/ca.crt)"
+    exit
+    ```
+    Replace `<KUBERNETES_PORT_443_TCP_ADDR>` with the IP address of your Vault pod. You can retrieve it using the `kubectl get svc` command. The pod name corresponds to your application name (e.g. if your application is called vault-application, the pod name will be `application-vault`).
+
+4. Enter the Vault shell:
+    ```sh
+    kubectl exec -it vault-0 -- sh
+    ```
+5. Paste the following configuration to create a policy:
+    ```sh
+    vault policy write myapp-kv-ro -<<EOF
+    path "secret/data/myapp/*" {
+      capabilities = ["create", "read", "update", "delete", "list"]
+    }
+    EOF
+    exit
+    ```
+
+6. Enter the Vault shell:
+    ```sh
+    kubectl exec -it vault-0 -- sh
+    ```
+7. Paste the following configuration to create a role:
+    ```sh
+    vault write auth/kubernetes/role/myapp \
+        bound_service_account_names=myapp-sa \
+        bound_service_account_namespaces=default \
+        policies=myapp-kv-ro \
+        ttl=24h
+    exit
+    ```
+
+## Storing and retrieving secrets
+
+1. Enter the Vault shell:
+    ```sh
+    kubectl exec -it vault-0 -- sh
+    ```
+
+2. Store a secret in Vault:
+    ```sh
+    vault kv put secret/myapp/config username='myuser' password='mypassword'
+    exit
+    ```
+
+3. Deploy an application with a service account that has access to the secrets stored in Vault.
+
+    * Create a service account:
+        ```sh
+        kubectl create serviceaccount myapp-sa
+        ```
+
+    * Deploy your application:
+        ```yaml
+        apiVersion: apps/v1
+        kind: Deployment
+        metadata:
+          name: myapp
+        spec:
+          replicas: 1
+          selector:
+            matchLabels:
+              app: myapp
+          template:
+            metadata:
+              labels:
+                app: myapp
+            spec:
+              serviceAccountName: myapp-sa
+              containers:
+              - name: myapp
+                image: your-application-image
+                env:
+                - name: VAULT_ADDR
+                  value: "http://vault.default.svc.cluster.local:8200"
+                - name: VAULT_TOKEN
+                  valueFrom:
+                    secretKeyRef:
+                      name: myapp-sa-token
+                      key: token
+        ```
+
+4. Use a Vault client to retrieve the secrets within your application:
+    ```python
+    import hvac
+
+    client = hvac.Client(url='http://vault.default.svc.cluster.local:8200')
+    client.token = os.getenv('VAULT_TOKEN')
+
+    secret = client.secrets.kv.v2.read_secret_version(path='myapp/config')
+    username = secret['data']['data']['username']
+    password = secret['data']['data']['password']
+    ```
+
+By following these steps, you have been able to set up Vault on Kubernetes in a Private Network, store secret information, and securely retrieve it in your applications.
+For more information, refer to the official [Vault documentation](https://developer.hashicorp.com/vault/docs)

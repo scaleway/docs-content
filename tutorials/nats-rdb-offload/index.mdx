@@ -1,0 +1,229 @@
+---
+meta:
+  title: Leverage on NATS Messaging Pub/Sub capabilities to offload your Managed Database.
+  description: Learn how to construct a pub/sub architecture that can help you manage the load coming to your database. Dive into this Python tutorial for step-by-step guidance on asynchronous data processing.
+content:
+  h1: Leverage on NATS Messaging Pub/Sub capabilities to offload your Managed Database.
+  paragraph: Learn how to construct a pub/sub architecture that can help you manage the load coming to your database. Dive into this Python tutorial for step-by-step guidance on asynchronous data processing.
+categories:
+  - functions
+  - messaging
+  - postgresql-and-mysql
+tags: terraform scraping-architecture
+dates:
+  validation: 
+  posted: 
+---
+
+## Introduction
+
+In this tutorial, we show how to set up a system that receives a message from a publisher and sends it to a managed database through a buffer subscriber. To do so, we  use Scaleway serverless products and deploy two applications:
+ - A publisher application, that sends a message to a NATS stream created with Scaleway Messaging and Queuing.
+ - A subscriber application, that consumes messages published to the stream and then writes the data into a Scaleway Managed Database.
+
+<Lightbox src="scaleway-scraping-architecture.webp" alt="" />
+
+We show how to provision all the required Scaleway resources using code examples and Scaleway Console [console](https://console.scaleway.com/). The code for the functions is written in Python.
+
+This project exemplifies a decoupled architecture, where producer and consumer perform specific tasks independently. This kind of design is modular and allows for flexibility and scalability. It also adheres to the principles of microservices and serverless architectures, where individual functions or scripts focus on specific tasks.
+
+To properly follow this tutorial, we recommend you to create a dedicated project in your Scaleway account.
+You can name it "RDB and NATS Tutorial". It will hold all your Scaleway ressources created for this tutorial, they will be easier to find.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Installed [NATS CLI](https://github.com/nats-io/natscli) on your local machine
+- Generated NATS Credentials (and save them under your project directory)
+- Created RDB (https://www.scaleway.com/en/docs/managed-databases/postgresql-and-mysql/quickstart/) with mySQL
+
+
+## Create a NATS server
+
+You can refer to the following documentation (https://www.scaleway.com/en/docs/serverless/messaging/api-cli/nats-cli/) to create your NATS stream.
+For the stream specifications, we recommend you to be as minimalist as possible. 
+There is no need for replication or specific parameters for this tutorial.
+
+Once you followed the abovementionned documentation, follow the next steps to set up your nats broker
+1. Open a Terminal window 
+2. Go to your directory for the project
+3. Run your NATS server by using the following code 
+    ```
+    nats-server
+
+    ```
+You now have your NATS server up and running.
+To be sure we did not forgot anything for the Scaleway context, paste the following code in a new window of your terminal
+    ```
+    nats context info scaleway  
+    ```
+You should see "OK" mentionned for the credentials path and that your NATS server is ready!
+If not go back to the NATS CLI documentation to create properly a Scaleway context.
+
+<add screenshot of NATS information>
+
+## Install the dependencies
+
+1. Open a new Terminal window from your project directory
+2. Install the following dependencies for the tutorial
+    ```
+    sudo apt-get install mysql-server
+    pip install mysql-connector-python 
+    pip install pynacl
+    pip install nkeys
+    ```
+
+
+## Connect to your Scalesway RDB
+
+1. Open a new Terminal window
+2. Go to Scaleway Console and into your project
+3. Go to your mySQL database 
+4. Go to Overview
+5. Use the snippet under Connection into the Network bloc so you can connect
+6. Copy the snippet into the Terminal window and update it with your created username
+7. Follow the instructions in the terminal to validate your password
+8. You should have an access to mysql environment 
+9. Create the database and table with the following code
+ ```
+CREATE DATABASE nats_messages;
+USE nats_messages;
+CREATE TABLE messages (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    subject VARCHAR(255),
+    data TEXT,
+    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+ ```
+
+<add screenshot of sql terminal>
+
+## Create the publisher
+
+We start by creating the publisher application.
+1. Create a new file in your project directory named nats_publisher.py
+2. Paste the following Python code in the file
+    ```
+import asyncio
+from nats.aio.client import Client as NATS
+
+async def run_publisher():
+    # Connect to the NATS server
+    nc = NATS()
+
+    await nc.connect("NATS ACCOUNT URL", user_credentials="NATS CREDENTIALS PATH")
+
+    # Publish a message to the subject
+    await nc.publish("foo", b'Hello, World!')
+
+    # Flush to ensure messages are processed
+    await nc.flush()
+
+    # Close the connection
+    await nc.close()
+
+if __name__ == '__main__':
+    asyncio.run(run_publisher())
+    ```
+3. Update the code with your NATS information
+
+This small Python application will publish a "Hello World!" message under the "foo" subject
+
+## Create the subscriber
+
+We start by creating the subscriber application.
+1. Create a new file in your project directory named nats_subscriber_with_mysql.py
+2. Paste the following Python code in the file
+    ```
+import asyncio
+import mysql.connector
+from nats.aio.client import Client as NATS
+
+async def run_subscriber():
+    # Connect to the NATS server
+    nc = NATS()
+
+    await nc.connect("NATS ACCOUNT URL", user_credentials="NATS CREDENTIALS PATH")
+
+    async def message_handler(msg):
+        subject = msg.subject
+        data = msg.data.decode()
+        print(f"Received a message on '{subject}': {data}")
+
+        # Store the message in the MySQL database
+        conn = mysql.connector.connect(
+            host="PUBLIC ENDPOINT",
+            port="PORT",
+            user="NAME",
+            password="PASSWORD",
+            database="nats_messages"
+        )
+        cursor = conn.cursor()
+        cursor.execute('INSERT INTO messages (subject, data) VALUES (%s, %s)', (subject, data))
+        conn.commit()
+        cursor.close()
+        conn.close()
+
+    # Subscribe to a subject
+    await nc.subscribe("foo", cb=message_handler)
+
+    # Keep the subscriber running to receive messages
+    while True:
+        await asyncio.sleep(1)
+
+if __name__ == '__main__':
+    asyncio.run(run_subscriber())
+```
+3. Update the subscriber code with your Scaleway RDB information as well as the ones form your NATS.
+   You will note that they are the same as the publisher's. 
+   It's completely normal as both applications are communicating through the same NATS server.
+
+## Put it all in motion
+
+You have now your architecture ready : 
+- A NATS server to handle the pub/sub messaging pattern
+- A publisher application that will send a message through the NATS server
+- A subscriber application that will retrieve the message from the NATS server and write it on the mySQL database
+- A database that can be read by the rest of your architecture's clients
+
+To see the flow running, you can follow the steps:
+1. Open your terminal window dedicated to the subscriber and run the python file
+```
+python nats_subscriber_with_mysql.py
+```
+2. Open your terminal window dedicated to the publisher and run the python file
+```
+python nats_publisher.py
+```
+3. Go back to your terminal window of the subscriber. 
+   You can see that the message has been received by the application and sent to the database.
+4. Go back to your database terminal window (the one with >sql) and run the following code
+```
+USE nats_messages
+SELECT * FROM messages;
+```
+5. You should see your message in the table with the timestamp
+
+<insert screenshot>
+
+### How to remove all resources used in the tutorial
+
+To be sure that you are not running resources without using them, you can delete your database following this documentation (https://console.scaleway.com/rdb/instances/fr-par/2f03fca4-70b0-4ccd-aee5-01032d1cc3b2/overview)
+You can also delete your NATS server using the following commande in your terminal
+```
+nats-server --signal stop
+```
+Messaging and Queuing NATS is a Serverless product and is only charge once you are movoing messages through the broker.
+So no worries for unexpected billing if you are not using it!
+
+## Summary, going further, key takeaways
+We have shown how to asynchronously decouple a producer and a mySQL database using NATS, adhering to serverless patterns.
+
+While the volume of data processed in this example is quite small, thanks to the Messaging and Queuing NATS streams's, your database will process message at an adapted pace.
+You can adapt this example to manage larger workloads.
+
+Here are some possible extensions to this basic example:
+ - Use a continous flow of incoming messages
+ - Use a serverless Database to embrace further the Serverless architecture
+ - The scalability of NATS pub/sub patterns enables you to manage more than one customer and publisher, let's ty this!

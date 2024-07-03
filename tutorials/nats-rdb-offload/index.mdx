@@ -21,7 +21,7 @@ In this tutorial, we show how to set up a system that receives a message from a 
  - A publisher application, that sends a message to a NATS stream created with Scaleway Messaging and Queuing.
  - A subscriber application, that consumes messages published to the stream and then writes the data into a Scaleway Managed Database.
 
-<Lightbox src="scaleway-scraping-architecture.webp" alt="" />
+<Lightbox src="scaleway-nats-offload-archi.png" alt="" />
 
 We show how to provision all the required Scaleway resources using code examples and the Scaleway [console](https://console.scaleway.com/). The code for the functions is written in Python.
 
@@ -40,22 +40,14 @@ You can name it "RDB and NATS Tutorial". It will hold all your Scaleway resource
 - Created a Managed Dabatase (/managed-databases/postgresql-and-mysql/quickstart/) with mySQL
 
 
-## Create a NATS server
+## Create a NATS stream
 
-Refer to the following documentation (/serverless/messaging/api-cli/nats-cli/) to create your NATS stream.
+Refer to the [following documentation](/serverless/messaging/api-cli/nats-cli/) to create your NATS stream.
 We recommend keeping stream specifications as simple as possible. 
 There is no need for replication or specific parameters for this tutorial.
 
-Once you followed the abovementionned documentation, follow the next steps to set up your nats broker
-1. Open a Terminal window 
-2. Go to your directory for the project
-3. Run your NATS server by using the following code 
-    ```
-    nats-server
+When your NATS server is up and running, check you did not forgot anything for the Scaleway [context](/serverless/messaging/api-cli/nats-cli/#define-a-context) by running the following code in a new window of your terminal:
 
-    ```
-You now have your NATS server up and running.
-To be sure we did not forgot anything for the Scaleway [context](/serverless/messaging/api-cli/nats-cli/#define-a-context), paste the following code in a new window of your terminal
     ```
     nats context info scaleway  
     ```
@@ -73,6 +65,7 @@ If not, go back to the NATS CLI documentation to properly create a Scaleway cont
     pip install mysql-connector-python 
     pip install pynacl
     pip install nkeys
+    pip install nats-python
     ```
 
 
@@ -86,17 +79,18 @@ If not, go back to the NATS CLI documentation to properly create a Scaleway cont
 6. Paste the snippet into the terminal window and update it with your created username
 7. Follow the instructions in the terminal to validate your password
     You should have access to the mysql environment 
-9. Create the database and table with the following code
- ```
-CREATE DATABASE nats_messages;
-USE nats_messages;
-CREATE TABLE messages (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    subject VARCHAR(255),
-    data TEXT,
-    received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
- ```
+9. Create the database and table with the following code: 
+
+    ```
+    CREATE DATABASE nats_messages;
+    USE nats_messages;
+    CREATE TABLE messages (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        subject VARCHAR(255),
+        data TEXT,
+        received_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    ```
 
 <add screenshot of sql terminal>
 
@@ -105,29 +99,31 @@ CREATE TABLE messages (
 We start by creating the publisher application.
 1. Create a new file in your project directory named `nats_publisher.py`
 2. Paste the following Python code into the file:
+
     ```
-import asyncio
-from nats.aio.client import Client as NATS
+    import asyncio
+    from nats.aio.client import Client as NATS
 
-async def run_publisher():
-    # Connect to the NATS server
-    nc = NATS()
+    async def run_publisher():
+        # Connect to the NATS server
+        nc = NATS()
 
-    await nc.connect("NATS ACCOUNT URL", user_credentials="NATS CREDENTIALS PATH")
+        await nc.connect("NATS ACCOUNT URL", user_credentials="NATS CREDENTIALS PATH")
 
-    # Publish a message to the subject
-    await nc.publish("foo", b'Hello, World!')
+        # Publish a message to the subject
+        await nc.publish("foo", b'Hello, World!')
 
-    # Flush to ensure messages are processed
-    await nc.flush()
+        # Flush to ensure messages are processed
+        await nc.flush()
 
-    # Close the connection
-    await nc.close()
+        # Close the connection
+        await nc.close()
 
-if __name__ == '__main__':
-    asyncio.run(run_publisher())
+    if __name__ == '__main__':
+        asyncio.run(run_publisher())
     ```
-    Do not forget to replace `NATS ACCOUNT URL` and `NATS CREDENTIALS PATH` with your own NATS account details.
+
+Do not forget to replace `NATS ACCOUNT URL` and `NATS CREDENTIALS PATH` with your own NATS account details.
 
 This small Python application will publish a "Hello World!" message under the "foo" subject
 
@@ -137,45 +133,45 @@ Next we create the subscriber application.
 1. Create a new file in your project directory named `nats_subscriber_with_mysql.py`
 2. Paste the following Python code into the file:
     ```
-import asyncio
-import mysql.connector
-from nats.aio.client import Client as NATS
+    import asyncio
+    import mysql.connector
+    from nats.aio.client import Client as NATS
 
-async def run_subscriber():
-    # Connect to the NATS server
-    nc = NATS()
+    async def run_subscriber():
+        # Connect to the NATS server
+        nc = NATS()
 
-    await nc.connect("NATS ACCOUNT URL", user_credentials="NATS CREDENTIALS PATH")
+        await nc.connect("NATS ACCOUNT URL", user_credentials="NATS CREDENTIALS PATH")
 
-    async def message_handler(msg):
-        subject = msg.subject
-        data = msg.data.decode()
-        print(f"Received a message on '{subject}': {data}")
+        async def message_handler(msg):
+            subject = msg.subject
+            data = msg.data.decode()
+            print(f"Received a message on '{subject}': {data}")
 
-        # Store the message in the MySQL database
-        conn = mysql.connector.connect(
-            host="PUBLIC ENDPOINT",
-            port="PORT",
-            user="NAME",
-            password="PASSWORD",
-            database="nats_messages"
-        )
-        cursor = conn.cursor()
-        cursor.execute('INSERT INTO messages (subject, data) VALUES (%s, %s)', (subject, data))
-        conn.commit()
-        cursor.close()
-        conn.close()
+            # Store the message in the MySQL database
+            conn = mysql.connector.connect(
+                host="PUBLIC ENDPOINT",
+                port="PORT",
+                user="NAME",
+                password="PASSWORD",
+                database="nats_messages"
+            )
+            cursor = conn.cursor()
+            cursor.execute('INSERT INTO messages (subject, data) VALUES (%s, %s)', (subject, data))
+            conn.commit()
+            cursor.close()
+            conn.close()
 
-    # Subscribe to a subject
-    await nc.subscribe("foo", cb=message_handler)
+        # Subscribe to a subject
+        await nc.subscribe("foo", cb=message_handler)
 
-    # Keep the subscriber running to receive messages
-    while True:
-        await asyncio.sleep(1)
+        # Keep the subscriber running to receive messages
+        while True:
+            await asyncio.sleep(1)
 
-if __name__ == '__main__':
-    asyncio.run(run_subscriber())
-```
+    if __name__ == '__main__':
+        asyncio.run(run_subscriber())
+    ```
     Do not forget to replace the subscriber code with the correct configuration details for your Scaleway Managed Database information, and `NATS ACCOUNT URL` and `NATS CREDENTIALS PATH` with your own NATS account details.
    You will note that they are the same as the publisher's. 
    This is normal as both applications are communicating through the same NATS server.
@@ -189,7 +185,7 @@ Your architecture is now ready:
 - A database that can be read by the rest of your architecture's clients
 
 To see the flow running, you can follow these steps:
-1. Open your Terminal window dedicated to the subscriber and run the Python file
+1. Open your terminal window dedicated to the subscriber and run the Python file
 ```
 python nats_subscriber_with_mysql.py
 ```
@@ -215,7 +211,7 @@ You can also delete your NATS server with the following command in your terminal
 ```
 nats-server --signal stop
 ```
-Messaging and Queuing NATS is a Serverless product and is only charge once you are movoing messages through the broker.
+Messaging and Queuing NATS is a Serverless product and is only charged for when you are moving messages through the broker. This eliminates the need to worry about unexpected billing when you are not using it.
 
 ## Summary, going further, key takeaways
 We have shown how to asynchronously decouple a producer and a mySQL database using NATS, adhering to serverless patterns.

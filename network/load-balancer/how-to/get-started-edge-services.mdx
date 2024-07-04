@@ -1,203 +1,419 @@
 ---
 meta:
-  title: How to add a certificate to your Load Balancer
-  description: This page explains how to add a certificate to your Load Balancer
+  title: How to use a Load Balancer with Edge Services
+  description: This page explains how to configure an Edge Services pipeline on your Load Balancer, enabling a caching service for faster and more efficient delivery.
 content:
-  h1: How to add a certificate to your Load Balancer
-  paragraph: This page explains how to add a certificate to your Load Balancer
+  h1: How to use a Load Balancer with Edge Services
+  paragraph: This page explains how to configure an Edge Services pipeline on your Load Balancer, enabling a caching service for faster and more efficient delivery.
 dates:
-  validation: 2024-05-14
-  posted: 2022-10-20
+  validation: 2024-07-04
+  posted: 2024-07-04
 ---
 
-## Introduction to SSL/TLS certificates
+Edge Services is an additional feature for Scaleway Load Balancers and Object Storage buckets, currently available in [Public Beta](https://www.scaleway.com/en/betas/).
 
-SSL/TLS certificates facilitate the establishment of secure connections between client and server. They verify the authenticity of the entities involved, and permit the encryption of data as it flows between client and server. SSL/TLS certificates are typically associated with the HTTPS protocol.
+Creating an Edge Services pipeline for your Load Balancer helps to reduce load on your Load Balancer's backend servers. The origin configuration you define is used by Edge Services to connect to your Load Balancer and request content, which is then stored in the cache. Then, when your Load Balancer origin is accessed via its customizable Edge Services endpoint, the requested content is served from the cache (if present), without the need to fetch this content via the Load Balancer and its backend servers.
 
-<Message type="tip">
+Edge Services lets you:
 
-Originally, the initial encryption protocol used with HTTPS was the **S**ecure **S**ockets **L**ayer (SSL). However, it is now standard for its successor: **T**ransport **L**ayer **S**ecurity (TLS) to be used. [Transport Layer Security](https://en.wikipedia.org/wiki/Transport_Layer_Security) is a more up-to-date security protocol designed to increase privacy and data security for communications over the internet.
+- Define the specific origin (Load Balancer, frontend port and host) for a given pipeline and its associated cache
+- Choose the TTL for cached objects
+- Purge the entire cache or specific cached objects at any time (cache invalidation)
+- Customize your Edge Services pipeline endpoint using a subdomain of your own domain
+- Add an SSL/TLS certificate so that Edge Services can serve content over HTTPS for your subdomain
 
-You may therefore hear certificates referred to as "SSL certificates", "TLS certificates" or "SSL/TLS certificates". These are essentially all the same thing.
+## Edge Services concepts
 
-</Message>
+TODO INSERT OVERALL DIAGRAM
 
-### Do I need to add a certificate to my Load Balancer?
+### Pipeline
 
-Adding an SSL/TLS certificate to your Load Balancer's frontend has the following effect:
-- Secure connections (e.g. HTTPS), can be established between the client and the Load Balancer. 
-- The Load Balancer can therefore decrypt incoming secure traffic from the client and encrypt outgoing traffic on its way back to the client
-- The Load Balancer can carry out layer 7 actions (e.g. establishing [cookie-based sticky sessions](/network/load-balancer/concepts/#sticky-session)) on the traffic it has decrypted.
-- Depending on your Load Balancer's backend configuration, and whether your backend server also has a certificate, traffic can also be encrypted as it flows between the Load Balancer and the backend server ([SSL bridging](/network/load-balancer/reference-content/ssl-bridging-offloading-passthrough/#configuring-a-load-balancer-for-ssl-bridging)), or else left unencrypted ([SSL offloading](/network/load-balancer/reference-content/ssl-bridging-offloading-passthrough/#configuring-a-load-balancer-for-ssl-offloading))
+An Edge Services pipeline consists of an [origin](#origin) for which Edge Services requests and [caches](#cache) content, and an [endpoint](#endpoint) from which this content is served via Edge Services. The pipeline's endpoint can be customized with a user-defined [subdomain](#subdomain) and associated [certificate](#certificate) so that Edge Services can serve content over HTTPS. 
 
-You may not need to add an SSL/TLS certificate to your Load Balancer's frontend if:
-- Your backend server has an SSL/TLS certificate, and you want to use an [SSL passthrough](/network/load-balancer/reference-content/ssl-bridging-offloading-passthrough/#configuring-a-load-balancer-for-ssl-passthrough) setup for secure connections. Note that in this case, the Load Balancer will not be able to carry out any layer 7 actions on encrypted traffic.
-- Your backend server does not have an SSL/TLS certificate, but you do not want or need to allow clients to establish secure connections to the Load Balancer or your backend server.
+You can create one or more Edge Services pipelines for each of your Load Balancers. If creating multiple pipelines for the same origin Load Balancer, each one must have a different [origin host](#origin-host). TODO DOUBLE CHECK THIS.
 
-Read [the documentation](/network/load-balancer/reference-content/ssl-bridging-offloading-passthrough/) about SSL bridging, offloading and passthrough configurations for more information on how to achieve these setups, and their advantages and disadvantages.
+### Origin
 
-### How does the secure connection work?
+The primary source from which an Edge Services pipeline retrieves and caches data. An origin consists of the [Load Balancer](#origin-load-balancer) and frontend port that Edge Services connects to to request content, and (optionally) a specified [host](#origin-host) associated with the Load Balancer, used in the HTTP request Host Header.
 
-When your Load Balancer's frontend has a certificate, clients can securely connect to it via an encrypted connection. The underlying process is as follows:
+### Origin Load Balancer
 
-- The client attempts to securely connect to the Load Balancer and asks it to identify itself.
-- The Load Balancer sends the client a copy of its certificate in response.
-- The client attempts to verify the certificate, and signals to the Load Balancer if it is satisfied it is trustworthy
-- The Load Balancer returns an acknowledgment to start an encrypted session.
-- Encrypted data is sent to the Load Balancer
+The Load Balancer defined by the user as origin for a given Edge Services pipeline. The pipeline connects to this Load Balancer, on the specified frontend port to request content.
 
-### How can I add a certificate to my Load Balancer?
+### Protocol
 
-Scaleway Load Balancer allows you to add certificates in two different ways: 
-- [**Generate a Let's Encrypt certificate**](#how-to-generate-and-add-a-let's-encrypt-certificate) directly from the console.
-- [**Import an existing certificate**](#how-to-import-a-certificate), which can be from a Certificate Authority (CA) other than Let’s Encrypt, or be a self-signed certificate. 
+The protocol (HTTP or HTTPS) that the Edge Services pipeline should use when sending requests to the origin. HTTPS is recommended. TODO ADD INFORMATION ON HOW TO CHOOSE THE CORRECT PROTOCOL
 
-Note that after creating your certificate, you **must** [add it to a specified frontend](/network/load-balancer/how-to/manage-frontends-and-backends/#how-to-edit-frontends) of your Load Balancer for it to take effect.
+### Origin host
 
-## How to generate and add a Let's Encrypt certificate
+The specific host for which Edge Services requests and caches data. This is an optional setting: when specified, this host (e.g. `mydomain.com`) is used in the HTTP Host Header when Edge Services requests data from the Load Balancer. If no origin host is specified, the Load Balancer's IP address is used in the Host Header. 
+
+The origin host must be associated with the origin Load Balancer, and only one host may be set per pipeline. If your Load Balancer is associated with multiple hosts, you can create a separate Edge Services pipeline for each. Each host will therefore get its own Edge Services endpoint and cache.
+
+### Cache
+
+The storage location where Edge Services stores copies of content that has retrieved from a given Load Balancer origin. When users request content from the Edge Services endpoint, it serves content directly from the cache wherever possible, in accordance with the caching rules defined by the user. This reduces load on the Load Balancer and its backend servers.
+
+Note that if an object has a caching directive, the caching directive always takes precedence over any lifetime setting defined in Edge Services.
+
+### Endpoint
+
+The endpoint from which a given Edge Services pipeline can be accessed, e.g. `https://pipeline-name.svc.edge.scw.cloud`. When a client requests content from the Edge Services endpoint, it is served by Edge Services and its cache, rather than from the Load Balancer and its backend servers directly. Edge Services automatically manages redirection from HTTP to HTTPS
+
+The endpoint can be customized with a user-defined subdomain, allowing you to replace the standardized endpoint with the subdomain of a domain you already own, e.g. `http://my-own-domain.com`. An associated [certificate](#certificate), and [CNAME record](#cname) will be required, in this case.
+
+### Certificate
+
+The SSL/TLS certificate for your subdomain to enable Edge Services to serve content over HTTPS, if you have customized your [Edge Services endpoint](#endpoint). You can choose between uploading your own certificate held in Scaleway Secret Manager, or letting Edge Services generate a fully-managed Let's Encrypt certificate.
+
+### CNAME record
+
+The CNAME record pointing your subdomain to the Edge Services endpoint, if you have customized your [Edge Services endpoint](#endpoint). This is necessary to ensure that traffic for your customized subdomain is correctly directed towards the Edge Services endpoint by DNS servers.
 
 <Macro id="requirements" />
 
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- [Created a Load Balancer](/network/load-balancer/how-to/create-load-balancer/)
-- A domain name, which points to your Load Balancer's IP address
+- A [Load Balancer](/network/load-balancer/how-to/create-load-balancer/)
+
+## How to create an Edge Services pipeline
+
+You can create one or more Edge Services pipelines for each of your Load Balancers. Each pipeline has its own [origin](#origin), [endpoint](#endpoint) and [cache](#cache). If you create multiple Edge Services pipelines for the same origin Load Balancer, each one must have a different [origin host](#origin-host).
+
+Follow the steps below to create an Edge Services pipeline.
+
+1. Click **Load Balancers** in the **Network** section of the Scaleway console side menu. The list of your Load Balancers displays.
+
+2. Click the **Edge Services** tab.
+
+3. Click **create Edge Services pipeline**. The pipeline creation wizard displays.
+
+    TODO SCREENSHOT
+
+4. Configure the [origin](#origin) for this pipeline:
+        - Select the **origin Load Balancer** from the dropdown list. The Edge Services pipeline will connect to this Load Balancer when requesting content.
+        - Select a **frontend** associated with the origin Load Balancer from the dropdown list. The Edge Services pipeline will connect to the Load Balancer on this port when requesting content. We recommend that you select an HTTPS port, e.g. `443`.
+
+        <Message type="tip">
+        For Kubernetes Load Balancers, see our [dedicated documentation](TODO) for help selecting the correct frontend and port.
+        </Message>
+
+5. Define the protocol and origin host for this pipeline:
+        - Select the protocol that Edge Services should use when making requests to the origin, either `HTTP` or `HTTPS` (recommended).
+        - Optionally, enter an [origin host](#origin-host) associated with your Load Balancer for this pipeline. When specified, this host replaces the Load Balancer IP address in the HTTP Host Header of the requests made from Edge Services to your Load Balancer.
+
+6. Enter a name for this Edge Services pipeline, or leave the auto-generated name in place.
+
+    Edge Services for Load Balancer is free during Public Beta. You will be notified before the service leaves beta and becomes billable.
+
+7. Click **Create Edge Services pipeline** to finish.
+
+
+TODO CONTINUE HERE
+    <Message type="important">
+
+    Your bucket's [visibility](https://www.scaleway.com/en/docs/storage/object/concepts/#visibility) can be set to **private**, but any objects within it that you want to expose via Edge Services must be set to [**public** visibility](https://www.scaleway.com/en/docs/storage/object/how-to/manage-object-visibility/). However, in the case that you are using Edge Services with bucket website (see below), objects can remain private.
+
+    </Message>
+
+    <Message type="important">
+    Note the following important information about using Edge Services with the [bucket website](/storage/object/how-to/use-bucket-website/) feature:
+    - **If you want to use bucket website and Edge Services**: Ensure that you activate bucket website **before** you enable Edge Services. Avoid deactivating bucket website afterwards.<br /><br />
+    - **If you do not want to use bucket website**: Simply enable Edge Services. Note however that if you activate bucket website after this, Edge Services will not be able to serve your bucket website URLs, and will continue to serve the regular bucket URLs.<br /><br />
+    - **If you want to change your bucket website setting**: Disable Edge Services first, activate or deactivate bucket website as you wish, and then enable Edge Services. Edge Services will now pick up the new configuration, and will serve content from your bucket website URLS if bucket website is activated, or from your regular bucket URLs if bucket website is deactivated.
+    </Message>
+
+## How to access your bucket via Edge Services
+
+Once you have enabled Edge Services on your bucket, you can access your bucket and its content via the following endpoints (replace `bucket-name` with the name of your bucket.)
+
+| Endpoint                                | Where to find this endpoint in the console | Notes                                                           |
+|-----------------------------------------|--------------------------|-----------------------------------------------------------------------------------|
+| `https://bucket-name.s3.nl-ams.scw.cloud` | The **Bucket settings** tab                | Edge Services is bypassed when bucket is accessed via this endpoint  |
+| `https://bucket-name.svc.edge.scw.cloud`  | The **Edge Services** tab                  | Edge Services serves bucket content when this endpoint is used |
+
+The two endpoints shown above are available as standard. However, with Edge Services, you can also choose to configure a **custom domain** from which your bucket can be accessed. Read more about this in the next section.
+
+## How to use custom domains
+
+### How to configure a custom domain
+
+If you already own a domain, you can use Edge Services to set a subdomain of your choice through which your bucket can be accessed. 
+
+For example, if you own `beautiful-domain.com`, you can configure your bucket to be accessed via the subdomain `whatever-i-want.beautiful-domain.com`. You must also add an SSL/TLS certificate so that your subdomain can securely serve your bucket's content via HTTPS.
+
+| Endpoint                                    | Where to find this endpoint in the console       |Notes                                                        |
+|----------------------------------------------|-------------------------------------------------|-------------------------------------------------------------|
+| `https://whatever-i-want.beautiful-domain.com`| The **Edge Services** tab  (after customization) | Edge Services serves bucket content when this endpoint is used. The pre-existing endpoints shown in the table in the previous section also continue to be functional as before. |
+
+You cannot customize your endpoint with a primary domain directly (e.g. `beautiful-domain.com`), only with a subdomain of it.
+
+The procedure for adding a customized endpoint is as follows:
+
+1. Click **Object Storage** in the **Storage** section of the Scaleway console side menu. The list of your buckets displays.
+
+2. Click the name of the bucket you want to configure a custom domain for.
+
+3. Click the **Edge Services** tab.
+
+    <Lightbox src="scaleway-edge-services-splash.webp" alt="" />
+
+4. In the **Endpoint** panel, click **Configure domain**. The following screen displays:
+
+    <Lightbox src="scaleway-edge-services-configure-domain.webp" alt="" />
+
+5. Set a subdomain from which your bucket will be accessible. You must already own the primary domain. For example, if you own `beautiful-domain.com`, choose any subdomain you like and enter `my-chosen-subdomain.beautiful-domain.com` into the box.
+
+    <Message type="important">
+    It is **not** possible to use only a root domain (aka primary domain or apex domain), you must use a subdomain. This is because CNAME records, essential to point your domain to your Edge Services endpoint, cannot by definition be created for root domains, only for subdomains.
+    ✅ blog.example.com
+    ❌ example.com
+    </Message>
+
+6. This step depends on whether the domain used in the previous step is managed with [Scaleway Domains and DNS](https://www.scaleway.com/en/docs/network/domains-and-dns/), or an external domain provider. Choose the appropriate tab below.
+
+    <Tabs id="edge-cname">
+    
+        <TabsTab label="Domains and DNS">
+        The domain you are using for Edge Services is considered to be managed with Scaleway Domains and DNS if:
+        - You [registered the domain](/network/domains-and-dns/how-to/register-internal-domain/) with Domains and DNS, or
+        - You [transferred an externally-registered domain](/network/domains-and-dns/how-to/transfer-external-domain/) to Domains and DNS
+
+        If either of the above is true, Scaleway will auto-detect that the domain is managed by Domains and DNS, and a message will display confirming that you do not need to create a CNAME record. We will auto-generate the appropriate CNAME record in your domain's [DNS records](/network/domains-and-dns/how-to/manage-dns-records/), to point your subdomain to the Edge Services endpoint for your bucket. This record is generated when you click `Customize domain` in step 8.
+
+        You should not attempt to modify or delete the CNAME record, which will be visible among your [DNS records](/network/domains-and-dns/how-to/manage-dns-records/) in the Scaleway console.
+        </TabsTab>
+
+        <TabsTab label="External provider">
+        Scaleway cannot itself create the appropriate CNAME record to point your subdomain to Edge Services if your domain is managed by an external provider. You must create the CNAME record yourself.
+
+        Log into your domain provider, and locate the DNS settings for your domain. Create a new CNAME record pointing your subdomain to the Edge Services endpoint for your bucket displayed in the Scaleway console. For help setting up CNAME records and troubleshooting any problems, [check out our dedicated documentation](/storage/object/reference-content/cname-record/)
+
+        Back in the Scaleway console, click the `Verify CNAME` button to check whether your CNAME record has been correctly configured. Edge Services will carry out a check, and if it is successful the following message displays:
+
+        <Lightbox src="scaleway-cname-success.webp" alt="Verification passed: Your DNS record has been correctly configured" />
+
+        If the check fails, an error message will display. See the documentation linked above for help troubleshooting such errors.
+        </TabsTab>
+    </Tabs>
+
+7. Provide an SSL/TLS certificate for your subdomain so that it can serve traffic over HTTPS. You have three options for this:
+    - Generate a free Let's Encrypt certificate, managed by Scaleway, including automatic renewals.
+    - Select an existing certificate that you have stored in [Scaleway Secret Manager](/identity-and-access-management/secret-manager/quickstart/).
+    - Manually import a certificate into Scaleway Secret Manager:
+      - Enter a name for your certificate (alphanumeric characters only)
+      - Optionally, add tags by typing each tag and then pressing enter
+      - Copy and paste the full PEM-formatted certificate chain into the box.
+      Your certificate will be automatically stored in Secret Manager and [billed accordingly](https://www.scaleway.com/en/pricing/?tags=available,securityandidentity-secretmanager-secretmanager).
+
+    <Message type="tip">
+    For help with SSL/TLS certificates for Edge Services, and/or dealing with any errors you encounter importing a certificate into Secret Manager, see our [dedicated documentation](/storage/object/reference-content/ssl-tls-certificate/).
+    </Message>
+
+8. Click **Customize domain** to finish.
+
+Your customized domain is set up, and you are returned to the Edge Services dashboard. The customized domain displays in the Endpoint panel. When you access your bucket through this domain, its content will be served via Edge Services.
 
 <Message type="note">
-Bear in mind the following restrictions for creating Let's Encrypt certificates:
-- They can only be added to Load Balancers that have [public accessibility](/network/load-balancer/concepts/#accessibility), that is to say that have a public IP address. It is not possible to add Let's Encrypt certificates to [private Load Balancers](/network/load-balancer/concepts/#private-load-balancer).
-- They cannot be created for Load Balancers which have a frontend listening on port 80 attached to a TCP backend. This is because the Let's Encrypt challenge would fail. Frontends listening on port 80 attached to an HTTP backend, or frontends listening on a port other than 80 and attached to a TCP backend, are both fine and compatible with Let's Encrypt certificates.
+If you chose to generate a managed Let's Encrypt certificate, allow a few minutes for the certificate to finish creating. When the process is complete and the certificate is ready, you will see a green status light for **SSL/TLS certificate** on your endpoint dashboard.
+
+<Lightbox src="scaleway-edge-services-certificate-complete.webp" alt="" />
+
 </Message>
 
-1. Click **Load Balancers** in the **Network** section of the [Scaleway console](https://console.scaleway.com) side menu. Click the Load Balancer you want to configure. The Load Balancer information page displays.
+### How to edit your customized domain or its certificate
 
-2. Click the Load Balancer you want to add a certificate to.
+After customizing your domain, you can edit it (or its certificate) at any time as follows:
 
-3. Click the **SSL Certificates** tab.
+1. Click **Object Storage** in the **Storage** section of the Scaleway console side menu. The list of your buckets displays.
 
-4. Click **Create SSL certificate**. A pop-up displays:
+2. Click the name of the bucket you want to configure a custom domain for.
 
-    <Lightbox src="scaleway-cert-lets-encrypt.webp" alt="" />
+3. Click the **Edge Services** tab.
 
-5. Enter the required information:
+    <Lightbox src="scaleway-edge-services-customised.webp" />
 
-    - Give a name for your certificate, or use the auto-generated name suggested for you.
-    - Select the **Let's Encrypt** certificate type.
-    - Enter the main domain name associated with your Load Balancer, e.g. `my-website.com` using the Common Name box.
-    - Enter additional domain names for the certificate using the **Subject Alternative Name** box if necessary. 
+4. In the **Endpoint** panel, click **Edit**. The **Edit Domain** screen displays.
 
-6. Click **Create SSL certificate**.
+5. Edit the subdomain as desired - do not forget to also set up a new CNAME record, if necessary.
 
-    You are returned to the **SSL certificates** tab where your newly-created certificate now appears. You must now attach the certificate to your frontend:
+6. Edit your certificate options as required - choose to generate a managed Let's Encrypt certificate, managed by Scaleway including automatic renewals, or select a different certificate from Secret Manager, or manually import a new certificate for your custom domain.
 
-7. Click the **Frontends** tab.
+7. Click **Edit domain** to finish.
 
-8. Click the three dot menu next to the frontend you want to add the certificate to, then click **Edit**.
+### How to reset your customized domain to the original Edge Services endpoint
 
-    <Lightbox src="scaleway-edit-frontend.webp" alt="" />
+Even though the original Edge Services endpoint (e.g. `https://bucket-name.svc.edge.scw.cloud`) will continue to work after you add a customized domain, you can choose to remove your customized domain completely and go back to the original Edge Services endpoint only. This is done via the reset function:
 
-9. Select the certificate you just created from the **SSL Certificate(s)** drop-down, then click **Edit Frontend**.
+1. Click **Object Storage** in the **Storage** section of the Scaleway console side menu. The list of your buckets displays.
 
-Your certificate is added to your Load Balancer's frontend.
+2. Click the name of the bucket you want to configure a custom domain for.
 
-## How to import a certificate
+3. Click the **Edge Services** tab.
 
-<Macro id="requirements" />
+    <Lightbox src="scaleway-edge-services-customised.webp" />
 
-- A Scaleway account logged into the [console](https://console.scaleway.com)
-- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- [Created a Load Balancer](/network/load-balancer/how-to/create-load-balancer)
-- Either:
-  - An existing certificate issued by a Certificate Authority, or
-  - [Generated a self-signed certificate](#how-to-create-a-self-signed-certificate)
+4. In the **Endpoint** panel, click **Reset**.
 
-Scaleway Load Balancers allow you to import **third party SSL certificates**. These are certificates issued by a Certificate Authority (CA) other than Let’s Encrypt. Depending on the CA, they may offer extended validation certificates which require full verification of the requesting entity’s legal identity before issuing the certificate. These certificates can be useful for websites that require a high trust level, like e-commerce or government websites, and can be easily imported into the Load Balancer configuration from the management console.
+    A screen displays warning you that this will reset the bucket's domain back to the default Edge Services endpoint. Edge Services will consider your customized subdomain as unknown. You should also remember to:
+        - Delete your CNAME record from your domain provider, unless your domain is managed with Scaleway Domains and DNS, in which case we take care of deletion for you.
+        - Delete any SSL/TLS certificates you imported into Secret Manager (if no longer required elsewhere, so that you are no longer billed for it). If you generated a managed Let's Encrypt certificate however, Scaleway takes care of the deletion for you.
 
-Alternatively you can also choose to import a **[self-signed certificate](#how-to-create-a-selfsigned-certificate)**, not signed by any publically-trusted Certificate Authority, but perhaps suitable for development and testing purposes, or internal use.
+5. Click **Reset domain** to finish.
 
-1. Click **Load Balancers** in the **Network** section of the [Scaleway console](https://console.scaleway.com) side menu. Click the Load Balancer you want to configure. The Load Balancer information page displays.
+## How to configure your cache
 
-2. Click the Load Balancer you want to add a certificate to.
+The cache feature allows you to cache your bucket's content with Edge Services. This means that content can be served directly to users from Edge Services' servers, enhancing performance.
 
-3. Click the **SSL Certificates** tab.
+You can disable and enable caching at will, as well as control the lifetime of an object in the cache. You can also purge your entire cache, or specific objects within it. A log is displayed to help you track your purge events.
 
-4. Click **Create an SSL certificate**. A pop-up displays:
+### How to enable your cache
 
-    <Lightbox src="scaleway-certificate-import.webp" alt="" />
+1. Click **Object Storage** in the **Storage** section of the Scaleway console side menu. The list of your buckets displays.
 
-5. Enter the required information:
+2. Click the name of the bucket you want to configure a cache for.
 
-    - Give a name for your certificate, or use the auto-generated name suggested for you.
-    - Select **Import Certificate** under type.
-    - Paste the full PEM-formatted certificate into the box provided. Include the entire certificate chain with public key, private key, and (optionally) Certificate Authorities. You may have received this information either in a combined file or in separate files from your CA. Contact them for more details on how to combine the information if you received the chain divided into multiple files.
+3. Click the **Edge Services** tab.
 
-6. Click **Create SSL certificate**.
+    <Lightbox src="scaleway-edge-services-customised.webp" />
 
-    You are returned to the **SSL certificates** tab where your newly-created certificate now appears. You must now attach the certificate to your frontend:
+4. In the **Cache** panel, use the <Icon name="toggle" /> icon to enable the cache.
 
-    <Lightbox src="scaleway-create-self-certificate.webp" />
+    The **Lifetime** configuration box displays. This enables you to define, in seconds, how long an object can be stored in the cache before it must be retrieved freshly from the bucket.
 
-7. Click **Frontends**.
+    <Lightbox src="scaleway-edge-services-cache.webp" />
 
-8. Click the three dot menu next to the frontend you want to add the certificate to, then click **Edit**
+    <Message type="tip">
+    As an example, a value of 0 means that objects will not be cached, unless they have a separately-defined caching directive. Note that in any case, if an object has a caching directive, the caching directive always takes precedence over any lifetime setting defined here in Edge Services.
+    </Message>
 
-    <Lightbox src="scaleway-edit-frontend.webp" alt="" />
+5. Leave the default value of 1 hour in place, or enter another value.
 
-9. Select the certificate you just created from the **SSL Certificate(s)** drop-down, then click **Edit Frontend**.
+The cache is now enabled.
 
-Your certificate is added to your Load Balancer's frontend.
+### How to purge all objects from your cache
 
-## How to create a self-signed certificate
+This clears all objects from your cache. Afterwards, Edge Services will retrieve fresh copies from the bucket before it stores them again in the cache.
 
-If you are using the [import certificate](#how-to-import-a-certificate) option, you may wish to generate your own self-signed certificate to import to your Load Balancer. These certificates are not signed by any publicly-trusted Certificate Authority, but may be suitable for development and testing purposes, or internal use. A self-signed certificate can be issued easily on any computer using the `openssl` tool. Follow these steps to generate a self-signed certificate:
+1. Click **Object Storage** in the **Storage** section of the Scaleway console side menu. The list of your buckets displays.
 
-1. From your computer, open up a command line terminal and run the following command to generate a private key file and a CSR file:
-	```
-	openssl req -new -newkey rsa:4096 -nodes -keyout private_key.txt -out csr.txt -subj "/C=FR/ST=Ile-de-France/L=Paris/O=MyInternetCompanyLTD/CN=www.example.com"
-	```
-	The following subcommands are used with the `openssl` base command:
-	- `req`: This subcommand specifies the use of the X.509 certificate signing request (CSR) management.
-	- `newkey rsa: 4096`:  This subcommand specifies the creation of a new key and certificate at the same time using a 4096 bit long RSA key.
-	- `nodes`: This option tells OpenSSL to skip the securisation of the certificate using a passphrase.
-	- `keyout`: This subcommand defines the location and file name of the private key file
-	- `out`: This specifies the path and file name of the generated certificate request.
-	- `sub`: The subject for the certificate. Modify the values of this subcommand to your requirements. The **Common Name** (CN) represents the domain name you are issuing the certificate for.
+2. Click the name of the bucket you want to purge the cache for.
 
-2. Generate a file containing all **Subject Alternative Names** (SAN) for the certificate. These include websites, IP addresses, common names, etc. They are protected by a single SSL Certificate. To do this, create a new file called `alt_names.txt`, open it in a text editor and edit the file as follows. Make sure to add all domain names and IP addresses that should be protected by the certificate.
-	```
-	subjectAltName=IP:10.100.0.1,IP:192.168.0.1,DNS:myserver.mydomain.com,DNS:otherserver.otherdomain.com,EMAIL:name@mydomain.com,EMAIL:othename@otherdomain.com
-	```
+3. Click the **Edge Services** tab.
 
-3. Save the file and exit the text editor.
+4. In the **Purge cache** panel, click **Purge all**.
 
-4. Generate the self-signed certificate using the `openssl` tool:
-	```
-	openssl x509 -req -extfile alt_names.txt -sha256 -days 365 -in csr.txt -signkey private_key.txt  -out certificate.txt
-	```
+    <Lightbox src="scaleway-edge-services-purge-cache.webp" />
 
-5. Check that you have the following files in your folder with the `ls` command.
-	- `csr.txt`: The certificate request
-	- `private_key.txt`: The private key for the certificate
-	- `certificate.txt`: The public key for the certificate
+    A screen displays warning you that your cache will be emptied, and Edge Services will have to retrieve objects from your bucket before re-caching them.
+        
+5. Click **Purge cache** to confirm.
 
-6. Combine the private key and certificate into a `.pem` file, which is the format required in the Scaleway console when adding the certificate to the Load Balancer:
-    ```
-    cat private_key.txt certificate.txt > cert.pem
-    ```
+### How to purge specific objects from your cache
 
-    The `cert.pem` file is created.
+This allows you to specify the precise objects that you want to clear from the cache. Afterwards, Edge Services will retrieve fresh copies from the bucket before it stores them again in the cache.
 
+1. Click **Object Storage** in the **Storage** section of the Scaleway console side menu. The list of your buckets displays.
 
-## How to manage your certificates
+2. Click the name of the bucket you want to purge cache objects for.
 
-View the certificate(s) that you have uploaded for your Load Balancer on the **SSL certificates** tab:
+3. Click the **Edge Services** tab.
 
-<Lightbox src="scaleway-certificate-list.webp" alt="" />
+4. In the **Purge cache** panel, click **Purge by object**.
 
-Use the <Icon name="delete" /> button to delete unwanted certificates.
+    <Lightbox src="scaleway-edge-services-purge-cache.webp" />
+        
+    A screen displays prompting you to enter the path of each object you want to purge from the cache.
 
-<Message type="tip">
-If you have more than one certificate for your Load Balancer, it will automatically use the first in the list, regardless of its expiry date. Ensure that you delete any expired certificates, and that the current certificate you want to use is first in the list.
-</Message>
+    <Lightbox src="scaleway-edge-services-purge-object.webp" />
 
+5. Enter the path of each object you want to purge. You can purge a maximum of 5 objects at a time.
 
+      <Message type="tip">
+
+      The path for each object should be defined from the root of the bucket, and must start with a slash. If we imagine a bucket containing one file at the root level called `object1.jpg`, and a subfolder at root level called `videos` containing an item called `my-video.mp4`, we would enter the object paths as follows:
+
+      - `/object1.jpg`
+      - `/videos/my-video.mp4`
+
+      You **cannot** purge entire subfolders by simply specifying the path to the subfolder, e.g. `/videos`. Purging objects must done strictly object-by-object, so `/videos/my-video1.mp4`, `/videos/my-video2.mp4`, `/videos/my-video3.mp4` etc. Watch this space for updates to this feature in the future.
+      </Message>
+
+6. Click **Purge objects from cache**
+
+    The specified objects are purged from your cache and you are returned to the Edge Services dashboard.
+
+### How to disable your cache
+
+1. Click **Object Storage** in the **Storage** section of the Scaleway console side menu. The list of your buckets displays.
+
+2. Click the name of the bucket you want to disable caching for.
+
+3. Click the **Edge Services** tab.
+
+4. In the **Cache** panel, use the <Icon name="toggle" /> icon to disable the cache.
+
+    A pop-up displays, asking you to confirm the action.
+
+5. Click **Disable cache**.
+
+    Your cache is purged and disabled. Edge Services will now serve content by fetching it from your Object Storage bucket directly. If you reenable your cache at a later point, you will begin with an empty cache.
+
+## How to monitor Edge Services with Scaleway Cockpit
+
+You can view your Edge Services metrics via [Scaleway Cockpit](/observability/cockpit/quickstart/). This allows you to monitor your ingress, egress, request rate and cache hit ratio as well as other metrics, in a convenient managed Grafana dashboard.
+
+Access your Edge Services dashboard in the Scaleway console via the shortcut in Edge Services tab of the bucket in question. Note that you will first need to [create a Grafana user and credentials](https://www.scaleway.com/en/docs/observability/cockpit/how-to/retrieve-grafana-credentials/).
+
+### Understanding the dashboard
+
+The Grafana dashboard presents a number of different metrics. Use the `Bucket name` drop-down in the top left to select which bucket to view Edge Services metrics for, and the time range drop-down in the top right to modify the time period to apply to the metrics.
+
+<Lightbox src="scaleway-edge-services-metrics.webp" alt="" />
+
+- **Request rate**: The number of requests made to Edge Services per second, for the specified bucket, averaged over the specified time period.
+- **Cache hit ratio**: The percentage of requests served from Edge Services' cache, compared to the total number of requests in total to Edge Services for this bucket, over the specified time period.
+- **Cache HIT/MISS**: A visual representation of the ratio of cache hits to misses, for the specified bucket, over the specified time period.
+    - **Cache hit line**: The number of requests per second made to Edge Services for this bucket, which were served directly from its cache.
+    - **Cache miss line**: The number of requests per second made to Edge Services for this bucket, where the content was fetched from the bucket rather than the cache. 
+    - **Total line**: The number of requests per second made to Edge Services for this bucket.
+
+- **Egress (to client)**: The total volume of data served to clients from Edge Services, for the specified bucket, over the specified time period.
+- **Ingress (from origin)**: The total volume of data from the origin bucket's server to Edge Services over the specified time period. This represents the traffic that occurs when Edge Services retrieves content from the bucket's server in order to fulfill requests.
+- **Edge Services throughput**: A visual representation of the rate of data transfer for the specified bucket with Edge Services over the specified time period.
+    - **Output bitrate line**: The rate at which data is being delivered from Edge Services to end users.
+    - **Input bitrate line**: The rate at which Edge Services is fetching data from the origin bucket server. Peaks in this line may represent times when Edge Services had to fetch content from the origin bucket, rather than being able to serve it directly from its own cache.
+
+- **Requests served**: The total number of requests that Edge Services has successfully served, for the specified bucket, over the specified time period.
+- **Edge Services response statuses**: A visual representation of the distribution of HTTP response statuses for requests served by Edge Services over the specified time period. Consult [the full list of HTTP status codes](https://en.wikipedia.org/wiki/List_of_HTTP_status_codes) for more information if necessary.
+
+- **Request origin country**: The proportion of requests (to Edge Services for the specified bucket over the specified time period) originating from different countries.
+- **End users location**: A visual representation of where Edge Services end users have been making requests from geographically.
+
+## How to disable Edge Services
+
+You can disable Edge Services at any time via the following procedure:
+
+1. Click **Object Storage** in the **Storage** section of the Scaleway console side menu. The list of your buckets displays.
+
+2. Click the name of the bucket you want to disable Edge Services for.
+
+3. Click the **Edge Services** tab.
+
+    <Lightbox src="scaleway-edge-services-customised.webp" />
+
+4. In the **Disable Edge Services** panel at the bottom of the screen, click **Disable Edge Services**.
+
+    A pop-up displays, informing you that the bucket will be removed from Edge Services.
+      - The bucket will no longer be accessible via its Edge Services endpoint, or any customized domains pointing to this endpoint.
+      - Any files stored in the Edge Services cache will be removed.
+    
+    <Message type="tip">
+    Remember to:
+        - Delete your CNAME record from your domain provider, unless your domain is managed with Scaleway Domains and DNS, in which case we take care of deletion for you.
+        - Delete any SSL/TLS certificates you imported into Secret Manager (if no longer required elsewhere, so that you are no longer billed for it). If you generated a managed Let's Encrypt certificate however, Scaleway takes care of the deletion for you.
+    </Message>
+
+5. Click **Disable Edge Services**.
+
+    Edge Services is disabled. You can enable it again at any time, but you will need to reconfigure your custom domain, and the cache will initially be empty.

@@ -1,0 +1,121 @@
+---
+meta:
+  title: Fix unreachable Ubuntu Focal Instance when it as two public IPv4 IPs.
+  description: This page helps you to recover or avoid unreachable Ubuntu 20.04 Focal Instance when it has two public IPv4 IP addresses.
+content:
+  h1: Fix unreachable Ubuntu Focal Instance when it as two public IPv4 IPs.
+  paragraph: This page helps you to recover or avoid unreachable Ubuntu 20.04 Focal Instance when it has two public IPv4 IP addresses.
+tags: ubuntu-focal focal 20.04 multiple ipv4 ip
+dates:
+  validation: 2024-07-23
+  posted: 2024-07-23
+categories:
+  - compute
+---
+
+When using an Ubuntu 20.04 Focal Instance with more than one routed IP address, the instance will become unreachable after a reboot. This may happen when you attach a second routed IPv4 or IPv6 IP address to the instance.
+
+The version of `systemd-networkd` used in Ubuntu Focal does not support the definition of a default route which is not part of the subnet of the network interface. The `on-link: true` option must be added to the netplan profile.
+
+A modified `cloud-init` package named cloud-init_24.2-0ubuntu1~20.04.1+scaleway has been added to Scaleways stable PPA to work around this situation.
+
+
+## Your Instance has not been rebooted
+
+1. Add Scaleway's stable PPA
+
+```sh
+add-apt-repository ppa:scaleway/stable
+```
+2. Add the modified cloud-init package
+
+```sh
+apt -y install cloud-init
+```
+3. Re-initialize cloud-init to fix the netplan profile
+```sh
+cloud-init clean
+cloud-init init --local
+cloud-init init
+```
+From this point on, your instance may be safely rebooted and you will no longer loose connectivity.
+
+## Your Instance has rebooted and is no longer reachable
+
+[Rescue mode](/compute/instances/concepts/#rescue-mode) allows you to boot your Instance into a temporary operating system, running from the Instance's RAM. Rescue mode is often used to diagnose and resolve issues such as faulty kernel configurations, networking issues, firewall configurations, and more.
+
+1. Switch the Instance's `boot-type` to `rescue` and reboot your Instance into rescue mode using the [CLI](https://www.scaleway.com/en/docs/developer-tools/scaleway-cli/quickstart/):
+```
+scw instance server stop <Instance_ID>
+# Wait for the instance to be stopped.
+scw instance server update <Instance_ID> boot-type=rescue
+scw instance server start <Instance_ID>
+```
+<Message type="note">
+    Replace `<Instance_ID>` with the unique ID of your Instance, e.g. `0500ebd2-d70d-49af-a969-3ac09b6f7fff`.
+</Message>
+
+2. Once the Instance is rebooted, log into your Instance using [SSH](/compute/instances/how-to/connect-to-instance/) and set up the environment to be able to chroot into it:
+```sh
+cat /proc/partitions
+major minor #blocks name
+
+7        0      65480 loop0
+7        1      89120 loop1
+7        2      39760 loop2
+252      0   19531250 vda
+252      1   19417569 vda1
+252     14       4096 vda14
+252     15     108544 vda15
+8        0    9765625 sda
+8        1    3240943 sda1
+8       14       4096 sda14
+8       15     108544 sda15
+
+```
+Then mount the partitions and get into the `chroot`:
+
+```sh
+mount /dev/vda1 /mnt
+mount -o bind /sys /mnt/sys
+mount -o bind /proc /mnt/proc
+mount -o bind /dev /mnt/dev
+mount -o bind /run /mnt/run
+chroot /mnt
+```
+3. Fix the DNS resolution file in the chroot
+```sh
+rm -f /etc/resolv.conf
+ln -s run/systemd/resolve/stub-resolv.conf /etc/resolv.conf
+```
+4. Once in the `chroot` install the modified cloud-init package
+```
+add-apt-repository ppa:scaleway/stable
+apt -y install cloud-init
+```
+5. Re-initialize cloud-init to fix the netplan profile
+```sh
+cloud-init clean && cloud-init init --local && cloud-init init
+```
+6. Get out of the `chroot` and remove the mounts
+```sh
+umount /mnt/sys /mnt/proc /mnt/dev /mnt/run /mnt
+```
+7. Stop the instance, switch back the Instance's `boot_type` to `local` and reboot the Instance:
+```
+scw instance server stop <Instance_ID>
+# Wait for the instance to be stopped
+scw instance server update <Instance_ID> boot-type=local
+scw instance server start <Instance_ID>
+```
+Once rebooted, your Instance will be reachable again.
+
+<Message type="important">
+   This modification will be valid for up until Ubuntu publishes a new version, i.e. cloud-init 24.3. You can use the following commands to hold the newly installed version so it does not get updated when the new version comes in.
+</Message>
+
+8. Put a hold on the newly installed cloud-init
+```sh
+apt-mark hold cloud-init
+cloud-init set on hold.
+```

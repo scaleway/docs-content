@@ -11,6 +11,7 @@ def to_kebab_case(value):
 def create_concepts_list(product):
   # gets current working directory
   directory_path=os.getcwd()
+  global concepts_list
   concepts_list = []
   for dirpath, dirnames, filenames in os.walk(f"{directory_path}/{product}"):
     for filename in filenames:
@@ -30,15 +31,9 @@ def create_concepts_list(product):
               concepts_list.append(concept_specs)
   return concepts_list
 
-
-# create_concepts_list(input("Enter a category and product, e.g. \'compute/instances\' :"))
-create_concepts_list("serverless/jobs")
-
 # TODO Create a function that takes a specific product (= subfolder such as object, functions, instances, etc. in contents) and walks the pages of this product to look for the first ocurrence of each concept, checks if the line contains a link to the concept (if line contains slug then skip), and if not, replaces the concept with "[concept](link to concept)".
 
-# TODO find a way to avoid errors with concepts that contain another concept ("permission" and "permission set" for instance), like: if concept
-
-def replace_concepts(product,concepts_list):
+def replace_concepts(product):
   # gets current working directory
   directory_path=os.getcwd()
   # create absolute path to product folder with cwd (path/to/docs/content) + category and product path from user input (e.g. serverless/jobs or compute/instances)
@@ -49,12 +44,30 @@ def replace_concepts(product,concepts_list):
       with open(file_path, 'r+') as file:
         # Exclude product index files and concepts files (obviously)
         if filename.endswith(".mdx") and filename != "index.mdx" and filename != "concepts.mdx":
+          # add a first_ocurrence_replaced = False, and set it to True after replacement, and if True, break replacement "if" block to switch to next concept in the list
+          first_ocurrence_replaced = False
+          replaced_content = ""
           for line in file:
             # TODO Exclude frontmatter from line read/replace (if line starts with stuff from frontmatter or other method)
             for concept in concepts_list:
               # look for concept in concepts list, and replace concept with [concept](URL) if match.
-              if line.find(concepts_list[0]) != -1:
-                line.replace(concept, f"[{concept[0]}]({concept[1]})")
-              pass
+              if line.find(concept[0]) != -1 and not first_ocurrence_replaced:
+                # TODO find a way to avoid errors with concepts that contain another concept ("permission" and "permission set" for instance), like: if concept
+
+
+        # ----- TODO The lines below do not work properly -----
+                # replacing the 
+                new_line = line.replace(concept[0], f"[{concept[0]}]({concept[1]})")
+                replaced_content = f"{replaced_content}{new_line}\n"
+                file.write(replaced_content)
+                first_ocurrence_replaced = True
+        # ---------------------------------------------------------
+
+
+
+        file.close()
+
+# create_concepts_list(input("Enter a category and product, e.g. \'compute/instances\' :"))
+create_concepts_list("serverless/jobs")
             
 replace_concepts("serverless/jobs")

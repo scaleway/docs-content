@@ -1,0 +1,170 @@
+---
+meta:
+  title: Deploying Meilisearch on a Scaleway Instance
+  description: Deploy Meilisearch on Scaleway Instances with this step-by-step guide to set up and run the Meilisearch search engine efficiently. Perfect for fast, relevant searches.
+content:
+  h1: Deploying Meilisearch on a Scaleway Instance
+  paragraph: Deploy Meilisearch on Scaleway Instances with this step-by-step guide to set up and run the Meilisearch search engine efficiently. Perfect for fast, relevant searches.
+tags: meilisearch search full-text instance
+categories:
+  - instances
+dates:
+  validation: 2024-07-25
+  posted: 2024-07-25
+---
+
+Meilisearch is an open-source search engine that provides instant and relevant search results from large collections of data. [Meilisearch](https://www.meilisearch.com/) is particularly useful for applications that require fast and efficient search capabilities, such as e-commerce sites, documentation search, and any platform where users need to quickly find relevant information from a large dataset.
+
+This tutorial shows you how to deploy a Meilisearch search engine on a [Scaleway Instance](/compute/instances/).
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com/)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) (specifically **InstancesFullAccess**) allowing you to perform actions in the intended Organization
+- An [SSH key](/identity-and-access-management/organizations-and-projects/how-to/create-ssh-key/)
+- An [Instance](/compute/instances/how-to/create-an-instance/) with the [Docker InstantApp](/compute/instances/reference-content/images-and-instantapps/#instantapps) or with the [Docker Engine](https://docs.docker.com/engine/install/) installed
+
+
+## Connecting to your Instance and starting Meilisearch
+
+1. Open a terminal and connect to your Instance using [SSH](/compute/instances/how-to/connect-to-instance/). Replace `<INSTANCE_IP>` with your Instance's IP (Instances > Overview > Flexible IP > the first IP address that displays in the list).
+
+    ```
+    ssh root@<INSTANCE_IP>
+    ```
+
+    <Message type="tip">
+     If you are using an Instance with a Docker InstantApp, run `docker -v` to make sure that the Docker engine is already installed. The current Docker engine version should display.
+    </Message>
+2. In the same terminal, generate a master key for Meilisearch. This key will secure your Meilisearch instance.
+
+    ```
+    export MEILI_MASTER_KEY=$(openssl rand -base64 16)
+    ```
+3. Run the following command to display the master key:
+
+    ```
+    echo $MEILI_MASTER_KEY
+    ```
+    <Message type="important">
+     Copy and save your master key as you will need it in the next steps.
+    </Message>
+4. Run the MeiliSearch container using Docker. This command sets up Meilisearch to store data persistently on the volume located at `$(pwd)/meili_data:/meili_data` on your Instance.
+
+    ```
+    docker run -d -p 7700:7700 -v $(pwd)/meili_data:/meili_data  -e $MEILI_MASTER_KEY getmeili/meilisearch:v1.9
+    ```
+5. Check that the container is running:
+    ```
+    docker ps
+    ```
+    You should see an output similar to the following:
+    ```
+    CONTAINER ID   IMAGE                       COMMAND                  CREATED          STATUS          PORTS                                       NAMES
+    0432254e4d64   getmeili/meilisearch:v1.9   "tini -- /bin/sh -c …"   56 minutes ago   Up 56 minutes   0.0.0.0:7700->7700/tcp, :::7700->7700/tcp   flamboyant_dewdney
+    ```
+    <Message type="tip">
+     You can stop the Meilisearch container using `docker container stop <container_name>`.
+    </Message>
+6. Use the following command to check that Meilisearch is running.
+
+    ```
+    curl -X GET 'http://localhost:7700/version' -H 'Authorization: Bearer '$MEILI_MASTER_KEY
+    ```
+
+    You should see an output similar to the following:
+    ```json
+    {
+    "commitSha": "0df84bbba7db46680e83843dd6454257161a282f",
+    "commitDate": "2024-06-27T12:00:00Z",
+    "pkgVersion": "aaaaaa"
+    }
+    ```
+
+## Accessing Meilisearch remotely
+
+1. Open a new terminal and export your environment variables. Make sure that you replace `{INSTANCE_PUBLIC_DNS}` and `{MEILI_MASTER_KEY}` with your own variables.
+    ```sh
+     export INSTANCE_PUBLIC_DNS={INSTANCE_PUBLIC_DNS}
+     export MEILI_MASTER_KEY={MEILI_MASTER_KEY}
+    ```
+    Your command should look like the following:
+      ```
+      export INSTANCE_PUBLIC_DNS=a3dc5b0e-5c5c-4ac4-91fb-1447b5c23b57.pub.instances.scw.cloud
+      export MEILI_MASTER_KEY=LtRrsh68IdT2jKDH5DdXhA==
+      ```
+2. Run the following command to access Meilisearch remotely:
+    ```sh
+    curl -X GET 'http://'$INSTANCE_PUBLIC_DNS':7700/version' -H 'Authorization: Bearer '$MEILI_MASTER_KEY
+    ```
+  <Message type="tip">
+   You can also open your browser at `http://{INSTANCE_PUBLIC_DNS}:7700/health` since you do not need an API key to access the `/health` endpoint.
+  </Message>
+
+If you have created your Instance within a **Private Network** or if you are using a specific **security group** configuration, you must allow TCP traffic on port `7700` for your Instance to access your Meilisearch container remotely. See [our dedicated documentation on how to use security groups](/compute/instances/how-to/use-security-groups/) and [how to configure a Public Gateway](/network/public-gateways/how-to/configure-a-public-gateway/) for more information.
+
+
+## Creating an index and adding data to it
+
+1. In the same terminal as the previous steps, paste the following command to create a new index named `movies`:
+    ```sh
+      curl -X POST 'http://'$INSTANCE_PUBLIC_DNS':7700/indexes' \
+      -H 'Content-Type: application/json' \
+      -H 'Authorization: Bearer '$MEILI_MASTER_KEY \
+      --data-binary '{
+        "uid": "movies",
+        "primaryKey": "id"
+      }'
+    ```
+
+2. Add sample data to the `movies` index. In this case, we are adding 2 movies.
+    ```sh
+      curl -X POST 'http://'$INSTANCE_PUBLIC_DNS':7700/indexes/movies/documents' \
+      -H 'Content-Type: application/json' \
+      -H 'Authorization: Bearer '$MEILI_MASTER_KEY \
+      --data-binary '[
+        {
+          "id": 1,
+          "title": "The Enigma of Elysia",
+          "overview": "In a world where magic and technology coexist, a mysterious artifact known as the Elysia Stone is stolen from the royal palace."
+        },
+        {
+          "id": 2,
+          "title": "A Shattered Mirror",
+          "overview": "In a world where dreams are reflected in a magical mirror, a young man named Orion discovers that his reflection has been shattered."
+        }
+      ]'
+    ```
+    An output similar to the following should display:
+    ```
+    {"taskUid":1,"indexUid":"movies","status":"enqueued","type":"documentAdditionOrUpdate","enqueuedAt":"2024-07-24T12:32:54.678571608Z"}root@scw-lucid-satoshi:~#
+    ```
+
+3. Search for the term `mystery` in the `movies` index:
+    ```sh
+      curl -X POST 'http://'$INSTANCE_PUBLIC_DNS':7700/indexes/movies/search' \
+      -H 'Content-Type: application/json' \
+      -H 'Authorization: Bearer '$MEILI_MASTER_KEY \
+    --data-binary '{ "q": "mystery" }'
+    ```
+    Documents containing the term (or close semantic variations of the term) should display in the output:
+    ```json
+    {"hits":[{"id":1,"title":"The Enigma of Elysia","overview":"In a world where magic and technology coexist, a mysterious artifact known as the Elysia Stone is stolen from the royal palace."}],"query":"mystery","processingTimeMs":4,"limit":20,"offset":0,"estimatedTotalHits":1}
+    ```
+
+
+### Going further
+
+- Learn more about [Meilisearch APIs and features](https://www.meilisearch.com/docs/reference/api/overview#parameters)
+
+- **Secure** your deployment:
+  - Encrypt traffic in transit to Meilisearch by [setting up SSL](https://www.meilisearch.com/docs/learn/configuration/instance_options#ssl-options)
+  - Move your Instance inside a [Private Network](/compute/instances/how-to/use-private-networks/) if you do not want it to be exposed publicly on the internet
+  - Configure regular data backups using [Meilisearch Snapshots](https://www.meilisearch.com/docs/learn/advanced/snapshots) or [Instances snapshots](/compute/instances/how-to/create-a-snapshot/)
+
+- **Fine-tune deployment configuration** such as [Instance type or disk size](/compute/instances/reference-content/choosing-instance-type/), from the [Scaleway console](https://console.scaleway.com/instance/servers), [the Scaleway API](https://www.scaleway.com/en/developers/api/instance/), [CLI](/compute/instances/api-cli/cli-cheatsheet/) or [Terraform](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/instance_server).
+
+## Troubleshooting
+
+If you encounter any issues, check that you meet all the [requirements listed at the beginning of this page](#before-you-start). Also, verify that your Instance accepts connections from your computer. To do so, you can configure [security groups](/compute/instances/how-to/use-security-groups/) or a [Public Gateway](/network/public-gateways/how-to/configure-a-public-gateway/) on the [Private Network](/compute/instances/how-to/use-private-networks/) your Instance belongs to.
+

@@ -43,29 +43,24 @@ def replace_concepts(product):
       file_path=f"{dirpath}/{filename}"
       with open(file_path, 'r+') as file:
         # Exclude product index files and concepts files (obviously)
+
         if filename.endswith(".mdx") and filename != "index.mdx" and filename != "concepts.mdx":
           # add a first_ocurrence_replaced = False, and set it to True after replacement, and if True, break replacement "if" block to switch to next concept in the list
-          first_ocurrence_replaced = False
-          replaced_content = ""
-          for line in file:
+          data = file.readlines()
+          for line in data:
             # TODO Exclude frontmatter from line read/replace (if line starts with stuff from frontmatter or other method)
             for concept in concepts_list:
+              first_ocurrence_replaced = 0
               # look for concept in concepts list, and replace concept with [concept](URL) if match.
-              if line.find(concept[0]) != -1 and not first_ocurrence_replaced:
+              if concept[0] in line and first_ocurrence_replaced == 0 :
                 # TODO find a way to avoid errors with concepts that contain another concept ("permission" and "permission set" for instance), like: if concept
 
-
-        # ----- TODO The lines below do not work properly -----
-                # replacing the 
+                line_index = data.index(line)
                 new_line = line.replace(concept[0], f"[{concept[0]}]({concept[1]})")
-                replaced_content = f"{replaced_content}{new_line}\n"
-                file.write(replaced_content)
-                first_ocurrence_replaced = True
-        # ---------------------------------------------------------
+                data[line_index] = new_line
+                first_ocurrence_replaced = 1
+                print(new_line)
 
-
-
-        file.close()
 
 # create_concepts_list(input("Enter a category and product, e.g. \'compute/instances\' :"))
 create_concepts_list("serverless/jobs")

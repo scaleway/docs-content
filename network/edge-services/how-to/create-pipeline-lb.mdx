@@ -1,0 +1,131 @@
+---
+meta:
+  title: How to create an Edge Services pipeline for a Load Balancer
+  description: This page explains how to configure an Edge Services pipeline on your Load Balancer, enabling a caching service for faster and more efficient delivery.
+content:
+  h1: How to create an Edge Services pipeline for a Load Balancer
+  paragraph: This page explains how to configure an Edge Services pipeline on your Load Balancer, enabling a caching service for faster and more efficient delivery.
+dates:
+  validation: 2024-07-24
+  posted: 2024-07-24
+tags: load-balancer edge-services cdn network cache domain https
+categories:
+  - network
+---
+
+Edge Services is an additional feature for Scaleway Load Balancers and Object Storage buckets, currently available in [Public Beta](https://www.scaleway.com/en/betas/).
+
+Creating an Edge Services pipeline for your Load Balancer helps to reduce load on your Load Balancer's backend servers. The origin configuration you define is used by Edge Services to connect to your Load Balancer and request content, which is then stored in the cache. Then, when your Load Balancer origin is accessed via its customizable Edge Services endpoint, the requested content is served from the cache (if present), without the need to fetch this content via the Load Balancer and its backend servers.
+
+Edge Services lets you:
+
+- Define the specific origin (Load Balancer, frontend port, and host) for a given pipeline and its associated cache
+- Choose the TTL for cached objects
+- Purge the entire cache or specific cached objects at any time (cache invalidation)
+- Customize your Edge Services pipeline endpoint using a subdomain of your own domain
+- Add an SSL/TLS certificate so that Edge Services can serve content over HTTPS for your subdomain
+
+An Edge Services pipeline can be created for any Load Balancer with a public IP address. Load Balancers with frontends/backends using both TCP and/or HTTP are supported. [Private Load Balancers](/network/load-balancer/reference-content/public-private-accessibility/#private-load-balancers) are not compatible with Edge Services.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A [Load Balancer](/network/load-balancer/how-to/create-load-balancer/)
+
+## How to create an Edge Services pipeline for Load Balancer
+
+You can create one or more Edge Services pipelines for each of your Load Balancers. Each pipeline has its own [origin](/network/edge-services/concepts/#origin), [endpoint](/network/edge-services/concepts/#endpoint), and [cache](/network/edge-services/concepts/#cache). If you create multiple Edge Services pipelines for the same origin Load Balancer, each one must be configured for a different frontend.
+
+Follow the steps below to create an Edge Services pipeline.
+
+1. Click **Load Balancers** in the **Network** section of the Scaleway console side menu. The list of your Load Balancers displays.
+
+2. Click the **Edge Services** tab.
+
+3. Click **create Edge Services pipeline**. The pipeline creation wizard displays.
+
+    TODO SCREENSHOT
+
+4. Configure the [origin](/network/edge-services/concepts/#origin) for this pipeline:
+        - Select the **origin Load Balancer** from the dropdown list. The Edge Services pipeline will connect to this Load Balancer when requesting content.
+        - Select a **frontend** associated with the origin Load Balancer from the dropdown list. The Edge Services pipeline will connect to the Load Balancer on this port when requesting content. We recommend that you select an HTTPS port, e.g. `443`. Note that if you are creating multiple pipelines for the same origin Load Balancer, each one must be configured for a different frontend.
+
+        <Message type="tip">
+        For Kubernetes Load Balancers, see our [dedicated documentation](#help-for-kubernetes-load-balancers) for help selecting the correct Load Balancer and frontend.
+
+        </Message>
+
+5. Define the protocol and origin host for this pipeline:
+        - Select the protocol that Edge Services should use when making requests to the origin, either `HTTP` or `HTTPS` (recommended). Choose the protocol that corresponds with your Load Balancer setup.
+        - Optionally, enter an [origin host](/network/edge-services/concepts/#origin-host) associated with your Load Balancer for this pipeline. When specified, this host replaces the Load Balancer IP address in the HTTP Host Header of the requests made from Edge Services to your Load Balancer.
+
+6. Enter a name for this Edge Services pipeline, or leave the auto-generated name in place.
+
+    Edge Services for Load Balancer is free during Public Beta. You will be notified before the service leaves beta and becomes billable.
+
+7. Click **Create Edge Services pipeline** to finish.
+
+Your pipeline is created and you are taken to its **Overview** page. The endpoint displays from which you can access your Load Balancer origin via Edge Services, e.g. `https://pipeline-id.edge.scw.cloud`.
+
+## Troubleshooting pipeline creation
+
+If you see the message `Edge Services was unable to contact the host via the Load Balancer Please check your origin configuration settings and try again`, check the following elements of your configuration:
+
+- **Protocol**: Ensure you did not select the wrong protocol, e.g. HTTP selected while the frontend chosen is configured to receive HTTPS, or the opposite.
+- **Origin host**: Ensure that you entered the correct origin host, with no typos, for a host that exists behind the selected Load Balancer.
+- **Load Balancer ACLs**: Ensure that there are no [ACLs](/network/load-balancer/how-to/create-manage-acls/) configured on your Load Balancer which are blocking traffic from Edge Services.
+
+## Help for Kubernetes Load Balancers
+
+If you are setting up an Edge Services pipeline for a [Kubernetes Kapsule](/containers/kubernetes) Load Balancer, follow these steps to determine which Load Balancer and frontend to configure for your pipeline:
+
+1. Run `kubectl describe svc`.
+
+    An output displays.
+
+2. Locate the section of the output that relates to your LoadBalancer service. It should look something like this:
+
+    ```
+    Name:                     myloadbalancer
+    Namespace:                default
+    Labels:                   app=mydeployment
+    Annotations:              service.beta.kubernetes.io/scw-loadbalancer-id: fr-par-1/a92de52e-262f-99f9-be66-5220003a2e42
+    Selector:                 app=mydeployment
+    Type:                     LoadBalancer
+    IP Family Policy:         SingleStack
+    IP Families:              IPv4
+    IP:                       10.32.220.60
+    IPs:                      10.32.220.60
+    LoadBalancer Ingress:     51.159.25.111
+    Port:                     http  8000/TCP
+    TargetPort:               8000/TCP
+    NodePort:                 http  32041/TCP
+    Endpoints:                
+    Session Affinity:         None
+    External Traffic Policy:  Cluster
+    ```
+3. Find the `service.beta.kubernetes.io/scw-loadbalancer-id` annotation, and note your Load Balancer ID (e.g. `a92de52e-262f-99f9-be66-5220003a2e42`). Check your Load Balancer list in the [console](https://console.scaleway.com/load-balancer/lbs) to find the Load Balancer name that corresponds to this ID. This is the Load Balancer you should select for the Edge Services pipeline.
+
+4. Find the **NodePort** line and note the port mentioned (in the case above, `32041`). In the [console](https://console.scaleway.com/load-balancer/lbs), find the frontend of the Load Balancer from step 3 that corresponds with this port. This is the frontend and port you should select for the Edge Services pipeline.
+
+## How to edit an Edge Services pipeline origin
+
+You can edit the protocol, origin host, and name of an Edge Services pipeline as follows.
+
+1. Click **Load Balancers** in the **Network** section of the Scaleway console side menu. The list of your Load Balancers displays.
+
+2. Click the **Edge Services** tab.
+
+3. Click the Edge Services pipeline you want to edit. The **Overview** page for the pipeline displays.
+
+4. In the top right corner, click **Edit**. A pop-up displays.
+
+        TODO INSERT SCREENSHOT
+
+5. Make the edits required. You can:
+    - Change the **protocol**
+    - Change the **origin host**
+    - Change the pipeline **name**
+
+6. Click **Save**.

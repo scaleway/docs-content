@@ -1,102 +1,137 @@
 ---
 meta:
-  title: How to configure IPv6 virtual machines on Proxmox Elastic Metal
-  description: This page explains how to configure IPv6 virtual machines on Proxmox on Elastic Metal
+  title: How to configure IPv6 virtual machines with Proxmox on Elastic Metal
+  description: This guide explains how to configure IPv6 virtual machines on Proxmox on Elastic Metal, including how to find and configure the IPv6 gateway.
 content:
-  h1: How to configure IPv6 virtual machines on Proxmox on Elastic Metal
-  paragraph: This page explains how to configure IPv6 virtual machines on Proxmox on Elastic Metal
-tags: elastic-metal ipv6 virtual-machine proxmox esxi
+  h1: How to configure IPv6 virtual machines with Proxmox on Elastic Metal
+  paragraph: This guide explains how to configure IPv6 virtual machines on Proxmox on Elastic Metal, including how to find and configure the IPv6 gateway.
+tags: elastic-metal ipv6 virtual-machine proxmox
 dates:
-  validation: 2024-01-22
-  posted: 2022-04-01
+  validation: 2024-07-30
+  posted: 2024-07-30
 categories:
   - bare-metal
 ---
 
 When you install your server with a virtualization solution like Proxmox, you can create multiple virtual machines on the physical server and configure them to use flexible IPv6 addresses.
 
-Below, you will find some examples for the configuration of the network interfaces on different distributions inside a virtual machine.
+This guide covers the steps for configuring the network interfaces on different distributions inside a virtual machine on a Proxmox host using flexible IPv6 addresses on Elastic Metal servers.
 
 <Message type="tip">
-  * The IPv6 gateway for your machines is learned by RA. You do not need to specify it in your configuration.
-  * The DNS cache server (nameserver) may be different depending on the physical location of your server. Refer to our [network information documentation](/console/account/reference-content/scaleway-network-information/#dns-cache-servers) to find the IPv6 addresses to use with your machine.
+  The DNS cache server (nameserver) may be different depending on the physical location of your server. Refer to our [network information documentation](/console/account/reference-content/scaleway-network-information/#dns-cache-servers) to find the IPv6 addresses to use with your machine.
 </Message>
 
 <Macro id="requirements" />
 
 - A Scaleway account logged into the [console](https://console.scaleway.com/)
 - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- A [Dedibox server](/dedibox/dedicated-servers/how-to/order-a-server/) with a hypervisor (Proxmox or ESXi) installed on it
+- An [Elastic Metal server](/bare-metal/elastic-metal/how-to/create-server/) with a hypervisor (Proxmox) installed on it
 - A [flexible IPv6](/bare-metal/elastic-metal/how-to/order-flexible-ip/)
-- A [virtual MAC address](/dedibox-network/ip-failover/concepts/#virtual-mac-address)
+- A [virtual MAC address](/bare-metal/elastic-metal/how-to/add-virtual-mac-address/)
 
+## Finding your IPv6 gateway
 
-## Ubuntu 
+1. Log into your virtual machine using SSH.
 
-Since the release of version 18.04 (Bionic Beaver) Ubuntu has switched to Netplan for the configuration of network interfaces. For older releases of the distribution, refer to the configuration for Debian.
+2. Identify your network interface:
+   ```sh
+   ip a
+   ```
+   Take note of your network interface name (e.g., `ens18`).
 
-1. Log into your virtual machine and open the network configuration file `/etc/netplan/01-netcfg.yaml` in a text editor of your choice, for example `nano`:
+3. Find your IPv6 gateway:
+   ```sh
+   ip -6 route
+   ```
+   Look for the line that specifies the default route. It should look like the following:
+   ```
+   default via fe80::xxxx:xxxx:xxxx:xxxx dev ens18 proto static metric 1024 onlink
+   ```
+   The `fe80::xxxx:xxxx:xxxx:xxxx` part is your link-local IPv6 gateway address.
+
+## Ubuntu - Configuration with Netplan
+
+1. Open the Netplan configuration file:
     ```sh
     sudo nano /etc/netplan/01-netcfg.yaml
     ```
-2. Create a network configuration as follows. Remember to replace `FLEXIBLE_IPv6` with your failover IP address: 
+
+2. Create the network configuration:
     ```yaml
-    # This is the network config written by 'subiquity'
     network:
-    ethernets:
+      version: 2
+      renderer: networkd
+      ethernets:
         ens18:
-        addresses:
-        - FLEXIBLE_IPv6/64
-        nameservers:
-            addresses: [ "2001:bc8:1008:1::16" ]
-            search: []
-    version: 2
+          dhcp4: false
+          dhcp6: false
+          accept-ra: no
+          addresses:
+            - FLEXIBLE_IPv4/32
+            - "FLEXIBLE_IPv6/64"
+          routes:
+            - to: 0.0.0.0/0
+              via: 62.210.0.1
+              on-link: true
+            - to: "::/0"
+              via: "LINK_LOCAL_IPv6_GATEWAY"
+              on-link: true
+          nameservers:
+            addresses:
+              - 51.159.47.28
+              - 51.159.47.26
     ```
-3. Save the file and exit the text editor.
-4. Apply the new configuration:
-    ```
+    Replace `FLEXIBLE_IPv4`, `FLEXIBLE_IPv6`, and `LINK_LOCAL_IPv6_GATEWAY` with your actual IP addresses.
+
+3. Apply the configuration:
+    ```sh
     sudo netplan apply
     ```
 
 ## Debian
 
-1. Log into the virtual machine and edit the file `/etc/network/interfaces/` with a text editor of your choice, for example, `nano`:
+1. Edit the network interfaces file:
     ```sh
-    nano /etc/network/interfaces
-    ```
-2. Configure the network interface as follows. Remember to replace `fail.over.ip.address` with your failover IP address:
-    ```sh
-    auto ens18
-        iface ens18 inet6 static
-        address FLEXIBLE_IPv6
-        netmask 64
-    ```
-3. Save the file and exit the text editor.
-4. Set the DNS server information by editing the file `/etc/resolv.conf`:
-    ```
-    nano /etc/resolv.conf
-    ```
-5. Set the DNS resolver by adding the following lines to the file. Then save it and exit the text editor:
-    ```
-    nameserver 2001:bc8:1008:1::16
-    nameserver 2001:bc8:1008:1::14
+    sudo nano /etc/network/interfaces
     ```
 
-    <Message typ="tip">
-      These DNS resolvers are operated by Scaleway. You can also set your preferred alternative DNS resolvers in the file.
-    </Message>
-6. Activate the network on your virtual machine by running the following code:
+2. Configure the network interface:
+    ```sh
+    auto ens18
+    iface ens18 inet static
+      address FLEXIBLE_IPv4
+      netmask 255.255.255.255
+      gateway 62.210.0.1
+    iface ens18 inet6 static
+      address FLEXIBLE_IPv6
+      netmask 64
+      gateway LINK_LOCAL_IPv6_GATEWAY
     ```
-    ifup ens18
+    Replace `FLEXIBLE_IPv4`, `FLEXIBLE_IPv6`, and `LINK_LOCAL_IPv6_GATEWAY` with your actual IP addresses.
+
+3. Set the DNS resolver:
+    ```sh
+    sudo nano /etc/resolv.conf
+    ```
+ 4. Add the following lines, then save and exit the file.
+    ```
+    nameserver 51.159.47.28
+    nameserver 51.159.47.26
+    ```
+
+5. Activate the network configuration:
+    ```sh
+    sudo ifup ens18
     ```
 
 ## CentOS
 
-1. Log into the virtual machine and edit the file `/etc/sysconfig/network-scripts/ifcfg-eth0` with a text editor of your choice, for example, `nano`:
+1. Edit the network script file:
     ```sh
-    nano /etc/sysconfig/network-scripts/ifcfg-eth0
+    sudo nano /etc/sysconfig/network-scripts/ifcfg-ens18
     ```
-2. Configure the network interface as follows. Remember to replace `fail.over.ip.address` with your failover IP address and `virtual:mac:address` with the virtual MAC of the VM:
+
+2. Configure the network interface:
     ```
     DEVICE=ens18
     BOOTPROTO=none
@@ -105,17 +140,60 @@ Since the release of version 18.04 (Bionic Beaver) Ubuntu has switched to Netpla
     IPV6INIT=yes
     PEERDNS=yes
     TYPE=Ethernet
-    NETMASK=64
-    IPADDR=FLEXIBLE_IPv6
-    DNS1=2001:bc8:1008:1::16
-    DNS2=2001:bc8:1008:1::14
+    NETMASK=255.255.255.255
+    IPADDR=FLEXIBLE_IPv4
+    IPV6ADDR=FLEXIBLE_IPv6
+    GATEWAY=62.210.0.1
+    DNS1=51.159.47.28
+    DNS2=51.159.47.26
     ARP=yes
     HWADDR=virtual:mac:address
     ```
-3. Save the file and close the text editor.
-4. Run the following command to bring the network interface up:
-    ```
-    ifup eth0
+    Replace `FLEXIBLE_IPv4`, `FLEXIBLE_IPv6`, and `virtual:mac:address` with your actual IP addresses and MAC address.
+
+3. Bring up the network interface:
+    ```sh
+    sudo ifup ens18
     ```
 
+4. Find the IPv6 gateway:
+   ```sh
+   ip -6 route
+   ```
 
+## Debugging configuration issues
+
+If your IPv6 configuration does not work as expected, follow these steps to troubleshoot:
+
+1. Check the interface configuration:
+   ```sh
+   ip a
+   ip route
+   ip -6 route
+   ```
+
+2. Run a ping test:
+   ```sh
+   ping6 google.com
+   ```
+
+3. Check the DNS resolution:
+   ```sh
+   dig google.com
+   dig -6 google.com
+   ```
+
+4. Review your network logs:
+   ```sh
+   sudo journalctl -u systemd-networkd
+   ```
+
+5. Restart network services:
+   ```sh
+   sudo systemctl restart systemd-networkd
+   ```
+6. Verify the link-local address:
+   ```sh
+   ip -6 addr show dev ens18
+   ping6 LINK_LOCAL_IPv6_GATEWAY
+   ```

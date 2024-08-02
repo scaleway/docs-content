@@ -1,0 +1,464 @@
+---
+meta:
+  title: Importing data into Managed Databases for PostgreSQL
+  description: This page explains how to import your data into Managed Databases for PostgreSQL from another database or backup files
+content:
+  h1: Importing data into Managed Databases for PostgreSQL
+  paragraph: This page explains how to import your data into Managed Databases for PostgreSQL from another database or backup files
+dates:
+  validation: 2024-06-24
+  posted: 2024-06-24
+---
+
+Managed Databases for PostgreSQL offers near-complete PostgreSQL compatibility, and allows you to import your data from any PostgreSQL-compatible database.
+
+<Message type="important">
+The methods listed below are best suited for database sizes below 100 GB (approx.). Above this size, we recommend you use dedicated tooling to import your data, as your local storage size and bandwidth will create bottlenecks, and the operation may last several hours.
+</Message>
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+
+- [Created a target Serverless SQL Database](/serverless/sql-databases/how-to/create-a-database) to import your data into.
+
+- Checked that the target database you are importing data into is empty, or contains data you can overwrite.
+
+The import procedure depends on your data source:
+    - [Importing data from an existing PostgreSQL database](#importing-data-from-an-existing-postgresql-database)
+      - [Using pg_dump](#using-pgdump)
+      - [Using pgAdmin](#using-pgadmin)
+      - [Using Airbyte](#using-airbyte)
+      - [Using Fivetran](#using-fivetran)
+      - [Using Meltano](#using-meltano)
+    - [Importing data from an existing PostgreSQL backup](#importing-data-from-an-existing-postgresql-backup)
+    - [Importing data from a file (.csv, .txt, etc.)](#importing-data-from-a-file-csv-txt-etc)
+
+## Importing data from an existing PostgreSQL database
+
+### Using pg_dump
+
+#### Prerequisites
+
+To complete this procedure, you must have installed PostgreSQL 16 (or newer) with [pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html) and [pg_restore](https://www.postgresql.org/docs/current/app-pgrestore.html) (bundled with the default PostgreSQL installation).
+
+#### Downloading and importing data into a Managed Database for PostgreSQL
+
+1. Run the following command to download a local export of your database with `pg_dump`, then enter your password when prompted:
+
+    ```
+    pg_dump --no-privileges --no-owner -U {username} -h {host} --port {port} -Fc {databasename} > my-backup
+    ```
+
+    <Message type="tip">
+    You can download specific tables using the `-t` option:
+
+      ```
+      pg_dump -t table1name -t table2name --no-privileges --no-owner -U {username} -h {host} --port {port} -Fc {databasename} > my-backup
+      ```
+    </Message>
+
+2. When finished, make sure the backup is downloaded on your local machine. The default location is in the current directory, under `/my-backup`.
+
+3. Run the command below to import data into your Managed Database for PostgreSQL using `pg_restore`. Make sure to replace the placeholders with your Managed Database for PostgreSQL connection parameters:
+
+    ```
+    pg_restore --no-privileges --no-owner --clean --if-exists -U {username} -h {host} --port 5432 -d {databasename} my-backup
+    ```
+
+    <Message type="note">
+    You can find this information on the [overview page](https://console.scaleway.com/rdb/instances) of your database.
+    </Message>
+
+4. Enter the database password you defined upon [Database Instance creation](/managed-databases/postgresql-and-mysql/how-to/create-a-database/) when prompted. 
+
+5. When finished, make sure your data is stored in your new database by [connecting to it](/managed-databases/postgresql-and-mysql/how-to/connect-database-instance/), and performing a query.
+
+### Using pgAdmin
+
+#### Prerequisites
+
+To complete the following procedure, you must have:
+
+- Installed [pg_Admin](https://www.pgadmin.org/).
+
+- Ensured your PGAdmin version is compatible with the PostgreSQL version of the database you will import your data into. Currently, pgAdmin 7.8 or newer is required to fully work with PostgreSQL 16.
+
+#### Downloading the backup on your local machine
+
+1. Open pgAdmin.
+
+2. Connect to your existing database server by selecting it in the left-hand menu.
+
+3. In the **Databases** submenu, connect to the database you want to export by selecting it.
+
+4. Right-click the database you want to export in the left-hand menu, and select **Backup**.
+
+5. Enter a name for the backup file (e.g. `my-backup`), and keep the default **format** and **compression** options.
+
+6. Click **Backup**. The backup creation process starts, and you can follow its progress by clicking **View processes**.
+
+7. When finished, make sure your backup is downloaded on your local machine. By default, the backup location is `Users/{username}/my-backup` on MacOS.
+
+#### Loading your data in your Managed Database for PostgreSQL
+
+1. Register your new database in pgAdmin. Refer to the [How to connect to a Managed Database for PostgreSQL](/managed-databases/postgresql-and-mysql/how-to/connect-database-instance/) documentation page for more information.
+
+2. Connect to your database server by selecting it in the left-hand menu.
+
+3. Select your database in the **Databases** submenu.
+
+4. Right-click the database you want to export in the left-hand menu, then select **Restore**.
+
+5. Enter the file name of your backup (e.g. `my-backup`), and keep the default options.
+
+6. Access the **Data options** tab, and enable the **Do not save - Owner** and **Do not save - Privileges** options.
+
+7. (Optional) If your new database is not empty, access the **Query Options** tab, and enable the **Clean before restore** option. 
+
+    <Message type="tip">
+    This option ensures that your database is emptied before loading data to avoid potential conflicts with existing data (such as table names or primary key constraints).
+    </Message>
+
+8. Click **Restore**. The restore process starts, and you can follow its progress by clicking **View processes**.
+
+9. When finished, make sure your data is stored in your new database by [connecting to it](/managed-databases/postgresql-and-mysql/how-to/connect-database-instance/), and performing a query.
+
+If the process fails and some data was already partly transferred, we suggest that you activate the **Clean before restore** option in the **Data options** tab to remove partly transferred data.
+
+### Using Airbyte
+
+#### Prerequisites
+
+To complete the following procedure, you must have:
+
+- Access to [Airbyte Cloud](https://cloud.airbyte.com/) or have [Airbyte installed](https://docs.airbyte.com/deploying-airbyte/quickstart) on your machine.
+
+<Message type="note">
+To avoid any statement timeout errors with Managed Database for PostgreSQL (e.g. `ERROR: canceling statement due to statement timeout`), we recommend you set up the PostgreSQL parameter `statement_timeout` to `1200000` (20 minutes), as recommended by Airbyte for other PostgreSQL-compatible data sources. You can modify this parameter in your [database overview in the Scaleway console](https://console.scaleway.com/rdb/instances), by clicking **More**, then **Advanced Settings**.
+</Message>
+
+#### Adding your existing database as a source
+
+1. From the Airbyte user interface, click **Sources**.
+
+2. Select **Postgres** from the list of sources.
+
+3. Fill in the required information to connect to your existing database:
+    - **Host**
+    - **Port**
+    - **Database Name**
+    - **Username**
+    - **Password**
+
+    <Message type="note">
+    You can find this information on the [overview page](https://console.scaleway.com/rdb/instances) of your database. The password is the [IAM secret key](/identity-and-access-management/iam/concepts/#api-key) corresponding to the [IAM user](/identity-and-access-management/iam/concepts/#user) or [IAM application](/identity-and-access-management/iam/concepts/#application) you are connecting with. 
+    </Message>
+
+4. Select an SSL Mode and an SSH Tunnel Method.
+
+5. Select **Detect Changes with Xmin System Column** as **Update Method** (other methods are not supported).
+
+4. Click **Set up source**.
+
+#### Adding your new Managed Database for PostgreSQL as a destination
+
+1. Click **Create a connection**.
+
+2. Select **Postgres** from the list of destinations.
+
+3. Fill in the required information to connect to your existing database:
+    - **Host**
+    - **Port**
+    - **Database Name**
+    - **Username**
+    - **Password**
+
+    <Message type="note">
+    You can find this information on the [overview page](https://console.scaleway.com/rdb/instances) of your database. The password is the [IAM secret key](/identity-and-access-management/iam/concepts/#api-key) corresponding to the [IAM user](/identity-and-access-management/iam/concepts/#user) or [IAM application](/identity-and-access-management/iam/concepts/#application) you are connecting with. 
+    </Message>
+
+4. Select an SSL Mode and an SSH Tunnel Method.
+
+5. Click **Set up destination**.
+
+5. Select the streams (tables) you want to load in your new Managed Database for PostgreSQL, then click **Next**.
+
+6. Edit the remaining options if required, then click **Finish & Sync**.
+
+7. When finished, make sure your data is stored in your new database by connecting to it, and performing a query.
+
+<Message type="important">
+This procedure does not currently work with Managed Databases for PostgreSQL. However, you can import your backup using [Managed Database for PostgreSQL and MySQL](/managed-databases/postgresql-and-mysql/).
+</Message>
+
+### Using Fivetran
+
+#### Prerequisites
+
+To complete the following procedure, you must have:
+
+- A Fivetran account, and be able to connect to the [Fivetran console](https://fivetran.com/dashboard)
+
+#### Connecting Fivetran to your Managed Database for PostgreSQL
+
+1. From the Fivetran user interface, click **Add destination** in the [destinations list](https://fivetran.com/dashboard/destinations).
+
+2. Enter a name for the destination (e.g. `my-new-database`), then click **Add**.
+
+3. Select **PostgreSQL**, then click **Select**.
+
+4. Fill in the required information to connect to your existing database:
+
+    - **Host**
+    - **Port**
+    - **Database Name**
+    - **Username**
+    - **Password**
+
+    <Message type="note">
+    You can find this information on the [overview page](https://console.scaleway.com/rdb/instances) of your database. The password is the [IAM secret key](/identity-and-access-management/iam/concepts/#api-key) corresponding to the [IAM user](/identity-and-access-management/iam/concepts/#user) or [IAM application](/identity-and-access-management/iam/concepts/#application) you are connecting with. 
+    </Message>
+
+5. Select **Connect directly** as **Connection method**.
+
+6. Select **Detect Changes via XMIN** as **Update Method** (other methods are not supported).
+
+    <Message type="note">
+    If you have set up IP address access restrictions from your IAM policies, copy the addresses from Fivetran IPs and edit your IAM policies to whitelist them.
+    </Message>
+
+7. Click **Save & Continue**.
+
+8. Select the certificate in the list corresponding to `CN=sdb.{region}.scw.cloud`, check its validity, and confirm your selection by clicking **Confirm**. 
+
+    <Message type="tip">
+    You can ensure the certificate is fully valid only if all of the following checks are true:
+      - Origin is Let's Encrypt
+      - The CN field is `sdb.{region}.scw.cloud`
+      - The complete certificate value is the same as the one hosted on `sdb.{region}.scw.cloud`
+      - The root certificate is the same as [Let's Encrypt ISRG X1 Root certificate](https://letsencrypt.org/certs/isrgrootx1.pem)
+    </Message>
+
+#### Connecting Fivetran to your existing database
+
+1. From the Fivetran user interface, click **Add connector** in the [connectors list](https://fivetran.com/dashboard/connectors).
+
+2. Select your destination (for instance `my-new-database`), then click **Select**.
+
+3. Select **PostgreSQL**, then click **Set up**.
+
+4. Fill in the required information to connect to your existing database:
+
+    - **Host**
+    - **Port**
+    - **Database Name**
+    - **Username**
+    - **Password**
+
+    <Message type="note">
+    You can find this information on the [overview page](https://console.scaleway.com/rdb/instances) of your database. The password is the [IAM secret key](/identity-and-access-management/iam/concepts/#api-key) corresponding to the [IAM user](/identity-and-access-management/iam/concepts/#user) or [IAM application](/identity-and-access-management/iam/concepts/#application) you are connecting with. 
+    </Message>
+
+5. Select **Connect directly** as **Connection method**.
+
+6. Select **Detect Changes via XMIN** as **Update Method** (other methods are not supported).
+
+    <Message type="note">
+    If you have set up IP address access restrictions from your IAM policies, copy the addresses from Fivetran IPs and edit your IAM policies to whitelist them.
+    </Message>
+
+7. Click **Save & Continue**.
+
+8. When the database schemas and tables display, select the one you want to import, then click **Save & Continue**.
+
+9. Select your preferred way of synchronizing future schemas changes and then click **Save & Continue**.
+
+10. Click **Start Initial Sync**.
+
+11. When finished, make sure your data is stored in your new database by connecting to it, and performing a query.
+
+<Message type="important">
+This procedure does not currently work with Managed Databases for PostgreSQL. However, you can import your backup using [Managed Database for PostgreSQL and MySQL](/managed-databases/postgresql-and-mysql/).
+</Message>
+
+### Using Meltano
+
+Tools such as [Meltano](https://meltano.com/) are better suited to load data only, without keeping constraints on column types or relations. To load all PostgreSQL objects (such as table constraints, users, etc.), we recommend using other tools such as [pg_dump and pg_restore](#using-pgdump).
+
+#### Prerequisites
+
+To complete the following procedure, you must have:
+ 
+- Installed [Meltano](https://docs.meltano.com/getting-started/installation/)
+
+#### Initializing your Meltano project
+
+1. In a terminal, run the command below to initialize a Meltano project named `migrate-postgresql`:
+
+    ```sh
+    meltano init migrate-postgresql
+    ```
+
+2. Run the following command to access the newly created directory that contains the project:
+
+    ```sh
+    cd migrate-postgresql
+    ```
+
+3. Run the following command to add a PostgreSQL-compatible extractor and loader:
+
+    ```sh
+    meltano add extractor tap-postgres
+    meltano add loader target-postgres
+    ```
+
+#### Configuring the extractor to connect to your existing database
+
+1. Run the command below to configure the connection to your existing database:
+
+    ```sh
+    meltano config tap-postgres set --interactive
+    ```
+
+    A list of settings displays, with a number associated with each parameter.
+
+2. Fill in the required information below by entering the number associated with each parameter:
+
+    - **Database Name** (5)
+    - **Host** (13)
+    - **Password** (14)
+    - **Port** (15)
+    - **Username** (32)
+
+3. Select the tables you want to load:
+
+    ```
+    meltano select tap-postgres {schema-name}-{table1name}
+    meltano select tap-postgres {schema-name}-{table2name}
+    ...
+    ```
+
+    <Message type="tip">
+    For instance `meltano select tap-postgres public-cities` if you are importing the table `cities` from the schema `public`.
+    You can check the selected tables and columns with `meltano select tap-postgres --list --all`.
+    </Message>
+
+#### Configuring the loader to connect to your new Managed Database for PostgreSQL
+
+1. Run the command below to configure the connection to your existing database:
+
+    ```sh
+    meltano config tap-postgres set --interactive
+    ```
+
+    A list of settings displays, with a number associated with each parameter.
+
+2. Fill in the required information below by entering the number associated with each parameter:
+
+    - **Database Name** (5)
+    - **Host** (13)
+    - **Password** (14)
+    - **Port** (15)
+    - **Username** (32)
+
+    <Message type="note">
+    You can find this information on the [overview page](https://console.scaleway.com/rdb/instances) of your database. The password is the [IAM secret key](/identity-and-access-management/iam/concepts/#api-key) corresponding to the [IAM user](/identity-and-access-management/iam/concepts/#user) or [IAM application](/identity-and-access-management/iam/concepts/#application) you are connecting with. 
+    </Message>
+
+#### Executing the data import and loading
+
+1. Run the following command to execute the data import and loading:
+
+    ```sh
+    meltano run tap-postgres target-postgres
+    ```
+
+2. When finished, make sure your data is stored in your new database by connecting to it, and performing a query.
+
+    <Message type="note">
+    By default, the `tap-postgres` extractor loads data in the `tap_postgres` schema, rather than the `public` schema. You can find your loaded tables with the following command:
+
+    ```
+    SELECT * from tap-postgres.{table1name} LIMIT 10;
+    ```
+    </Message>
+
+## Importing data from an existing PostgreSQL backup
+
+### Using pg_restore
+
+#### Prerequisites
+
+To complete the following procedure, you must have:
+
+- Installed PostgreSQL 16 (or newer) with [pg_restore](https://www.postgresql.org/docs/current/app-pgrestore.html) (bundled with the default PostgreSQL installation).
+
+- A backup file for your database (named `my-backup` in the following procedure). 
+
+1. In a terminal, access the directory containing the backup file, then run the command below to import data to your Managed Database for PostgreSQL using `pg_restore`. Make sure to replace the placeholders with your Managed Database for PostgreSQL connection parameters:
+
+    ```
+    pg_restore --no-privileges --no-owner --clean --if-exists -U {username} -h {host} --port 5432 -d {databasename} my-backup
+    ```
+
+    <Message type="note">
+    You can find this information on the [overview page](https://console.scaleway.com/rdb/instances) of your database. The password is the [IAM secret key](/identity-and-access-management/iam/concepts/#api-key) corresponding to the [IAM user](/identity-and-access-management/iam/concepts/#user) or [IAM application](/identity-and-access-management/iam/concepts/#application) you are connecting with. 
+    </Message>
+
+2. When finished, make sure your data is stored in your new database by [connecting to it](/managed-databases/postgresql-and-mysql/how-to/connect-database-instance/), and performing a query.
+
+## Import Data from a file (.csv, .txt, etc.)
+
+### Using psql
+
+#### Prerequisites
+
+To complete the following procedure, you must have:
+
+- Installed PostgreSQL 16 (or newer) with [pg_restore](https://www.postgresql.org/docs/current/app-pgrestore.html) (bundled with the default PostgreSQL installation).
+
+- A data file corresponding to a single table (named named `my-table.csv` in the following procedure).
+
+<Message type="tip">
+You can create a `.csv` file from an existing PostgreSQL table with the [COPY TO command](https://www.postgresql.org/docs/current/sql-copy.html), as shown below:
+
+```sql
+\COPY {tablename} TO './my-table.csv' WITH DELIMITER ',' CSV;
+```
+</Message>
+
+1. In a terminal, access the folder containing your data file:
+
+    ```
+    cd path/to/my-table.csv
+    ```
+
+2. Connect to your Managed Database for PostgreSQL using `psql`:
+
+    ```sh
+    psql "postgresql://{username}:{password}@{host}:5432/{databasename}?sslmode=require"
+    ```
+
+    <Message type="note">
+    You can find this information on the [overview page](https://console.scaleway.com/rdb/instances) of your database. The password is the [IAM secret key](/identity-and-access-management/iam/concepts/#api-key) corresponding to the [IAM user](/identity-and-access-management/iam/concepts/#user) or [IAM application](/identity-and-access-management/iam/concepts/#application) you are connecting with. 
+    </Message>
+
+3. Create the table structure corresponding to your file column types:
+
+   ```sql
+   CREATE TABLE {tablename} (column1name type1, column2name type2, ...);
+   ```
+
+4. Run the command below to load your data to your Managed Database for PostgreSQL using the [psql \copy command](https://www.postgresql.org/docs/current/app-psql.html#APP-PSQL-META-COMMANDS-COPY):
+
+    ```sql
+    \copy {tablename} FROM './my-table.csv' WITH DELIMITER ',' CSV;
+    ```
+
+    <Message type="tip">
+      The PostgreSQL [COPY command](https://www.postgresql.org/docs/current/sql-copy.html) cannot be used directly, as it requires the source file to be available on the PostgreSQL instance itself.
+    </Message>
+
+5. When finished, make sure your data is stored in your new database by [connecting to it](/managed-databases/postgresql-and-mysql/how-to/connect-database-instance/), and performing a query.

@@ -21,11 +21,11 @@ Anyone who has a GitHub account can contribute to the documentation content:
 - You have a [GitHub](https://github.com/signup) personal account
 - You have installed [yarn](https://yarnpkg.com/getting-started) package manager
 - You have [Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown) and [MDX](https://mdxjs.com/guides/) syntax knowledge
-- You have read [the writing guidelines](#writing-guidelines)
+- You have read [the writing guidelines](https://www.scaleway.com/en/docs/guidelines/)
 
 ### Contribution procedure for internal Scaleway users
 
-:warning: **Important**  
+:warning: **Important**
   - All rules below concern this repository.
   - Any PRs which do not comply with the rules below will be rejected.
 
@@ -41,10 +41,10 @@ Anyone who has a GitHub account can contribute to the documentation content:
 
     - `product`: the name of the product that corresponds to the documentation page you will edit.
 
-    :information_source: **Example:**  
+    :information_source: **Example:**
       in the branch `int-add-instances`, an internal contributor will add information to a documentation page of the Instances product category.
 
-4. Make your edits to the documentation. Refer to the [writing guidelines](#writing-guidelines) below to ensure your changes comply with our style guide.
+4. Make your edits to the documentation. Refer to the [writing guidelines](https://www.scaleway.com/en/docs/guidelines/) to ensure your changes comply with our style guide.
 
 5. Run `git commit -m "type(module): description with some words <BRANCH_NAME>"`. Refer to the [commit naming conventions](#commit-conventions) below to properly name your commit.
 
@@ -53,14 +53,14 @@ Anyone who has a GitHub account can contribute to the documentation content:
     All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
 
 
-:warning: **Important**  
+:warning: **Important**
   All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
 
 ---
 
 ### Contribution procedure for external users
 
-:warning: **Important**  
+:warning: **Important**
   - All rules below concern this repository.
   - Any PRs which do not comply with the rules below will be rejected.
 
@@ -78,10 +78,10 @@ Anyone who has a GitHub account can contribute to the documentation content:
 
     - `product`: the name of the product that corresponds to the documentation page you will edit.
 
-    :information_source: **Example:**  
+    :information_source: **Example:**
       in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
 
-4. Make your edits to the documentation. Refer to the [writing guidelines](#writing-guidelines) below to ensure your changes comply with our guidelines.
+4. Make your edits to the documentation. Refer to the [writing guidelines](https://www.scaleway.com/en/docs/guidelines/) to ensure your changes comply with our guidelines.
 
 5. Run `git commit -m "type(module): description of what you performed <BRANCH_NAME>"`. Refer to the [commit naming conventions](#commit-conventions) below to properly name your commit.
 
@@ -101,7 +101,7 @@ Anyone who has a GitHub account can contribute to the documentation content:
 
     All pull requests names must comply with the following naming convention: `docs(<PRODUCT_NAME>): <ACTION> <EXPLANATION> <BRANCH_NAME>`.
 
-:warning: **Important**  
+:warning: **Important**
   All pull requests are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
 
 ---
@@ -188,7 +188,7 @@ Feel free to explore this page in your markdown editor to see how the components
 
 ### Frontmatter
 
-Any Markdown file that contains a YAML frontmatter block will be processed by Gatsby as a special file.  
+Any Markdown file that contains a YAML frontmatter block will be processed by Gatsby as a special file.
 The front matter must be the first thing in the file and must take the form of a valid YAML set between triple-dashed lines.
 
 Here is a common example used in our `.mdx` files:
@@ -221,131 +221,4 @@ Here starts the content…
 
 ## Writing Guidelines
 
-### Requirements
-
-In this section, point out what the user must have already prepared before starting the step-by-step. Include links to other documentation pages.
-
-Example:
-
----
-
-**Requirements**
-
-- You have a Scaleway Account
-- You have configured your SSH key
-
----
-
-See also: [Message boxes typographical conventions](#message-boxes)
-
-### Titles/Anchors
-
-You can go up to 5 hierarchy levels (H1, H2, H3, H4, H5).
-
----
-
-**Important**
-
-- In the right menu, **only H1 and H2 are visible**.
-
-- **No titles should be orphaned**. For example, if you started with H2, you should go down in sequence. So the next step should either be another H2 or a level lower (in this case, H3).
-
----
-
-See also: [Anchors and titles components](/components#h2-title)
-
-## Typographical Conventions
-
-### Spelling
-
-At Scaleway we use US English.
-
-### Capitalization
-
-What should be capitalized:
-
-- Product names
-
-### Emboldening
-
-Bold text is used to represent where a user should click or highlight other text relevant to the UI.
-
-Example:
-
-Click **+ Create an Instance to proceed.**
-
-## Code Snippets
-
-Use a code block for examples of:
-
-- commands
-- scripts
-- outputs
-
-Use inline code when you need to reference information in your text, such as:
-
-- environment variables
-- e-mail addresses
-- referencing parts of the code block in the text
-
-### Message boxes
-
-Message boxes help you highlight important or pertinent information.
-
-**Tip**: An alternative way of doing the step, or links to additional information about the step.
-
-**Note**: Information about the consequence(s) of a step.
-
-**Important**: Warning about a possible unwanted consequence (eg delete all data) or possible mistake that could be made during this step.
-
-**Requirements**: A list of what the user must have already prepared before starting the step-by-step.
-
-See also: [Message box components](/components#messages)
-
-### Environment Variables
-
-When referring to API calls or CLI commands, follow the environment variable conventions listed on [this page](https://github.com/scaleway/scaleway-sdk-go/tree/master/scw#environment-variables). Use the same format for other variables.
-
-Example:
-
-```
-$EMAIL_ADDRESS
-```
-
-If you need to use an example of IP addresses, some IP ranges are reserved for documentation:
-
-**IPv4**
-
-192.0.2.0/24
-
-198.51.100.0/24
-
-203.0.113.0/24
-
-233.252.0.0/24
-
-**IPv6**
-
-2001:db8::/32
-
-## Screenshot Guidelines
-
-### Format
-
-Save screenshots in `.png` format.
-
-### Information to omit
-
-Omit any personal information (such as e-mail addresses, addresses, telephone numbers, the Scaleway resource ID, etc). Use the blur effect over the information you wish to conceal.
-
-### Captions
-
-If the image contents are already being described in the documentation text, there is no need to include a caption. To increase accessibility, if new information is being presented in the image, include a description (`alt="caption"`).
-
-### Image Names
-
-Start with “Scaleway” and make the name as explicit as possible, describing the screenshot.
-
-Example:
-
-`scaleway-top-right-menu.png` or `scaleway-leave-organization`
+Refer to the [Scaleway Documentation Guidelines](https://www.scaleway.com/en/docs/guidelines/) for an extensive list of our writing guidelines.

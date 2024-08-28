@@ -1,0 +1,193 @@
+---
+meta:
+title: How to use Tink AEAD Streaming with Scaleway's Key Manager
+description: Discover how to use Tink with AEAD Streaming and Scaleway's Key Manager in order to encrypt and decrypt large data streams.
+content:
+h1: How to use Tink AEAD Streaming with Scaleway's Key Manager
+paragraph: Discover how to use Tink with AEAD Streaming and Scaleway's Key Manager to encrypt and decrypt large data streams.
+tags: key-manager sensitive-data tink aead streaming
+dates:
+validation: 2024-08-28
+posted: 2024-08-28
+categories:
+  - identity-and-access-management
+---
+
+In this tutorial, you'll learn how to use Scaleway's Tink Key Manager extension to encrypt and decrypt large data streams using AEAD (Authenticated Encryption with Associated Data).
+
+## First steps
+
+To complete the actions presented below, you must :
+
+- Create a symmetric Key Manager key for encryption. Save the key ID somewhere safe, as you will need it later.
+- In your terminal, paste the following commands to export your environment variables. Make sure you add your **own variables**. You can also use a Scaleway configuration file.
+
+  ```
+  export SCW_ACCESS_KEY="<access-key>"
+  export SCW_SECRET_KEY="<secret-key>"
+  export SCW_DEFAULT_ORGANIZATION_ID="<organization-id>"
+  export SCW_DEFAULT_PROJECT_ID="<project-id>"
+  export SCW_DEFAULT_REGION="<region>"
+  export SCW_API_URL="<api-url>"
+  export SCW_KMS_KEY_ID="<key-id>"
+  ```
+
+## Encrypt and decrypt large data streams using AEAD
+
+1. Add the [Scaleway Tink provider for Go](https://github.com/scaleway/tink-go-scwkms/tree/main) and Tink to your go.mod:
+
+```
+> go get github.com/scaleway/tink-go-scwkms
+> go get github.com/tink-crypto/tink-go/v2
+```
+
+2. Create a Go project and copy and paste the following code:
+
+```
+package main
+
+import (
+    "bytes"
+    "fmt"
+    "github.com/scaleway/tink-go-scwkms/integration/scwkms"
+    "github.com/tink-crypto/tink-go/v2/keyset"
+    "github.com/tink-crypto/tink-go/v2/streamingaead"
+    "io"
+    "log"
+    "os"
+    "path/filepath"
+)
+
+func main() {
+    const keyURIPrefix = "scw-kms://regions/<region>/keys/"
+    keyURI := keyURIPrefix + os.Getenv("SCW_KMS_KEY_ID")
+
+    client, err := scwkms.NewClient(keyURIPrefix)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    kekAEAD, err := client.GetAEAD(keyURI)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    handle, err := keyset.NewHandle(streamingaead.AES256GCMHKDF1MBKeyTemplate())
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Encrypt the keyset and store it in memory (using a bytes buffer)
+    buf := new(bytes.Buffer)
+    writer := keyset.NewBinaryWriter(buf)
+    err = handle.Write(writer, kekAEAD)
+    if err != nil {
+        log.Fatalf("Error writing encrypted keyset: %v", err)
+    }
+
+    // Decrypt the keyset from the buffer
+    reader := keyset.NewBinaryReader(buf)
+    decryptedHandle, err := keyset.Read(reader, kekAEAD)
+    if err != nil {
+        log.Fatalf("Error reading encrypted keyset: %v", err)
+    }
+
+    // Create the Streaming AEAD primitive from the decrypted keyset
+    primitive, err := streamingaead.New(decryptedHandle)
+    if err != nil {
+        log.Fatalf("Error creating streaming AEAD primitive: %v", err)
+    }
+
+    // Create a file with the plaintext.
+    dir, err := os.MkdirTemp("", "streamingaead")
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer os.RemoveAll(dir)
+    plaintextPath := filepath.Join(dir, "plaintext")
+    if err := os.WriteFile(plaintextPath, []byte("this data needs to be encrypted"), 0666); err != nil {
+        log.Fatal(err)
+    }
+    plaintextFile, err := os.Open(plaintextPath)
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // AssociatedData defines the context of the encryption. (It's optional)
+    // Here, we include the path of the plaintext file.
+    associatedData := []byte("associatedData for " + plaintextPath)
+
+    // Encrypt the plaintext file and write the output to the ciphertext file.
+    ciphertextPath := filepath.Join(dir, "ciphertext")
+    ciphertextFile, err := os.Create(ciphertextPath)
+    if err != nil {
+        log.Fatal(err)
+    }
+    w, err := primitive.NewEncryptingWriter(ciphertextFile, associatedData)
+    if err != nil {
+        log.Fatal(err)
+    }
+    if _, err := io.Copy(w, plaintextFile); err != nil {
+        log.Fatal(err)
+    }
+    if err := w.Close(); err != nil {
+        log.Fatal(err)
+    }
+    if err := ciphertextFile.Close(); err != nil {
+        log.Fatal(err)
+    }
+    if err := plaintextFile.Close(); err != nil {
+        log.Fatal(err)
+    }
+
+    // Print the content of the encrypted file.
+    c, err := os.ReadFile(ciphertextPath)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(string(c))
+
+    // Decrypt the ciphertext file and write the output to the decrypted file.
+    ciphertextFile, err = os.Open(ciphertextPath)
+    if err != nil {
+        log.Fatal(err)
+    }
+    decryptedPath := filepath.Join(dir, "decrypted")
+    decryptedFile, err := os.Create(decryptedPath)
+    if err != nil {
+        log.Fatal(err)
+    }
+    r, err := primitive.NewDecryptingReader(ciphertextFile, associatedData)
+    if err != nil {
+        log.Fatal(err)
+    }
+    if _, err := io.Copy(decryptedFile, r); err != nil {
+        log.Fatal(err)
+    }
+    if err := decryptedFile.Close(); err != nil {
+        log.Fatal(err)
+    }
+    if err := ciphertextFile.Close(); err != nil {
+        log.Fatal(err)
+    }
+
+    // Print the content of the decrypted file.
+    b, err := os.ReadFile(decryptedPath)
+    if err != nil {
+        log.Fatal(err)
+    }
+    fmt.Println(string(b))
+}
+```
+<Message type="important">
+    Associated data is authenticated but **not** encrypted.
+</Message>
+
+In this tutorial, we propose using the Key Manager's remote KEK to protect the DEK and stream AEAD. However, it is also possible to protect the Data Encryption Key with another key that is not a remote key.
+
+3. Run your code by using the following command:
+
+```
+> go mod tidy
+> go run test.go
+``

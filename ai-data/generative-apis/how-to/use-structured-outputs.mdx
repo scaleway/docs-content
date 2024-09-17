@@ -1,0 +1,242 @@
+---
+meta:
+  title:  How to use structured outputs
+  description: Learn how to interact with structured outputs using Scaleway's Chat Completions API service.
+content:
+  h1:  How to use structured outputs
+  paragraph: Learn how to interact with powerful text models using Scaleway's Chat Completions API service.
+tags: chat-completitions-api
+dates:
+  validation: 2024-09-17
+  posted: 2024-09-17
+---
+
+
+Structured outputs allow users to get consistent, machine-readable (JSON format) responses from language models (LLMs).
+By specifying a response format when using the [Chat Completions API](/ai-data/generative-apis/api-cli/using-chat-api/), you can ensure that responses are returned in a predefined JSON structure.
+There are two main modes for generating structured outputs: **Object Mode** (schemaless) and **Schema Mode** (deterministic, structured output).
+
+You can interact with text models using several ways:
+- The Scaleway [console](https://console.scaleway.com) will soon provide a complete [playground](/ai-data/generative-apis/how-to/query-text-models/#accessing-the-playground), aiming to test models, adapt parameters, and observe how these changes affect the output in real-time.
+- Via the [Chat API](/ai-data/generative-apis/how-to/query-text-models/#querying-text-models-via-api)
+
+<Macro id="requirements" />
+
+- Access to this service is restricted while in beta. You can request access to the product by filling out a form on the Scaleway's [betas page](https://www.scaleway.com/en/betas/#generative-api).
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/identity-and-access-management/iam/how-to/create-api-keys/) for API authentication
+- Python 3.7+ installed on your system
+
+## Types of structured outputs
+
+- **JSON mode** (schemaless):
+   - Type: `{"type": "json_object"}`
+   - This mode is non-deterministic and allows the model to output a JSON object without strict validation.
+   - Useful for flexible outputs when you expect the model to infer a reasonable structure based on your prompt.
+   - JSON Mode is older and has been used by developers since early API implementations.
+
+- **Structured outputs (schema mode)** (deterministic/structured):
+   - Type `{"type": "json_schema"}`
+   - This mode enforces a strict schema format, where the output adheres to the predefined structure.
+   - Supports complex types and validation mechanisms as per the JSON schema specification (e.g., `anyOf`, `oneOf`, `allOf`).
+   - Structured outputs is newer and has been implemented by OpenAI in September 2023 to enable stricter, schema-based response formatting.
+
+<Message type="note">
+    - All LLMs on the Scaleway library support **JSON mode** and **Structured outputs**, however, quality of results will vary in the schemaless JSON mode.
+    - JSON mode: It is important to explicitly ask the model to generate JSON output either in system prompt or user prompt. To prevent infinite generations, you are encouraged to ask the model for short JSON objects.
+    - Structured outputs: Scaleway supports the [JSON schema specification](https://json-schema.org/specification/) including nested schemas composition (`anyOf`, `allOf`, `oneOf` etc), `$ref`, `all` types, and regular expressions.
+</Lessage>
+
+## Code examples
+
+<Message type="tip">
+    Before diving into the code examples, ensure you have the necessary libraries installed:
+    ```bash
+    pip install openai httpx pydantic
+    ```
+</Message>
+
+The following Python example demonstrates how to use both **JSON mode** and **Structured outputs** to generate structured responses.
+Following is our base code:
+
+```python
+import json
+from openai import OpenAI
+from pydantic import BaseModel, Field
+import httpx
+
+MODEL = "meta/llama-3.1-8b-instruct:fp8"
+API_KEY = "<SCW_API_KEY>"
+
+client = OpenAI(
+    base_url="https://<INFERENCE_ID>.ifr.fr-par.scw.cloud/v1",
+    api_key=API_KEY,
+    http_client=httpx.Client(verify=False),
+)
+
+# Define the schema for the output using Pydantic
+class VoiceNote(BaseModel):
+    title: str = Field(description="A title for the voice note")
+    summary: str = Field(description="A short one sentence summary of the voice note.")
+    actionItems: list[str] = Field(description="A list of action items from the voice note")
+
+# Transcript to use for the output
+TRANSCRIPT = (
+    "Good morning! It's 7:00 AM, and I'm just waking up. Today is going to be a busy day, "
+    "so let's get started. First, I need to make a quick breakfast. I think I'll have some "
+    "scrambled eggs and toast with a cup of coffee. While I'm cooking, I'll also check my "
+    "emails to see if there's anything urgent."
+)
+```
+
+### Using JSON mode (schemaless)
+
+In JSON mode, you can prompt the model to output a JSON object without enforcing a strict schema.
+
+```python
+def schemaless():
+    print(">>>>>>>>>>>>>>>>> JSON MODE=JSON object only \n")
+    extract = client.chat.completions.create(
+        messages=[
+            {
+                "role": "system",
+                "content": "The following is a voice message transcript. Only answer in JSON.",
+            },
+            {
+                "role": "user",
+                "content": TRANSCRIPT,
+            },
+        ],
+        model=MODEL,
+        response_format={
+            "type": "json_object",
+        },
+    )
+    output = json.loads(extract.choices[0].message.content)
+    print(json.dumps(output, indent=2))
+    return output
+```
+
+Output example:
+```json
+{
+  "Current Time": "7:00 AM",
+  "Plan": {
+    "Breakfast": {
+      "Choices": "scrambled eggs and toast",
+      "Additional Drink": "cup of coffee"
+    },
+    "Task": "Check emails for urgent matters"
+  }
+}
+```
+
+### Using structured outputs with JSON schema (Pydantic)
+
+Bu using [Pydantic](https://docs.pydantic.dev/latest/concepts/models/), users can define the schema as a Python class and enforce the model to return results adhering to this schema.
+
+```python
+def schema_pydantic():
+    print(">>>>>>>>>>>>>>>>> Structured Outputs 1 = With JSON schema Pydantic \n")
+    extract = client.chat.completions.create(
+        messages=[
+            {
+                "role": "system",
+                "content": "The following is a voice message transcript. Only answer in JSON.",
+            },
+            {
+                "role": "user",
+                "content": TRANSCRIPT,
+            },
+        ],
+        model=MODEL,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "schema": VoiceNote.model_json_schema(),
+            }
+        },
+    )
+    output = json.loads(extract.choices[0].message.content)
+    print(json.dumps(output, indent=2))
+    return output
+```
+
+Output example:
+```json
+{
+  "title": "Morning Routine",
+  "summary": "scrambled eggs with toast and coffee",
+  "actionItems": [
+    "make breakfast",
+    "check emails"
+  ]
+}
+```
+
+### Using structured outputs with JSON schema (manual definition)
+
+Alternatively, users can manually define the JSON schema inline when calling the model.
+
+```python
+def schema_param():
+    print(">>>>>>>>>>>>>>>>> Structured Outputs 2 = With JSON schema param \n")
+    extract = client.chat.completions.create(
+        messages=[
+            {
+                "role": "system",
+                "content": "The following is a voice message transcript. Only answer in JSON.",
+            },
+            {
+                "role": "user",
+                "content": TRANSCRIPT,
+            },
+        ],
+        model=MODEL,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "schema": {
+                    "type": "object",
+                    "properties": {
+                        "title": {"type": "string"},
+                        "summary": {"type": "string"},
+                        "actionItems": {
+                            "type": "array",
+                            "items": {"type": "string"}
+                        }
+                    },
+                    "required": ["title", "summary", "actionItems"]
+                }
+            }
+        }
+    )
+    output = json.loads(extract.choices[0].message.content)
+    print(json.dumps(output, indent=2))
+    return output
+```
+
+Output example:
+```json
+{
+  "title": "Morning Routine Checklist",
+  "summary": "You have a busy day ahead, let's get started with a quick breakfast and checking emails before tackling the rest of the tasks",
+  "actionItems": [
+    "Cook scrambled eggs",
+    "Toast for breakfast",
+    "Make a cup of coffee",
+    "Check emails for any urgent messages"
+  ]
+}
+```
+
+## Conclusion
+
+Using structured outputs from LLMs can significantly enhance data handling in your applications.
+By choosing between JSON Mode and Structured Outputs with JSON Schema, you control the consistency and structure of the model's responses to suit your specific needs.
+
+- **JSON mode** is flexible but less predictable.
+- **Structured outputs** provide strict adherence to a predefined schema, ensuring consistency.
+
+Experiment with both methods to determine which best fits your application's requirements.

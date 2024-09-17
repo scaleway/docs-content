@@ -12,7 +12,9 @@ dates:
 ---
 
 
-Structured outputs allow users to get consistent, machine-readable (JSON format) responses from language models.
+Structured outputs allow users to get consistent, machine-readable JSON format responses from language models.
+JSON, as a widely-used format, enables seamless integration with a variety of platforms and applications. Its interoperability is crucial for developers aiming to incorporate AI functionality into their current systems with minimal adjustments.
+
 By specifying a response format when using the [Chat Completions API](/ai-data/generative-apis/api-cli/using-chat-api/), you can ensure that responses are returned in a JSON structure.
 There are two main modes for generating JSON: **Object Mode** (schemaless) and **Schema Mode** (deterministic, structured output).
 
@@ -59,6 +61,8 @@ You can interact with text models in several ways:
 </Message>
 
 The following Python examples demonstrate how to use both **JSON mode** and **Structured outputs** to generate structured responses.
+
+We will send to our LLM a voice note transcript in order to structure it.
 Following is our base code:
 
 ```python
@@ -66,11 +70,14 @@ import json
 from openai import OpenAI
 from pydantic import BaseModel, Field
 
-MODEL = "meta/llama-3.1-8b-instruct:fp8"
+# Set your preferred model
+MODEL = "llama-3.1-8b-instruct"
+
+# Set your API key
 API_KEY = "<SCW_API_KEY>"
 
 client = OpenAI(
-    base_url="https://<INFERENCE_ID>.ifr.fr-par.scw.cloud/v1",
+    base_url="https://api.scaleway.ai/v1",
     api_key=API_KEY,
 )
 
@@ -81,11 +88,11 @@ class VoiceNote(BaseModel):
     actionItems: list[str] = Field(description="A list of action items from the voice note")
 
 # Transcript to use for the output
-TRANSCRIPT = (
-    "Good morning! It's 7:00 AM, and I'm just waking up. Today is going to be a busy day, "
-    "so let's get started. First, I need to make a quick breakfast. I think I'll have some "
-    "scrambled eggs and toast with a cup of coffee. While I'm cooking, I'll also check my "
-    "emails to see if there's anything urgent."
+TRANSCRIPT = ( 
+    "Good evening! It's 6:30 PM, and I'm just getting home from work. I have a few things to do " 
+    "before I can relax. First, I'll need to water the plants in the garden since they've been in the sun all day. " 
+    "Then, I'll start preparing dinner. I think a simple pasta dish with some garlic bread should be good. " 
+    "While that's cooking, I'll catch up on a couple of phone calls I missed earlier."
 )
 ```
 
@@ -94,40 +101,44 @@ TRANSCRIPT = (
 In JSON mode, you can prompt the model to output a JSON object without enforcing a strict schema.
 
 ```python
-def schemaless():
-    print(">>>>>>>>>>>>>>>>> JSON MODE=JSON object only \n")
-    extract = client.chat.completions.create(
-        messages=[
-            {
-                "role": "system",
-                "content": "The following is a voice message transcript. Only answer in JSON.",
-            },
-            {
-                "role": "user",
-                "content": TRANSCRIPT,
-            },
-        ],
-        model=MODEL,
-        response_format={
-            "type": "json_object",
+extract = client.chat.completions.create(
+    messages=[
+        {
+            "role": "system",
+            "content": "The following is a voice message transcript. Only answer in JSON.",
         },
-    )
-    output = json.loads(extract.choices[0].message.content)
-    print(json.dumps(output, indent=2))
-    return output
+        {
+            "role": "user",
+            "content": TRANSCRIPT,
+        },
+    ],
+    model=MODEL,
+    response_format={
+        "type": "json_object",
+    },
+)
+output = json.loads(extract.choices[0].message.content)
+print(json.dumps(output, indent=2))
 ```
 
 Output example:
 ```json
 {
-  "Current Time": "7:00 AM",
-  "Plan": {
-    "Breakfast": {
-      "Choices": "scrambled eggs and toast",
-      "Additional Drink": "cup of coffee"
+  "current_time": "6:30 PM",
+  "tasks": [
+    {
+      "task": "water the plants in the garden",
+      "priority": "high"
     },
-    "Task": "Check emails for urgent matters"
-  }
+    {
+      "task": "prepare dinner (pasta with garlic bread)",
+      "priority": "high"
+    },
+    {
+      "task": "catch up on phone calls",
+      "priority": "medium"
+    }
+  ]
 }
 ```
 
@@ -136,40 +147,38 @@ Output example:
 Using [Pydantic](https://docs.pydantic.dev/latest/concepts/models/), users can define the schema as a Python class and enforce the model to return results adhering to this schema.
 
 ```python
-def schema_pydantic():
-    print(">>>>>>>>>>>>>>>>> Structured Outputs 1 = With JSON schema Pydantic \n")
-    extract = client.chat.completions.create(
-        messages=[
-            {
-                "role": "system",
-                "content": "The following is a voice message transcript. Only answer in JSON.",
-            },
-            {
-                "role": "user",
-                "content": TRANSCRIPT,
-            },
-        ],
-        model=MODEL,
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "schema": VoiceNote.model_json_schema(),
-            }
+extract = client.chat.completions.create(
+    messages=[
+        {
+            "role": "system",
+            "content": "The following is a voice message transcript. Only answer in JSON.",
         },
-    )
-    output = json.loads(extract.choices[0].message.content)
-    print(json.dumps(output, indent=2))
-    return output
+        {
+            "role": "user",
+            "content": TRANSCRIPT,
+        },
+    ],
+    model=MODEL,
+    response_format={
+        "type": "json_schema",
+        "json_schema": {
+            "schema": VoiceNote.model_json_schema(),
+        }
+    },
+)
+output = json.loads(extract.choices[0].message.content)
+print(json.dumps(output, indent=2))
 ```
 
 Output example:
 ```json
 {
-  "title": "Morning Routine",
-  "summary": "scrambled eggs with toast and coffee",
+  "title": "To-Do List",
+  "summary": "Returning from work, need to complete tasks before relaxing",
   "actionItems": [
-    "make breakfast",
-    "check emails"
+    "Water garden",
+    "Prepare dinner: pasta dish with garlic bread",
+    "Catch up on missed phone calls"
   ]
 }
 ```
@@ -179,60 +188,56 @@ Output example:
 Alternatively, users can manually define the JSON schema inline when calling the model.
 
 ```python
-def schema_param():
-    print(">>>>>>>>>>>>>>>>> Structured Outputs 2 = With JSON schema param \n")
-    extract = client.chat.completions.create(
-        messages=[
-            {
-                "role": "system",
-                "content": "The following is a voice message transcript. Only answer in JSON.",
-            },
-            {
-                "role": "user",
-                "content": TRANSCRIPT,
-            },
-        ],
-        model=MODEL,
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "summary": {"type": "string"},
-                        "actionItems": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        }
-                    },
-                    "required": ["title", "summary", "actionItems"]
-                }
+extract = client.chat.completions.create(
+    messages=[
+        {
+            "role": "system",
+            "content": "The following is a voice message transcript. Only answer in JSON.",
+        },
+        {
+            "role": "user",
+            "content": TRANSCRIPT,
+        },
+    ],
+    model=MODEL,
+    response_format={
+        "type": "json_schema",
+        "json_schema": {
+            "schema": {
+                "type": "object",
+                "properties": {
+                    "title": {"type": "string"},
+                    "summary": {"type": "string"},
+                    "actionItems": {
+                        "type": "array",
+                        "items": {"type": "string"}
+                    }
+                },
+                "required": ["title", "summary", "actionItems"]
             }
         }
-    )
-    output = json.loads(extract.choices[0].message.content)
-    print(json.dumps(output, indent=2))
-    return output
+    }
+)
+output = json.loads(extract.choices[0].message.content)
+print(json.dumps(output, indent=2))
 ```
 
 Output example:
 ```json
 {
-  "title": "Morning Routine Checklist",
-  "summary": "You have a busy day ahead, let's get started with a quick breakfast and checking emails before tackling the rest of the tasks",
+  "title": "Evening Routine",
   "actionItems": [
-    "Cook scrambled eggs",
-    "Toast for breakfast",
-    "Make a cup of coffee",
-    "Check emails for any urgent messages"
-  ]
+    "Water the plants",
+    "Cook dinner (pasta and garlic bread)",
+    "Make phone calls"
+  ],
+  "summary": "Made a list of tasks to accomplish before relaxing tonight"
 }
 ```
 
 ## Conclusion
 
-Using structured outputs from LLMs can significantly enhance data handling in your applications.
+Using structured outputs with LLMs can significantly enhance data handling in your applications.
 By choosing between JSON Mode and Structured Outputs with JSON Schema, you control the consistency and structure of the model's responses to suit your specific needs.
 
 - **JSON mode** is flexible but less predictable.

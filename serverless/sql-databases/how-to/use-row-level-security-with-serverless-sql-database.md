@@ -1,0 +1,84 @@
+---
+meta:
+  title: How to use Row Level Security with Serverless SQL Database
+  description: This page explains how to use Row Level Security with Serverless SQL Databases
+content:
+  h1: How to use Row Level Security with Serverless SQL Database
+  paragraph: This page explains how to use Row Level Security with Serverless SQL Databases
+tags: sql-databases serverless database row-level-security postgresql postgrest
+dates:
+  validation: 2024-09-24
+  posted: 2024-09-24
+categories:
+  - serverless
+---
+
+Row Level Security can be actived with Serverless SQL Database for a maximum 2 different roles having both read and write permissions. This can be useful to restrict access to subset of users with frameworks or tools such as [PostgREST](https://docs.postgrest.org/en/v12/).
+This requires setting up different [IAM permissions sets](https://www.scaleway.com/en/docs/identity-and-access-management/iam/reference-content/permission-sets/) for each role (**ServerlessSQLDatabaseFullAccess** or **ServerlessSQLDatabaseReadWrite** for one role, and **ServerlessSQLDatabaseDataReadWrite** for the other).
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Created a Serverless SQL Database](/serverless/sql-databases/how-to/create-a-database/)
+- [Created two applications](/identity-and-access-management/iam/how-to/create-application/) in IAM
+
+## Add sample data and create PostgreSQL Row Level Security
+
+1. [Connect to your Serverless SQL Database](https://www.scaleway.com/en/docs/serverless/sql-databases/quickstart/#how-to-connect-to-a-database) with a PostgreSQL client. For instance with psql:
+    ```bash
+    psql "postgres://[user-or-application-id]:[api-secret-key]@[database-hostname]:5432/[database-name]?sslmode=require"
+    ```
+
+2. Add sample data using the following command:
+    ```sql
+    CREATE TABLE pets (name varchar, keeper varchar, id int);
+    INSERT INTO pets VALUES ('Stuart','role_admin',1),('Nemo','role_admin',2),('Alfie','role_readwrite',3),('Peanut','role_readwrite',4);
+    ```
+
+3. Enable **Row Level Security**:
+    ```sql
+    ALTER TABLE pets ENABLE row level security;
+    ```
+
+4. Create a PostgreSQL policy so that users or applications connecting with `role_readwrite` can access a `pet` row only if its `keeper` column value is `role_readwrite`:
+    ```sql
+    CREATE POLICY pets_keeper ON pets TO role_readwrite USING (keeper = current_user);
+    ```
+
+5. (Optional) You can check that you can still see all data with your current connection:
+    ```sql
+    SELECT * FROM pets;
+    ```
+    This is expected as you are connected with `role_admin`. You can verify the current role your are connected with using the following command:
+    ```sql
+    SELECT current_user;
+    ```
+
+
+## Create an IAM application with Row Level Security enabled
+
+1. Create a new [IAM application](https://www.scaleway.com/en/docs/identity-and-access-management/iam/how-to/create-application/) or use an existing one.
+
+2. Add **ServerlessSQLDatabaseDataReadWrite** permission set to this application by creating a new [IAM policy](https://www.scaleway.com/en/docs/identity-and-access-management/iam/how-to/create-policy/)
+
+    <Message type="tip">
+    You need to provide **ServerlessSQLDatabaseDataReadWrite** permission set and not **ServerlessSQLDatabaseReadWrite** permission set. Indeed, all connections to your database performed with **ServerlessSQLDatabaseDataReadWrite** permissions will use `role_readwrite` in PostgreSQL, whereas all connections performed with **ServerlessSQLDatabaseReadWrite** or **ServerlessSQLDatabaseFullAccess** will use `role_admin` in PostgreSQL.
+    </Message>
+
+3. Create an [API Key](https://www.scaleway.com/en/docs/identity-and-access-management/iam/how-to/create-api-keys/) for this application and connect to your Serverless SQL Database with this application.
+    ```bash
+    psql "postgres://[new-application-id]:[new-api-secret-key]@[database-hostname]:5432/[database-name]?sslmode=require"
+    ```
+
+4. List the `pets` this application has access to with:
+    ```sql
+    SELECT * FROM pets;
+    ```
+    You should only see pets with a `keeper` column value of `role_readwrite`.
+
+    Your new application can now only access a specific subset of rows based on its permissions.
+
+    <Message type="tip">
+    Note that row level security and policies can be created or deleted by a table owner. In this example, you can check table owner with the following command `select * from pg_tables where tablename = 'pets';`.
+    </Message>

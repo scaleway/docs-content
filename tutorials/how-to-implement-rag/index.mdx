@@ -4,14 +4,14 @@ meta:
    description: Learn how to implement Retrieval-Augmented Generation (RAG) using Scaleway's managed inference, PostgreSQL, pgvector, and object storage.
 content:
     h1: How to implement RAG with managed inference
-tags: inference, managed, postgresql, pgvector, object storage
+tags: inference, managed, postgresql, pgvector, object storage, RAG
 categories:
     - inference
 ---
 
-RAG (Retrieval-Augmented Generation) is a powerful approach for enhancing a model's knowledge by leveraging your own dataset.
-Scaleway's robust infrastructure makes it easier than ever to implement RAG, as our products are fully compatible with LangChain, especially the OpenAI integration.
-By utilizing our managed inference services, managed databases, and object storage, you can effortlessly build and deploy a customized model tailored to your specific needs.
+Retrieval-Augmented Generation (RAG) enhances the power of language models by enabling them to retrieve relevant information from external datasets. In this tutorial, we’ll implement RAG using Scaleway’s Managed Inference, PostgreSQL, pgvector, and Scaleway’s Object Storage.
+
+With Scaleway's fully managed services, integrating RAG becomes a streamlined process. You'll use a sentence transformer for embedding text, store embeddings in a PostgreSQL database with pgvector, and leverage object storage for scalable data management.
 
 <Macro id="requirements" />
 
@@ -56,16 +56,14 @@ By utilizing our managed inference services, managed databases, and object stora
 
    # Scaleway Inference API configuration (Embeddings)
    SCW_INFERENCE_EMBEDDINGS_ENDPOINT=your_scaleway_inference_embeddings_endpoint  # Endpoint for sentence-transformers/sentence-t5-xxl deployment
-   SCW_INFERENCE_API_KEY_EMBEDDINGS=your_scaleway_api_key_for_embeddings
 
    # Scaleway Inference API configuration (LLM deployment)
    SCW_INFERENCE_DEPLOYMENT_ENDPOINT=your_scaleway_inference_endpoint  # Endpoint for your LLM deployment
-   SCW_INFERENCE_API_KEY=your_scaleway_api_key_for_inference_deployment
    ```
 
 ### Set Up Managed Database
 
-1. Connect to your PostgreSQL instance and install the pg_vector extension.
+1. Connect to your PostgreSQL instance and install the pgvector extension, which is used for storing high-dimensional embeddings.
 
     ```python
     conn = psycopg2.connect(
@@ -89,3 +87,75 @@ By utilizing our managed inference services, managed databases, and object stora
     conn.commit()
    ```
 
+### Set Up Document Loaders for Object Storage
+
+```python
+    document_loader = S3DirectoryLoader(
+    bucket=os.getenv('SCW_BUCKET_NAME'),
+    endpoint_url=os.getenv('SCW_BUCKET_ENDPOINT'),
+    aws_access_key_id=os.getenv("SCW_ACCESS_KEY"),
+    aws_secret_access_key=os.getenv("SCW_SECRET_KEY")
+    )
+
+```
+
+### Embeddings and Vector Store Setup
+
+We will utilize the OpenAIEmbeddings class from LangChain and store the embeddings in PostgreSQL using the PGVector integration.
+
+```python
+    embeddings = OpenAIEmbeddings(
+    openai_api_key=os.getenv("SCW_API_KEY"),
+    openai_api_base=os.getenv("SCW_INFERENCE_EMBEDDINGS_ENDPOINT"),
+    model="sentence-transformers/sentence-t5-xxl",
+    )
+
+    connection_string = f"postgresql+psycopg2://{conn.info.user}:{conn.info.password}@{conn.info.host}:{conn.info.port}/{conn.info.dbname}"
+    vector_store = PGVector(connection=connection_string, embeddings=embeddings)
+```
+
+### Load and Process Documents
+
+Use the S3FileLoader to load documents and split them into chunks. Then, embed and store them in your PostgreSQL database.
+
+```python
+    files = document_loader.lazy_load()
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=20)
+
+    for file in files:
+        cur.execute("SELECT object_key FROM object_loaded WHERE object_key = %s", (file.metadata["source"],))
+            if cur.fetchone() is None:
+                fileLoader = S3FileLoader(
+                bucket=os.getenv(),
+                key=file.metadata["source"].split("/")[-1],
+                endpoint_url=endpoint_s3,
+                aws_access_key_id=os.getenv("SCW_ACCESS_KEY"),
+                aws_secret_access_key=os.getenv("SCW_SECRET_KEY")
+                )
+                file_to_load = fileLoader.load()
+                chunks = text_splitter.split_text(file.page_content)
+
+                embeddings_list = [embeddings.embed_query(chunk) for chunk in chunks]
+                for chunk, embedding in zip(chunks, embeddings_list):
+                    vector_store.add_embeddings(embedding, chunk)
+```
+
+### Query the RAG System
+
+Now, set up the RAG system to handle queries using RetrievalQA and the LLM.
+
+```python
+    retriever = vector_store.as_retriever(search_kwargs={"k": 3})
+    llm = ChatOpenAI(
+    base_url=os.getenv("SCW_INFERENCE_DEPLOYMENT_ENDPOINT"),
+    api_key=os.getenv("SCW_API_KEY"),
+    model=deployment.model_name,
+    )
+
+    qa_stuff = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
+
+    query = "What are the commands to set up a database with the CLI of Scaleway?"
+    response = qa_stuff.invoke(query)
+
+    print(response['result'])
+```

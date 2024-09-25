@@ -1,0 +1,182 @@
+---
+meta:
+  title: Elastic Metal RV1 guidelines
+  description: This page provides guidelines to use your EM-RV1 server.
+content:
+  h1: Elastic Metal RV1 guidelines
+  paragraph: This page provides guidelines to use your EM-RV1 server.
+tags: elastic-metal server riscv em-rv1
+dates:
+  validation: 2024-09-16
+  posted: 2024-03-15
+categories:
+  - bare-metal
+---
+
+## Boot process
+
+EM-RV1 servers do not support standard UEFI or BIOS boot, therefore the boot
+process might slightly differ from other servers. At boot, the bootloader
+expects the eMMC to be partitioned as GPT, and will look for a `boot.itb` file
+in the first or second partition. The partition that contains this boot file
+must be formatted as FAT32.
+
+This `boot.itb` file is in fact a [FIT Image](https://docs.u-boot.org/en/latest/usage/fit/source_file_format.html)
+that must contain the following sections:
+
+  - **kernel**: A Linux kernel image.
+  - **fdt**: A [device tree](https://en.wikipedia.org/wiki/Devicetree).
+  - **opensbi**: The SBI as defined by [RISC-V SBI
+      specification](https://github.com/riscv-non-isa/riscv-sbi-doc/).
+  - **env**: A text-based environment file that defines the following keys:
+      - `usr_bootargs`: Command-line arguments to pass to the kernel.
+      - `usr_has_ramdisk`: Set to `1` if we should load the ramdisk from the FIT
+        image.
+  - **ramdisk** (optional): A ramdisk image.
+
+The following section will explain in details how to create your own boot FIT image.
+
+## Boot a custom kernel
+
+In this section, you will build a boot image based off a close-to-mainline
+Linux kernel.
+
+<Message type="note">
+  Mainline Linux is not fully compatible with EM-RV1 servers yet.
+</Message>
+
+<Macro id="requirements" />
+
+- Installed an EM-RV1 server with Ubuntu
+- Proficient knowledge of Linux systems
+- A few hours of availability to build a Linux kernel
+
+1. Connect to your EM-RV1 server using SSH.
+2. Install the build dependencies.
+    ```bash
+    sudo apt update
+    sudo apt install -y \
+      autoconf bc bison dwarves flex gawk git make \
+      libelf-dev libssl-dev \
+      u-boot-tools device-tree-compiler
+    ```
+3. Clone the projects to build.
+    ```bash
+    git clone --depth=1 https://github.com/revyos/th1520-linux-kernel.git linux
+    git clone https://github.com/revyos/thead-opensbi.git opensbi
+    git clone https://github.com/scaleway/em-rv1.git
+    ```
+4. Build the Linux kernel.
+    ```bash
+    cd linux/
+    make revyos_defconfig
+    # This can take several hours.
+    make -j
+    sudo make modules_install
+    cd ..
+    ```
+5. Build OpenSBI.
+   ```bash
+   cd opensbi/
+   make PLATFORM=generic -j
+   cd ..
+   ```
+6. Build and install the FIT image.
+   ```bash
+   cd em-rv1/fit/
+
+   # Build the device tree
+   cpp \
+    -nostdinc \
+    -I ../linux/arch/riscv/boot/dts/thead/ \
+    -I ../linux/include/ \
+    -undef \
+    -x assembler-with-cpp \
+    em-rv1-c4m16s128-a.dts \
+    | dtc -o em-rv1-c4m16s128-a.dtb
+
+   # Build the FIT image
+   sudo mv /boot/boot.itb /boot/boot.itb.bak
+   sudo mkimage -f em-rv1-c4m16s128-a-boot.its /boot/boot.itb
+
+   cd -
+   ```
+7. Reboot the server to load the new kernel.
+
+## Update the kernel
+
+Due to hardware specificities, it is not possible to use the kernel provided by
+major Linux distributions directly on EM-RV1 servers. Instead, we provide a
+custom upgrade channel. Follow the steps below to update your kernel:
+
+1. [Reboot your EM-RV1 server in rescue mode](/bare-metal/elastic-metal/how-to/use-rescue-mode/).
+2. Log into the machine over SSH using the `rescue` user.
+3. Update the kernel:
+    ```bash
+    sudo rv1 update-kernel
+    ```
+
+    <Message type="note">
+    If you prefer to run a more recent Linux kernel instead of the
+    vendor-provided kernel, you can append the `--tree mainline` option.
+
+    Although we do not recommend it, you can also enable support for vector
+    instructions with the `--enable-vector` flag. Be aware that this feature
+    makes your system vulnerable to the
+    [GhostWrite](https://ghostwriteattack.com/) attack and implements an
+    unratified version of RISC-V vector instructions (RVV 0.7.1) which requires
+    specific development efforts.
+
+    For a comprehensive list of options, refer to `rv1 update-kernel --help`.
+    </Message>
+4. Wait for the update to complete. This step can take a few minutes.
+5. Reboot the server in normal mode.
+
+<Message type="note">
+If you are updating from kernel version `5.10.113-scw0` or lower, note that
+newer kernels disable vector instructions by default. Refer to the process
+above if you still wish to keep them enabled.
+</Message>
+
+
+## Android
+
+### Remote access
+
+This guide will help you get a remote access on the Android distribution
+installed on your EM-RV1 server.
+
+<Macro id="requirements" />
+
+- Installed [Android Platform
+  tools](https://developer.android.com/tools/releases/platform-tools) on your
+  local machine
+- Installed [scrcpy](https://github.com/Genymobile/scrcpy#get-the-app) on your
+  local machine
+- Installed the Android image on your EM-RV1 server
+
+1. Open a SSH tunnel to the ADB daemon running on your server:
+   ```bash
+   ssh -L '5555:localhost:5555' root@<your server IP address>
+   ```
+   Make sure you keep this session open in the background during the next
+   steps.
+2. In a new local shell, connect your local ADB client to the remote daemon
+   through the SSH tunnel you created in the previous step:
+   ```bash
+   adb connect localhost:5555
+   ```
+3. Start a `scrcpy` session on this ADB session:
+   ```bash
+   scrcpy -s localhost:5555
+   ```
+
+<Message type="tip">
+Once connected to the ADB daemon, you can use common ADB commands from your
+local computer. For example, you can install an APK on the remote machine with
+the following command:
+
+```bash
+adb -s localhost:5555 install path/to/app.apk
+```
+</Message>

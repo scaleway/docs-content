@@ -7,7 +7,7 @@ content:
   paragraph: This page explains how to ensure resiliency with multi-AZ Kubernetes clusters
 tags: kubernetes persistent volume persistent-volume
 dates:
-  validation: 2023-10-17
+  validation: 2024-04-29
   posted: 2023-10-17
 categories:
   - kubernetes
@@ -20,6 +20,7 @@ Kubernetes Kapsule clusters can use Private Networks, providing a default securi
 ## Advantages of using multiple Availability Zones
 
 Running a Kubernetes Kapsule cluster across multiple Availability Zones (AZs) enhances high availability and fault tolerance, ensuring your applications remain operational even if one AZ fails due to issues like power outages or natural disasters.
+
 This setup improves disaster recovery, reduces latency by serving users from the nearest AZs, and allows maintenance and upgrades without downtime.
 
 The main advantages of running a Kubernetes Kapsule cluster in multiple AZs are:
@@ -36,6 +37,17 @@ The main advantages of running a Kubernetes Kapsule cluster in multiple AZs are:
 - Ensure your load balancers are zone-aware to distribute traffic efficiently across nodes in different AZs, preventing overloading a single zone.
 
 For more information, refer to the [official Kubernetes best practices for running clusters in multiple zones](https://kubernetes.io/docs/setup/best-practices/multiple-zones/) documentation.
+
+## Limitations
+
+- Kapsule's Control Plane network access is managed by a Load Balancer in the primary zone of each region. If this zone fails globally, the Control Plane will be unreachable, even if the cluster spans multiple zones. This limitation also applies to HA Dedicated Control Planes.
+- Persistent volumes are limited to their Availability Zone (AZ). Applications must replicate data across persistent volumes in different AZs to maintain high availability in case of zone failures.
+- In "controlled isolation" mode, nodes access the Control Plane via their public IPs. If two AZs can't communicate (split-brain scenario), nodes won't appear unhealthy from Kubernetes' perspective, but communication between nodes in different AZs will be disrupted. Applications must handle this scenario if they use components across multiple AZs.
+- In "full isolation" mode, nodes also use the Public Gateway to access the Control Plane. If nodes can't reach the Public Gateway (e.g. because of Private Network failure in an AZ), they will become unhealthy. As there is only one Public Gateway per Private Network, losing the AZ with the Public Gateway results in the loss of all nodes in all private pools across all AZs.
+
+<Message type="note">
+It is important to note that the scalability and reliability of Kubernetes does not automatically ensure the scalability and reliability of an application hosted on it. While Kubernetes is a robust and scalable platform, each application must independently implement measures to achieve scalability and reliability, ensuring it avoids bottlenecks and single points of failure. Therefore, although Kubernetes itself remains responsive, the responsiveness of your application relies on your design and deployment choices.
+</Message>
 
 ## Kubernetes Kapsule infrastructure setup
 
@@ -131,6 +143,7 @@ After applying this Terraform configuration, the cluster and node pools will be 
 ### Deployments with topologySpreadConstraints
 
 `topologySpreadConstraints` allow for fine control over how pods are spread across your Kubernetes cluster among failure-domains such as regions, zones, nodes, and other user-defined topology domains.
+
 This approach ensures high availability and resiliency. For more information, refer to the [official Kubernetes Pod Topology Spread Constraints documentation](https://kubernetes.io/docs/concepts/scheduling-eviction/topology-spread-constraints/).
 
 Here is an example of how you can define `topologySpreadConstraints` in your deployment:
@@ -228,7 +241,6 @@ resource "scaleway_domain_record" "multi-az" {
 
 ### Storage with VolumeBindingMode
 
-
 In this final section, the focus will be on stateful applications that require persistent volumes within a multi-Availability Zone (AZ) architecture. A prerequisite is having a default `scw-bssd` storage class in your cluster, with the `volumeBindingMode` parameter specifically set to `WaitForFirstConsumer`.
 You can confirm the presence and settings of your storage classes using the `kubectl` command shown below:
 
@@ -245,15 +257,14 @@ scw-bssd-retain      csi.scaleway.com   Retain          WaitForFirstConsumer   t
 </Message>
 
 Using a storage class with `volumeBindingMode` set to `WaitForFirstConsumer` is a requirement when deploying applications across multiple AZs, especially those that rely on persistent volumes. This configuration ensures that volume creation is contingent on the pod's scheduling, aligning with specific AZ prerequisites.
+
 Creating a volume ahead of this could lead to its arbitrary placement in an AZ, which can cause attachment issues if the pod is subsequently scheduled in a different AZ. The `WaitForFirstConsumer` mode ensures that volumes are instantiated in the same AZ as their corresponding node, ensuring distribution across various AZs as pods are allocated.
+
 This method is an important point to maintain system resilience and operational consistency across multi-AZ deployments.
 
-
-
 <Message type="note">
-     You now have a brief overview of how to set up a multi-AZ Kubernetes Kapsule cluster on Scaleway. For further information, refer to our complete step-by-step tutorial [Deploying a multi-AZ Kubernetes cluster with Terraform and Kapsule](/tutorials/k8s-kapsule-multi-az/).
+     You now have a brief overview of how to set up a multi-AZ Kubernetes Kapsule cluster on Scaleway. For further information, refer to our complete step-by-step tutorial on [deploying a multi-AZ Kubernetes cluster with Terraform and Kapsule](/tutorials/k8s-kapsule-multi-az/).
 </Message>
-
 
 ## Additional resources
 

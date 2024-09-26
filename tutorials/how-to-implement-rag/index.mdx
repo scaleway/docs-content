@@ -80,6 +80,8 @@ With Scaleway's fully managed services, integrating RAG becomes a streamlined pr
     cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
     conn.commit()
     ```
+The command above ensures that pgvector is installed on your database if it hasn't been already.
+
 2. To avoid reprocessing documents that have already been loaded and vectorized, create a table in your PostgreSQL database to track them. This ensures that new documents added to your object storage bucket are processed only once, preventing duplicate downloads and redundant vectorization.
 
     ```python
@@ -88,6 +90,8 @@ With Scaleway's fully managed services, integrating RAG becomes a streamlined pr
    ```
 
 ### Set Up Document Loaders for Object Storage
+
+The document loader pulls documents from your Scaleway Object Storage bucket. This loader will retrieve the contents of each document for further processing.s
 
 ```python
     document_loader = S3DirectoryLoader(
@@ -101,25 +105,55 @@ With Scaleway's fully managed services, integrating RAG becomes a streamlined pr
 
 ### Embeddings and Vector Store Setup
 
-We will utilize the OpenAIEmbeddings class from LangChain and store the embeddings in PostgreSQL using the PGVector integration.
+1. We will utilize the OpenAIEmbeddings class from LangChain and store the embeddings in PostgreSQL using the PGVector integration.
 
 ```python
     embeddings = OpenAIEmbeddings(
     openai_api_key=os.getenv("SCW_API_KEY"),
     openai_api_base=os.getenv("SCW_INFERENCE_EMBEDDINGS_ENDPOINT"),
     model="sentence-transformers/sentence-t5-xxl",
+    tiktoken_enabled=False,
     )
+```
+
+Key Parameters:
+- openai_api_key: This is your API key for accessing the OpenAI-powered embeddings service, in this case, deployed via Scaleway’s Managed Inference.
+- openai_api_base: This is the base URL that points to your deployment of the sentence-transformers/sentence-t5-xxl model on Scaleway's Managed Inference. This URL serves as the entry point to make API calls for generating embeddings.
+- model="sentence-transformers/sentence-t5-xxl": This defines the specific model being used for text embeddings. sentence-transformers/sentence-t5-xxl is a powerful model optimized for generating high-quality sentence embeddings, making it ideal for tasks like document retrieval in RAG systems.
+- tiktoken_enabled=False: This is an important parameter, which disables the use of TikToken for tokenization within the embeddings process.
+
+What is tiktoken_enabled?
+
+tiktoken is a tokenization library developed by OpenAI, which is optimized for working with GPT-based models (like GPT-3.5 or GPT-4). It transforms text into smaller token units that the model can process.
+
+Why set tiktoken_enabled=False?
+
+In the context of using Scaleway’s Managed Inference and the sentence-t5-xxl model, TikToken tokenization is not necessary because the model you are using (sentence-transformers) works with raw text and handles its own tokenization internally.
+Moreover, leaving tiktoken_enabled as True causes issues when sending data to Scaleway’s API because it results in tokenized vectors being sent instead of raw text. Since Scaleway's endpoint expects text and not pre-tokenized data, this mismatch can lead to errors or incorrect behavior.
+By setting tiktoken_enabled=False, you ensure that raw text is sent to Scaleway's Managed Inference endpoint, which is what the sentence-transformers model expects to process. This guarantees that the embedding generation process works smoothly with Scaleway's infrastructure.
+
+2. Next, configure the connection string for your PostgreSQL instance and create a PGVector store to store these embeddings.
+
+```python
 
     connection_string = f"postgresql+psycopg2://{conn.info.user}:{conn.info.password}@{conn.info.host}:{conn.info.port}/{conn.info.dbname}"
     vector_store = PGVector(connection=connection_string, embeddings=embeddings)
 ```
 
+PGVector: This creates the vector store in your PostgreSQL database to store the embeddings.
+
 ### Load and Process Documents
 
 Use the S3FileLoader to load documents and split them into chunks. Then, embed and store them in your PostgreSQL database.
 
+1. Lazy loadings documents: This method is designed to efficiently load and process documents one by one from Scaleway Object Storage. Instead of loading all documents at once, it loads them lazily, allowing us to inspect each file before deciding whether to embed it.
 ```python
     files = document_loader.lazy_load()
+```
+Why lazy loading?
+The key reason for using lazy loading here is to avoid reprocessing documents that have already been embedded. In the context of Retrieval-Augmented Generation (RAG), reprocessing the same document multiple times is redundant and inefficient. Lazy loading enables us to check if a document has already been embedded (by querying the database) before actually loading and embedding it.
+
+```python
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=20)
 
     for file in files:
@@ -140,6 +174,23 @@ Use the S3FileLoader to load documents and split them into chunks. Then, embed a
                     vector_store.add_embeddings(embedding, chunk)
 ```
 
+- S3FileLoader: Loads each file individually from the object storage bucket.
+- RecursiveCharacterTextSplitter: Splits the document into smaller text chunks. This is important for embedding, as models typically work better with smaller chunks of text.
+- embeddings_list: Stores the embeddings for each chunk.
+- vector_store.add_embeddings(): Stores each chunk and its corresponding embedding in the PostgreSQL vector store.
+
+The code iterates over each file retrieved from object storage using lazy loading.
+For each file, a query is made to check if its corresponding object_key (a unique identifier from the file metadata) exists in the object_loaded table in PostgreSQL.
+If the document has already been processed and embedded (i.e., the object_key is found in the database), the system skips loading the file and moves on to the next one.
+If the document is new (not yet embedded), the file is fully loaded and processed.
+
+This approach ensures that only new or modified documents are loaded into memory and embedded, saving significant computational resources and reducing redundant work.
+
+Why store both chunk and embedding?
+
+Storing both the chunk and its corresponding embedding allows for efficient document retrieval later.
+When a query is made, the RAG system will retrieve the most relevant embeddings, and the corresponding text chunks will be used to generate the final response.
+
 ### Query the RAG System
 
 Now, set up the RAG system to handle queries using RetrievalQA and the LLM.
@@ -159,3 +210,10 @@ Now, set up the RAG system to handle queries using RetrievalQA and the LLM.
 
     print(response['result'])
 ```
+
+
+### Conclusion
+
+This step is essential for efficiently processing and storing large document datasets for RAG. By using lazy loading, the system handles large datasets without overwhelming memory, while chunking ensures that each document is processed in a way that maximizes the performance of the LLM. The embeddings are stored in PostgreSQL via pgvector, allowing for fast and scalable retrieval when responding to user queries.
+
+By combining Scaleway’s Managed Object Storage, PostgreSQL with pgvector, and LangChain’s embedding tools, you can implement a powerful RAG system that scales with your data and offers robust information retrieval capabilities.

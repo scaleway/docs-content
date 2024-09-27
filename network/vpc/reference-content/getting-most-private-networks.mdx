@@ -19,7 +19,7 @@ This document sets out guidance, advice and best practices for building and opti
 
 VPC allows you to build your own **V**irtual **P**rivate **C**loud on top of Scaleway's shared public cloud. Within each VPC, you can create **Private Networks**. Resources attached to Private Networks can communicate securely between themselves, away from the public internet, reducing security risks by ensuring traffic is isolated from public routes.
 
-The VPC operates at the network layer (layer 3) of the OSI model, while Private Networks are a layer 2 resource. As such, a VPC is responsible for routing packets between its different Private Networks. The [**VPC Routing**](TODO) feature auto-creates managed routes between the Private Networks of a VPC, so resources on different Private Networks within a VPC can communicate. You can also use [InterLink](TODO) to connect your VPC to your own on-premises infrastructure. Meanwhile, Private Networks provide network isolation within a VPC and enable you to segment your resources and traffic across different subnets.
+The VPC operates at the network layer (layer 3) of the OSI model, while Private Networks are a layer 2 resource. As such, a VPC is responsible for routing packets between its different Private Networks. Private Networks provide network isolation within a VPC and enable you to segment your resources and traffic across different subnets. The [**VPC Routing**](TODO) feature allows for managed and custom routes between the Private Networks of a VPC, so resources on different subnets can communicate.
 
 <Lightbox src="scaleway-vpc-osi.webp" alt="A graphic shows a simplified version of the seven layers of the OSI networking model (1: Physical, 2: Link, 3: Network, 4: Transport, 5: Session, 6: Presentation, 7: Application). The OSI model shows how different protocols work together and communicate in a networked environment. Scaleway VPC sits at level 3, and Scaleway Private Networks site at level 2." />
 
@@ -47,7 +47,7 @@ When you start creating resources and building your infrastructure with Scaleway
 
 For example, you may use one Private Network for frontend resources and another for backend resources, limiting public access only via Load Balancers and/or Public Gateways, stripping other resources of public IP addresses. You may want to create different VPCs for production and test environments, allowing you isolate potential errors in testing from the production environment.
 
-When [creating a Private Network](/network/vpc/how-to/create-private-network/), you can let Scaleway automatically generate a CIDR block for it that is guaranteed to be unique in this VPC. All resources attached to the Private Network will be allocated a private IP address from this block. However, you also have the option to define your own CIDR block for the network. Ensure you choose a prefix and network size that is appropriate for your needs, does not overlap with that of any other Private Network in the VPC, and contains enough IP addresses for all resources that will be attached to the Private Network.
+When [creating a Private Network](/network/vpc/how-to/create-private-network/), you can let Scaleway automatically generate a CIDR block for it that is guaranteed to be unique in this VPC. All resources attached to the Private Network get a private IP address from this block. However, you also have the option to define your own CIDR block for the network. Ensure you choose a prefix and network size that is appropriate for your needs, does not overlap with that of any other Private Network in the VPC, and contains enough IP addresses for all resources that will be attached to the Private Network.
 
 ## Attaching resources to Private Networks
 
@@ -63,32 +63,36 @@ Note that when you select this option, the IP address randomly assigned to the r
 
 ### Using reserved IP addresses
 
-You can reserve private IP addresses from your Private Networks' CIDR blocks thanks to Scaleway's [**IP A**ddress **M**anagement solution](/network/ipam/), which helps you plan, track and manage the IP address space of your VPCs and their Private Networks. Simply select the Private Network you want to reserve an IP address on, and choose to either reserve any available address, or a specific address not currently attached to any resource. The reserved address will then not risk being auto-assigned by Scaleway to other resources during network attachment, and can be kept until you are ready to use it to attach a specific resource.
+You can reserve private IP addresses from your Private Networks' CIDR blocks thanks to Scaleway's [**IP A**ddress **M**anagement solution](/network/ipam/), which helps you plan, track and manage the IP address space of your VPCs and their Private Networks. From the [IPAM space](https://console.scaleway.com/ipam/) in the Scaleway console, simply use the **Reserve private IP** feature to select the Private Network you want to reserve an IP address on, and choose to either reserve any available address, or a specific address not currently attached to any resource. The reserved address will then not risk being auto-assigned by Scaleway to other resources during network attachment, and can be kept until you are ready to use it to attach a specific resource.
 
 Further, when you attach a resource to a Private Network and specify a reserved IP to use, the IP will remain reserved even after you detach the resource from the network. You can choose to either release the IP back into the pool, or keep it reserved until you use it to attach another resource.
 
-Using reserved IP addresses is ideal to ensure that certain IP addresses are never released into the general pool and kept for certain critical resources with fixed IP requirements, even when that resource is detached from the Private Network, or when migrating between resources. Reserved IP addresses may also be useful where your Private Network is extending or integrating with external networks via InterLink or manual VPNs, or to assign addresses to virtual machines hosted on Elastic Metal servers via Proxmox.
+Using reserved IP addresses is ideal to ensure that certain IP addresses are never released into the general pool and kept for certain critical resources with fixed IP requirements, even when that resource is detached from the Private Network, or when migrating between resources. Reserved IP addresses may also be useful where your Private Network is extending or integrating with external networks, or to assign addresses to virtual machines hosted on Elastic Metal servers via Proxmox.
 
-## NOT GIVING A PUBLIC IP
+## Removing public IPs from resources
 
-- Public Gateways
-- Load Balancers
-- VPC Routing
-- VPC Peering
+We strongly recommend that you remove public (flexible) IP addresses from any of your Scaleway resources where public access is not absolutely required. Attaching resources to Private Networks, and limiting their communication to these networks only brings the following advantages:
 
-For secure, dedicated connectivity between resources in a Scaleway VPC and your on-premises architecture, consider creating an [InterLink](TODO). Otherwise, you may consider installing a manual VPN on a Scaleway Instance to connect to other non-Scaleway infrastructure, and create a [custom route](TODO) towards this VPN so traffic on your Private Network can securely communicate with resources at the other end of your VPN tunnel. 
+- **Minimized attack surface**: Without a public IP address, the resource is not exposed directly to the internet, decreasing the risk of DDoS or brute force attacks, or unauthorized access.
+- **Reduced cost**: Public (flexible) IP addresses are [billed](TODO), whereas Private Networks and the private IP addresses that attach resources to Private Networks are free of charge. 
+- **Improved latency**: Communication between resources over a Private Network is generally faster, as it does not need to be routed through the public internet.
 
-## Security best practices
+## Safely exposing a Private Network to the internet
 
-- Security groups and network ACLs
-- Monitoring and logging (Utilizing cloud provider tools for network traffic analysis and security auditing.)
-- Apply the principals of zero trust networking
+### Public Gateways
 
-## Cost management
-- Understand pricing
-- Avoid common pitfalls that can lead to unexpected charges via cost optimization
+You can use Scaleway [Public Gateways](/network/public-gateways/) to provide resources on a Private Network with a secure point of access to and from the public internet. 
 
-## Use cases
+- Set the Public Gateway to advertize a default route to the internet, allowing attached resources to send packets to the internet via the gateway, without needing their own public IP address.
+- Activate the [SSH bastion](TODO) so that you can establish SSH connections to resources on the Private Network via the gateway's bastion.
+- Use static NAT to map ingress traffic from the public internet towards resources on the Private Network, using private IP addresses and ports.
 
+### Load Balancers
 
-## 
+Another option is to attach a Scaleway [Load Balancer](TODO) to the Private Network. By giving the Load Balancer a public IP address, and configuring Instances on the Private Network as backend servers for the Load Balancer via their private IP addresses, the Load Balancer can securely and efficiently distribute traffic to the Instances. This solution is suitable when you have multiple Instances serving the same application.
+
+You can also remove the public IP address from the Load Balancer itself. This may be relevant if the Load Balancer is configured to receive and distribute traffic from resources on a different Private Network within the same VPC, for example.
+
+## Connecting a VPC to external infrastructure
+
+Watch this space for Scaleway's upcoming solution to provide secure, dedicated connectivity between resources in a Scaleway VPC and your external or on-premises architecture. In the meantime, you may consider installing a manual VPN on a Scaleway Instance to connect to other non-Scaleway infrastructure, and create a [custom route](TODO) towards this VPN so traffic on your Private Network can securely communicate with resources at the other end of your VPN tunnel.

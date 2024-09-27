@@ -13,16 +13,19 @@ Retrieval-Augmented Generation (RAG) supercharges language models by enabling re
 
 In this comprehensive guide, you'll learn how to implement RAG using LangChain, one of the leading frameworks for developing robust language model applications. We'll combine LangChain with ***Scaleway’s Managed Inference***, ***Scaleway’s PostgreSQL Managed Database*** (featuring pgvector for vector storage), and ***Scaleway’s Object Storage*** for seamless integration and efficient data management.
 
-***Why LangChain?***
+#### Why LangChain?
 LangChain simplifies the process of enhancing language models with retrieval capabilities, allowing developers to build scalable, intelligent applications that access external datasets effortlessly. By leveraging LangChain’s modular design and Scaleway’s cloud services, you can unlock the full potential of Retrieval-Augmented Generation.
 
-***What You’ll Learn:***
+#### What You’ll Learn:
 How to embed text using a sentence transformer using ***Scaleway Manage Inference***
 How to store and query embeddings using ***Scaleway’s Managed PostgreSQL Database*** with pgvector
 How to manage large datasets efficiently with ***Scaleway Object Storage***
 
 <Macro id="requirements" />
 
+## Before you start
+
+To complete the actions presented below, you must have:
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - A valid [API key](/identity-and-access-management/iam/how-to/create-api-keys/)
@@ -79,7 +82,7 @@ pgvector is essential for storing and indexing high-dimensional vectors, which a
 To prevent reprocessing documents that have already been loaded and vectorized, you should create a table to keep track of them. This will ensure that new documents added to your object storage bucket are only processed once, avoiding duplicate downloads and redundant vectorization:
 
 ```sql
- CREATE TABLE IF NOT EXISTS object_loaded (id SERIAL PRIMARY KEY, object_key TEXT;
+ CREATE TABLE IF NOT EXISTS object_loaded (id SERIAL PRIMARY KEY, object_key TEXT);
 ```
 
 3. Connect to PostgreSQL programmatically using Python
@@ -132,7 +135,7 @@ The S3DirectoryLoader class, part of LangChain, is specifically designed to load
 Now, let’s configure the document loader to pull files from your Scaleway Object Storage bucket using the appropriate credentials and environment variables:
 
 ```python
-#rag.py
+# rag.py
 
     document_loader = S3DirectoryLoader(
     bucket=os.getenv('SCW_BUCKET_NAME'),
@@ -146,10 +149,19 @@ Now, let’s configure the document loader to pull files from your Scaleway Obje
 This section highlights that you're leveraging LangChain’s document loader capabilities to connect directly to your Scaleway Object Storage. LangChain simplifies the process of integrating external data sources, allowing you to focus on building a RAG system without handling low-level integration details.
 
 ### Embeddings and Vector Store Setup
+1. Import the required module
+```python
+# rag.py
 
-1. We will utilize the OpenAIEmbeddings class from LangChain and store the embeddings in PostgreSQL using the PGVector integration.
+from langchain_openai import OpenAIEmbeddings
+from langchain_postgres import PGVector
+```
+
+2. We will utilize the OpenAIEmbeddings class from LangChain and store the embeddings in PostgreSQL using the PGVector integration.
 
 ```python
+# rag.py
+
     embeddings = OpenAIEmbeddings(
     openai_api_key=os.getenv("SCW_API_KEY"),
     openai_api_base=os.getenv("SCW_INFERENCE_EMBEDDINGS_ENDPOINT"),
@@ -158,17 +170,17 @@ This section highlights that you're leveraging LangChain’s document loader cap
     )
 ```
 
-Key Parameters:
+#### Key Parameters:
 - openai_api_key: This is your API key for accessing the OpenAI-powered embeddings service, in this case, deployed via Scaleway’s Managed Inference.
 - openai_api_base: This is the base URL that points to your deployment of the sentence-transformers/sentence-t5-xxl model on Scaleway's Managed Inference. This URL serves as the entry point to make API calls for generating embeddings.
 - model="sentence-transformers/sentence-t5-xxl": This defines the specific model being used for text embeddings. sentence-transformers/sentence-t5-xxl is a powerful model optimized for generating high-quality sentence embeddings, making it ideal for tasks like document retrieval in RAG systems.
 - tiktoken_enabled=False: This is an important parameter, which disables the use of TikToken for tokenization within the embeddings process.
 
-What is tiktoken_enabled?
+#### What is tiktoken_enabled?
 
 tiktoken is a tokenization library developed by OpenAI, which is optimized for working with GPT-based models (like GPT-3.5 or GPT-4). It transforms text into smaller token units that the model can process.
 
-Why set tiktoken_enabled=False?
+#### Why set tiktoken_enabled=False?
 
 In the context of using Scaleway’s Managed Inference and the sentence-t5-xxl model, TikToken tokenization is not necessary because the model you are using (sentence-transformers) works with raw text and handles its own tokenization internally.
 Moreover, leaving tiktoken_enabled as True causes issues when sending data to Scaleway’s API because it results in tokenized vectors being sent instead of raw text. Since Scaleway's endpoint expects text and not pre-tokenized data, this mismatch can lead to errors or incorrect behavior.
@@ -192,11 +204,11 @@ Use the S3FileLoader to load documents and split them into chunks. Then, embed a
 ```python
     files = document_loader.lazy_load()
 ```
-Why lazy loading?
+#### Why lazy loading?
 The key reason for using lazy loading here is to avoid reprocessing documents that have already been embedded. In the context of Retrieval-Augmented Generation (RAG), reprocessing the same document multiple times is redundant and inefficient. Lazy loading enables us to check if a document has already been embedded (by querying the database) before actually loading and embedding it.
 
 ```python
-    text_splitter = RecursiveCharacterTextSplitter(chunk_size=300, chunk_overlap=20)
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=480, chunk_overlap=20)
 
     for file in files:
         cur.execute("SELECT object_key FROM object_loaded WHERE object_key = %s", (file.metadata["source"],))
@@ -216,19 +228,21 @@ The key reason for using lazy loading here is to avoid reprocessing documents th
                     vector_store.add_embeddings(embedding, chunk)
 ```
 
-- S3FileLoader: Loads each file individually from the object storage bucket.
-- RecursiveCharacterTextSplitter: Splits the document into smaller text chunks. This is important for embedding, as models typically work better with smaller chunks of text.
-- embeddings_list: Stores the embeddings for each chunk.
-- vector_store.add_embeddings(): Stores each chunk and its corresponding embedding in the PostgreSQL vector store.
+1. S3FileLoader: The S3FileLoader loads each file individually from your ***Scaleway Object Storage bucket*** using the file's object_key (extracted from the file's metadata). It ensures that only the specific file is loaded from the bucket, minimizing the amount of data being retrieved at any given time.
+2. RecursiveCharacterTextSplitter: The RecursiveCharacterTextSplitter breaks each document into smaller chunks of text. This is crucial because embeddings models, like those used in Retrieval-Augmented Generation (RAG), typically have a limited context window (the number of tokens they can process at once).
+    - Chunk Size: Here, the chunk size is set to 480 characters, with an overlap of 20 characters. The choice of 480 characters is based on the context size supported by the embeddings model. Models have a maximum number of tokens they can process in a single pass, often around 512 tokens or fewer, depending on the specific model you are using. To ensure that each chunk fits within this limit, 380 characters provide a buffer, as different models tokenize characters into variable-length tokens.
+    - Chunk Overlap: The 20-character overlap ensures continuity between chunks, which helps prevent loss of meaning or context between segments.
+3. Embedding the Chunks: For each document, the text is split into smaller chunks using the text splitter, and an embedding is generated for each chunk using the embeddings.embed_query(chunk) function. This function transforms each chunk into a vector representation that can later be used for similarity search.
+4. Embedding Storage: After generating the embeddings for each chunk, they are stored in a vector database (e.g., PostgreSQL with pgvector) using the vector_store.add_embeddings(embedding, chunk) method. Each embedding is stored alongside its corresponding text chunk, enabling retrieval during a query.
+5. Avoiding Redundant Processing: The script checks the object_loaded table in PostgreSQL to see if a document has already been processed (i.e., the object_key exists in the table). If it has, the file is skipped, avoiding redundant downloads, vectorization, and database inserts. This ensures that only new or modified documents are processed, reducing the system's computational load and saving both time and resources.
 
-The code iterates over each file retrieved from object storage using lazy loading.
-For each file, a query is made to check if its corresponding object_key (a unique identifier from the file metadata) exists in the object_loaded table in PostgreSQL.
-If the document has already been processed and embedded (i.e., the object_key is found in the database), the system skips loading the file and moves on to the next one.
-If the document is new (not yet embedded), the file is fully loaded and processed.
+#### Why 480 characters?
+
+The chunk size of 480 characters is chosen to fit comfortably within the context size limits of typical embeddings models, which often range between 512 and 1024 tokens. Since most models tokenize text into smaller units (tokens) based on words, punctuation, and subwords, the exact number of tokens for 480 characters will vary depending on the language and the content. By keeping chunks small, we avoid exceeding the model’s context window, which could lead to truncated embeddings or poor performance during inference.
 
 This approach ensures that only new or modified documents are loaded into memory and embedded, saving significant computational resources and reducing redundant work.
 
-Why store both chunk and embedding?
+#### Why store both chunk and embedding?
 
 Storing both the chunk and its corresponding embedding allows for efficient document retrieval later.
 When a query is made, the RAG system will retrieve the most relevant embeddings, and the corresponding text chunks will be used to generate the final response.

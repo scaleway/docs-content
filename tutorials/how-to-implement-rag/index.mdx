@@ -36,7 +36,7 @@ How to manage large datasets efficiently with ***Scaleway Object Storage***
 1. Install necessary packages: run the following command to install the required packages:
 
    ```sh
-   pip install langchain psycopg2 python-dotenv scaleway
+   pip install langchain psycopg2 python-dotenv
    ```
 2. Configure your environment variables: create a .env file and add the following variables. These will store your API keys, database connection details, and other configuration values.
 
@@ -67,31 +67,48 @@ How to manage large datasets efficiently with ***Scaleway Object Storage***
 
 ### Set Up Managed Database
 
-1. Connect to your PostgreSQL instance and install the pgvector extension, which is used for storing high-dimensional embeddings.
+To perform these actions, you'll need to connect to your PostgreSQL database. You can use any PostgreSQL client, such as psql. The following steps will guide you through setting up your database to handle vector storage and document tracking.
 
-    ```python
-    conn = psycopg2.connect(
+1. Install the pgvector extension
+pgvector is essential for storing and indexing high-dimensional vectors, which are critical for retrieval-augmented generation (RAG) systems. Ensure that it is installed by executing the following SQL command:
+
+```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+```
+2. Create a table to track processed documents
+To prevent reprocessing documents that have already been loaded and vectorized, you should create a table to keep track of them. This will ensure that new documents added to your object storage bucket are only processed once, avoiding duplicate downloads and redundant vectorization:
+
+```sql
+ CREATE TABLE IF NOT EXISTS object_loaded (id SERIAL PRIMARY KEY, object_key TEXT;
+```
+
+3. Connect to PostgreSQL programmatically using Python
+You can also connect to your PostgreSQL instance and perform the same tasks programmatically.
+
+ ```python
+ # rag.py file
+
+from dotenv import load_dotenv
+import psycopg2
+import os
+
+# Load environment variables
+load_dotenv()
+
+# Establish connection to PostgreSQL database using environment variables
+conn = psycopg2.connect(
     database=os.getenv("SCW_DB_NAME"),
     user=os.getenv("SCW_DB_USER"),
     password=os.getenv("SCW_DB_PASSWORD"),
     host=os.getenv("SCW_DB_HOST"),
     port=os.getenv("SCW_DB_PORT")
-    )
+)
 
-    cur = conn.cursor()
-
-    # Install pg_vector extension
-    cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-    conn.commit()
-    ```
-The command above ensures that pgvector is installed on your database if it hasn't been already.
-
-2. To avoid reprocessing documents that have already been loaded and vectorized, create a table in your PostgreSQL database to track them. This ensures that new documents added to your object storage bucket are processed only once, preventing duplicate downloads and redundant vectorization.
-
-    ```python
-    cur.execute("CREATE TABLE IF NOT EXISTS object_loaded (id SERIAL PRIMARY KEY, object_key TEXT)")
-    conn.commit()
+# Create a cursor to execute SQL commands
+cur = conn.cursor()
    ```
+
+
 
 ### Set Up Document Loaders for Object Storage
 
@@ -164,7 +181,7 @@ The key reason for using lazy loading here is to avoid reprocessing documents th
         cur.execute("SELECT object_key FROM object_loaded WHERE object_key = %s", (file.metadata["source"],))
             if cur.fetchone() is None:
                 fileLoader = S3FileLoader(
-                bucket=os.getenv(),
+                bucket=os.getenv("SCW_BUCKET_NAME"),
                 key=file.metadata["source"].split("/")[-1],
                 endpoint_url=endpoint_s3,
                 aws_access_key_id=os.getenv("SCW_ACCESS_KEY"),

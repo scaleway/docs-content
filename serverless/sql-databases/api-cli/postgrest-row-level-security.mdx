@@ -13,11 +13,15 @@ categories:
   - serverless
 ---
 
+PostgREST's built-in Row Level Security based on users JWT relies either on [role impersonation](https://docs.postgrest.org/en/v12/references/auth.html#user-impersonation) or [transaction-scoped settings](https://docs.postgrest.org/en/v12/references/transactions.html#tx-settings). 
+
+Due to connection pooling, Serverless SQL Database currently only support transaction-scoped settings and requires using a single PostgreSQL role for all queries (the internal `role_readwrite` in PostgreSQL).
+
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - [Created a Serverless SQL Database](/serverless/sql-databases/how-to/create-a-database/)
 
-## Add sample data and create PostgreSQL Row Level Security
+## How to add sample data and enable PostgreSQL Row Level Security
 
 1. [Connect to your Serverless SQL Database](/serverless/sql-databases/quickstart/#how-to-connect-to-a-database) with a PostgreSQL client such as `psql`:
     ```bash
@@ -35,11 +39,32 @@ categories:
     ALTER TABLE pets ENABLE row level security;
     ```
 
-## Use Row Level Security with PostgREST
+3. Run the command below to enable **Row Level Security**:
+    ```sql
+    ALTER TABLE pets ENABLE row level security;
+    ```
 
-PostgREST built-in Row Level Security based on users JWT relies either on [role impersonation](https://docs.postgrest.org/en/v12/references/auth.html#user-impersonation) or [transaction-scoped settings](https://docs.postgrest.org/en/v12/references/transactions.html#tx-settings). Due to connection pooling, Serverless SQL Database currently only support transaction-scoped settings and requires using a single PostgreSQL role for all queries (the internal `role_readwrite` in PostgreSQL).
+4. Run the command below to create a PostgreSQL policy so that users or applications connecting with `role_readwrite` can access a `pet` row only if its `keeper` column value is `role_readwrite`:
+    ```sql
+    CREATE POLICY pets_keeper ON pets TO role_readwrite USING (keeper = current_user);
+    ```
 
-1. [Install PostgREST](https://docs.postgrest.org/en/v12/tutorials/tut0.html#step-1-install-postgresql)
+5. (Optional) Run the command below to check that you can see all the data with your current connection:
+    ```sql
+    SELECT * FROM pets;
+    ```
+    All the data contained in the database displays, as you are connected with `role_admin`.
+    
+    <Message type="tip">
+    You can verify the current role your are connected with using the following command:
+    ```sql
+    SELECT current_user;
+    ```
+    </Message>
+
+## How to use Row Level Security with PostgREST
+
+1. Install PostgREST by following the [official documentation](https://docs.postgrest.org/en/v12/tutorials/tut0.html#step-1-install-postgresql).
 
 2. Create a `tutorial.conf` file with the following content:
     ```
@@ -48,21 +73,28 @@ PostgREST built-in Row Level Security based on users JWT relies either on [role 
     jwt-secret = "[your jwt secret]"
     ```
     where:
-    - `db-uri` should use credentials with an application having **ServerlessSQLDatabaseDataReadWrite** permissions (and not **ServerlessSQLDatabaseDataReadWrite** neither **ServerlessSQLDatabaseFullAccess**)
-    - `db-schemas` is your database schema. You can use `"public"` as a default value. 
-    - `jwt-secret` can be generated using the command `openssl rand -base64 32`
+    - `db-uri` must use credentials with an [application](/identity-and-access-management/iam/how-to/create-application/) having **ServerlessSQLDatabaseDataReadWrite** permissions (neither **ServerlessSQLDatabaseReadWrite** nor **ServerlessSQLDatabaseFullAccess**)
+    - `db-schemas` is your database schema. Use `public` as a default value. 
+    - `jwt-secret` can be generated using the following command:
+    ```sh
+    openssl rand -base64 32
+    ```
 
-3. Run PostgREST:
+3. Run the command below to start a local PostgREST instance:
+
     ```bash
     postgrest tutorial.conf 
     ```
-    You can check that your are able to query your database by [generating a JWT](https://docs.postgrest.org/en/v12/tutorials/tut1.html#step-3-sign-a-token) with the payload data `{"role": "role_readwrite"}`:
+
+    <Message type="tip">
+    You can check that your are able to query your database by [generating a JWT](https://docs.postgrest.org/en/v12/tutorials/tut1.html#step-3-sign-a-token) with `{"role": "role_readwrite"}` as the payload data, then running the command below:
     ```bash
      curl http://localhost:3000/pets \
         -H "Authorization: Bearer $TOKEN"
     ```
     where `$TOKEN` is your generated JWT.
     A pet list should display.
+    </Message>
 
 4. Connect to your Serverless SQL Database with **ServerlessSQLDatabaseFullAccess** permissions, and delete the existing policy on the `pets` table:
     ```sql
@@ -92,7 +124,7 @@ PostgREST built-in Row Level Security based on users JWT relies either on [role 
      curl http://localhost:3000/pets \
         -H "Authorization: Bearer $TOKEN"
     ```
-    You should only see pets with a `keeper` column value of `role_readwrite`.
+    You should only see pets with a `role_readwrite` value for `keeper`.
 
     Your new application can now only access a specific subset of rows based on its permissions using transaction-scoped settings.
 

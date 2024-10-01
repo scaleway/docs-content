@@ -15,7 +15,7 @@ categories:
 
 PostgREST's built-in Row Level Security based on users JWT relies either on [role impersonation](https://docs.postgrest.org/en/v12/references/auth.html#user-impersonation) or [transaction-scoped settings](https://docs.postgrest.org/en/v12/references/transactions.html#tx-settings). 
 
-Due to connection pooling, Serverless SQL Database currently only support transaction-scoped settings and requires using a single PostgreSQL role for all queries (the internal `role_readwrite` in PostgreSQL).
+Due to connection pooling, Serverless SQL Databases currently only support transaction-scoped settings and requires using a single PostgreSQL role for all queries (the internal `role_readwrite` in PostgreSQL).
 
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
@@ -39,11 +39,6 @@ Due to connection pooling, Serverless SQL Database currently only support transa
     ALTER TABLE pets ENABLE row level security;
     ```
 
-3. Run the command below to enable **Row Level Security**:
-    ```sql
-    ALTER TABLE pets ENABLE row level security;
-    ```
-
 4. Run the command below to create a PostgreSQL policy so that users or applications connecting with `role_readwrite` can access a `pet` row only if its `keeper` column value is `role_readwrite`:
     ```sql
     CREATE POLICY pets_keeper ON pets TO role_readwrite USING (keeper = current_user);
@@ -53,10 +48,10 @@ Due to connection pooling, Serverless SQL Database currently only support transa
     ```sql
     SELECT * FROM pets;
     ```
-    All the data contained in the database displays, as you are connected with `role_admin`.
+    All the data in the database displays, as you are connected with `role_admin`.
     
     <Message type="tip">
-    You can verify the current role your are connected with using the following command:
+    You can verify the current role you are connected with using the following command:
     ```sql
     SELECT current_user;
     ```
@@ -67,48 +62,49 @@ Due to connection pooling, Serverless SQL Database currently only support transa
 1. Install PostgREST by following the [official documentation](https://docs.postgrest.org/en/v12/tutorials/tut0.html#step-1-install-postgresql).
 
 2. Create a `tutorial.conf` file with the following content:
-    ```
+
+    ```json
     db-uri = "postgres://[user-or-application-id]:[api-secret-key]@[database-hostname]:5432/[database-name]?sslmode=require"
     db-schemas = "[your database schema]"
     jwt-secret = "[your jwt secret]"
     ```
-    where:
-    - `db-uri` must use credentials with an [application](/identity-and-access-management/iam/how-to/create-application/) having **ServerlessSQLDatabaseDataReadWrite** permissions (neither **ServerlessSQLDatabaseReadWrite** nor **ServerlessSQLDatabaseFullAccess**)
+
+    Where:
+    - `db-uri` must use credentials with an [application](/identity-and-access-management/iam/how-to/create-application/) having **ServerlessSQLDatabaseDataReadWrite** permissions (not **ServerlessSQLDatabaseReadWrite** or **ServerlessSQLDatabaseFullAccess**)
     - `db-schemas` is your database schema. Use `public` as a default value. 
-    - `jwt-secret` can be generated using the following command:
+    - `jwt-secret` is a token generated using the following command:
     ```sh
     openssl rand -base64 32
     ```
 
-3. Run the command below to start a local PostgREST instance:
+3. In a terminal, access the folder containing the `tutorial.conf` file, and run the command below to start a local PostgREST instance:
 
     ```bash
     postgrest tutorial.conf 
     ```
 
     <Message type="tip">
-    You can check that your are able to query your database by [generating a JWT](https://docs.postgrest.org/en/v12/tutorials/tut1.html#step-3-sign-a-token) with `{"role": "role_readwrite"}` as the payload data, then running the command below:
+    You can check that you can query your database by [generating a JWT](https://docs.postgrest.org/en/v12/tutorials/tut1.html#step-3-sign-a-token) with `{"role": "role_readwrite"}` as the payload data, then running the command below, where `$TOKEN` is your generated JWT:
     ```bash
      curl http://localhost:3000/pets \
         -H "Authorization: Bearer $TOKEN"
     ```
-    where `$TOKEN` is your generated JWT.
-    A pet list should display.
+    A list of pets displays.
     </Message>
 
-4. Connect to your Serverless SQL Database with **ServerlessSQLDatabaseFullAccess** permissions, and delete the existing policy on the `pets` table:
+4. Connect to your Serverless SQL Database with **ServerlessSQLDatabaseFullAccess** permissions, and run the following command to delete the `pets_keeper` policy previously applied to the `pets` table:
     ```sql
     DROP POLICY pets_keeper ON pets;
     ```
 
-5. Create a new policy on the `pets` table:
+5. Run the command below to create a new policy on the `pets` table:
     ```sql
     CREATE POLICY pets_keeper ON pets TO role_readwrite 
     USING (keeper = current_setting('request.jwt.claims', true)::json->>'user_type');
     ```
-    This policy will use `current_settings` instead on `current_user` and thus check for additional fields contained by the JWT instead of only the `"role"` field.
+    This policy uses `current_setting` instead of `current_user`, and thus checks for additional fields contained by the JWT, and not only the `role` field.
 
-6. Generate a JWT with the following payload data:
+6. [Generate a JWT](https://docs.postgrest.org/en/v12/tutorials/tut1.html#step-3-sign-a-token) with the following payload data:
     ```json
     {
         "role": "role_readwrite",
@@ -116,18 +112,18 @@ Due to connection pooling, Serverless SQL Database currently only support transa
     }
     ```
     <Message type="tip">
-    In this configuration, `user_type` value from JWT will be checked against `keeper` column value in your database to authorize access. You can replace `"user_type": "role_readwrite"` by any alternative field name or value depending on your use case. However you need to keep `"role": "role_readwrite"` for any kind of users you want to authenticate through PostgREST, because alternative roles (such as `role_admin`) will already have too much privileges and be able to see any data.
+    Here, the `user_type` value from the JWT will be checked against the `keeper` column value in your database to authorize access. You can replace `"user_type": "role_readwrite"` with any alternative field name or value depending on your use case. However, you must keep `"role": "role_readwrite"` for any users you want to authenticate through PostgREST, because other roles (such as `role_admin`) have too many permissions and will be able to see any data.
     </Message>
 
-7. Query your database using this JWT through PostgREST:
+7. Run the command below to query your database using the JWT you just created through PostgREST:
     ```bash
      curl http://localhost:3000/pets \
         -H "Authorization: Bearer $TOKEN"
     ```
-    You should only see pets with a `role_readwrite` value for `keeper`.
+    A list of pets with a `role_readwrite` value for `keeper` displays.
 
     Your new application can now only access a specific subset of rows based on its permissions using transaction-scoped settings.
 
     <Message type="tip">
-    You can change your JWT payload data with `"user_type": "role_admin"` and see that only another set of rows will be displayed. You can go further by adding any additional fields or values to filter, and edit your policy to filter on a more complex set of rules.
+    You can change your JWT payload data with `"user_type": "role_admin"` and see that only another set of rows will be displayed. You can go further by adding fields or values to filter, and edit your policy to filter on a more complex set of rules. Refer to the [official PostgREST](https://docs.postgrest.org/en/v12/explanations/db_authz.html) documentation for more information.
     </Message>

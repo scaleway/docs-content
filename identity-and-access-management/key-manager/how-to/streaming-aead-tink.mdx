@@ -1,0 +1,208 @@
+---
+meta:
+title: How to use Streaming AEAD with Tink and Key Manager
+description: Discover how to encrypt and decrypt large data streams with Streaming AEAD, Tink and Key Manager
+content:
+h1: How to use Streaming AEAD with Tink and Key Manager
+paragraph: Discover how to encrypt and decrypt large data streams with Streaming AEAD, Tink and Key Manager
+tags: key sensitive-data tink aead streaming encryption decryption
+dates:
+validation: 2024-10-03
+posted: 2024-10-03
+categories:
+  - identity-and-access-management
+---
+
+This page shows you how to use Scaleway Key Manager with Tink to securely handle large data streams. Specifically, it uses AEAD, which ensures both encryption and authentication of data, along with associated data (like file paths) that is authenticated but not encrypted. This is important for handling large files efficiently, especially in cases where stream processing is necessary (such as video files or large logs).
+
+Tink is a multi-language cryptographic library that simplifies common cryptographic operations like encryption, decryption, signing, and more. It provides cryptographic primitives, including AEAD.
+
+Key Manager handles secure storage and management of encryption keys. In this case, it is integrated with Tink to manage a Key Encryption Key (KEK).
+
+Streaming AEAD: This is the cryptographic primitive that handles secure, authenticated streaming encryption. It ensures that large amounts of data are encrypted on-the-fly without needing to load everything into memory.
+
+This page shows you how to use the Key Manager Tink extension to encrypt and decrypt large data streams using Authenticated Encryption with Associated Data (AEAD).
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Created a key encryption key (KEK) in Key Manager
+- A working Go environment
+- Installed the [Scaleway Go SDK](https://github.com/scaleway/scaleway-sdk-go) and created [credentials](/developer-tools/scaleway-sdk/go-sdk/)
+
+## Configuring your environment variables
+
+Configuring your environment variables allows the Go application to authenticate and use Scaleway's API and Key Manager.
+
+Open a terminal and paste the following commands to export your environment variables. Make sure that you add your **own variables**. You can also use a Scaleway configuration file.
+
+  ```
+  export SCW_ACCESS_KEY="<API-ACCESS-KEY>"
+  export SCW_SECRET_KEY="<API-SECRET-KEY>"
+  export SCW_DEFAULT_ORGANIZATION_ID="<Scaleway-Organization-ID>"
+  export SCW_DEFAULT_PROJECT_ID="<Scaleway-Project-ID>"
+  export SCW_DEFAULT_REGION="<region>"
+  export SCW_API_URL="<api-URL>"
+  export SCW_KMS_KEY_ID="<KEY-ENCRYPTION-KEY-ID>"
+  ```
+
+## Encrypting and decrypting large data streams using AEAD
+
+
+1. Open a terminal and add the necessary dependencies for your Go project ([Scaleway Tink provider for Go](https://github.com/scaleway/tink-go-scwkms/tree/main) and Tink):
+
+    ```
+     go get github.com/scaleway/tink-go-scwkms
+     go get github.com/tink-crypto/tink-go/v2
+    ```
+
+2. Create a Go project and paste the following code in a Go file:
+
+    ```
+    package main
+
+    import (
+        "bytes"
+        "fmt"
+        "github.com/scaleway/tink-go-scwkms/integration/scwkms"
+        "github.com/tink-crypto/tink-go/v2/keyset"
+        "github.com/tink-crypto/tink-go/v2/streamingaead"
+        "io"
+        "log"
+        "os"
+        "path/filepath"
+    )
+
+    func main() {
+        const keyURIPrefix = "scw-kms://regions/<region>/keys/"
+        keyURI := keyURIPrefix + os.Getenv("SCW_KMS_KEY_ID")
+
+        client, err := scwkms.NewClient(keyURIPrefix)
+        if err != nil {
+            log.Fatal(err)
+        }
+
+        kekAEAD, err := client.GetAEAD(keyURI)
+        if err != nil {
+            log.Fatal(err)
+        }
+
+        handle, err := keyset.NewHandle(streamingaead.AES256GCMHKDF1MBKeyTemplate())
+        if err != nil {
+            log.Fatal(err)
+        }
+
+        // Encrypt the keyset and store it in memory (using a bytes buffer)
+        buf := new(bytes.Buffer)
+        writer := keyset.NewBinaryWriter(buf)
+        err = handle.Write(writer, kekAEAD)
+        if err != nil {
+            log.Fatalf("Error writing encrypted keyset: %v", err)
+        }
+
+        // Decrypt the keyset from the buffer
+        reader := keyset.NewBinaryReader(buf)
+        decryptedHandle, err := keyset.Read(reader, kekAEAD)
+        if err != nil {
+            log.Fatalf("Error reading encrypted keyset: %v", err)
+        }
+
+        // Create the Streaming AEAD primitive from the decrypted keyset
+        primitive, err := streamingaead.New(decryptedHandle)
+        if err != nil {
+            log.Fatalf("Error creating streaming AEAD primitive: %v", err)
+        }
+
+        // Create a file with the plaintext.
+        dir, err := os.MkdirTemp("", "streamingaead")
+        if err != nil {
+            log.Fatal(err)
+        }
+        defer os.RemoveAll(dir)
+        plaintextPath := filepath.Join(dir, "plaintext")
+        if err := os.WriteFile(plaintextPath, []byte("this data needs to be encrypted"), 0666); err != nil {
+            log.Fatal(err)
+        }
+        plaintextFile, err := os.Open(plaintextPath)
+        if err != nil {
+            log.Fatal(err)
+        }
+
+        // AssociatedData defines the context of the encryption. (It is optional)
+        // Here, we include the path of the plaintext file.
+        associatedData := []byte("associatedData for " + plaintextPath)
+
+        // Encrypt the plaintext file and write the output to the ciphertext file.
+        ciphertextPath := filepath.Join(dir, "ciphertext")
+        ciphertextFile, err := os.Create(ciphertextPath)
+        if err != nil {
+            log.Fatal(err)
+        }
+        w, err := primitive.NewEncryptingWriter(ciphertextFile, associatedData)
+        if err != nil {
+            log.Fatal(err)
+        }
+        if _, err := io.Copy(w, plaintextFile); err != nil {
+            log.Fatal(err)
+        }
+        if err := w.Close(); err != nil {
+            log.Fatal(err)
+        }
+        if err := ciphertextFile.Close(); err != nil {
+            log.Fatal(err)
+        }
+        if err := plaintextFile.Close(); err != nil {
+            log.Fatal(err)
+        }
+
+        // Print the content of the encrypted file.
+        c, err := os.ReadFile(ciphertextPath)
+        if err != nil {
+            log.Fatal(err)
+        }
+        fmt.Println(string(c))
+
+        // Decrypt the ciphertext file and write the output in the decrypted file.
+        ciphertextFile, err = os.Open(ciphertextPath)
+        if err != nil {
+            log.Fatal(err)
+        }
+        decryptedPath := filepath.Join(dir, "decrypted")
+        decryptedFile, err := os.Create(decryptedPath)
+        if err != nil {
+            log.Fatal(err)
+        }
+        r, err := primitive.NewDecryptingReader(ciphertextFile, associatedData)
+        if err != nil {
+            log.Fatal(err)
+        }
+        if _, err := io.Copy(decryptedFile, r); err != nil {
+            log.Fatal(err)
+        }
+        if err := decryptedFile.Close(); err != nil {
+            log.Fatal(err)
+        }
+        if err := ciphertextFile.Close(); err != nil {
+            log.Fatal(err)
+        }
+
+        // Print the content of the decrypted file.
+        b, err := os.ReadFile(decryptedPath)
+        if err != nil {
+            log.Fatal(err)
+        }
+        fmt.Println(string(b))
+    }
+    ```
+    <Message type="note">
+     - The example above shows you how to use the Key Manager remote key encryption key to protect your data encryption key and AEAD stream, you can also protect the data encryption key using another non remote key.
+     - Associated data is authenticated but not encrypted
+    </Message>
+
+3. Save your changes and run the following commands to execute your code:
+
+    ```
+    go mod tidy
+    go run test.go
+    ``

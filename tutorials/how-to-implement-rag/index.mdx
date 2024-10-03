@@ -264,29 +264,46 @@ This approach ensures that only new or modified documents are loaded into memory
 Storing both the chunk and its corresponding embedding allows for efficient document retrieval later.
 When a query is made, the RAG system will retrieve the most relevant embeddings, and the corresponding text chunks will be used to generate the final response.
 
-### Query the RAG System
+### Query the RAG System with a pre-defined prompt template
 
-Now, set up the RAG system to handle queries using RetrievalQA and the LLM.
+Now, set up the RAG system to handle queries
 
 ```python
-    retriever = vector_store.as_retriever(search_kwargs={"k": 3})
-    llm = ChatOpenAI(
-    base_url=os.getenv("SCW_INFERENCE_DEPLOYMENT_ENDPOINT"),
-    api_key=os.getenv("SCW_API_KEY"),
-    model=deployment.model_name,
+llm = ChatOpenAI(
+        base_url=os.getenv("SCW_INFERENCE_DEPLOYMENT_ENDPOINT"),
+        api_key=os.getenv("SCW_SECRET_KEY"),
+        model=deployment.model_name,
     )
 
-    qa_stuff = RetrievalQA.from_chain_type(llm=llm, chain_type="stuff", retriever=retriever)
+    prompt = hub.pull("rlm/rag-prompt")
+    retriever = vector_store.as_retriever()
 
-    query = "What are the commands to set up a database with the CLI of Scaleway?"
-    response = qa_stuff.invoke(query)
 
-    print(response['result'])
+    rag_chain = (
+        {"context": retriever, "question": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+    for r in rag_chain.stream("Your question"):
+        print(r, end="", flush=True)
+        time.sleep(0.15)
 ```
+- LLM Initialization: We initialize the ChatOpenAI instance using the endpoint and API key from the environment variables, along with the specified model name.
 
+- Prompt Setup: The prompt is pulled from the hub using a pre-defined template, ensuring consistent query formatting.
+
+- Retriever Configuration: We set up the retriever to access the vector store, allowing the RAG system to retrieve relevant information based on the query.
+
+- RAG Chain Construction: We create the RAG chain, which connects the retriever, prompt, LLM, and output parser in a streamlined workflow.
+
+- Query Execution: Finally, we stream the output of the RAG chain for a specified question, printing each response with a slight delay for better readability.
+
+### Query the RAG system with you own prompt template
 
 ### Conclusion
 
-This step is essential for efficiently processing and storing large document datasets for RAG. By using lazy loading, the system handles large datasets without overwhelming memory, while chunking ensures that each document is processed in a way that maximizes the performance of the LLM. The embeddings are stored in PostgreSQL via pgvector, allowing for fast and scalable retrieval when responding to user queries.
+In this tutorial, we explored essential techniques for efficiently processing and storing large document datasets for a Retrieval-Augmented Generation (RAG) system. By leveraging metadata, we can quickly check which documents have already been processed, ensuring that our system operates smoothly without redundant data handling. Chunking optimizes the processing of each document, maximizing the performance of the LLM. Storing embeddings in PostgreSQL via pgvector enables fast and scalable retrieval, ensuring quick responses to user queries.
 
-By combining Scaleway’s Managed Object Storage, PostgreSQL with pgvector, and LangChain’s embedding tools, you can implement a powerful RAG system that scales with your data and offers robust information retrieval capabilities.
+By integrating Scaleway’s Managed Object Storage, PostgreSQL with pgvector, and LangChain’s embedding tools, you can build a powerful RAG system that scales with your data while offering robust information retrieval capabilities. This approach equips you with the tools necessary to handle complex queries and deliver accurate, relevant results efficiently.

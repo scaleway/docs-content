@@ -37,7 +37,7 @@ def extract_metadata(filepath):
             if "validation: " in line:
                 val_date = line.split(": ", 1)[1].strip()
                 has_val_date = True
-            if "validation-frequency:" in line:
+            if "validation_frequency:" in line:
                 val_freq = line.split(": ", 1)[1].strip()
             if "---" in line:
                 meta_limiters += 1
@@ -119,6 +119,7 @@ def main():
     docs_to_review = process_files(".")
     docs_to_review_by_cat = organize_docs_by_category(docs_to_review)
     message = prep_message(docs_to_review_by_cat)
+    print(message)
     if os.environ.get("DRY_RUN") != "true":
         send_message(message)
 

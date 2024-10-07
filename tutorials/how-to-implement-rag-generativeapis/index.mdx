@@ -1,0 +1,360 @@
+---
+meta:
+   title: Implementing Retrieval-Augmented Generation (RAG) with LangChain and Scaleway Generative APIs
+   description: Step by step Retrieval-Augmented Generation (RAG) with LangChain and Scaleway Generative APIs
+content:
+    h1: Implementing Retrieval-Augmented Generation (RAG) with LangChain and Scaleway Generative APIs
+tags: inference API postgresql pgvector object storage RAG langchain machine learning AI language models
+categories:
+    - inference
+---
+
+Retrieval-Augmented Generation (RAG) enhances language models by incorporating relevant information from your own datasets. This hybrid approach improves both the accuracy and contextual relevance of the model's outputs, making it ideal for advanced AI applications.
+
+In this tutorial, you will learn how to implement RAG using LangChain, a leading framework for developing powerful language model applications. We will integrate LangChain with **Scaleway’s Generative APIs**, **Scaleway’s PostgreSQL Managed Database** (utilizing pgvector for vector storage), and **Scaleway’s Object Storage** to ensure seamless data management and efficient integration.
+
+## What you will learn
+- How to embed text using ***Scaleway Generative APIs***
+- How to store and query embeddings using ***Scaleway’s Managed PostgreSQL Database*** with pgvector
+- How to manage large datasets efficiently with ***Scaleway Object Storage***
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/identity-and-access-management/iam/how-to/create-api-keys/)
+- Access to the [Generative APIs service](ai-data/generative-apis/quickstart/)
+- An [Object Storage Bucket](/storage/object/how-to/create-a-bucket/) to store all the data you want to inject into your LLM model.
+- A [Managed Database](/managed-databases/postgresql-and-mysql/how-to/create-a-database/) to securely store all your embeddings.
+
+## Configure your development environment
+
+### Install required packages
+
+Run the following command to install the required packages:
+
+   ```sh
+   pip install langchain psycopg2 python-dotenv
+   ```
+### Create a .env file
+
+Create a .env file and add the following variables. These will store your API keys, database connection details, and other configuration values.
+
+   ```sh
+   # .env file
+
+   # Scaleway API credentials
+   SCW_ACCESS_KEY=your_scaleway_access_key
+   SCW_API_KEY=your_scaleway_secret_key
+
+   # Scaleway managed database (PostgreSQL) credentials
+   SCW_DB_NAME=your_scaleway_managed_db_name
+   SCW_DB_USER=your_scaleway_managed_db_username
+   SCW_DB_PASSWORD=your_scaleway_managed_db_password
+   SCW_DB_HOST=your_scaleway_managed_db_host  # The IP address of your database instance
+   SCW_DB_PORT=your_scaleway_managed_db_port  # The port number for your database instance
+
+   # Scaleway S3 bucket configuration
+   SCW_BUCKET_NAME=your_scaleway_bucket_name
+   SCW_BUCKET_ENDPOINT="https://{{SCW_BUCKET_NAME}}.s3.{{SCW_REGION}}.scw.cloud" # S3 endpoint, e.g., https://s3.fr-par.scw.cloud
+
+   # Scaleway Generative APIs endpoint
+   SCW_GENERATIVE_APIs_ENDPOINT="https://api.scaleway.ai/v1"
+   ```
+
+## Setting Up Managed Databases
+
+### Connect to your PostgreSQL database
+
+To perform these actions, you will need to connect to your PostgreSQL database. You can use any PostgreSQL client, such as [psql](https://www.postgresql.org/docs/current/app-psql.html). The following steps will guide you through setting up your database to handle vector storage and document tracking.
+
+### Install the pgvector extension
+
+[pgvector](https://github.com/pgvector/pgvector) is essential for storing and indexing high-dimensional vectors, which are critical for retrieval-augmented generation (RAG) systems. Ensure that it is installed by executing the following SQL command:
+
+```sql
+   CREATE EXTENSION IF NOT EXISTS vector;
+```
+### Create a table to track processed documents
+
+To prevent reprocessing documents that have already been loaded and vectorized, you should create a table to keep track of them. This will ensure that new documents added to your object storage bucket are only processed once, avoiding duplicate downloads and redundant vectorization:
+
+```sql
+ CREATE TABLE IF NOT EXISTS object_loaded (id SERIAL PRIMARY KEY, object_key TEXT);
+```
+
+### Connect to PostgreSQL programmatically
+
+Connect to your PostgreSQL instance and perform tasks programmatically.
+
+ ```python
+ # rag.py file
+
+from dotenv import load_dotenv
+import psycopg2
+import os
+
+# Load environment variables
+load_dotenv()
+
+# Establish connection to PostgreSQL database using environment variables
+conn = psycopg2.connect(
+        database=os.getenv("SCW_DB_NAME"),
+        user=os.getenv("SCW_DB_USER"),
+        password=os.getenv("SCW_DB_PASSWORD"),
+        host=os.getenv("SCW_DB_HOST"),
+        port=os.getenv("SCW_DB_PORT")
+    )
+
+# Create a cursor to execute SQL commands
+cur = conn.cursor()
+   ```
+
+## Embeddings and vector store setup
+
+### Import required modules
+
+```python
+# rag.py
+
+from langchain_openai import OpenAIEmbeddings
+from langchain_postgres import PGVector
+```
+
+### Configure OpenAI Embeddings
+
+We will use the [OpenAIEmbeddings](https://api.python.langchain.com/en/latest/embeddings/langchain_openai.embeddings.base.OpenAIEmbeddings.html) class from LangChain and store the embeddings in PostgreSQL using the PGVector integration.
+
+```python
+# rag.py
+
+embeddings = OpenAIEmbeddings(
+                openai_api_key=os.getenv("SCW_API_KEY"),
+                openai_api_base=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
+                model="sentence-transformers/sentence-t5-xxl",
+                tiktoken_enabled=False,
+            )
+```
+
+#### Key parameters:
+- `openai_api_key`: This is your API key for accessing the OpenAI-powered embeddings service, in this case, hosted by Scaleway’s Generative APIs.
+- `openai_api_base`: This is the base URL that points Scaleway Generative APIs where the embedding model is hosted. This URL serves as the entry point to make API calls for generating embeddings.
+- `model="sentence-transformers/sentence-t5-xxl"`: This defines the specific model being used for text embeddings. sentence-transformers/sentence-t5-xxl is a powerful model optimized for generating high-quality sentence embeddings, making it ideal for tasks like document retrieval in RAG systems.
+- `tiktoken_enabled=False`: This is parameter disables the use of TikToken for tokenization within the embeddings process.
+
+#### What is tiktoken_enabled?
+
+[`tiktoken`](https://github.com/openai/tiktoken) is a tokenization library developed by OpenAI, which is optimized for working with GPT-based models (like GPT-3.5 or GPT-4). It transforms text into smaller token units that the model can process.
+
+#### Why set tiktoken_enabled=False?
+
+In the context of using Scaleway’s Generative APIs and the `sentence-t5-xxl` model of this example, TikToken tokenization is not necessary because the model you are using (sentence-transformers) works with raw text and handles its own tokenization internally.
+Moreover, leaving `tiktoken_enabled` as `True` causes issues when sending data to Scaleway’s API because it results in tokenized vectors being sent instead of raw text. Since Scaleway's endpoint expects text and not pre-tokenized data, this mismatch can lead to errors or incorrect behavior.
+By setting `tiktoken_enabled=False`, you ensure that raw text is sent to Scaleway's Generative APIs endpoint, which is what the sentence-transformers model expects to process. This guarantees that the embedding generation process works smoothly with Scaleway's infrastructure.
+
+### Create a PGVector store
+
+Configure the connection string for your PostgreSQL instance and create a PGVector store to store these embeddings.
+
+```python
+# rag.py
+
+connection_string = f"postgresql+psycopg2://{conn.info.user}:{conn.info.password}@{conn.info.host}:{conn.info.port}/{conn.info.dbname}"
+vector_store = PGVector(connection=connection_string, embeddings=embeddings)
+```
+
+PGVector: This creates the vector store in your PostgreSQL database to store the embeddings.
+
+## Load and process documents
+
+Use the [`S3FileLoader`](https://api.python.langchain.com/en/latest/document_loaders/langchain_community.document_loaders.s3_file.S3FileLoader.html) to load documents and split them into chunks. Then, embed and store them in your PostgreSQL database.
+
+### Import required modules
+
+```python
+#rag.py
+
+import boto3
+from langchain_community.document_loaders import S3FileLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain_openai import OpenAIEmbeddings
+
+```
+
+### Load metadata for improved efficiency
+
+Load metadata for improved efficiency: By loading the metadata for all objects in your bucket, you can speed up the process significantly. This allows you to quickly check if a document has already been embedded without the need to load the entire document.
+
+```python
+# rag.py
+
+endpoint_s3 = f"https://s3.{os.getenv('SCW_DEFAULT_REGION', '')}.scw.cloud"
+session = boto3.session.Session()
+client_s3 = session.client(service_name='s3', endpoint_url=endpoint_s3,
+                               aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
+                               aws_secret_access_key=os.getenv("SCW_SECRET_KEY", ""))
+paginator = client_s3.get_paginator('list_objects_v2')
+page_iterator = paginator.paginate(Bucket=BUCKET_NAME)
+```
+
+In this code sample we:
+- Set up a Boto3 session: We initialize a Boto3 session, which is the AWS SDK for Python, fully compatible with Scaleway Object Storage. This session manages configuration, including credentials and settings, that Boto3 uses for API requests.
+- Create an S3 client: We establish an S3 client to interact with the Scaleway Object Storage service.
+- Set up pagination for listing objects: We prepare pagination to handle potentially large lists of objects efficiently.
+- Iterate through the bucket: This initiates the pagination process, allowing us to list all objects within the specified Scaleway Object bucket seamlessly.
+
+### Iterate through metadata
+
+Iterate through metadata: Next, we will iterate through the metadata to determine if each object has already been embedded. If an object hasn’t been processed yet, we will embed it and load it into the database.
+
+```python
+# rag.py
+
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0, add_start_index=True, length_function=len, is_separator_regex=False)
+for page in page_iterator:
+    for obj in page.get('Contents', []):
+        cur.execute("SELECT object_key FROM object_loaded WHERE object_key = %s", (obj['Key'],))
+        response = cur.fetchone()
+            if response is None:
+                file_loader = S3FileLoader(
+                        bucket=BUCKET_NAME,
+                        key=obj['Key'],
+                        endpoint_url=endpoint_s3,
+                        aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
+                        aws_secret_access_key=os.getenv("SCW_SECRET_KEY", "")
+                    )
+                file_to_load = file_loader.load()
+                cur.execute("INSERT INTO object_loaded (object_key) VALUES (%s)", (obj['Key'],))
+                chunks = text_splitter.split_text(file_to_load[0].page_content)
+                try:
+                    embeddings_list = [embeddings.embed_query(chunk) for chunk in chunks]
+                    vector_store.add_embeddings(chunks, embeddings_list)
+                    cur.execute("INSERT INTO object_loaded (object_key) VALUES (%s)", (obj['Key'],))
+                except Exception as e:
+                    logger.error(f"An error occurred: {e}")
+
+conn.commit()
+```
+
+- S3FileLoader: The S3FileLoader loads each file individually from your ***Scaleway Object Storage bucket*** using the file's object_key (extracted from the file's metadata). It ensures that only the specific file is loaded from the bucket, minimizing the amount of data being retrieved at any given time.
+- RecursiveCharacterTextSplitter: The RecursiveCharacterTextSplitter breaks each document into smaller chunks of text. This is crucial because embeddings models, like those used in Retrieval-Augmented Generation (RAG), typically have a limited context window (the number of tokens they can process at once).
+- Embedding the chunks: For each document, the text is split into smaller chunks using the text splitter, and an embedding is generated for each chunk using the embeddings.embed_query(chunk) function. This function transforms each chunk into a vector representation that can later be used for similarity search.
+- Embedding storage: After generating the embeddings for each chunk, they are stored in a vector database (e.g., PostgreSQL with pgvector) using the vector_store.add_embeddings(embedding, chunk) method. Each embedding is stored alongside its corresponding text chunk, enabling retrieval during a query.
+- Avoiding redundant processing: The script checks the object_loaded table in PostgreSQL to see if a document has already been processed (i.e., the object_key exists in the table). If it has, the file is skipped, avoiding redundant downloads, vectorization, and database inserts. This ensures that only new or modified documents are processed, reducing the system's computational load and saving both time and resources.
+
+#### Why 500 characters?
+
+The chunk size of 500 characters is chosen to fit comfortably within the context size limits of typical embeddings models, which often range between 512 and 1024 tokens. Since most models tokenize text into smaller units (tokens) based on words, punctuation, and subwords, the exact number of tokens for 480 characters will vary depending on the language and the content. By keeping chunks small, we avoid exceeding the model’s context window, which could lead to truncated embeddings or poor performance during inference.
+
+This approach ensures that only new or modified documents are loaded into memory and embedded, saving significant computational resources and reducing redundant work.
+
+#### Why store both chunk and embedding?
+
+Storing both the chunk and its corresponding embedding allows for efficient document retrieval later.
+When a query is made, the RAG system will retrieve the most relevant embeddings, and the corresponding text chunks will be used to generate the final response.
+
+### Query the RAG System with a pre-defined prompt template
+
+### Import required modules
+
+```python
+#rag.py
+
+from langchain import hub
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.runnables import RunnablePassthrough
+
+```
+
+### Setup LLM for querying
+
+Now, set up the RAG system to handle queries
+
+```python
+#rag.py
+
+llm = ChatOpenAI(
+        base_url=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
+        api_key=os.getenv("SCW_SECRET_KEY"),
+        model="llama-3.1-8b-instruct",
+        )
+
+prompt = hub.pull("rlm/rag-prompt")
+retriever = vector_store.as_retriever()
+
+
+rag_chain = (
+        {"context": retriever, "question": RunnablePassthrough()}
+        | prompt
+        | llm
+        | StrOutputParser()
+    )
+
+for r in rag_chain.stream("Your question"):
+    print(r, end="", flush=True)
+    time.sleep(0.1)
+```
+- LLM initialization: We initialize the ChatOpenAI instance using the endpoint and API key from the environment variables, along with the specified model name.
+
+- Prompt setup: The prompt is pulled from the hub using a pre-defined template, ensuring consistent query formatting.
+
+- Retriever configuration: We set up the retriever to access the vector store, allowing the RAG system to retrieve relevant information based on the query.
+
+- RAG chain construction: We create the RAG chain, which connects the retriever, prompt, LLM, and output parser in a streamlined workflow.
+
+- Query execution: Finally, we stream the output of the RAG chain for a specified question, printing each response with a slight delay for better readability.
+
+### Query the RAG system with your own prompt template
+
+Personalizing your prompt template allows you to tailor the responses from your RAG (Retrieval-Augmented Generation) system to better fit your specific needs. This can significantly improve the relevance and tone of the answers you receive. Below is a detailed guide on how to create a custom prompt for querying the system.
+
+```python
+#rag.py
+
+from langchain.chains.combine_documents import create_stuff_documents_chain
+from langchain_core.prompts import PromptTemplate
+from langchain_openai import ChatOpenAI
+
+llm = ChatOpenAI(
+        base_url=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
+        api_key=os.getenv("SCW_SECRET_KEY"),
+        model="llama-3.1-8b-instruct",
+        )
+prompt = """Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer. Always finish your answer with "Thank you for asking". {context} Question: {question} Helpful Answer:"""
+custom_rag_prompt = PromptTemplate.from_template(prompt)
+retriever = vector_store.as_retriever()
+custom_rag_chain = create_stuff_documents_chain(llm, custom_rag_prompt)
+
+
+context = retriever.invoke("your question")
+for r in custom_rag_chain.stream({"question":"your question", "context": context}):
+    print(r, end="", flush=True)
+    time.sleep(0.1)
+```
+
+- Prompt template: The prompt template is meticulously crafted to direct the model's responses. It clearly instructs the model on how to leverage the provided context and emphasizes the importance of honesty in cases where it lacks information.
+To make the responses more engaging, consider adding a light-hearted conclusion or a personalized touch. For example, you might modify the closing line to say, "Thank you for asking! I'm here to help with anything else you need!"
+Retrieving context:
+- The retriever.invoke(new_message) method fetches relevant information from your vector store based on the user’s query. It's essential that this step retrieves high-quality context to ensure that the model's responses are accurate and helpful.
+You can enhance the quality of the context by fine-tuning your embeddings and ensuring that the documents in your vector store are relevant and well-structured.
+Creating the RAG chain:
+- The create_stuff_documents_chain function connects the language model with your custom prompt. This integration allows the model to process the retrieved context effectively and formulate a coherent and context-aware response.
+Consider experimenting with different chain configurations to see how they affect the output. For instance, using a different chain type may yield varied responses.
+Streaming responses:
+- The loop that streams responses from the custom_rag_chain provides a dynamic user experience. Instead of waiting for the entire output, users can see responses as they are generated, enhancing interactivity.
+You can customize the streaming behavior further, such as implementing progress indicators or more sophisticated UI elements for applications.
+
+#### Example use cases
+- Customer support: Use a custom prompt to answer customer queries effectively, making the interactions feel more personalized and engaging.
+- Research assistance: Tailor prompts to provide concise summaries or detailed explanations on specific topics, enhancing your research capabilities.
+- Content generation: Personalize prompts for creative writing, generating responses that align with specific themes or tones.
+
+## Conclusion
+
+In this tutorial, we explored essential techniques for efficiently processing and storing large document datasets within a Retrieval-Augmented Generation (RAG) system. By leveraging metadata, we ensured that our system avoids redundant data handling, allowing for smooth and efficient operations. The use of chunking optimizes document processing, maximizing the performance of the language model. Storing embeddings in PostgreSQL via pgvector enables rapid and scalable retrieval, ensuring quick responses to user queries.
+
+Furthermore, you can continually enhance your RAG system by implementing mechanisms to retain chat history. Keeping track of past interactions allows for more contextually aware responses, fostering a more engaging user experience. This historical data can be used to refine your prompts, adapt to user preferences, and improve the overall accuracy of responses.
+
+By integrating Scaleway Object Storage, Managed Database for PostgreSQL with pgvector, and LangChain’s embedding tools, you have the foundation to build a powerful RAG system that scales with your data while offering robust information retrieval capabilities. This approach equips you with the tools necessary to handle complex queries and deliver accurate, relevant results efficiently.
+
+With ongoing refinement and adaptation, your RAG system can evolve to meet the changing needs of your users, ensuring that it remains a valuable asset in your AI toolkit.

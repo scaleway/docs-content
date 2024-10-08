@@ -4,7 +4,7 @@ meta:
    description: Step by step Retrieval-Augmented Generation (RAG) with LangChain and Scaleway Generative APIs
 content:
     h1: Implementing Retrieval-Augmented Generation (RAG) with LangChain and Scaleway Generative APIs
-tags: inference API postgresql pgvector object storage RAG langchain machine learning AI language models
+tags: inference API postgresql pgvector object storage RAG langchain AI LLMs embeddings
 categories:
     - inference
 ---
@@ -43,30 +43,31 @@ Create a .env file and add the following variables. These will store your API ke
    ```sh
    # .env file
 
-   # Scaleway API credentials
-   SCW_ACCESS_KEY=your_scaleway_access_key
+   # Scaleway API credentials https://console.scaleway.com/iam/api-keys
+   SCW_ACCESS_KEY=your_scaleway_access_key_id
    SCW_API_KEY=your_scaleway_secret_key
 
-   # Scaleway managed database (PostgreSQL) credentials
-   SCW_DB_NAME=your_scaleway_managed_db_name
+   # Scaleway Managed Database (PostgreSQL) credentials
    SCW_DB_USER=your_scaleway_managed_db_username
    SCW_DB_PASSWORD=your_scaleway_managed_db_password
+   SCW_DB_NAME="rdb"
    SCW_DB_HOST=your_scaleway_managed_db_host  # The IP address of your database instance
    SCW_DB_PORT=your_scaleway_managed_db_port  # The port number for your database instance
 
    # Scaleway S3 bucket configuration
    SCW_BUCKET_NAME=your_scaleway_bucket_name
-   SCW_BUCKET_ENDPOINT="https://{{SCW_BUCKET_NAME}}.s3.{{SCW_REGION}}.scw.cloud" # S3 endpoint, e.g., https://s3.fr-par.scw.cloud
+   SCW_REGION=fr-par
+   SCW_BUCKET_ENDPOINT="https://{{SCW_BUCKET_NAME}}.s3.{{SCW_REGION}}.scw.cloud" # S3 endpoint, e.g., https://name.s3.fr-par.scw.cloud
 
    # Scaleway Generative APIs endpoint
    SCW_GENERATIVE_APIs_ENDPOINT="https://api.scaleway.ai/v1"
    ```
 
-## Setting Up Managed Databases
+## Setting Up Managed Database
 
 ### Connect to your PostgreSQL database
 
-To perform these actions, you will need to connect to your PostgreSQL database. You can use any PostgreSQL client, such as [psql](https://www.postgresql.org/docs/current/app-psql.html). The following steps will guide you through setting up your database to handle vector storage and document tracking.
+You can use any PostgreSQL client, such as [psql](https://www.postgresql.org/docs/current/app-psql.html). The following steps will guide you through setting up your database to handle vector storage and document tracking.
 
 ### Install the pgvector extension
 
@@ -188,13 +189,12 @@ Load metadata for improved efficiency: By loading the metadata for all objects i
 ```python
 # rag.py
 
-endpoint_s3 = f"https://s3.{os.getenv('SCW_DEFAULT_REGION', '')}.scw.cloud"
 session = boto3.session.Session()
-client_s3 = session.client(service_name='s3', endpoint_url=endpoint_s3,
+client_s3 = session.client(service_name='s3', endpoint_url=os.getenv("SCW_BUCKET_ENDPOINT", ""),
                                aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
-                               aws_secret_access_key=os.getenv("SCW_SECRET_KEY", ""))
+                               aws_secret_access_key=os.getenv("SCW_API_KEY", ""))
 paginator = client_s3.get_paginator('list_objects_v2')
-page_iterator = paginator.paginate(Bucket=BUCKET_NAME)
+page_iterator = paginator.paginate(Bucket=os.getenv("SCW_BUCKET_NAME", ""))
 ```
 
 In this code sample we:
@@ -215,23 +215,23 @@ for page in page_iterator:
     for obj in page.get('Contents', []):
         cur.execute("SELECT object_key FROM object_loaded WHERE object_key = %s", (obj['Key'],))
         response = cur.fetchone()
-            if response is None:
-                file_loader = S3FileLoader(
-                        bucket=BUCKET_NAME,
-                        key=obj['Key'],
-                        endpoint_url=endpoint_s3,
-                        aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
-                        aws_secret_access_key=os.getenv("SCW_SECRET_KEY", "")
-                    )
-                file_to_load = file_loader.load()
+        if response is None:
+            file_loader = S3FileLoader(
+                    bucket=os.getenv("SCW_BUCKET_NAME", ""),
+                    key=obj['Key'],
+                    endpoint_url=os.getenv("SCW_BUCKET_ENDPOINT", ""),
+                    aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
+                    aws_secret_access_key=os.getenv("SCW_API_KEY", "")
+                )
+            file_to_load = file_loader.load()
+            cur.execute("INSERT INTO object_loaded (object_key) VALUES (%s)", (obj['Key'],))
+            chunks = text_splitter.split_text(file_to_load[0].page_content)
+            try:
+                embeddings_list = [embeddings.embed_query(chunk) for chunk in chunks]
+                vector_store.add_embeddings(chunks, embeddings_list)
                 cur.execute("INSERT INTO object_loaded (object_key) VALUES (%s)", (obj['Key'],))
-                chunks = text_splitter.split_text(file_to_load[0].page_content)
-                try:
-                    embeddings_list = [embeddings.embed_query(chunk) for chunk in chunks]
-                    vector_store.add_embeddings(chunks, embeddings_list)
-                    cur.execute("INSERT INTO object_loaded (object_key) VALUES (%s)", (obj['Key'],))
-                except Exception as e:
-                    logger.error(f"An error occurred: {e}")
+            except Exception as e:
+                logger.error(f"An error occurred: {e}")
 
 conn.commit()
 ```

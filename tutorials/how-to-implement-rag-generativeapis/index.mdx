@@ -34,7 +34,7 @@ In this tutorial, you will learn how to implement RAG using LangChain, a leading
 Run the following command to install the required packages:
 
    ```sh
-   pip install langchain psycopg2 python-dotenv
+   pip install langchain psycopg2 python-dotenv langchainhub
    ```
 ### Create a .env file
 
@@ -60,7 +60,7 @@ Create a .env file and add the following variables. These will store your API ke
    ## Will be used to store your proprietary data (PDF, CSV etc)
    SCW_BUCKET_NAME=your_scaleway_bucket_name
    SCW_REGION=fr-par
-   SCW_BUCKET_ENDPOINT="https://{{SCW_BUCKET_NAME}}.s3.{{SCW_REGION}}.scw.cloud" # S3 endpoint, e.g., https://name.s3.fr-par.scw.cloud
+   SCW_BUCKET_ENDPOINT="https://s3.{{SCW_REGION}}.scw.cloud" # S3 main endpoint, e.g., https://s3.fr-par.scw.cloud
 
    # Scaleway Generative APIs endpoint
    ## LLM and Embedding model are served through this base URL
@@ -136,7 +136,7 @@ We will use the [OpenAIEmbeddings](https://api.python.langchain.com/en/latest/em
 embeddings = OpenAIEmbeddings(
                 openai_api_key=os.getenv("SCW_API_KEY"),
                 openai_api_base=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
-                model="sentence-transformers/sentence-t5-xxl",
+                model="sentence-t5-xxl",
                 tiktoken_enabled=False,
             )
 ```
@@ -144,7 +144,7 @@ embeddings = OpenAIEmbeddings(
 #### Key parameters:
 - `openai_api_key`: This is your API key for accessing the OpenAI-powered embeddings service, in this case, hosted by Scaleway’s Generative APIs.
 - `openai_api_base`: This is the base URL that points Scaleway Generative APIs where the embedding model is hosted. This URL serves as the entry point to make API calls for generating embeddings.
-- `model="sentence-transformers/sentence-t5-xxl"`: This defines the specific model being used for text embeddings. sentence-transformers/sentence-t5-xxl is a powerful model optimized for generating high-quality sentence embeddings, making it ideal for tasks like document retrieval in RAG systems.
+- `model="sentence-t5-xxl"`: This defines the specific model being used for text embeddings. sentence-transformers/sentence-t5-xxl is a powerful model optimized for generating high-quality sentence embeddings, making it ideal for tasks like document retrieval in RAG systems.
 - `tiktoken_enabled=False`: This parameter disables the use of TikToken for tokenization within the embeddings process.
 
 ### Create a PGVector store
@@ -158,11 +158,12 @@ connection_string = f"postgresql+psycopg2://{conn.info.user}:{conn.info.password
 vector_store = PGVector(connection=connection_string, embeddings=embeddings)
 ```
 
-PGVector: This creates the vector store in your PostgreSQL database to store the embeddings.
-
 ## Load and process documents
 
-Use the [`S3FileLoader`](https://api.python.langchain.com/en/latest/document_loaders/langchain_community.document_loaders.s3_file.S3FileLoader.html) to load documents and split them into chunks. Then, embed and store them in your PostgreSQL database.
+At this stage, you need to have proprietary data (e.g PDF, CSV) stored in your Scaleway Object storage bucket.
+
+Below we will use Langchain's [`S3FileLoader`](https://api.python.langchain.com/en/latest/document_loaders/langchain_community.document_loaders.s3_file.S3FileLoader.html) to load documents and split them into chunks. 
+Then, we will embed and store them in your PostgreSQL database.
 
 ### Import required modules
 
@@ -172,13 +173,12 @@ Use the [`S3FileLoader`](https://api.python.langchain.com/en/latest/document_loa
 import boto3
 from langchain_community.document_loaders import S3FileLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_openai import OpenAIEmbeddings
 
 ```
 
 ### Load metadata for improved efficiency
 
-Load metadata for improved efficiency: By loading the metadata for all objects in your bucket, you can speed up the process significantly. This allows you to quickly check if a document has already been embedded without the need to load the entire document.
+By loading the metadata for all objects in your bucket, you can speed up the process significantly. This allows you to quickly check if a document has already been embedded without the need to load the entire document.
 
 ```python
 # rag.py
@@ -199,7 +199,7 @@ In this code sample we:
 
 ### Iterate through metadata
 
-Iterate through metadata: Next, we will iterate through the metadata to determine if each object has already been embedded. If an object hasn’t been processed yet, we will embed it and load it into the database.
+Next, we will iterate through the metadata to determine if each object has already been embedded. If an object hasn’t been processed yet, we will embed it and load it into the database.
 
 ```python
 # rag.py
@@ -238,9 +238,7 @@ conn.commit()
 
 #### Why 500 characters?
 
-The chunk size of 500 characters is chosen to fit comfortably within the context size limits of typical embeddings models, which often range between 512 and 1024 tokens. Since most models tokenize text into smaller units (tokens) based on words, punctuation, and subwords, the exact number of tokens for 480 characters will vary depending on the language and the content. By keeping chunks small, we avoid exceeding the model’s context window, which could lead to truncated embeddings or poor performance during inference.
-
-This approach ensures that only new or modified documents are loaded into memory and embedded, saving significant computational resources and reducing redundant work.
+The chunk size of 500 characters is chosen to fit comfortably within the context size limit if the embedding model used in this tutorial. By keeping chunks small, we avoid exceeding the model’s context window, which could lead to truncated embeddings or poor performance during inference.
 
 #### Why store both chunk and embedding?
 
@@ -257,6 +255,7 @@ When a query is made, the RAG system will retrieve the most relevant embeddings,
 from langchain import hub
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.runnables import RunnablePassthrough
+from langchain_openai import ChatOpenAI
 
 ```
 
@@ -269,7 +268,7 @@ Now, set up the RAG system to handle queries
 
 llm = ChatOpenAI(
         base_url=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
-        api_key=os.getenv("SCW_SECRET_KEY"),
+        api_key=os.getenv("SCW_API_KEY"),
         model="llama-3.1-8b-instruct",
         )
 
@@ -308,6 +307,7 @@ Personalizing your prompt template allows you to tailor the responses from your 
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain_core.prompts import PromptTemplate
 from langchain_openai import ChatOpenAI
+import time
 
 llm = ChatOpenAI(
         base_url=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),

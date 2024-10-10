@@ -1,0 +1,259 @@
+---
+meta:
+  title: Processing images and getting structured outputs with Pixtral vision model
+  description: Learn how to use Mistral's Pixtral vision model to automatically generate a product catalog from images.
+content:
+  h1: Processing images and getting structured outputs with Pixtral vision model
+  paragraph: Discover how to leverage Mistral's Pixtral vision model to analyze images and generate comprehensive structured outputs.
+tags: AI vision-model image-processing Pixtral Mistral structured-data
+categories:
+  - managed-inference
+hero: assets/Pixtral-Structured-Outputs.webp
+dates:
+  validation: 2024-10-09
+  posted: 2024-10-09
+---
+
+In today's data-driven world, the ability to extract structured information from visual content is becoming increasingly valuable across various industries. From analyzing medical images to interpreting financial charts, from processing historical documents to cataloging diverse product lines, the applications are vast and varied.
+
+[Pixtral](https://mistral.ai/news/pixtral-12b/), developed by Mistral AI, is a powerful vision model capable of understanding and describing images with remarkable accuracy. By leveraging Pixtral, we can automate the process of extracting structured information from a wide range of visual inputs, including photographs, scanned documents, graphs, and more.
+
+This tutorial will guide you through the process of using the Pixtral vision model to analyze images and automatically generate structured outputs. We'll use Python to interact with the model and structure our data, making it easy to integrate this solution into your existing workflows. While we'll use a product catalog as an example, the techniques demonstrated here can be adapted to various use cases across different industries.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- A Python environment (version 3.7 or higher)
+- An API key from Scaleway [Identity and Access Management](https://www.scaleway.com/en/docs/identity-and-access-management/iam/)
+- Access to a Scaleway [Managed Inference](/ai-data/managed-inference/reference-content/pixtral-12b-2409/) endpoint with Pixtral deployed or to Scaleway [Generative APIs](/ai-data/generative-apis/quickstart/) service
+- The `openai` and `pydantic` Python libraries installed
+
+## Setting up the environment
+
+Before we dive into using Pixtral, let's set up our Python environment and install the necessary libraries.
+
+1. Create a new directory for your project:
+   ```
+   mkdir pixtral-image-processor
+   cd pixtral-image-processor
+   ```
+
+2. Create a virtual environment and activate it:
+   ```
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+   ```
+
+3. Install the required libraries:
+   ```
+   pip install openai pydantic
+   ```
+
+## Defining the data model
+
+We'll start by defining our data model using `pydantic`. This will ensure that our structured output has a consistent format and that all required fields are present.
+
+Create a new file called `models.py` and add the following code:
+
+```python
+from pydantic import BaseModel, Field
+from typing import List, Optional
+from datetime import date
+
+class Dimension(BaseModel):
+    length: float
+    width: float
+    height: float
+    unit: str = Field(..., pattern="(cm|in|mm)")
+
+class Price(BaseModel):
+    amount: float
+    currency: str = Field(..., pattern="[A-Z]{3}")
+
+class Review(BaseModel):
+    user_id: str
+    rating: int = Field(..., ge=1, le=5)
+    comment: Optional[str] = None
+    date: date
+
+class Product(BaseModel):
+    id: str
+    name: str
+    description: str
+    category: str
+    subcategory: Optional[str] = None
+    brand: str
+    sku: str
+    price: Price
+    dimensions: Dimension
+    weight: float
+    weight_unit: str = Field(..., pattern="(kg|g|lb|oz)")
+    in_stock: bool
+    available_colors: List[str] = Field(..., min_items=1)
+    features: List[str] = Field(..., min_items=1)
+    image_urls: List[str] = Field(..., min_items=1)
+    reviews: List[Review] = Field(default_factory=list)
+    average_rating: Optional[float] = None
+
+class ProductCatalog(BaseModel):
+    products: List[Product]
+    total_products: int
+    last_updated: date
+```
+
+This model defines the structure for our product catalog, which we'll use as an example of structured output from image processing.
+
+## Setting up the Pixtral client
+
+Next, we'll set up the client to interact with the Pixtral model. Create a new file called `pixtral_client.py` and add the following code:
+
+```python
+from openai import OpenAI
+import os
+
+MODEL = "pixtral-12b-2409"
+API_KEY = os.environ.get("SCALEWAY_API_KEY")
+BASE_URL = os.environ.get("SCALEWAY_INFERENCE_ENDPOINT_URL")
+# use https://api.scaleway.ai/v1 for Scaleway Generative APIs
+
+client = OpenAI(
+    base_url=BASE_URL,
+    api_key=API_KEY
+)
+
+def get_pixtral_client():
+    return client
+```
+
+Make sure to set the `SCALEWAY_API_KEY` and `SCALEWAY_INFERENCE_ENDPOINT_URL` environment variables with your actual API key from Scaleway IAM, and the appropriate endpoint URL for Scaleway Managed Inference or Generative APIs service.
+
+## Creating the image processor
+
+Now, let's create the main script that will use Pixtral to analyze images and generate our structured output. Create a file called `process_images.py` and add the following code:
+
+```python
+import json
+from datetime import date
+from pixtral_client import get_pixtral_client
+from models import ProductCatalog
+
+def process_images(image_urls):
+    client = get_pixtral_client()
+
+    prompt = """
+    Extract detailed information from the provided images. Create an entry for each image. 
+    Include the following details for each item:
+    - A descriptive name and detailed description
+    - Appropriate category and subcategory
+    - Realistic dimensions, weight, and pricing (if applicable)
+    - At least 3 key features or characteristics
+    - Any visible attributes (e.g., colors, materials)
+    - Generate 2 hypothetical reviews or interpretations
+
+    Ensure all information is consistent with what can be seen or reasonably inferred from the images.
+    """
+
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful assistant. Only reply in JSON.",
+        },
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text",
+                    "text": prompt
+                },
+                *[{"type": "image_url", "image_url": {"url": url}} for url in image_urls]
+            ],
+        },
+    ]
+
+    try:
+        response = client.chat.completions.create(
+            messages=messages,
+            model=MODEL,
+            response_format={
+                "type": "json_schema",
+                "json_schema": {
+                    "strict": True,
+                    "name": "Processed Image Data",
+                    "schema": ProductCatalog.model_json_schema()
+                }
+            },
+        )
+
+        processed_data = response.choices[0].message.parsed
+        structured_output = ProductCatalog(**processed_data)
+        structured_output.last_updated = date.today()
+        structured_output.total_products = len(structured_output.products)
+
+        return structured_output
+
+    except Exception as e:
+        print(f"Error processing images: {e}")
+        return None
+
+def save_output_to_json(output, filename):
+    with open(filename, 'w') as f:
+        json.dump(output.model_dump(), f, indent=2, default=str)
+
+if __name__ == "__main__":
+    image_urls = [
+        "https://picsum.photos/id/26/800/600",  # Sample image 1
+        "https://picsum.photos/id/3/800/600"    # Sample image 2
+    ]
+
+    processed_output = process_images(image_urls)
+    
+    if processed_output:
+        save_output_to_json(processed_output, "processed_image_data.json")
+        print(f"Image processing complete. Structured data for {processed_output.total_products} items generated.")
+    else:
+        print("Failed to process images.")
+```
+
+This script does the following:
+1. Imports the necessary modules and models.
+2. Defines a function to process images using the Pixtral model.
+3. Creates a prompt that instructs the model on how to analyze the images and what information to extract.
+4. Sends the images and prompt to the Pixtral model and receives the generated structured data.
+5. Validates the received data against our `pydantic` models.
+6. Saves the generated structured output to a JSON file.
+
+## Running the image processor
+
+To use the image processor:
+
+1. Set the environment variables for your Scaleway API key and inference endpoint URL:
+   ```
+   export SCALEWAY_API_KEY="your_api_key_here"
+   export SCALEWAY_INFERENCE_ENDPOINT_URL="your_endpoint_url_here"
+   ```
+
+2. Run the script:
+   ```
+   python process_images.py
+   ```
+
+The script will process the sample images and generate a `processed_image_data.json` file containing the extracted structured information.
+
+## Customizing the image processor
+
+You can easily customize the image processor for your specific needs:
+
+1. Modify the `prompt` in `process_images.py` to extract different or additional information from the images.
+2. Update the `models.py` file to change the structure of your output data to fit your specific use case.
+3. Add error handling and logging to make the script more robust for production use.
+
+## Conclusion
+
+In this tutorial, we've explored how to leverage Mistral's Pixtral vision model to process images and generate structured outputs following a strict and complex JSON schema. This approach can be applied to a wide range of industries and use cases, from cataloging products to analyzing medical images, from interpreting financial charts to processing historical documents.
+
+By combining the power of AI vision models with structured data validation, we've created a flexible and extensible solution that can be adapted to various image processing needs. 
+
+<Message type="note">
+  Remember to always verify the AI-generated information for accuracy before using it in critical applications or decision-making processes.
+</Message>
+

@@ -37,7 +37,7 @@ def extract_metadata(filepath):
             if "validation: " in line:
                 val_date = line.split(": ", 1)[1].strip()
                 has_val_date = True
-            if "validation-frequency:" in line:
+            if "validation_frequency:" in line:
                 val_freq = line.split(": ", 1)[1].strip()
             if "---" in line:
                 meta_limiters += 1

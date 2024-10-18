@@ -1,5 +1,4 @@
 import os
-import fileinput, sys
 
 class AddLinkOnFirstConcept:
 
@@ -75,5 +74,90 @@ class AddLinkOnFirstConcept:
           self.replace_string_in_file(current_file, old_string, new_string)
           # Add test new content and error handling before printing line below
           print(f"{old_string} replaced by {new_string} in file {file}.")
-
       return
+
+
+# TODO
+
+# - Check if concept is already present in file before replacing
+
+# - Add tests
+
+# - Address case where concept is part of another concept (e.g. "serverless" and "Serverless Framework")
+
+# - Make sure capitalized concepts are properly matched and reproduced
+
+# - Try a different replace method using readlines(), then looping through each line to search for concept and easily exclude frontmatter
+
+#   - Frontmatter:
+#     - Enter frontmatter section: If current_line contains "---\n" then switch
+#       on frontmatter_check = True
+#     - If frontmatter_check = True and current_line == "---\n" then switch off
+#       frontmatter_check = False
+#     - If frontmatter_check = True then skip line
+#   
+#   - Code block:
+#     - Same as frontmatter but with "```"
+
+#   - Monospace
+#     - if concept is between "`[any string]`" and "`[any string]`" then DO NOT skip line
+#       as 
+#     - if concept is between "`[any string]" and "[any string]`" then skip line
+
+# To check programmatically if a markdown string is monospace or bold or italics, ChatGPT provides the answer below:
+
+# Example in Python with markdown-it-py:
+
+# You can use the markdown-it-py library to parse the Markdown into tokens and inspect them to detect different formatting.
+# Install the library:
+
+# bash
+
+# pip install markdown-it-py
+
+# Code Example:
+
+# python
+
+# from markdown_it import MarkdownIt
+
+# # Function to check markdown formatting
+# def check_formatting(markdown_text):
+#     md = MarkdownIt()
+#     tokens = md.parse(markdown_text)
+    
+#     for token in tokens:
+#         if token.type == 'inline':
+#             for child in token.children:
+#                 if child.type == 'code_inline':
+#                     print("Monospace text:", child.content)
+#                 elif child.type == 'strong_open':
+#                     print("Bold text detected")
+#                 elif child.type == 'em_open':
+#                     print("Italics text detected")
+
+# # Example usage
+# markdown_string = "Here is some **bold** text, *italics*, and `monospace` code."
+
+# check_formatting(markdown_string)
+
+# Explanation:
+
+#     The MarkdownIt parser breaks down the Markdown string into tokens.
+#     We loop through these tokens and check for specific types (code_inline for inline monospace, strong_open for bold, and em_open for italics).
+
+# Output:
+
+# scss
+
+# Bold text detected
+# Italics text detected
+# Monospace text: monospace
+
+# Parsing Bold, Italics, and Monospace
+
+#     Monospace (inline code) is detected by the code_inline token.
+#     Bold text is detected by strong_open and strong_close tokens.
+#     Italics text is detected by em_open and em_close tokens.
+
+# This approach allows you to programmatically check for these specific formatting patterns in any Markdown string.

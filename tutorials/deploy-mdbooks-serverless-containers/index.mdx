@@ -1,0 +1,106 @@
+onf---
+meta:
+  title: Fast deployment of documentation on Serverless Containers with mdbooks
+  description: Step-by-step guide to deploy mdbooks on Serverless Containers.
+content:
+  h1: Deploying mdbooks on Serverless Containers
+  paragraph:
+tags: docker container deploy serverless
+hero: assets/scaleway-umami.webp
+categories:
+  - containers
+  - container-registry
+dates:
+  validation:
+  posted:
+---
+
+Publish modern online books, for product, API documentation, tutorials, course material  or anything that requires a clean, easily navigable and customizable presentation.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Docker installed on your local machine
+
+## Why deploying on Serverless
+
+Serverless products are perfect for cost efficiency with a pay-as-you go model and scales very well.
+
+With zero infrastructure management a lot of tools to integrate in CI/CD environments, `mdbooks` can benefits a lot of Serverless Containers.
+
+## Local setup
+
+Follow [Istallation instructions](https://rust-lang.github.io/mdBook/guide/installation.html) of mdbooks.
+
+Run:
+- `mdbook init my-first-book` in order to create a sample book.
+- `cd my-first-book`
+
+Now you can edit the content of the book to publish.
+
+It's recommanded to test the book using the command: `mdbook test`.
+
+## Prepare Container Registry
+
+<Message type="note">
+  We recommend using Scaleway Container Registry instead of external registries to avoid errors of rate limiting and risks regarding evolutions of CGU and pricing.
+</Message>
+
+1. Create a file named `Dockerfile` in this folder containing the following code:
+
+```dockerfile
+FROM debian:bookworm-slim
+
+WORKDIR /app
+
+# Copy necessary files (add if you have custom files)
+COPY book.toml /app/
+COPY src/* /app/src/
+
+# Install mdbooks binary
+RUN apt-get -y update; apt-get -y install curl;
+RUN mkdir /home/mdbooks
+RUN curl -sSL https://github.com/rust-lang/mdBook/releases/download/v0.4.40/mdbook-v0.4.40-x86_64-unknown-linux-gnu.tar.gz | tar -xz --directory=/home/mdbooks
+ENV PATH="$PATH:/home/mdbooks"
+
+# Serve the book:
+# 0.0.0.0 is required to listen on public interface, otherwise mdbook will only listen for localhost
+# 8080 port is used to match the Serverless Container settings.
+ENTRYPOINT ["mdbook", "serve", "-n", "0.0.0.0", "-p", "8080" ]
+```
+
+2. Open Container Registry product on Scaleway Console.
+3. Click **Create namespace**. A namespace is used to hold the image.
+
+<Message type="note">
+  A pop-up will appear with informations to log into your Container Registry Namespace. This will allow to push the image later.
+</Message>
+
+4. Create the namespace and save the registry endpoint. It should be something like `rg.fr-par.scw.cloud/<namespace>`
+
+## Build and Push
+
+1. Run the command `docker build -t rg.<region>.scw.cloud/<namespace>/<image_name>:<tag_name> .`
+* **region**: to get this information, check the namespace settings of the namespace you created.
+* **image_name**: use the name you want to identify your image, for example `mdbook`.
+* **tag_name**: use tags to identify the version of your image, for example `v1`.
+
+2. Push the image:
+`docker push rg.<region>.scw.cloud/<namespace>/<image_name>:<tag>`
+
+## Deploy the Serverless Container
+
+1. Create a Serverless Container Namespace. [Link to console](https://console.scaleway.com/containers/namespaces/create)
+2. Configure the Serverless Containers. Important points are:
+* **Image**: Select the Registry namespace, Container and Tag you created before using the dropdowns.
+* **Name**: You can change the default name to use a more meaningful one.
+
+You can keep default values of other parameters and fine-tune them later at anytime without downtime.
+
+3. Click "Deploy container" button and wait few seconds for the deployment.
+4. Congratulation you Serverless Container is deployed an ready :)
+
+## Going further
+
+- Integrate in CI/CD

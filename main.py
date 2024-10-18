@@ -1,4 +1,4 @@
-from walk import AddLinkOnFirstConcept
+from replace_concepts import AddLinkOnFirstConcept
 
 def main():
     # Create a TicTacToe instance and start the game

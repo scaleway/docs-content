@@ -1,6 +1,8 @@
 import os
 
+
 class AddLinkOnFirstConcept:
+
 
   def __init__(self):
     pass
@@ -9,9 +11,11 @@ class AddLinkOnFirstConcept:
   def to_kebab_case(self, value):
       return "-".join(value.lower().split())
 
+
   def select_folder_to_process(self):
      product=input("enter the product to process (in the \"category/product\" format: ")
      return product
+
 
   # This function retrieves the concepts of a product and , and store them as a list of list ([concept1, url1], [concept2, url2])
   def create_concepts_list(self, product):
@@ -36,6 +40,7 @@ class AddLinkOnFirstConcept:
                 concepts_list.append(concept_specs)
     return concepts_list
 
+
   def create_files_to_update_list(self, product):
     files_list = []
     for dirpath, dirnames, filenames in os.walk(product):
@@ -44,7 +49,21 @@ class AddLinkOnFirstConcept:
           file_path = f"{dirpath}/{filename}"
           files_list.append(file_path)      
     return files_list
+  
 
+  def check_if_concept_in_other_concept(concepts_list):
+    concepts = concepts_list
+    control_list = concepts_list
+    skip_concept = False
+
+    for i in concepts:
+      for j in control_list:
+        if i in j:
+          skip_concept = True
+          print(f"Concept \"{i}\" is contained in \n{j}\n")
+          return skip_concept
+
+  # Working implementation
   def replace_string_in_file(self, current_file, old_string, new_string):
     with open(current_file, "r+") as file_to_process:
       content = file_to_process.read()
@@ -55,6 +74,20 @@ class AddLinkOnFirstConcept:
       file_to_process.write(new_content)
       return
 
+  # Version with line-by-line processing
+  def line_by_line_replace(self, current_file, old_string, new_string):
+    with open(current_file, "r") as file_to_process:
+      lines_of_file = file_to_process.readlines()
+    # iterates over each line of the file
+    for i in range(len(lines_of_file)):
+      if old_string in lines_of_file[i]:
+        # replace concept once in the line 
+        lines_of_file[i] = lines_of_file[i].replace(old_string, new_string, 1)
+        break
+    with open(current_file, "w") as file_to_write:
+      file_to_write.writelines(lines_of_file)
+    return
+
   def replace(self):
       # product = self.select_folder_to_process()
       product = "serverless/jobs"
@@ -63,17 +96,19 @@ class AddLinkOnFirstConcept:
       # Looks for each concept in each page
       for file in files_list:
         for concept in concepts_list:
+          skip_concept = False
           old_string = concept[0]
           new_string = f"[{concept[0]}]({concept[1]})"
           current_file=file
           # Check if concept already has link to concepts page
           with open(file) as file_to_check:
-           if new_string not in file_to_check.read():
-            self.replace_string_in_file(current_file, old_string, new_string)
-            # Add test new content and error handling before printing line below
-            print(f"{old_string} replaced by {new_string} in file {file}.")
-           else:
-            print(f"{new_string} already in {file_to_check}")
+            if new_string not in file_to_check.read() and skip_concept == False:
+              self.line_by_line_replace(current_file, old_string, new_string)
+              # Add test new content and error handling before printing line below
+              print(f"{old_string} replaced by {new_string} in file {file}.")
+            else:
+              print(f"{new_string} already in {file_to_check}")
+          file_to_check.close()
       return
 
 

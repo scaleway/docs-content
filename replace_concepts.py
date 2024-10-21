@@ -62,19 +62,9 @@ class AddLinkOnFirstConcept:
           skip_concept = True
           print(f"Concept \"{i}\" is contained in \n{j}\n")
           return skip_concept
+        
 
-  # Working implementation
-  def replace_string_in_file(self, current_file, old_string, new_string):
-    with open(current_file, "r+") as file_to_process:
-      content = file_to_process.read()
-      new_content = content.replace(old_string, new_string, 1)
-      file_to_process.seek(0)
-      file_to_process.truncate(0)
-      print(file_to_process)
-      file_to_process.write(new_content)
-      return
-
-  # Version with line-by-line processing
+  # WORKING - Version with line-by-line processing
   def line_by_line_replace(self, current_file, old_string, new_string):
     with open(current_file, "r") as file_to_process:
       lines_of_file = file_to_process.readlines()

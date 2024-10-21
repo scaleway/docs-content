@@ -46,19 +46,13 @@ class AddLinkOnFirstConcept:
     return files_list
 
   def replace_string_in_file(self, current_file, old_string, new_string):
-    with open(current_file, "r+") as file_to_read:
-      content = file_to_read.read()
-      # file_to_read.close()
-
-    # Replace the old string with the new string
+    with open(current_file, "r+") as file_to_process:
+      content = file_to_process.read()
       new_content = content.replace(old_string, new_string, 1)
-
-    # Open the file in write mode to overwrite with new content
-    # with open(current_file, 'w') as file_to_write:
-      file_to_read.seek(0)
-      file_to_read.truncate(0)
-      print(file_to_read)
-      file_to_read.write(new_content)
+      file_to_process.seek(0)
+      file_to_process.truncate(0)
+      print(file_to_process)
+      file_to_process.write(new_content)
       return
 
   def replace(self):
@@ -66,20 +60,26 @@ class AddLinkOnFirstConcept:
       product = "serverless/jobs"
       concepts_list = self.create_concepts_list(product)
       files_list = self.create_files_to_update_list(product)
+      # Looks for each concept in each page
       for file in files_list:
         for concept in concepts_list:
           old_string = concept[0]
           new_string = f"[{concept[0]}]({concept[1]})"
           current_file=file
-          self.replace_string_in_file(current_file, old_string, new_string)
-          # Add test new content and error handling before printing line below
-          print(f"{old_string} replaced by {new_string} in file {file}.")
+          # Check if concept already has link to concepts page
+          with open(file) as file_to_check:
+           if new_string not in file_to_check.read():
+            self.replace_string_in_file(current_file, old_string, new_string)
+            # Add test new content and error handling before printing line below
+            print(f"{old_string} replaced by {new_string} in file {file}.")
+           else:
+            print(f"{new_string} already in {file_to_check}")
       return
 
 
 # TODO
 
-# - Check if concept is already present in file before replacing
+# - DONE - Check if concept is already present in file before replacing
 
 # - Add tests
 

@@ -62,18 +62,47 @@ class AddLinkOnFirstConcept:
           skip_concept = True
           print(f"Concept \"{i}\" is contained in \n{j}\n")
           return skip_concept
-        
+      # Check if occurrence is in code block, frontmatter, or monospace  
+  def check_if_skip_line(self, current_line, skip_line):
+    # Check if in frontmatter
+
+    if current_line == '---\n' and skip_line == False:
+      skip_line = True
+      return skip_line
+    
+    if current_line == '---\n' and skip_line == True:
+      skip_line = False
+      return skip_line
+
+
+    # Check if in code block
+    if current_line == '```\n' and skip_line == False:
+      skip_line = True
+      return skip_line
+
+    if current_line == '```\n' and skip_line == True:
+      skip_line = False
+      return skip_line
+
+    else:
+      return skip_line
+
+    # TODO Check if in inline code
+
 
   # WORKING - Version with line-by-line processing
   def line_by_line_replace(self, current_file, old_string, new_string):
     with open(current_file, "r") as file_to_process:
       lines_of_file = file_to_process.readlines()
+    skip_line_toggle = False
     # iterates over each line of the file
     for i in range(len(lines_of_file)):
-      if old_string in lines_of_file[i]:
-        # replace concept once in the line 
-        lines_of_file[i] = lines_of_file[i].replace(old_string, new_string, 1)
-        break
+      skip_line = self.check_if_skip_line(lines_of_file[i], skip_line_toggle)
+      skip_line_toggle = skip_line
+      if old_string in lines_of_file[i] and skip_line == False:
+      # replace concept once in the line 
+          lines_of_file[i] = lines_of_file[i].replace(old_string, new_string, 1)
+          break
     with open(current_file, "w") as file_to_write:
       file_to_write.writelines(lines_of_file)
     return
@@ -86,13 +115,13 @@ class AddLinkOnFirstConcept:
       # Looks for each concept in each page
       for file in files_list:
         for concept in concepts_list:
-          skip_concept = False
           old_string = concept[0]
           new_string = f"[{concept[0]}]({concept[1]})"
           current_file=file
           # Check if concept already has link to concepts page
           with open(file) as file_to_check:
-            if new_string not in file_to_check.read() and skip_concept == False:
+            if new_string not in file_to_check.read():
+              # Replace first occurrence of concept
               self.line_by_line_replace(current_file, old_string, new_string)
               # Add test new content and error handling before printing line below
               print(f"{old_string} replaced by {new_string} in file {file}.")
@@ -100,7 +129,6 @@ class AddLinkOnFirstConcept:
               print(f"{new_string} already in {file_to_check}")
           file_to_check.close()
       return
-
 
 # TODO
 
@@ -111,6 +139,8 @@ class AddLinkOnFirstConcept:
 # - Address case where concept is part of another concept (e.g. "serverless" and "Serverless Framework")
 
 # - Make sure capitalized concepts are properly matched and reproduced
+
+# - Address case when concept is in plural form (e.g. [job](link)s ). concept must have space or punctuation after (or no letter). 
 
 # - Try a different replace method using readlines(), then looping through each line to search for concept and easily exclude frontmatter
 

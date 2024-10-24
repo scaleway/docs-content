@@ -9,249 +9,193 @@ tags: glusterfs network filesystem Ubuntu
 categories:
   - instances
 dates:
-  validation: 2024-04-09
+  validation: 2024-10-15
   posted: 2018-09-28
 ---
 
-GlusterFS is an open-source, scalable network filesystem suitable for high data-intensive workloads such as media streaming, cloud storage, and CDN (Content Delivery Network). Each storage server will be a mirror of the other storage server, and files will be replicated automatically across both storage servers.
+GlusterFS is an open-source, scalable network filesystem suited for high data-intensive workloads, such as media streaming, cloud storage, and content delivery networks (CDN). 
+In this tutorial, we will deploy a high-availability storage solution using **GlusterFS 11** and **Scaleway Block Storage** on **Ubuntu 22.04**.
+
+Each storage Instance will mirror the other, and files will automatically be replicated across all servers.
 
 <Macro id="requirements" />
 
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - An [SSH key](/identity-and-access-management/organizations-and-projects/how-to/create-ssh-key/)
-- 3 servers running on Ubuntu
-- `sudo` privileges or access to the root user
+- Three Instances running Ubuntu 22.04 LTS
+- Attached [Scaleway Block Storage](/storage/block/how-to/attach-a-volume/) to each GlusterFS Instance
 
 ## Configuring the host file
 
-Before installing `glusterfs` on all servers we need to configure the hosts' file and add the GlusterFS repository to each server.
+Before installing GlusterFS, ensure each Instance can resolve the others via their hostname. This will simplify network communication between servers.
 
-1. [Connect to your server](/compute/instances/how-to/connect-to-instance/) via SSH.
-2. Update the apt-sources and the software already installed on the server.
+1. Log in to each Instance via SSH.
+    ```
+    ssh root@<your_instance_public_ip>
+    ```
+2. Update the system:
     ```
     apt update && apt upgrade -y
     ```
-3. Log in to each server and edit the `/etc/hosts` file.
+
+3. Edit the `/etc/hosts` file on each Instance:
     ```
     nano /etc/hosts
     ```
-4. Paste the hosts configuration below:
+
+4. Add entries for each Instance:
     ```
-    ip_address gluster01
-    ip_address gluster02
-    ip_address client01
+    <IP_ADDRESS_1> gluster01
+    <IP_ADDRESS_2> gluster02
+    <IP_ADDRESS_3> client01
     ```
-5. Save and exit.
-6. Ping each server using the hostname as below:
+
+5. Verify hostname resolution:
     ```
     ping -c 3 gluster01
     ping -c 3 gluster02
     ping -c 3 client01
     ```
-<Message type="note">
-  If the `ping` command is not installed by default, you can install it with the `apt install iputils-ping` command.
-</Message>
 
-Each hostname will resolve to each server's IP address.
+## Adding the GlusterFS 11 repository
 
-```
---- gluster01 ping statistics ---
-3 packets transmitted, 3 received, 0% packet loss, time 2033ms
-rtt min/avg/max/mdev = 0.560/0.604/0.627/0.031 ms
+1. Install the `software-properties-common` package on all Instances:
+    ```
+    apt install software-properties-common -y
+    ```
 
---- gluster02 ping statistics ---
-3 packets transmitted, 3 received, 0% packet loss, time 2050ms
-rtt min/avg/max/mdev = 0.497/0.593/0.688/0.080 ms
+2. Add the GlusterFS 11 repository to all systems:
+    ```
+    sudo add-apt-repository ppa:gluster/glusterfs-11
+    apt update
+    ```
 
---- client01 ping statistics ---
-3 packets transmitted, 3 received, 0% packet loss, time 2036ms
-rtt min/avg/max/mdev = 0.672/0.728/0.802/0.054 ms
+---
 
-```
+## Installing GlusterFS server
 
-## Adding the GlusterFS repository
-
-Install the `software-properties-common` package to all systems.
-
-```
-apt install software-properties-common -y
-```
-
-Add the GlusterFS key and repository to all systems.
-
-```
-sudo add-apt-repository ppa:gluster/glusterfs-9
-```
-
-## Installing a GlusterFS server
-
-1. Install the `glusterfs-server` package on both gluster01 and gluster02 servers.
+1. Install the GlusterFS server on both `gluster01` and `gluster02`:
     ```
     apt install glusterfs-server -y
     ```
-2. Start the `glusterd` service, and enable it to launch at every system boot:
+
+2. Start the `glusterd` service and enable it at boot:
     ```
     systemctl start glusterd.service
     systemctl enable glusterd.service
     ```
 
-    GlusterFS server is now up and running on the `gluster01` and `gluster02` servers.
-3. Check the services and the software's versions:
+3. Verify the installation:
     ```
     systemctl status glusterd.service
-    glusterfsd --version
+    glusterfs --version
     ```
 
-The command should return an `active (running)` status and `glusterfs 9.5` version.
+    You should see GlusterFS 11.x and an active status for the service.
 
-## Configuring GlusterFS servers
+## Setting Up a distributed GlusterFS volume with Scaleway Block Storage
 
-The next step is configuring the servers by creating a trusted storage pool and creating a distributed GlusterFS volume.
-
-- From the gluster01 server, we need to add the gluster02 server to the GlusterFS storage pool.
-    ```
-    gluster peer probe gluster02
-    ```
-
-    The result `peer probe: success` is displayed. We added the gluster02 server to the storage trusted pool.
-- Check the storage pool status and list.
-    ```
-    gluster peer status
-    gluster pool list
-    ```
-    ```
-    root@gluster01:~# gluster peer status
-    Number of Peers: 1
-
-    Hostname: gluster02
-    Uuid: 17e7a76f-f616-42e5-b741-63a07fd091d6
-    State: Peer in Cluster (Connected)
-    root@gluster01:~# gluster pool list
-    UUID					Hostname 	State
-    17e7a76f-f616-42e5-b741-63a07fd091d6	gluster02	Connected
-    ecc9cafa-b25d-477e-b6bc-403c051e752d	localhost	Connected
-    ```
-
-The gluster02 server is connected to the peer cluster, and it is on the pool list.
-
-After creating the trusted storage pool, we will create a new distributed GlusterFS volume. We will create the new GlusterFS volume based on the system directory.
-
-## Setting up the distributed GlusterFS volume
-
-<Message type="note">
-  For the server production, it is recommended to create the GlusterFS volume using a different partition, not using a system directory.
+<Message type="important">
+    In a production environment, it is **strongly recommended** to use dedicated storage, such as **Scaleway Block Storage**, instead of system directories for GlusterFS volumes.
+    This ensures better data safety, scalability, and performance. Using system directories (like `/glusterfs`) can lead to potential issues if the root partition fills up.
 </Message>
 
-1. Create a new directory `/glusterfs/distributed` on both the gluster01 and the gluster02 servers.
-    ```
-    mkdir -p /glusterfs/distributed
-    ```
-2. Create a distributed glusterfs volume in the gluster01 server named `vol01` with two replicas: `gfs01` and `gfs02`.
-    ```
-    gluster volume create vol01 transport tcp gluster01:/glusterfs/distributed gluster02:/glusterfs/distributed force
-    ```
-    ```
-    volume create: vol01: success: please start the volume to access data
-    ```
-3. Start the `vol01` volume and check its information:
-    ```
-    gluster volume start vol01
-    gluster volume info vol01
-    ```
-    ```
-    root@gluster01:/# gluster volume start vol01
-    volume start: vol01: success
-    root@gluster01:/# gluster volume info vol01
+### Attaching Scaleway Block Storage
 
-    Volume Name: vol01
-    Type: Replicate
-    Volume ID: 814b103e-522c-48d2-8d1c-3301e10f3416
-    Status: Started
-    Snapshot Count: 0
-    Number of Bricks: 1 x 2 = 2
-    Transport-type: tcp
-    Bricks:
-    Brick1: gluster01:/glusterfs/distributed
-    Brick2: gluster02:/glusterfs/distributed
-    Options Reconfigured:
-    transport.address-family: inet
-    nfs.disable: on
-    performance.client-io-threads: off
-    ```
+1. Create and attach Scaleway Block Storage to each Instance:
+   - From the Scaleway Console, [create a new Block Storage volume](/storage/block/how-to/create-a-volume/) for each GlusterFS server.
+   - Attach each volume to the respective Instance.
+   - Once attached, log into each Instance and check if the block storage is recognized:
+     ```
+     lsblk
+     ```
+     You should see a new unmounted device (e.g., `/dev/sdb`).
 
-At this stage, we created the `Replicate` type `vol01` volume and two bricks on the `gluster01` and `gluster02` servers. All data will be distributed automatically to each replica server.
+2. Partition the volume and format it with a filesystem (e.g., `ext4`):
+     ```
+     mkfs.ext4 /dev/sdb
+     ```
 
-## Configuring GlusterFS client
+3. Mount the Block Storage to a directory:
+   - Create a mount point for GlusterFS:
+     ```
+     mkdir -p /mnt/glusterfs
+     ```
+   - Mount the volume to the directory:
+     ```
+     mount /dev/sdb /mnt/glusterfs
+     ```
 
-In this step, we will mount the `glusterfs` volume `vol01` to the Ubuntu client, and we need to install the `glusterfs-client` to the client server.
+4. Add the Block Storage to `/etc/fstab` to ensure it mounts automatically after reboot:
+     ```
+     /dev/sdb /mnt/glusterfs ext4 defaults 0 0
+     ```
 
-1. Install the glusterfs-client on `client01`.
+5. Repeat these steps and attach, format, and mount a Block Storage volume on all GlusterFS Instances (e.g., `gluster01` and `gluster02`).
+
+### Creating a distributed GlusterFS volume
+
+Now that Block Storage is mounted on both servers, proceed with creating the distributed GlusterFS volume:
+
+1. Create a GlusterFS Volume using the mounted block storage directories on both servers. Run the following command on `gluster01`:
+   ```
+   gluster volume create vol01 transport tcp gluster01:/mnt/glusterfs gluster02:/mnt/glusterfs force
+   ```
+
+2. Start the volume:
+   ```
+   gluster volume start vol01
+   ```
+
+3. Check the volume status:
+   ```
+   gluster volume info
+   ```
+
+## Configuring the GlusterFS client
+
+1. Install the GlusterFS client on `client01`:
     ```
     apt install glusterfs-client -y
     ```
-2. Create a new directory: `/mnt/glusterfs`.
+
+2. Create a mount point:
     ```
     mkdir -p /mnt/glusterfs
     ```
-3. Mount the distributed glusterfs volume (`vol01`) to the `/mnt/glusterfs` directory.
+
+3. Mount the GlusterFS volume:
     ```
     mount -t glusterfs gluster01:/vol01 /mnt/glusterfs
     ```
-4. Check the amount of volume available in the system.
+
+4. Verify the mount:
     ```
     df -h /mnt/glusterfs
     ```
 
-    <Message type="note">
-      To mount glusterfs permanently to the Ubuntu client system, we can add the volume to the `/etc/fstab`.
-    </Message>
-5. Edit the `/etc/fstab` configuration file: `vim /etc/fstab`.
-6. Paste the following configuration: `gluster01:/vol01 /mnt/glusterfs glusterfs defaults,_netdev 0 0`.
-7. Save and exit.
-8. Reboot the server. When online, the GlusterFS volume 'vol01' is mounted automatically through the fstab.
+5. Add the volume to `/etc/fstab` for permanent mounting:
+    ```
+    gluster01:/vol01 /mnt/glusterfs glusterfs defaults,_netdev 0 0
+    ```
 
 ## Testing replication and mirroring
 
-1. Mount the glusterfs volume `vol01` to each glusterfs servers.
-    - On gluster01: `mount -t glusterfs gluster01:/vol01 /mnt`
-    - On gluster02: `mount -t glusterfs gluster02:/vol01 /mnt`
-2. Back on `client01`, go to the '/mnt/glusterfs' directory.
+1. Mount the GlusterFS volume on both `gluster01` and `gluster02`:
     ```
-    cd /mnt/glusterfs
+    mount -t glusterfs gluster01:/vol01 /mnt
+    mount -t glusterfs gluster02:/vol01 /mnt
     ```
-3. Create three files using the touch command.
+
+2. From `client01`, create test files in `/mnt/glusterfs`:
     ```
     touch file01 file02 file03
     ```
-4. Check on each `gluster01` and `gluster02` that the files that we created from the client machine are displayed.
+
+3. Verify that the files are replicated on both `gluster01` and `gluster02`:
     ```
-    cd /mnt/
-    ls -lah
+    ls /mnt
     ```
 
-    The gluster01 machine returns:
-
-    ```
-    root@gluster01:/mnt# ls -lah
-    total 8.0K
-    drwxr-xr-x  3 root root 4.0K Oct  1 15:40 .
-    drwxr-xr-x 24 root root 4.0K Sep 28 14:11 ..
-    -rw-r--r--  1 root root    0 Oct  1 15:40 file01
-    -rw-r--r--  1 root root    0 Oct  1 15:40 file02
-    -rw-r--r--  1 root root    0 Oct  1 15:40 file03
-    ```
-
-    The gluster02 machine returns:
-
-    ```
-    root@gluster02:/mnt# ls -lah
-    total 8.0K
-    drwxr-xr-x  3 root root 4.0K Oct  1 15:40 .
-    drwxr-xr-x 24 root root 4.0K Sep 28 14:11 ..
-    -rw-r--r--  1 root root    0 Oct  1 15:40 file01
-    -rw-r--r--  1 root root    0 Oct  1 15:40 file02
-    -rw-r--r--  1 root root    0 Oct  1 15:40 file03
-    ```
-
-As you can see, all the files we created from the client machine are distributed to all the GlusterFS volume node servers.
+You should see the same files on both servers, confirming the replication is working.

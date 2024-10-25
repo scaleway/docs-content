@@ -19,110 +19,66 @@ Knowing how to create, combine and configure resources such as Private Networks 
 
 This is the first in a series of use cases designed to show you potentially interesting and useful infrastructures, illustrating how to use VPC and other network products to achieve a robust, secure and scalable cloud environment.
 
-## Private Networks and VPC definitions
+## Overview
 
-VPC allows you to build your own **V**irtual **P**rivate **C**loud on top of Scaleway's shared public cloud. Within each VPC, you can create **Private Networks**. Resources attached to Private Networks can communicate securely between themselves, away from the public internet, reducing security risks by ensuring traffic is isolated from public routes.
+The architecture diagram below shows the infrastructure for this use-case.
 
-The VPC operates at the network layer (layer 3) of the OSI model, while Private Networks are a layer 2 resource. As such, a VPC is responsible for routing packets between its different Private Networks. Private Networks provide network isolation within a VPC and enable you to segment your resources and traffic across different subnets.
+<Lightbox src="scaleway-vpc-infra-1.webp" size="large" alt="An architecture diagram shows how a Load Balancer inside a Scaleway VPC is attached to a Private Network. Also attached to the Private Network are three Instances (connected to Block Storage), a Managed Database and a Public Gateway. Users acces resources via a domain name which a Domains and DNS entry points to the Load Balancer's public flexible IP address. The Load Balancer distributes requests to the three Instances, which do not have public IP addresses. Instances can privately retrieve and store data in the Managed Database and Block Storage. The Public Gateway also has a flexible IP address, which allows admins to connect to resources in the Private Network via SSH bastion. The gateway's public flexible IP also allows connections to Scaleway resources outside the VPC, e.g. Object Storage, Transactional Email, Nats, Queues, Topics and Events, Serverless products and Secret Manager." />
 
-VPCs and Private Networks are both **regional** resources. When you create a Private Network in a VPC, it is necessarily scoped to the same region as the VPC. Some Scaleway resources are also regional, others are zonal and scoped to a single Availability Zone (AZ). When attaching resources to a Private Network, you can attach resources from any AZ within the Private Network's region, allowing for example an Elastic Metal server in PAR-2 to communicate securely, away from the public internet, with an Instance in PAR-1 and a Managed Database in PAR-3.
+This is a basic infrastructure to leverage VPC isolation:
 
-<Lightbox src="scaleway-vpc-schema.webp" alt="A graphic shows how resources in three different AZs are connected and isolated from the internet by a Private Network in the Paris region." />
+- The **Scaleway VPC** contains one **Private Network, to which a **Load Balancer** is attached
+- Users access an application via a domain name
+- The domain name's DNS record points to the public flexible IP of the Load Balancer.
+- The Load Balancer distributes traffic to multiple **Instances** also attached to the Private Network
+- The Instances do not have their own public (flexible) IP addresses, and are accessible only from inside the VPC.
+- The Instances can store data to and retrieve data from a **Managed Database** attached to the same Private Network, without going through the public Internet.
+- The **Public Gateway** attached to the Private Network has its own public flexible IP address, which administrators can use to access Instances and other resources in the VPC.
+- The Instances can access services outside the VPC (e.g. hosted on other Scaleway resources) via the Public Gateway.
 
-| Region                  | Availability Zones        |
-|-------------------------|---------------------------|
-| France - Paris          | PAR1, PAR2, PAR3          | 
-| Netherlands - Amsterdam | AMS1, AMS2, AMS3          |
-| Poland - Warsaw         | WAW1, WAW2, WAW3          |
-
-One default VPC for each region is automatically created in each Scaleway [Project](/identity-and-access-management/organizations-and-projects/concepts/#project). The [**VPC routing**](/network/vpc/concepts/#routing) feature allows for managed and custom routes between the Private Networks of a VPC, so resources on different Private Networks can communicate.
-
-<Lightbox src="scaleway-routing-diag.webp" alt="A diagram shows two Private Networks inside a VPC. A route table on a virtual router sits inside the VPC, and the route table is synchronized to each resource attached to the VPC's Private Networks. An Instance on Private Network A is able to send a packet to an Instance on Private Network B. An Elastic Metal server on Private Network A is able to send a packet to the public internet via the Public Gateway also on Private Network A." />
-
-## Designing your network topology
-
-When you start creating resources and building your infrastructure with Scaleway, take some time to consider and plan your network topology. We recommend that you build your VPC infrastructure with **separation of concerns** in mind. Separation of concerns is a fundamental design principle aimed at breaking down large complex systems into smaller, distinct components each with clear responsibilities and interfaces. This kind of design will future-proof your VPC and come into its own when Scaleway introduces further features such as ACLs for VPC.
-
- Separating resources into different Private Networks according to function and usage can:
-- **Improve network performance** by reducing broadcast traffic and congestion
-- **Enhance manageability** via a logical organization of resources
-- **Enable easier troubleshooting, monitoring and maintenance**
-- **Allow for easier scalability**
-
-For example, you may use one Private Network for frontend resources and another for backend resources, limiting public access only via Load Balancers and/or Public Gateways, stripping other resources of public IP addresses. You may want to create different VPCs for production and test environments, allowing you to isolate potential errors in testing from the production environment.
-
-When [creating a Private Network](/network/vpc/how-to/create-private-network/), you can let Scaleway automatically generate a CIDR block for it that is guaranteed to be unique in this VPC. All resources attached to the Private Network get a private IP address from this block. However, you also have the option to define your own CIDR block for the network. Ensure you choose a prefix and network size that is appropriate for your needs, does not overlap with that of any other Private Network in the VPC, and contains enough IP addresses for all resources that will be attached to the Private Network.
-
-## Attaching resources to Private Networks
-
-When you attach a resource (e.g. an Instance, an Elastic Metal server) to a Private Network, you can either:
-- Let Scaleway automatically assign any IP address from the Private Network's CIDR block to use for the attachment, or
-- Define a specific, reserved IP address from the CIDR block to use for the attachment.
-
-### Auto-assigning an IP address
-
-This solution is best for simplicity, dynamic environments, and short-lived resources. It can be especially useful in large-scale deployments where manual IP management could be cumbersome. When you let Scaleway automatically assign IP addresses, we ensure there are no IP conflicts within your VPC, reducing any risk of human error.
-
-Note that when you select this option, the IP address randomly assigned to the resource will be stable, and does not risk changing until you detach the resource from the Private Network. At this point, the private IP address is released back into the pool of generally available addresses from the network's CIDR block, and may be auto-assigned to another resource requesting attachment.
-
-### Using reserved IP addresses
-
-You can reserve private IP addresses from your Private Networks' CIDR blocks thanks to Scaleway's [**IP A**ddress **M**anagement solution](/network/ipam/), which helps you plan, track and manage the IP address space of your VPCs and their Private Networks. From the [IPAM space](https://console.scaleway.com/ipam/) in the Scaleway console, simply use the **Reserve private IP** feature to select the Private Network you want to reserve an IP address on, and choose to either reserve any available address, or a specific address not currently attached to any resource. The reserved address will then not risk being auto-assigned by Scaleway to other resources during network attachment, and can be kept until you are ready to use it to attach a specific resource.
-
-Further, when you attach a resource to a Private Network and specify a reserved IP to use, the IP will remain reserved even after you detach the resource from the network. You can choose to either release the IP back into the pool, or keep it reserved until you use it to attach another resource.
-
-Using reserved IP addresses is ideal to ensure that certain IP addresses are never released into the general pool and kept for certain critical resources with fixed IP requirements, even when that resource is detached from the Private Network, or when migrating between resources. Reserved IP addresses may also be useful where your Private Network is extending or integrating with external networks, or to assign addresses to virtual machines hosted on Elastic Metal servers via Proxmox.
-
-## Removing public IPs from resources
-
-We strongly recommend that you disable public connectivity on all of your Scaleway resources, unless it is absolutely required. It is preferable to attach resources to Private Networks wherever possible, and direct all traffic to the resource's private IP address on that network. This ensures optimal security, reduced cost and enhanced latency. Find out more in our documentation about [public connectivity best practices](/network/ipam/reference-content/public-connectivity-best-practices).
-
-## Public connectivity over Private Networks
-
-### Public Gateways
-
-You can use Scaleway [Public Gateways](/network/public-gateways/) to provide resources on a Private Network with a secure point of access to and from the public internet. 
-
-- Set the Public Gateway to advertize a default route to the internet, allowing attached resources to send packets to the internet via the gateway, without needing their own public IP address.
-- Activate the [SSH bastion](/network/public-gateways/how-to/use-ssh-bastion/) so that you can establish SSH connections to resources on the Private Network via the gateway's bastion.
-- Use static NAT to map ingress traffic from the public internet towards resources on the Private Network, using private IP addresses and ports.
-
-### Load Balancers
-
-Another option is to attach a Scaleway [Load Balancer](/network/load-balancer/) to the Private Network. By giving the Load Balancer a public IP address, and configuring Instances on the Private Network as backend servers for the Load Balancer via their private IP addresses, the Load Balancer can securely and efficiently distribute traffic to the Instances. This solution is suitable when you have multiple Instances serving the same application, although you can also use multiple frontends/backends and [routes](/network/load-balancer/how-to/create-manage-routes/) to direct traffic to specific server pools. 
-
-You can also disable public connectivity on the Load Balancer itself. This may be relevant if the Load Balancer is configured to receive and distribute traffic from resources on a different Private Network within the same VPC, for example.
-
-## Connecting a VPC to external infrastructure
-
-Watch this space for Scaleway's upcoming solution to provide private, secure connectivity between resources in a Scaleway VPC and your external or on-premises architecture. In the meantime, you may consider installing a manual VPN on a Scaleway Instance to connect to other non-Scaleway infrastructure, and create a [custom route](/network/vpc/how-to/manage-routing/#how-to-create-a-custom-route) towards this VPN so traffic on your Private Network can securely communicate with resources at the other end of your VPN tunnel.
-
-## Resource-specific information
-
-Different types of Scaleway resources may have different requirements and possibilities in terms of Private Networks. See the comparative table below for more information, and to jump to the resource-specific documentation on Private Networks for each product.
-
-* **Max attached PNs**: The maximum number of Private Networks that a resource can be attached to
-* **Mandatory PN**: Whether or not a Private Network must necessarily be attached to this resource
-* **Compatible with private IPv6**: Whether or not the resource is compatible with private IPv6 addressing. Compatible resources generally acquire both an IPv4 and an IPv6 address when attached to a Private Network.
-* **Compatible with reserved IPs**: Whether or not you can use a [reserved IP](/network/ipam/how-to/reserve-ip/#how-to-attach-a-resource-to-a-private-network-using-a-reserved-ip-address/) to attach the resource to a Private Network 
-
-|                              | Instance | Elastic Metal | Kubernetes | Managed Inference |
-|------------------------------|----------|---------------|------------|-------------------|
-| Max attached PNs             | 8        | 8             | 1          | 1                 |
-| Mandatory PN                 | No       | No            | Yes        | No                |
-| Compatible with private IPv6 | Yes      | Yes           | Yes        | No                |
-| Compatible with reserved IPs | Yes      | Yes           | No         | No                |
-| Additional information       | --       | [Paid-for <br />feature](https://www.scaleway.com/en/pricing/elastic-metal/#network) | PN cannot be changed <br />after cluster creation | Must have at least one of <br/> private and/or public endpoint |
-| Documentation | [Go](/compute/instances/how-to/use-private-networks/) | [Go](/bare-metal/elastic-metal/how-to/use-private-networks/) | [Go](/containers/kubernetes/reference-content/secure-cluster-with-private-network/#why-have-a-private-network-for-your-kubernetes-kapsule-cluster) | [Go](/ai-data/managed-inference/how-to/managed-inference-with-private-network/) |
+## Advantages
 
 
-|                              | Managed Database | Managed Database for Redis™ | Public Gateways | Load Balancer |
-|------------------------------|------------------|-----------------------------|-----------------|---------------|
-| Max attached PNs             | 1                | 1                           | 8               | 8             |
-| Mandatory PN                 | No               | No                          | No              | No            |
-| Compatible with private IPv6 | No               | No                          | No              | No            |
-| Compatible with reserved IPs | No               | No                          | Yes             | Yes           |
-| Additional information       | Must have at least one of <br/> private and/or public endpoint | Must have at least one of <br/> private and/or public endpoint | -- | Private LBs must have a PN |
-| Documentation | [Go](/managed-databases/postgresql-and-mysql/how-to/connect-database-private-network/) | [Go](/faq/databases-for-redis/#what-is-the-private-networks-feature-for-redistm-database-instances) | [Go](/network/public-gateways/how-to/configure-a-public-gateway/#how-to-attach-a-public-gateway-to-a-private-network) | [Go](/network/load-balancer/how-to/use-with-private-network/)
 
+Advantages:
+VPC Isolation:
 
+By using a Virtual Private Cloud (VPC), resources are isolated within a private network, enhancing security. Only authorized services and users can access the resources inside the VPC, reducing exposure to potential threats.
+Load Balancer:
+
+The Load Balancer distributes traffic across multiple Instances (virtual machines), improving scalability and reliability. If one instance fails, the load balancer redirects traffic to healthy ones, ensuring high availability.
+Private Network for Sensitive Resources:
+
+The infrastructure separates resources like the Managed Database behind the private network, ensuring sensitive data is not directly exposed to the internet.
+Public Gateway with Flexible IP:
+
+The Public Gateway allows controlled access to and from the VPC, enabling secure communication with external services. The Flexible IP offers static IP addresses, which are beneficial for setting up secure, consistent connections (e.g., for whitelisting or DNS records).
+Block and Object Storage:
+
+Block Storage is useful for persistent data needs (e.g., file systems for applications), while Object Storage outside the VPC is optimal for handling large amounts of unstructured data (e.g., backups, images, logs).
+Scalable External Services:
+
+The ability to connect to external services like Transactional Email, Serverless, and NATS, Queues, Topics, and Events gives flexibility for event-driven architectures, asynchronous processing, and scaling as needed without overloading core VPC resources.
+Security Features:
+
+Resources like the Secret Manager help securely store sensitive credentials and keys, improving overall security management.
+Applications:
+E-commerce Platforms:
+
+This setup is perfect for an e-commerce platform, which needs a scalable backend (instances and block storage), secure payment systems (private database access), and public-facing components (load balancer and public gateway) for handling user traffic efficiently.
+Web Applications:
+
+Web apps that handle high traffic can benefit from the load balancer and instances, ensuring uptime and availability. These applications can scale horizontally as demand increases, making it suitable for apps like SaaS products, social networks, or content platforms.
+Enterprise Applications:
+
+Enterprises handling sensitive data (HR systems, CRMs, etc.) can use the VPC’s isolation and private networking to secure internal services, while still allowing selective access via the public gateway.
+Microservices Architectures:
+
+This infrastructure supports microservices, where each service can be independently deployed on different instances or as serverless functions, using the load balancer to distribute requests and queues to manage communication between services.
+Data Analytics and Big Data Processing:
+
+Applications requiring high-performance data processing (e.g., data analytics platforms, ETL pipelines) can use managed databases and block storage for internal data while storing large datasets in external object storage. Event-driven data workflows can be handled by the external NATS, Queues, Topics, and Events service.
+Mobile or Web Backends:
+
+For mobile apps, this infrastructure can support a robust backend with an API gateway (public gateway), managing API calls securely and scaling as user demand grows.
+This setup provides a well-rounded, scalable, and secure foundation for a wide range of applications, particularly those requiring separation of public-facing and private resources.

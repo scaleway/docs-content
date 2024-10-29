@@ -47,7 +47,7 @@ We start by creating the scraper program, or the "data producer".
 
     SQS credentials and queue URL are read by the function from environment variables. Those variables are set by Terraform as explained in [one of the next sections](#create-a-terraform-file-to-provision-the-necessary-scaleway-resources). *If you choose another deployment method, such as the [console](https://console.scaleway.com/), do not forget to set them.*
     ```python
-    queue_url = os.getenv('QUEUE_URL') 
+    queue_url = os.getenv('QUEUE_URL')
     sqs_access_key = os.getenv('SQS_ACCESS_KEY')
     sqs_secret_access_key = os.getenv('SQS_SECRET_ACCESS_KEY')
     ```
@@ -65,10 +65,10 @@ We start by creating the scraper program, or the "data producer".
     Using the AWS python sdk `boto3`, connect to the SQS queue and push the `title` and `url` of articles published less than 15 minutes ago.
     ```python
         sqs = boto3.client(
-          'sqs', 
-          endpoint_url=SCW_SQS_URL, 
-          aws_access_key_id=sqs_access_key, 
-          aws_secret_access_key=sqs_secret_access_key, 
+          'sqs',
+          endpoint_url=SCW_SQS_URL,
+          aws_access_key_id=sqs_access_key,
+          aws_secret_access_key=sqs_secret_access_key,
           region_name='fr-par')
 
         for age, titleline in zip(ages, titlelines):
@@ -117,7 +117,7 @@ Next, let's create our consumer function. When receiving a message containing th
     Lastly, we write the information into the database. *To keep the whole process completely automatic the* `CREATE_TABLE_IF_NOT_EXISTS` *query is run each time. If you integrate the functions into an existing database, there is no need for it.*
     ```python
       conn = None
-      try: 
+      try:
           conn = pg8000.native.Connection(host=db_host, database=db_name, port=db_port, user=db_user, password=db_password, timeout=15)
 
           conn.run(CREATE_TABLE_IF_NOT_EXISTS)
@@ -136,7 +136,7 @@ As explained in the [Scaleway Functions documentation](/serverless/functions/how
 
 ## Create a Terraform file to provision the necessary Scaleway resources
 
-For the purposes of this tutorial, we show how to provision all resources via Terraform. 
+For the purposes of this tutorial, we show how to provision all resources via Terraform.
 
 <Message type="tip">
 If you do not want to use Terraform, you can also create the required resources via the [console](https://console.scaleway.com/), the [Scaleway API](https://www.scaleway.com/en/developers/api/), or any other [developer tool](https://www.scaleway.com/en/developers/). Remember that if you do so, you will need to set up environment variables for functions as previously specified. The following documentation may help create the required resources:
@@ -149,7 +149,7 @@ If you do not want to use Terraform, you can also create the required resources 
 1. Create a directory called `terraform` (at the same level as the `scraper` and `consumer` directories created in the previous steps).
 2. Inside it, create a file called `main.tf`.
 3. In the file you just created, add the code below to set up the [Scaleway Terraform provider](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs) and your Project:
-    ```
+    ```hcl
     terraform {
       required_providers {
         scaleway = {
@@ -167,7 +167,7 @@ If you do not want to use Terraform, you can also create the required resources 
     }
     ```
 4. Still in the same file, add the code below to provision the SQS resources: SQS activation for the project, separate credentials with appropriate permissions for producer and consumer, and an SQS queue:
-    ```
+    ```hcl
     resource "scaleway_mnq_sqs" "main" {
       project_id = scaleway_account_project.mnq_tutorial.id
     }
@@ -202,7 +202,7 @@ If you do not want to use Terraform, you can also create the required resources 
     }
     ```
 5. Add the code below to provision the Managed Database for PostgreSQL resources. Note that here we are creating a random password and using it for the default and worker user:
-    ```
+    ```hcl
     resource "random_password" "dev_mnq_pg_exporter_password" {
       length           = 16
       special          = true
@@ -219,7 +219,7 @@ If you do not want to use Terraform, you can also create the required resources 
       node_type = "db-dev-s"
       engine = "PostgreSQL-15"
       is_ha_cluster = false
-      disable_backup = true 
+      disable_backup = true
       user_name = "mnq_initial_user"
       password = random_password.dev_mnq_pg_exporter_password.result
     }
@@ -240,7 +240,7 @@ If you do not want to use Terraform, you can also create the required resources 
     }
 
     resource "scaleway_rdb_database" "main" {
-      instance_id = scaleway_rdb_instance.main.id 
+      instance_id = scaleway_rdb_instance.main.id
       name = "hn-database"
     }
 
@@ -252,14 +252,14 @@ If you do not want to use Terraform, you can also create the required resources 
     }
 
     resource "scaleway_rdb_privilege" "mnq_user_role" {
-      instance_id = scaleway_rdb_instance.main.id 
+      instance_id = scaleway_rdb_instance.main.id
       user_name = scaleway_rdb_user.worker.name
       database_name = scaleway_rdb_database.main.name
       permission = "all"
     }
     ```
 6. Add the code below to provision the functions resources. First, activate the namespace, then locally zip the code and create the functions in the cloud. Note that we are referencing variables from other resources, to completely automate the deployment process:
-    ```
+    ```hcl
     locals {
       scraper_folder_path = "../scraper"
       consumer_folder_path = "../consumer"
@@ -354,17 +354,17 @@ If you do not want to use Terraform, you can also create the required resources 
       }
     }
     ```
-    Note that a folder `archives` needs to be created manually if you started from scratch. It is included in the git repository. 
-7. Add the code below to provision the triggers resources. The cron trigger activates at the minutes `[0, 15, 30, 45]` of every hour. No arguments are passed, but we could do so by specifying them in JSON format in the `args` parameter. 
-    ```
+    Note that a folder `archives` needs to be created manually if you started from scratch. It is included in the git repository.
+7. Add the code below to provision the triggers resources. The cron trigger activates at the minutes `[0, 15, 30, 45]` of every hour. No arguments are passed, but we could do so by specifying them in JSON format in the `args` parameter.
+    ```hcl
     resource "scaleway_function_cron" "scraper_cron" {
-      function_id = scaleway_function.scraper.id 
+      function_id = scaleway_function.scraper.id
       schedule = "0,15,30,45 * * * *"
       args = jsonencode({})
     }
 
     resource "scaleway_function_trigger" "consumer_sqs_trigger" {
-      function_id = scaleway_function.consumer.id 
+      function_id = scaleway_function.consumer.id
       name = "hn-sqs-trigger"
       sqs {
         project_id = scaleway_mnq_sqs.main.project_id
@@ -378,7 +378,7 @@ Terraform makes this very straightforward. To provision all the resources and ge
 ```
 cd terraform
 terraform init
-terraform plan 
+terraform plan
 terraform apply
 ```
 
@@ -386,14 +386,14 @@ terraform apply
 
 Go to the [Scaleway console](https://console.scaleway.com/), and check the logs and metrics for Serverless Functions' execution and Messaging and Queuing SQS queue statistics.
 
-To make sure the data is correctly stored in the database, you can [connect to it directly](/managed-databases/postgresql-and-mysql/how-to/connect-database-instance/) via a CLI tool such as `psql`. 
+To make sure the data is correctly stored in the database, you can [connect to it directly](/managed-databases/postgresql-and-mysql/how-to/connect-database-instance/) via a CLI tool such as `psql`.
 Retrieve the instance IP and port of your Managed Database from the console, under the [Managed Database section](https://console.scaleway.com/rdb/instances).
 Use the following command to connect to your database. When prompted for a password, you can find it by running `terraform output -json`.
 ```
 psql -h <DB_INSTANCE_IP> --port <DB_INSTANCE_PORT> -d hn-database -U worker
 ```
 
-When you are done testing, don't forget to clean up! To do so, run: 
+When you are done testing, don't forget to clean up! To do so, run:
 ```
 cd terraform
 terraform destroy
@@ -405,7 +405,7 @@ We have shown how to asynchronously decouple the producer and the consumer using
 While the volume of data processed in this example is quite small, thanks to the Messaging and Queuing SQS queue's robustness and the auto-scaling capabilities of the Serverless Functions, you can adapt this example to manage larger workloads.
 
 Here are some possible extensions to this basic example:
- - Replace the simple proposed logic with your own. What about counting how many times some keywords (e.g: copilot, serverless, microservice) appear in Hacker News articles? 
+ - Replace the simple proposed logic with your own. What about counting how many times some keywords (e.g: copilot, serverless, microservice) appear in Hacker News articles?
  - Define multiple cron triggers for different websites and pass the website as an argument to the function. Or, create multiple functions that feed the same queue.
  - Use a [Serverless Container](/serverless/containers/quickstart/) instead of the consumer function, and use a command line tool such as `htmldoc` or `pandoc` to convert the scraped articles to PDF and upload the result to a [Scaleway Object Storage](/storage/object/quickstart/) S3 bucket.
  - Replace the Managed Database for PostgreSQL with a [Scaleway Serverless Database](/serverless/sql-databases/quickstart/), so that all the infrastructure lives in the serverless ecosystem! *Note that at the moment there is no Terraform support for Serverless Database, hence the choice here to use Managed Database for PostgreSQL*.

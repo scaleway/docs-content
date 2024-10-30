@@ -1,0 +1,238 @@
+---
+meta:
+  title: How to query vision models
+  description: Learn how to interact with powerful vision models using Scaleway's Generative APIs service.
+content:
+  h1: How to query vision models
+  paragraph: Learn how to interact with powerful vision models using Scaleway's Generative APIs service.
+tags: generative-apis ai-data vision-models
+dates:
+  validation: 2024-10-30
+  posted: 2024-10-30
+---
+
+Scaleway's Generative APIs service allows users to interact with powerful vision models hosted on the platform.
+
+<Message type="note">
+  Vision models can understand and analyze images, not generate them. 
+</Message>
+
+There are several ways to interact with vision models:
+- The Scaleway [console](https://console.scaleway.com) provides complete [playground](/ai-data/generative-apis/how-to/query-vision-models/#accessing-the-playground), aiming to test models, adapt parameters, and observe how these changes affect the output in real-time.
+- Via the [Chat API](/ai-data/generative-apis/how-to/query-vision-models/#querying-vision-models-via-api)
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/identity-and-access-management/iam/how-to/create-api-keys/) for API authentication
+- Python 3.7+ installed on your system
+
+## Accessing the Playground
+
+Scaleway provides a web playground for vision models hosted on Generative APIs.
+
+1. Navigate to Generative APIs under the AI section of the [Scaleway console](https://console.scaleway.com/) side menu. The list of models you can query displays.
+2. Click the name of the vision model you want to try. Alternatively, click <Icon name="more" /> next to the vision model, and click **Try model** in the menu. 
+
+The web playground displays.
+
+## Using the Playground
+1. Upload one or multiple images to the prompt area at the bottom of the page. Enter a prompt, for example, to describe the image(s) you attached.
+2. Edit the hyperparameters listed on the right column, for example the default temperature for more or less randomness on the outputs. 
+3. Switch model at the top of the page, to observe the capabilities of chat and vision models offered via Generative APIs. 
+4. Click **View code** to get code snippets configured according to your settings in the playground.
+
+## Querying vision models via API
+
+The [Chat API](/ai-data/generative-apis/api-cli/using-chat-api/) is an OpenAI-compatible REST API for generating and manipulating conversations.
+
+You can query the vision models programmatically using your favorite tools or languages.
+Vision models take both text and images as inputs.
+
+<Message type="tip">
+  Unlike traditional language models, vision models will take a content array for the user role, structuring text and images as inputs.
+</Message>
+
+In the following example, we will use the OpenAI Python client.
+
+### Installing the OpenAI SDK
+
+Install the OpenAI SDK using pip:
+
+```bash
+pip install openai
+```
+
+### Initializing the client
+
+Initialize the OpenAI client with your base URL and API key:
+
+```python
+from openai import OpenAI
+
+# Initialize the client with your base URL and API key
+client = OpenAI(
+    base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
+    api_key="<SCW_SECRET_KEY>"  # Your unique API secret key from Scaleway
+)
+```
+
+### Generating a chat completion
+
+You can now create a chat completion, for example with the `pixtral-12b-2409` model:
+
+```python
+# Create a chat completion using the 'pixtral-12b-2409' model
+response = client.chat.completions.create(
+    model="pixtral-12b-2409",
+    messages=[
+      {
+        "role": "user", 
+        "content": [
+              {"type": "text", "text": "What is this image?"},
+              {"type": "image_url", "image_url": {"url": "https://picsum.photos/id/32/512/512"}},
+          ] #  Vision models will take a content array with text and image_url objects.
+
+      }
+    ],
+    temperature=0.7,  # Adjusts creativity
+    max_tokens=2048,   # Limits the length of the output
+    top_p=0.9         # Controls diversity through nucleus sampling. You usually only need to use temperature.
+)
+
+# Print the generated response
+print(response.choices[0].message.content)
+```
+
+This code sends messages, prompt and image, to the vision model and returns an answer based on your input. The `temperature`, `max_tokens`, and `top_p` parameters control the response's creativity, length, and diversity, respectively.
+
+A conversation style may include a default system prompt. You may set this prompt by setting the first message with the role system. For example:
+
+```python
+[
+  {
+  	"role": "system",
+  	"content": "You are Xavier Niel."
+  }
+]
+```
+
+### Passing images to Pixtral
+
+1. **Image URLs**: If the image is available online, you can just include the image URL in your request as demonstrated above. This approach is simple and does not require any encoding.
+2. **Base64 encoded**: image Base64 encoding is a standard way to transform binary data, like images, into a text format, making it easier to transmit over the internet.
+
+The following Python code sample shows you how to encode an image in base64 format and pass it to your request payload.
+
+```python
+import base64
+from io import BytesIO
+from PIL import Image
+
+def encode_image(img):
+    buffered = BytesIO()
+    img.save(buffered, format="JPEG")
+    encoded_string = base64.b64encode(buffered.getvalue()).decode("utf-8")
+    return encoded_string
+
+img = Image.open("path_to_your_image.jpg")
+base64_img = encode_image(img)
+
+payload = {
+    "messages": [
+        {
+            "role": "user",
+            "content": [
+                {
+                    "type": "text", 
+                    "text": "What is this image?"
+                },
+                {
+                    "type": "image_url",
+                    "image_url": {
+                        "url": f"data:image/jpeg;base64,{base64_img}"
+                    }
+                }
+            ]
+        }
+    ],
+    ... # other parameters
+}
+
+```
+
+### Model parameters and their effects
+
+The following parameters will influence the output of the model:
+
+- **`messages`**: A list of message objects that represent the conversation history. Each message should have a `role` (e.g., "system", "user", "assistant") and `content`. The content is an array that can contain text and/or image objects.
+- **`temperature`**: Controls the output's randomness. Lower values (e.g., 0.2) make the output more deterministic, while higher values (e.g., 0.8) make it more creative.
+- **`max_tokens`**: The maximum number of tokens (words or parts of words) in the generated output.
+- **`top_p`**: Recommended for advanced use cases only. You usually only need to use temperature. `top_p` controls the diversity of the output, using nucleus sampling, where the model considers the tokens with top probabilities until the cumulative probability reaches `top_p`.
+- **`stop`**: A string or list of strings where the model will stop generating further tokens. This is useful for controlling the end of the output.
+
+<Message type="warning">
+ If you encounter an error such as "Forbidden 403" refer to the [API documentation](/ai-data/generative-apis/api-cli/understanding-errors) for troubleshooting tips.
+</Message>
+
+## Streaming
+
+By default, the outputs are returned to the client only after the generation process is complete. However, a common alternative is to stream the results back to the client as they are generated. This is particularly useful in chat applications, where it allows the client to view the results incrementally as each token is produced.
+Following is an example using the chat completions API:
+
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
+    api_key="<SCW_API_KEY>"  # Your unique API key from Scaleway
+)
+response = client.chat.completions.create(
+  model="pixtral-12b-2409",
+  messages=[{
+      "role": "user", 
+      "content": [
+          {"type": "text", "text": "What is this image?"},
+          {"type": "image_url", "image_url": {"url": "https://picsum.photos/id/32/512/512"}},
+      ]
+  }],
+  stream=True,
+)
+
+for chunk in response:
+    if chunk.choices[0].delta.content:
+        print(chunk.choices[0].delta.content, end="")
+```
+
+## Async
+
+The service also supports asynchronous mode for any chat completion.
+
+```python
+
+import asyncio
+from openai import AsyncOpenAI
+
+client = AsyncOpenAI(
+    base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
+    api_key="<SCW_API_KEY>"  # Your unique API key from Scaleway
+)
+
+async def main():
+    stream = await client.chat.completions.create(
+        model="pixtral-12b-2409",
+        messages=[{
+            "role": "user", 
+            "content": [
+                {"type": "text", "text": "What is this image?"},
+                {"type": "image_url", "image_url": {"url": "https://picsum.photos/id/32/512/512"}},
+            ]
+        }],
+        stream=True,
+    )
+    async for chunk in stream:
+        print(chunk.choices[0].delta.content, end="")
+
+asyncio.run(main())
+```

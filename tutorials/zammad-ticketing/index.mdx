@@ -1,39 +1,34 @@
 ---
 meta:
   title: Deploying the Zammad ticketing solution
-  description: This page shows how to install and configure the Zammad ticketing solution
+  description: This page shows how to install and configure the Zammad ticketing solution on Scaleway Instances
 content:
   h1: Deploying the Zammad ticketing solution
-  paragraph: This page shows how to install and configure the Zammad ticketing solution
-tags: compute Zammad ticket support chat Elasticsearch
+  paragraph: This page shows how to install and configure the Zammad ticketing solution on Scaleway Instances
+tags: Zammad ticketing support Elasticsearch
 hero: assets/scaleway_zammad.webp
 categories:
-  - compute
   - instances
-  - develop-and-test
 dates:
-  validation: 2023-09-19
+  validation: 2024-10-08
   posted: 2020-12-22
 ---
 
-## Zammad - Overview
+Zammad is an open-source helpdesk system that allows you to oversee customer interactions across various communication channels, encompassing telephone, Facebook, Twitter, chat, and emails. Notably, the software is entirely open-source and distributed under the GNU AFFERO General Public License version 3 (GNU AGPLv3).
 
-[Zammad](https://zammad.org/) is an open-source helpdesk system that allows you to oversee customer interactions across various communication channels, encompassing telephone, Facebook, Twitter, chat, and emails. Notably, the software is entirely open-source and is distributed under the GNU AFFERO General Public License version 3 (GNU AGPLv3).
-
-This tutorial will guide you through the process of installing Zammad on a Virtual Instance operating on **Ubuntu 20.04 LTS (Focal Fossa)**. Furthermore, you will receive a brief orientation of the application.
+This tutorial will guide you through the process of installing Zammad on a Scaleway Instance operating on **Ubuntu 20.04 LTS (Focal Fossa)**. Furthermore, you will receive a brief orientation of the application.
 
 <Message type="tip">
   We recommend you follow this tutorial using a [Cost-Optimized Instance](/compute/instances/reference-content/choosing-instance-type/).
 </Message>
 
-<Macro id="iam-requirements" />
+<Macro id="requirements" />
 
-<Message type="requirement">
-  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
-  - You have [configured your SSH key](/console/project/how-to/create-ssh-key/)
-  - You have an Instance running on **Ubuntu Focal Fossa (20.04 LTS)** with at least 4 GB of RAM
-  - You have a domain name pointed to your Instance
-</Message>
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An [SSH key](/identity-and-access-management/organizations-and-projects/how-to/create-ssh-key/)
+- An [Instance](/compute/instances/how-to/create-an-instance/), running on Ubuntu Focal Fossa (20.04 LTS), with at least 4 GB of RAM
+- A [domain name](/network/domains-and-dns/quickstart/) pointed to your Instance
 
 ## Installing Elasticsearch
 
@@ -46,7 +41,7 @@ Zammad requires an [Elasticsearch](https://www.elastic.co/elasticsearch/) databa
     ```
 3. Install HTTPS transport to download the packages over a secure connection.
     ```
-    apt install -y apt-transport-https
+    apt install curl apt-transport-https gnupg
     ```
 4. Add the Elastic repository to the APT configuration.
     ```
@@ -97,17 +92,22 @@ Zammad requires an [Elasticsearch](https://www.elastic.co/elasticsearch/) databa
     locale-gen en_US.UTF-8
     echo "LANG=en_US.UTF-8" > /etc/default/locale
     ```
-2. Add the Zammad repository to the `apt` package manager and install the Zammad GPG key on your system:
+2. Install the Zammad GPG key on your system:
     ```
-    sudo wget -O /etc/apt/sources.list.d/zammad.list \
-    https://dl.packager.io/srv/zammad/zammad/stable/installer/ubuntu/20.04.repo
-    wget -qO- https://dl.packager.io/srv/zammad/zammad/key | sudo apt-key add -
+    curl -fsSL https://dl.packager.io/srv/zammad/zammad/key | \
+    gpg --dearmor | tee /etc/apt/trusted.gpg.d/pkgr-zammad.gpg> /dev/null
     ```
-3. Update the `apt` package manager to activate the new repository and install Zammad:
+
+3. Add the Zammad repository to the `apt` package manager:
+    ```
+    echo "deb [signed-by=/etc/apt/trusted.gpg.d/pkgr-zammad.gpg] https://dl.packager.io/srv/deb/zammad/zammad/stable/ubuntu 22.04 main"| \
+    tee /etc/apt/sources.list.d/zammad.list > /dev/null
+    ```
+4. Update the `apt` package manager to activate the new repository and install Zammad:
     ```
     apt update && apt install zammad -y
     ```
-4. Configure Zammad with Elasticsearch by running the following two commands:
+5. Configure Zammad with Elasticsearch by running the following two commands:
     ```
     zammad run rails r "Setting.set('es_user', 'elastic')"
     zammad run rails r "Setting.set('es_password', '<elastic_password>')"
@@ -117,17 +117,17 @@ Zammad requires an [Elasticsearch](https://www.elastic.co/elasticsearch/) databa
 
 ## Configuring Nginx
 
-Zammad uses the [Nginx](http://nginx.org/) web server to serve the application. In the following step you configure the web server application and request a TLS certificate, issued by the [Let's Encrypt](https://letsencrypt.org/) certificate authority, to secure the connection to between your users and agents using HTTPS. A domain name pointing to the IP address of your Virtual Cloud Instance is required for this step (A-Record).
+Zammad uses the [Nginx](http://nginx.org/) web server to serve the application. In the following step, you configure the web server application and request a TLS certificate, issued by the [Let's Encrypt](https://letsencrypt.org/) certificate authority, to secure the connection between your users and agents using HTTPS. A domain name pointing to the IP address of your Virtual Cloud Instance is required for this step (A-Record).
 
-1. Open the Nginx configuration file, generated by Zammad, in a text editor. In this tutorial we use `nano` to edit the file:
+1. Open the Nginx configuration file, generated by Zammad, in a text editor. In this tutorial, we use `nano` to edit the file:
     ```
     nano /etc/nginx/sites-enabled/zammad.conf
     ```
 
     <Message type="note">
-      Do not rename or move this file. Zammad will regenerate it, if the file is not available.
+      Do not rename or move this file. Zammad will regenerate it if the file is not available.
     </Message>
-2. Look out for the `server {` block and replace the server's hostname `localhost` with your domain name. In this tutorial we use `zammad.example.com`:
+2. Look out for the `server {` block and replace the server's hostname `localhost` with your domain name. In this tutorial, we use `zammad.example.com`:
     ```
     [...]
     server {
@@ -162,11 +162,11 @@ Zammad uses the [Nginx](http://nginx.org/) web server to serve the application. 
     <Lightbox src="scaleway-zammad_01.webp" alt="" />
 4. Enter the required information about your organization. You can upload your company logo to customize the installation. Make sure the **System URL** corresponds with your domain name (`zammad.example.com` in our example):
     <Lightbox src="scaleway-zammad_02.webp" alt="" />
-5. Choose how you want to deliver your emails. You can either use a local mail server, installed on your instance, or use an external mailing service by using SMTP:
+5. Choose how you want to deliver your emails. You can either use a local mail server, installed on your instance or use an external mailing service by using SMTP:
     <Lightbox src="scaleway-zammad_03.webp" alt="" />
 
   Enter the SMTP details of either the local MTA or the information you received from your messaging service.
-6. To configure the email channel, click the **Email** button and enter the account POP3/IMAP information for your incoming mails.
+6. To configure the email channel, click the **Email** button and enter the account POP3/IMAP information for your incoming emails.
     <Lightbox src="scaleway-zammad_04.webp" alt="" />
 7. You have completed the basic installation of Zammad. The agent dashboard displays:
     <Lightbox src="scaleway-zammad_05.webp" alt="" />
@@ -175,9 +175,9 @@ Zammad uses the [Nginx](http://nginx.org/) web server to serve the application. 
 
 ## Creating additional users
 
-Currently, your Zammad application has only the admin user. In the following step we create additional accounts for users and agents.
+Currently, your Zammad application has only the admin user. In the following step, we create additional accounts for users and agents.
 
-Zammad proposes three default roles of user accounts:
+Zammad proposes three default roles for user accounts:
 
 - **Customer:** Users who create tickets and ask for help.
 - **Agent:** Your agents who deal with the requests made by your customers.
@@ -196,14 +196,12 @@ If required, you can create more detailed roles by adding more and allowing or d
 ## Creating additional channels
 
 For now, your Zammad instance allows you to communicate with your users by e-mail, but the application provides a wide range of connectors to interact with your customers. You can configure modules for:
-
 - Twitter
 - Facebook
 - Telegram
 - Chat
 - SMS (via twilio)
-
-and much more.
+And much more.
 
 1. Click the cogwheel icon (1) to enter the management section of Zammad.
 2. Scroll down to the **Channels** section (2) and choose the communication channel you want to configure (3).
@@ -212,4 +210,4 @@ and much more.
 
 ## Conclusion
 
-You have configured a Virtual Cloud Instance with the Zammad ticketing solution, linked it to an Elasticserarch database and configured a secure connection to the Instance using HTTPS. You also did a short walkthrough of some features of Zammad. For more information on all features of the solution, refer to the [official documentation](https://docs.zammad.org/en/latest/index.html).
+You have configured a Virtual Cloud Instance with the Zammad ticketing solution, linked it to an Elasticserarch database, and configured a secure connection to the Instance using HTTPS. You also did a short walkthrough of some features of Zammad. For more information on all features of the solution, refer to the [official documentation](https://docs.zammad.org/en/latest/index.html).

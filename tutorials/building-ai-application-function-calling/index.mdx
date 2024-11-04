@@ -1,0 +1,277 @@
+---
+meta:
+  title: Get started with agentic AI - building a flight assistant with function calling on open-weight Llama 3.1
+  description: Learn how to implement function calling in your applications using a practical flight schedule example.
+content:
+  h1: Get started with agentic AI - building a flight assistant with function calling on open-weight Llama 3.1
+  paragraph: Create a smart flight assistant that can understand natural language queries and return structured flight information using function calling capabilities.
+tags: AI function-calling LLM python structured-data
+categories:
+  - managed-inference
+  - generative-apis
+hero: assets/function-calling.webp
+dates:
+  validation: 2024-10-25
+  posted: 2024-10-25
+---
+
+In today's AI-driven world, enabling natural language interactions with structured data systems has become increasingly important. Function calling allows AI models like Llama 3.1 to bridge the gap between human queries and programmatic functions, creating powerful agents for many use cases.
+
+This tutorial will guide you through creating a simple flight schedule assistant that can understand natural language queries about flights and return structured information. We'll use Python and the OpenAI SDK to implement function calling on Llama 3.1, making it easy to integrate this solution into your existing applications.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- Python 3.7 or higher
+- An API key from Scaleway [Identity and Access Management](https://www.scaleway.com/en/docs/identity-and-access-management/iam/)
+- Access to Scaleway [Generative APIs](/ai-data/generative-apis/quickstart/) or to Scaleway [Managed Inference](/ai-data/managed-inference/quickstart/)
+- The `openai` Python library installed
+
+## Understanding function calling
+
+Function calling allows AI models to:
+- Understand when to use specific functions based on user queries
+- Extract relevant parameters from natural language
+- Format the extracted information into structured function calls
+- Process the function results and present them in a user-friendly way
+
+## Setting up the environment
+
+1. Create a new directory for your project:
+   ```
+   mkdir flight-assistant
+   cd flight-assistant
+   ```
+
+2. Create and activate a virtual environment:
+   ```
+   python3 -m venv venv
+   source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+   ```
+
+3. Install the required library:
+   ```
+   pip install openai
+   ```
+
+## Creating the flight schedule function
+
+First, let's create a simple function that returns flight schedules. Create a file called `flight_schedule.py`:
+
+```python
+def get_flight_schedule(departure_airport: str, destination_airport: str, departure_date: str) -> dict:
+    """
+    Get available flights between two airports on a specific date.
+    
+    Args:
+        departure_airport (str): IATA code of departure airport (e.g., "CDG")
+        destination_airport (str): IATA code of destination airport (e.g., "LHR")
+        departure_date (str): Date in YYYY-MM-DD format
+    
+    Returns:
+        dict: Available flights with their details
+    """
+    # Mock flight database - in a real application, this would query an actual database
+    flights = {
+        "CDG-LHR-2024-11-01": [
+            {
+                "flight_number": "AF123",
+                "airline": "Air France",
+                "departure_time": "08:00",
+                "arrival_time": "09:00",
+                "price": "€150"
+            },
+            {
+                "flight_number": "BA456",
+                "airline": "British Airways",
+                "departure_time": "14:00",
+                "arrival_time": "15:00",
+                "price": "€180"
+            }
+        ]
+    }
+    
+    key = f"{departure_airport}-{destination_airport}-{departure_date}"
+    return flights.get(key, {"error": "No flights found for this route and date."})
+```
+
+## Setting up the AI assistant
+
+Create a new file called `assistant.py` to handle the AI interactions:
+
+```python
+from openai import OpenAI
+import os
+import json
+from flight_schedule import get_flight_schedule
+
+# Initialize the OpenAI client with Scaleway configuration
+
+MODEL="meta/llama-3.1-70b-instruct:fp8" 
+# use the right name according to your Managed Inference deployment or Generative APIs model
+
+API_KEY = os.environ.get("SCALEWAY_API_KEY")
+BASE_URL = os.environ.get("SCALEWAY_INFERENCE_ENDPOINT_URL")
+# use https://api.scaleway.ai/v1 for Scaleway Generative APIs
+
+client = OpenAI(
+    base_url=BASE_URL,
+    api_key=API_KEY
+)
+
+# Define the tool specification
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "get_flight_schedule",
+        "description": "Get available flights between two airports on a specific date",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "departure_airport": {
+                    "type": "string",
+                    "description": "IATA code of departure airport (e.g., CDG, LHR)"
+                },
+                "destination_airport": {
+                    "type": "string",
+                    "description": "IATA code of destination airport (e.g., CDG, LHR)"
+                },
+                "departure_date": {
+                    "type": "string",
+                    "description": "Date in YYYY-MM-DD format"
+                }
+            },
+            "required": ["departure_airport", "destination_airport", "departure_date"]
+        }
+    }
+}]
+
+def process_query(user_query: str) -> str:
+    """Process a natural language query about flights."""
+    
+    # Initial conversation with the model
+    messages = [
+        {
+            "role": "system",
+            "content": "You are a helpful flight assistant. Help users find flights by calling the appropriate function."
+        },
+        {
+            "role": "user",
+            "content": user_query
+        }
+    ]
+    
+    # Get the model's response
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=messages,
+        tools=tools,
+        tool_choice="auto"
+    )
+    
+    # Check if the model wants to call a function
+    response_message = response.choices[0].message
+    
+    if response_message.tool_calls:
+        # Get function call details
+        tool_call = response_message.tool_calls[0]
+        function_name = tool_call.function.name
+        function_args = json.loads(tool_call.function.arguments)
+        
+        # Execute the function
+        if function_name == "get_flight_schedule":
+            function_response = get_flight_schedule(**function_args)
+            
+            # Add the function result to the conversation
+            messages.append(response_message)
+            messages.append({
+                "role": "tool",
+                "content": json.dumps(function_response),
+                "tool_call_id": tool_call.id
+            })
+            
+            # Get final response
+            final_response = client.chat.completions.create(
+                model=MODEL,
+                messages=messages
+            )
+            
+            return final_response.choices[0].message.content
+    
+    return response_message.content
+```
+
+## Creating the main application
+
+Create a file called `main.py` to run the assistant:
+
+```python
+from assistant import process_query
+
+def main():
+    print("Welcome to the Flight Schedule Assistant!")
+    print("Ask about flights using natural language (or type 'quit' to exit)")
+    print("Example: What flights are available from CDG to LHR on November 1st, 2024?")
+    
+    while True:
+        query = input("\nYour query: ")
+        if query.lower() == 'quit':
+            break
+            
+        response = process_query(query)
+        print("\nAssistant:", response)
+
+if __name__ == "__main__":
+    main()
+```
+
+## Running the application
+
+1. Set your Scaleway API key:
+   ```
+   export SCALEWAY_API_KEY="your-api-key-here"
+   ```
+
+2. Set your Base URL for OpenAI client:
+   ```
+   export SCALEWAY_INFERENCE_ENDPOINT_URL="your-inference-endpoint-here"
+   ```
+
+3. Run the application:
+   ```
+   python main.py
+   ```
+
+4. Try some example queries:
+   - "What flights are available from CDG to LHR on November 1st?"
+   - "Show me morning flights from CDG to LHR on November 1st"
+   - "Are there any afternoon flights from CDG to LHR on 2024-11-01?"
+
+## How it works
+
+1. **User input**: The application receives a natural language query about flights.
+
+2. **Function recognition**: The AI model analyzes the query and determines that it needs flight schedule information.
+
+3. **Parameter extraction**: The model extracts key information (airports, date) from the query.
+
+4. **Function calling**: The model returns the function call to be made by the user, in this case the `get_flight_schedule` function with the extracted parameters provided by the model.
+
+5. **Response generation**: The model receives the function's response and generates a natural language reply for the user.
+
+## Customizing the application
+
+You can enhance the flight assistant in several ways:
+
+1. **Add real data**: Replace the mock flight database with actual flight API calls.
+2. **Expand functions**: Add functions for booking flights, checking prices, or getting airport information.
+3. **Improve error handling**: Add validation for airport codes and dates.
+4. **Add memory**: Implement conversation history to handle follow-up questions.
+
+## Conclusion
+
+Function calling bridges the gap between natural language processing and structured data operations. This flight schedule assistant demonstrates how to implement function calling to create intuitive interfaces for your applications.
+
+<Message type="note">
+  Remember to handle user data responsibly and validate all inputs before making actual flight queries or bookings in a production environment.
+</Message>

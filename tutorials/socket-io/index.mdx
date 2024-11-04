@@ -1,228 +1,162 @@
 ---
 meta:
   title: Getting started with Socket.io
-  description: This tutorial shows how to install and how to use Socket.io server
+  description: This tutorial shows how to install and use Socket.io server
 content:
   h1: Getting started with Socket.io
-  paragraph: This tutorial shows how to install and how to use Socket.io 
-tags: Socket.io npm socket io socket-io javascript example node-js chat server client node manager
+  paragraph: This tutorial shows how to install and how to use Socket.io
+tags: Socket-io npm socket javascript node-js
 categories:
-  - compute
+  - instances
 dates:
-  validation: 2023-10-02
+  validation: 2024-10-15
   posted: 2018-07-05
 ---
 
-Socket.io enables real-time event-based communication between one or more clients and a server. It works on every platform, browser or device and is fast and reliable. Socket.io has two parts: a client-side library that runs in the browser, and a server-side library for Node.js. Both components have an identical API.
+Socket.io enables real-time event-based communication between one or more clients and a server. It works on every platform, browser, or device and is fast and reliable. Socket.io has two parts: a client-side library that runs in the browser, and a server-side library for Node.js. Both components have an identical API.
 
 Learn how to install and use Socket.io with Express using the `npm` package manager, and create a simple chat server to see the basics of how a client and server work together.
 
-<Macro id="iam-requirements" />
- 
-<Message type="requirement">
-  - You have an account and are logged into the [Scaleway console](https://console.scaleway.com)
-  - You have a [Scaleway Instance](/compute/instances/how-to/create-an-instance/) running Ubuntu Xenial or a later version
-  - You have [configured your SSH key](/console/project/how-to/create-ssh-key/)
-  - You have root access to the Instances you want to manage
-  - You have [Node.js](https://nodejs.org/en/) and [NPM (Node Package Manager)](https://www.npmjs.com/) installed on your Instance. 
-</Message>
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An [SSH key](/identity-and-access-management/organizations-and-projects/how-to/create-ssh-key/)
+- An [Instance](/compute/instances/how-to/create-an-instance/) running Ubuntu 20.04 LTS or later
+- Root access to the Instances you want to manage
+- Installed [Node.js](https://nodejs.org/en/) (version 18.x or later) and [NPM](https://www.npmjs.com/) on your Instance
 
 ## Installing Express.js and Socket.io
 
-Express is a minimal and flexible Node.js web application framework.
+Express is a minimal, flexible Node.js web application framework. Install it alongside Socket.io to create a real-time server.
 
-1. Create a folder and change the directory. In this tutorial we call the folder `myapp`.
+1. Create a project folder and navigate into it:
     ```
     mkdir myapp
     cd myapp
     ```
-2. Use `npm init` to create a package.json.
+
+2. Initialize your project with `npm`:
     ```
-    npm init
+    npm init -y
     ```
 
-    The `npm init` command creates an empty project with a `package.json` file. You can answer all the questions or press enter through all of them if you do not want to.
-3. Install Express and Socket.io using the `npm` package manager, and save them to our `package.json` file for later.
+    This creates a `package.json` file with default settings.
+
+3. Install Express and Socket.io:
     ```
-    npm install socket.io express --save
+    npm install express@4 socket.io@4 --save
     ```
-4. Install jquery using `npm`.
+
+4. (Optional) Install jQuery if you want to use it in the front-end:
     ```
     npm install jquery --save
     ```
 
 ## Creating an Express server
 
-1. Create a new file in the `myapp` folder. 
+1. Create a file called `app.js` file in the `myapp` folder.:
     ```
     nano app.js
     ```
-2. Paste the following code in the file, save and exit.
+    This file will contain the application code for the Socket.io application.
+
+2. Paste the following code into the application file `app.js`:
     ```js
-    // app.js
-    var express = require('express');
-    var app = express();
-    var server = require('http').createServer(app);
-    var io = require('socket.io')(server);
+    const express = require('express');
+    const http = require('http');
+    const app = express();
+    const server = http.createServer(app);
+    const { Server } = require('socket.io');
+    const io = new Server(server);
 
     app.use(express.static(__dirname + '/node_modules'));
-    app.get('/', function(req, res,next) {
+    app.get('/', (req, res) => {
         res.sendFile(__dirname + '/index.html');
     });
 
-    server.listen(4200);
+    io.on('connection', (socket) => {
+        console.log('a user connected');
+        socket.on('disconnect', () => {
+            console.log('user disconnected');
+        });
+    });
+
+    server.listen(4200, () => {
+        console.log('listening on *:4200');
+    });
     ```
+    Save the file and exit `nano`.
 
-    We use this file to require Express, to create a new server, and require Socket.io as well.
-
-    We also use it to set the static folder to `/node_modules` since we use npm to serve-up jQuery and we want to be able to reference it in our HTML code.
-
-    `App.get` routes HTTP requests to the specified path with a specific call-back function. The `res` object represents the HTTP response that an Express app sends when it gets a request. The `sendFile` sends the file to the specified path. The `server.listen` opens a port and listens for requests coming in.
-3. Create an `index.html` file in the `myapp` folder to display a `Hello World` message in the socket.
+3. Create another file called `index.html` in the `myapp` folder:
     ```
     nano index.html
     ```
-4. Paste the following content in the file:
+    This file contains the frontend for the application.
+
+4. Paste the following content into `index.html`:
     ```html
     <!doctype html>
     <html lang="en">
         <head>
-
+            <meta charset="UTF-8">
+            <title>Socket.io Demo Chat</title>
         </head>
         <body>
             <h1>Hello World!</h1>
-            <div id="future"></div>
-            <form id="form" id="chat_form">
-                <input id="chat_input" type="text">
-                <input type="submit" value="Send">
+            <form id="chat-form">
+                <input id="message" autocomplete="off" />
+                <button>Send</button>
             </form>
-            <script src="/jquery/dist/jquery.js"></script>
+            <ul id="messages"></ul>
+
             <script src="/socket.io/socket.io.js"></script>
+            <script>
+                const socket = io();
+                document.getElementById('chat-form').addEventListener('submit', (e) => {
+                    e.preventDefault();
+                    socket.emit('chat message', document.getElementById('message').value);
+                    document.getElementById('message').value = '';
+                });
+
+                socket.on('chat message', (msg) => {
+                    const item = document.createElement('li');
+                    item.textContent = msg;
+                    document.getElementById('messages').appendChild(item);
+                });
+            </script>
         </body>
     </html>
     ```
 
-    The src scripts point to files in our `node_modules` folder.
-5. Launch the server.
-    ```
-    node app.js
-    ```
-6. Open a browser and enter `http://<IP_address>:4200`. It should display the following:
-    <Lightbox src="scaleway-Hello_world.webp" alt="Hello World" />
+## Running the server
 
-## Connecting a client to a server using Socket.io
-
-In the next steps we connect the client to the server with Socket.io and have it respond in the console.
-
-1. In the `app.js` file, edit the `index.html` to add the script to the bottom of the file.
-    ```html
-    <!--Index.html-->
-    ...
-    <script>
-      var socket = io.connect('http://10.1.220.19:4200');
-      socket.on('connect', function(data) {
-          socket.emit('join', 'Hello World from client');
-      });
-    </script>
-    ```
-
-    The `socket.on('connect')` is an event fired upon a successful connection from the web browser. We then have a function callback that sends the `hello world` message to the server.
-2. Edit the `app.js` file to add the following configuration. Add the configuration before `server.listen`.
-    ```js
-    // app.js
-    io.on('connection', function(client) {
-        console.log('Client connected...');
-        client.on('join', function(data) {
-          console.log(data);
-        });
-    });
-
-    server.listen(4200);
-    ```
-
-    - `io.on` - is listening for connections. When it receives one it will report to the console `client connected...`. 
-    - `'client.on('join')` - waits for a message from the client to `join`. It will then log in to the console.
-3. Launch `node` again.
+1. Launch the server using Node.js:
     ```
     node app.js
     ```
 
-<Lightbox src="scaleway-ClientConnected.webp" alt="" />
+2. Open a browser and go to `http://<your_instance_ip>:4200`. You should see the chat interface.
 
-## Setting up the Socket server
+<Lightbox src="scaleway-Hello_world.webp" alt="Chat Interface" />
 
-<Message type="important">
-  You must set up your server locally before following the next steps. 
-</Message>
+## Enhancing the chat server with client-server interaction
 
-1. Add the `emit` line after console.log.
+1. Edit `app.js` to handle chat messages:
     ```js
-    // app.js
-    io.on('connection', function(client) {
-        console.log('Client connected...');
-        client.on('join', function(data) {
-          console.log(data);
-          client.emit('messages', 'Hello from server');
+    io.on('connection', (socket) => {
+        console.log('a user connected');
+        socket.on('chat message', (msg) => {
+            io.emit('chat message', msg);
+        });
+        socket.on('disconnect', () => {
+            console.log('user disconnected');
         });
     });
-
-    server.listen(4200);
     ```
 
-    - `client.emit` will send a message back to the client that just connected with a message using 'messages'.
-2. Add a new `socket.on` message event in the `index.html`.
-    ```js
-    // index.html
-    socket.on('messages', function(data) {
-            alert(data);
-    });
-    ```
+2. Reload the server and try sending chat messages. Any message sent will be broadcast to all connected clients.
 
-    When a client connects now, it will send a message to the server and it will trigger a pop-up.
 
-## Excluding the Socket server
-
-In the previous examples we learned that we can send a message to the server and also send one back to the client. You can also send a message to all the clients excluding the socket that started it.
-
-1. Update the `index.html` file as follows.
-    ```html
-    <script>
-      var socket = io.connect('http://51.15.244.129:4200');
-      socket.on('connect', function(data) {
-      socket.emit('join', 'Hello World from client');
-      });
-      socket.on('broad', function(data) {
-        $('#future').append(data+ "<br/>");
-      });
-
-      $('form').submit(function(e){
-        e.preventDefault();
-        var message = $('#chat_input').val();
-        socket.emit('messages', message);
-      });
-    </script>
-    ```
-
-    We added in a new `JQuery .submit` event handler which prevents the form from submitting and instead sends a message to the server with the values of the input field in messages.
-
-    Also, we added a new socket event listener for 'broad' which updates our div with the message returned.
-2. Update the `app.js` file.
-    ```js
-    // app.js
-    ...
-    io.on('connection', function(client) {
-      console.log('Client connected...');
-      client.on('join', function(data) {
-        console.log(data);
-        client.on('messages', function(data) {
-          client.emit('broad', data);
-          client.broadcast.emit('broad',data);
-        });
-      });
-    });
-    server.listen(4200);
-    ```
-
-    You can see we are listening for messages. After receiving data we inform all other clients, including the socket that sent the message.
-
-    If we restart the `app.js` file using `node`, we will be able to send messages to all other clients when we type anything into our input box and press submit. The div under the hello world message updates.
+You have successfully installed and configured **Socket.io** and **Express** on **Node.js 18.x**. The basic chat server demonstrates real-time bidirectional communication between clients and the server.
+You can now build more advanced applications using [Socket.io's robust API](https://socket.io/docs/v4/server-api/).

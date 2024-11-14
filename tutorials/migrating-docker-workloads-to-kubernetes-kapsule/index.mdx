@@ -1,0 +1,410 @@
+---
+meta:
+  title: Migrating Docker workloads to Kubernetes Kapsule
+  description: This guide helps you migrate Docker applications to Scaleway Kapsule (Scaleway's managed Kubernetes service) with detailed instructions and troubleshooting tips.
+content:
+  h1: Migrating Docker workloads to Kubernetes Kapsule
+  paragraph: This guide helps you migrate Docker applications to Scaleway Kapsule (Scaleway's managed Kubernetes service) with detailed instructions and troubleshooting tips.
+tags: docker k8s kubernetes kapsule migration
+categories:
+  - kubernetes
+dates:
+  validation: 2024-11-14
+  posted: 2024-11-14
+---
+
+This step-by-step guide will help you migrate your applications packaged in Docker containers to **Scaleway Kubernetes Kapsule**, Scaleway's managed Kubernetes service.
+Whether you are new to Kubernetes or have some experience, this guide aims to simplify the migration process, addressing common challenges and providing clear instructions.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Basic knowledge and familiarity with Docker and basic Kubernetes concepts.
+- Access to your Docker images (locally or in a registry).
+- The following tools installed:
+  - [Docker](https://docs.docker.com/get-docker/)
+  - [kubectl](https://kubernetes.io/docs/tasks/tools/)
+  - [Scaleway CLI (optional but recommended)](https://www.scaleway.com/en/docs/cli/install)
+
+## Overview of Steps
+
+- [Step 1: Review your Docker applications](#step-1-check-your-docker-applications)
+- [Step 2: Push Docker images to a container registry](#step-2-push-docker-images-to-a-container-registry)
+- [Step 3: Create a Kapsule Kubernetes cluster](#step-3-create-a-kapsule-kubernetes-cluster)
+- [Step 4: Configure kubectl to connect to your cluster](#step-4-configure-kubectl-to-connect-to-your-cluster)
+- [Step 5: Create Kubernetes manifests for your applications](#step-5-create-kubernetes-manifests-for-your-applications)
+- [Step 6: Deploy your applications to the cluster](#step-6-deploy-your-applications-to-the-cluster)
+- [Step 7: Access and test your applications](#step-7-access-and-test-your-applications)
+- [Step 8: Optional configurations (networking, storage, autoscaling)](#step-8-optional-configurations)
+- [Step 9: Monitor and maintain your deployments](#step-9-monitor-and-maintain-your-deployments)
+
+## Step 1: Check your Docker applications
+
+Before you begin the migration, take some time to:
+
+- **Verify your Dockerfiles**: Make sure they build without errors.
+- **List environment variables**: Note any necessary environment variables or config files.
+- **Identify dependencies**: Write down any external services or databases your app relies on.
+- **Assess storage needs**: Determine if your application requires persistent storage.
+
+## Step 2: Push Docker images to a container registry
+
+Your Kubernetes cluster needs access to your Docker images. You can use:
+
+- [Scaleway Container Registry](/containers/container-registry/quickstart/) (recommended)
+- Other registries (e.g., Docker Hub or GitHub Container Registry)
+
+### 2.1 Create a namespace in Scaleway Container Registry
+
+
+1. Click **Container Registry** in the **Containers** section of the [Scaleway console](https://console.scaleway.com) side menu. If you do not have a Registry already created, the product creation page is displayed.
+2. Click **Create namespace** to launch the namespace creation wizard.
+3. Enter the following required information for your namespace:
+    * A **Name** for the namespace
+    * A **Description** of the namespace
+    * The geographical **Region** of the namespace
+    * The namespace's **Privacy Policies**
+
+    <Message type="note">
+      A namespace can either be [public or private](/containers/container-registry/concepts/#namespace-privacy-policies). Anyone will be able to pull container images from a public namespace. Privacy policies may be set at image level.
+    </Message>
+4. Click **Create namespace** to create the namespace.
+
+### 2.2 Authenticate Docker with Scaleway Registry
+
+```
+docker login rg.<region>.scw.cloud
+```
+<Message type="note">
+  Use your **Scaleway credentials** when prompted.
+</Message>
+
+### 2.3 Build and push your Docker images
+
+<Message type="note">
+  Replace `<region>` with your registry region (e.g., `fr-par`).
+</Message>
+
+```
+# Build your Docker image
+docker build -t my-app:latest .
+
+# Tag the image for Scaleway Registry
+docker tag my-app:latest rg.<region>.scw.cloud/my-apps/my-app:latest
+
+# Push the image to Scaleway Registry
+docker push rg.<region>.scw.cloud/my-apps/my-app:latest
+```
+
+## Step 3: Create a Kubernetes Kapsule cluster
+
+### 3.1 Create the cluster via Scaleway console
+
+#### Cluster configuration
+
+1. Navigate to **Kubernetes** under the **Containers** section of the [Scaleway console](https://console.scaleway.com/) side menu. The Kubernetes dashboard displays.
+2. Click **Create cluster** to launch the cluster creation wizard.
+3. On the cluster configuration page, provide the following details:
+    * Check the Organization and Project for the new cluster.
+        <Message type="important">
+          You cannot move a cluster from one Organization or Project to another once created.
+        </Message>
+    * Select **Kubernetes Kapsule** as the cluster type, which uses exclusively Scaleway Instances.
+    * Choose the geographical **region** for the cluster.
+    * Select the control plane offer for your cluster. Options include shared or dedicated control planes.
+        <Message type="tip">
+          Need help deciding on a control plane offer? Learn more about our [Kubernetes control plane offers](/containers/kubernetes/reference-content/kubernetes-control-plane-offers/).
+        </Message>
+    * Specify the **Kubernetes version** for your cluster.
+4. Enter the **cluster's details**. Provide a name for the cluster. Optionally, you can add a description and tags for better organization.
+5. Configure the **Private Network** for the cluster to ensure secure and isolated network communication. Each cluster is auto-configured with a /22 IP subnet. Click **Select Private Network** to:
+    * Attach an existing Private Network (VPC) within the same Availability Zone from the drop-down menu.
+    * Attach a new Private Network to the cluster.
+    <Message type="important">
+      The Private Network cannot be detached, and the cluster cannot be moved to another Private Network post-creation.
+    </Message>
+6. Click **Configure pools** to proceed.
+
+#### Pool configuration
+
+This section outlines the settings for your cluster pools. You can configure as many pools for your cluster as you require.
+
+1. Configure the following for each pool:
+    * Choose an **Availability Zone** for the pool's nodes.
+    * Select the **node type** for the pool.
+        <Message type="tip">
+          Need advice on choosing a node type? [Learn more about Kubernetes nodes.](/containers/kubernetes/concepts/#node)
+        </Message>
+    * Configure the **system volume**. This volume contains the operating system of the nodes in your pool.
+    * Configure **pool options**, including node count and whether to enable autoscaling. Options also include enabling autoheal and linking to a placement group, or you can retain default settings.
+        <Message type="tip">
+          - Unsure about the autoheal feature? [Learn more about autoheal.](/containers/kubernetes/concepts/#autoheal)
+          - Need more information about placement groups? [Learn more about placement groups.](/compute/instances/concepts/#placement-groups)
+        </Message>
+    * Enable full isolation, if required.
+        <Message type="tip">
+          Need more information on full isolation? [Learn more about full isolation.](/containers/kubernetes/reference-content/secure-cluster-with-private-network/#what-is-the-difference-between-controlled-isolation-and-full-isolation)
+        </Message>
+2. Click **Add pool** to integrate the pool into the cluster.
+3. To add more pools, click **Expand** and repeat the steps above.
+    <Message type="tip">
+      You can add or remove pools as needed before finalizing your cluster configuration. To remove a pool, click **Remove** within the respective pool.
+    </Message>
+4. Once all pools are configured, click **Review** to finalize your cluster setup.
+
+#### Review configuration
+
+1. Review the configuration details of your Kubernetes cluster and its pools.
+    <Message type="tip">
+      To modify any element, click the <Icon name="edit" /> **Edit** icon next to the respective configuration component.
+    </Message>
+2. Click **Create cluster** to deploy your cluster. Once deployment is complete, the cluster appears in the clusters list.
+
+<Message type="tip">
+  Refer to the [How to create a Kubernetes Kapsule cluster](/containers/kubernetes/how-to/create-cluster/) for more information.
+</Message>
+
+### 3.2 Wait for the cluster to be ready
+
+- The cluster creation may take several minutes.
+- Once ready, you will see the cluster status as **Ready**.
+
+## Step 4: Configure kubectl to connect to your cluster
+
+### 4.1 Download kubeconfig file
+
+1. In the Scaleway Console, go to your cluster's **Overview** page.
+2. Click **Download kubeconfig**.
+3. Save the file to a secure location (e.g., `~/.kube/kapsule-config`).
+
+### 4.2 Set up kubeconfig environment variable
+
+```sh
+export KUBECONFIG=~/.kube/kapsule-config
+```
+
+### 4.3 Verify connection to the cluster
+
+```
+kubectl get nodes
+```
+- You should see a list of your cluster's nodes.
+
+## Step 5: Create Kubernetes manifests for your applications
+
+### 5.1 Create a deployment manifest
+
+Create a file named `deployment.yaml`:
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: my-app-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: my-app
+  template:
+    metadata:
+      labels:
+        app: my-app
+    spec:
+      containers:
+        - name: my-app
+          image: rg.<region>.scw.cloud/my-apps/my-app:latest
+          ports:
+            - containerPort: 80
+```
+
+<Message type="note">
+   Replace image name and container port as per your application.
+</Message>
+
+### 5.2 Create a service manifest
+
+Create a file named `service.yaml`:
+
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-app-service
+spec:
+  type: LoadBalancer
+  selector:
+    app: my-app
+  ports:
+    - port: 80
+      targetPort: 80
+```
+
+## Step 6: Deploy your applications to the cluster
+
+### 6.1 Apply the deployment and service
+
+
+```sh
+kubectl apply -f deployment.yaml
+
+kubectl apply -f service.yaml
+```
+
+### 6.2 Verify deployment status
+
+```
+kubectl get deployments
+kubectl get pods
+kubectl get services
+```
+- Ensure pods are in **Running** state.
+- The service should show an **EXTERNAL-IP** once the load balancer is provisioned.
+
+## Step 7: Access and test your applications
+
+### 7.1 Get the external IP address
+
+```sh
+kubectl get service my-app-service
+```
+- Wait until the **EXTERNAL-IP** field is populated (may take a few minutes).
+
+### 7.2 Test your application
+
+- Open a web browser and navigate to `http://<EXTERNAL-IP>`.
+- Verify that your application is running as expected.
+
+## Step 8: Optional configurations
+
+### 8.1 Networking and security
+
+#### Set up Ingress Controller (Optional)
+
+For advanced routing and SSL termination, [deploy an ingress controller](/containers/kubernetes/how-to/deploy-ingress-controller/) like **NGINX Ingress**.
+```sh
+kubectl apply -f <https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.2.1/deploy/static/provider/cloud/deploy.yaml>
+```
+
+### 8.2 Persistent storage
+
+#### Create a PersistentVolumeClaim (PVC)
+
+Create `pvc.yaml`:
+
+```yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: my-app-pvc
+spec:
+  accessModes:
+  - ReadWriteOnce
+  resources:
+    requests:
+      storage: 10Gi
+```
+
+#### Update deployment to use PVC
+
+Modify `deployment.yaml`:
+
+```yaml
+spec:
+      containers:
+      - name: my-app
+        image: rg.<region>.scw.cloud/my-apps/my-app:latest
+        volumeMounts:
+        - mountPath: "/data"
+          name: my-app-storage
+      volumes:
+      - name: my-app-storage
+        persistentVolumeClaim:
+          claimName: my-app-pvc
+```
+
+#### Apply PVC manifest
+
+```sh
+kubectl apply -f pvc.yaml
+kubectl apply -f deployment.yaml
+```
+
+### 8.3 Autoscaling (Optional)
+
+#### Deploy Horizontal Pod Autoscaler (HPA)
+
+Create `hpa.yaml`:
+
+```yaml
+apiVersion: autoscaling/v2beta2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: my-app-hpa
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: my-app-deployment
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+```
+
+Apply the HPA:
+
+```sh
+kubectl apply -f hpa.yaml
+```
+
+## Step 9: Monitor and maintain your deployments
+
+### 9.1 Set up monitoring
+
+- Deploy monitoring tools like **Prometheus** and **Grafana**.
+- Use **[Scaleway Cockpit](/observability/cockpit/quickstart/)** for basic monitoring and metrics.
+
+### 9.2 Logging
+
+- Ensure logs are being collected and stored.
+- Consider deploying a logging stack like **ELK (Elasticsearch, Logstash, Kibana)** or **EFK (Elasticsearch, Fluentd, Kibana)**.
+
+### 9.3 Regular updates
+
+- Keep your [Kubernetes cluster](/containers/kubernetes/how-to/upgrade-kubernetes-version/) and applications up to date.
+- Regularly check for updates to dependencies and security patches.
+
+## Troubleshooting tips
+
+- **Permission Issues**: If you encounter IAM permission errors, verify your Scaleway account permissions and ensure your IAM policies allow necessary actions.
+- **Image Pull Errors**: Ensure your images are correctly tagged and pushed to the registry, and that your cluster has access to the registry.
+- **Service Not Accessible**: Check that your service has an external IP and that firewall rules (Security Groups) allow incoming traffic on required ports.
+- **Pod Errors**: Use kubectl logs `<pod-name>` to inspect logs and kubectl describe pod `<pod-name>` for detailed pod information.
+
+## Additional resources
+
+- **Scaleway Documentation**:
+  - [Kubernetes Kapsule Documentation](/compute/kubernetes/)
+  - [Scaleway Container Registry](/containers/container-registry/)
+- **Kubernetes Documentation**:
+  - [Kubernetes Concepts](https://kubernetes.io/docs/concepts/)
+  - [Kubectl Cheat Sheet](https://kubernetes.io/docs/reference/kubectl/cheatsheet/)
+- **Community Support**:
+  - [Scaleway Community Slack](https://slack.scaleway.com/)
+  - [Kubernetes Slack](https://slack.k8s.io/)
+
+## Feedback and support
+
+If you have questions or need assistance:
+
+- **Scaleway Support**: Reach out via your [Scaleway console support](https://console.scaleway.com/support) options.
+- **Community Forums**: Engage with other users and Scaleway staff.
+
+Your feedback is valuable for enhancing our services and documentation.

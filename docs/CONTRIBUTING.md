@@ -118,7 +118,7 @@ You have to clone the project locally to work on it.
 1. Copy the following code and enter it in your terminal:
 
 ```bash
-git clone git@github.com:docs-content.git | bash -s -- cd docs-content && yarn
+git clone git@github.com:scaleway/docs-content.git | bash -s -- cd docs-content && yarn
 ```
 
 2. Ensure `yarn` has been run, if not run `yarn install`.

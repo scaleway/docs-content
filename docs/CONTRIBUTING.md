@@ -118,7 +118,7 @@ You have to clone the project locally to work on it.
 1. Copy the following code and enter it in your terminal:
 
 ```bash
-git clone git@github.com:docs-content.git | bash -s -- cd docs-content && yarn
+git clone git@github.com:scaleway/docs-content.git | bash -s -- cd docs-content && yarn
 ```
 
 2. Ensure `yarn` has been run, if not run `yarn install`.
@@ -131,7 +131,7 @@ Helpful pre-commit commands:
 
 ### Commit conventions
 
-This project uses [conventionalcommits](https://www.conventionalcommits.org/en/v1.0.0/) based on the [Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines).
+This project uses [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) based on the [Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines).
 
 Here is a commit template example:
 

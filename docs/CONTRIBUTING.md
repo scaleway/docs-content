@@ -131,7 +131,7 @@ Helpful pre-commit commands:
 
 ### Commit conventions
 
-This project uses [conventionalcommits](https://www.conventionalcommits.org/en/v1.0.0/) based on the [Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines).
+This project uses [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) based on the [Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines).
 
 Here is a commit template example:
 

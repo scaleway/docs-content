@@ -10,7 +10,7 @@ categories:
   - kubernetes
   - instances
 dates:
-  validation: 2024-05-13
+  validation: 2024-11-18
   posted: 2018-04-07
 ---
 
@@ -63,78 +63,69 @@ Kafka is built in Scala and Java and can run on any platform that is capable of 
   For security reasons, it is not recommended to run your applications as root user. You should create a dedicated Kafka user and run the application with user privileges.
 </Message>
 
-1. Update the system and download a Java environment as Kafka relies on it:
+1. Update the system and download a Java environment as Kafka relies on it. Kafka 3.8.1 requires Java 11 or later. Install OpenJDK 17:
     ```
-    apt update &&  apt upgrade
-    apt install openjdk-11-jdk
+    apt update && apt upgrade
+    apt install openjdk-17-jdk
     ```
-
-    Kafka relies on [ZooKeeper](https://zookeeper.apache.org/) to coordinate and synchronize information between the different Kafka nodes. The Kafka package comes pre-packed with a ZooKeeper application, but as it is available in Ubuntu's repository we can install it easily with `apt`.
-2. Install `ZooKeeper`
+2. Download Kafka and extract it
     ```
-     apt install zookeeperd
-    ```
-3. Download Kafka and extract it
-    ```
-    wget https://downloads.apache.org/kafka/3.7.0/kafka-3.7.0-src.tgz
-    tar -zxf kafka-3.7.0-src.tgz
-    mv kafka-3.6.0-src /usr/local/kafka
+    wget https://downloads.apache.org/kafka/3.8.1/kafka_2.13-3.8.1.tgz
+    tar -zxf kafka_2.13-3.8.1.tgz
+    mv kafka_2.13-3.8.1 /usr/local/kafka
     mkdir /tmp/kafka-logs
     ```
-4. Enter the Kafka directory and start the Gradle daemon
-    ```
-    cd /usr/local/kafka
-    ./gradlew jar
-    ```
-5. Start the ZooKeeper service:
-    ```
-    /usr/local/kafka/bin/zookeeper-server-start.sh /usr/local/kafka/config/zookeeper.properties
-    ```
-6. Open another terminal session and start the first Kafka broker
-    ```
-    /usr/local/kafka/bin/kafka-server-start.sh /usr/local/kafka/config/server.properties
-    ```
+3. Configure Kafka for KRaft Mode (ZooKeeper-less) and initialize the Kafka cluster:
+   ```bash
+   /usr/local/kafka/bin/kafka-storage.sh format -t <cluster-id> -c /usr/local/kafka/config/kraft/server.properties
+   ```
+   <Message type="note">
+     Replace `<cluster-id>` with a unique identifier for your cluster.
+   </Message>
 
-    Kafka stores the data in topics. Topics can be seen as a table in a database or a folder in a file system. It contains the messages sent to Kafka.
-7. Create the first topic
-    ```
-    /usr/local/kafka/$ bin/kafka-topics.sh --create --topic test --bootstrap-server localhost:9092
-    ```
+   Edit the `server.properties` file:
+   ```properties
+   process.roles=broker,controller
+   node.id=1
+   controller.quorum.voters=1@localhost:9093,2@localhost:9094,3@localhost:9095
+   listeners=PLAINTEXT://localhost:9092,CONTROLLER://localhost:9093
+   listener.security.protocol.map=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+   inter.broker.listener.name=PLAINTEXT
+   log.dirs=/tmp/kafka-logs
+   ```
 
-    This command will create a topic `test` by passing via the ZooKeeper instance running on `localhost:9092` and we get a response: `Created topic "test"`.
+4. Start the Kafka Broker:
+   ```bash
+   /usr/local/kafka/bin/kafka-server-start.sh /usr/local/kafka/config/kraft/server.properties
+   ```
 
-Our first Kafka broker is ready now to receive some messages.
+## Creating a topic
+
+Create a topic named `test` using the following command:
+```bash
+/usr/local/kafka/bin/kafka-topics.sh --create --topic test --bootstrap-server localhost:9092 --partitions 1 --replication-factor 1
+```
+You should see the response: `Created topic "test"`.
 
 ## Sending messages
 
-Kafka comes with a command line tool that can to send messages to our broker.
-
-1. Send the first messages
-    ```
-    /usr/local/kafka/bin/kafka-console-producer.sh --topic test --bootstrap-server localhost:9092
-    ```
-2. Type some messages that we can send to Kafka:
-    ```
-    This is a test message
-    This is another test message
-    ```
-
-    It is possible to exit the tool by pressing on `CTRL+C`.
+Use the Kafka producer tool to send messages:
+```bash
+/usr/local/kafka/bin/kafka-console-producer.sh --topic test --bootstrap-server localhost:9092
+```
+Type messages and press `CTRL+C` to exit:
+```
+This is a test message
+This is another test message
+```
 
 ## Starting a consumer
 
-1. As we have sent some messages to Kafka, start a consumer
-    ```
-    /usr/local/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --topic test --from-beginning
-    ```
-
-    The messages that we have sent previously to Kafka will appear on the client:
-
-    ```
-    This is a test message
-    This is another test message
-    ```
-2. Exit the tool by pressing `CTRL+C` on your keyboard.
+Use the Kafka consumer tool to read messages:
+```bash
+/usr/local/kafka/bin/kafka-console-consumer.sh --topic test --bootstrap-server localhost:9092 --from-beginning
+```
+The messages you sent will appear. Press `CTRL+C` to exit.
 
 ## Starting a multi-broker cluster
 
@@ -144,71 +135,56 @@ _If you configure Kafka for testing purposes you can run the different brokers o
 
 We will setup a cluster consisting of three Kafka brokers. This will allow us to keep the cluster running even if one broker fails.
 
-1. First, we have to clone the configuration files
+1. Clone the configuration files:
     ```
-     cp /usr/local/kafka/config/server.properties /usr/local/kafka/config/server-1.properties
-     cp /usr/local/kafka/config/server.properties /usr/local/kafka/config/server-2.properties
+    cp /usr/local/kafka/config/kraft/server.properties /usr/local/kafka/config/server-1.properties
+    cp /usr/local/kafka/config/kraft/server.properties /usr/local/kafka/config/server-2.properties
     ```
-
     Now we have to edit the configuration files to configure some parameters give a unique identifier to each instance.
-2. Modify the following parameters in `server-1.properties`
-    ```
-    broker.id=1
-    listeners=PLAINTEXT://localhost:9093
-    log.dir=/tmp/kafka-logs-1
-    ```
-3. Edit the file `server-2.properties` as follows
-    ```
-    broker.id=2
-    listeners=PLAINTEXT://localhost:9094
-    log.dir=/tmp/kafka-logs-2
-    ```
-4. Zookeeper and our first node are already started, start the two new nodes:
-    ```
-    /usr/local/kafka/bin/kafka-server-start.sh /usr/local/kafka/config/server-1.properties &
-    /usr/local/kafka/bin/kafka-server-start.sh /usr/local/kafka/config/server-2.properties &
-    ```
-5. Create a topic that is replicated on the three brokers:
-    ```
-    /usr/local/kafka/bin/kafka-topics.sh --create --zookeeper localhost:2181 --replication-factor 3 --partitions 1 --topic replicated-topic
-    ```
 
-    Our cluster is running now and has its fist topic `replicated-topic`.
-6. Run the following command to check the status of the cluster:
-    ```
-    /usr/local/kafka/bin/kafka-topics.sh --describe --zookeeper localhost:2181 --topic replicated-topic
-    Topic:replicated-topic    PartitionCount:1    ReplicationFactor:3    Configs:
-    Topic: replicated-topic    Partition: 0    Leader: 0    Replicas: 0,1,2    Isr: 0,1,2
-    ```
+2. Modify each configuration file:
+   - `server-1.properties`:
+     ```properties
+     node.id=2
+     listeners=PLAINTEXT://localhost:9094
+     log.dirs=/tmp/kafka-logs-1
+     ```
+   - `server-2.properties`:
+     ```properties
+     node.id=3
+     listeners=PLAINTEXT://localhost:9095
+     log.dirs=/tmp/kafka-logs-2
+     ```
 
-    Since our cluster has only one topic, there is only one line. Here is the information on how to read it:
-      - **"Leader"** is the responsible node for reads and writes on the given partition. Each node will be a leader for a randomly chosen part of partitions.
-      - **"Replicas"** contains the list of nodes that replicate the log for this partition. This listing contains all nodes, no matter if they are the leader or if they are currently reachable (they might be out of sync).
-      - **"Isr"** contains the set of "in-sync" replicas. This is the subset of replicas that are currently active and connected to the leader.
-7. Our cluster is up and running now. Let's feed some test messages to it:
-    ```
-    /usr/local/kafka/bin/kafka-console-producer.sh --broker-list localhost:9092 --topic replicated-topic
-    ```
+3. Start additional brokers:
+   ```bash
+   /usr/local/kafka/bin/kafka-server-start.sh /usr/local/kafka/config/server-1.properties &
+   /usr/local/kafka/bin/kafka-server-start.sh /usr/local/kafka/config/server-2.properties &
+   ```
 
-    Type some messages and press `CTRL+C` to exit the `producer`:
+4. Create a replicated topic:
+   ```bash
+   /usr/local/kafka/bin/kafka-topics.sh --create --topic replicated-topic --bootstrap-server localhost:9092 --partitions 1 --replication-factor 3
+   ```
 
-    ```
-    This is a first test message
-    This is a second test message
-    ...
-    ```
-8. Let us consume the data
-    ```
-    /usr/local/kafka/bin/kafka-console-consumer.sh --bootstrap-server localhost:9092 --from-beginning --topic replicated-topic
-    ```
+5. Check cluster status:
+   ```bash
+   /usr/local/kafka/bin/kafka-topics.sh --describe --bootstrap-server localhost:9092 --topic replicated-topic
+   ```
 
-    The messages will appear on the screen. To exit the `consumer` press on `CTRL+C`on your keyboard.
+## Security best practices
 
-    ```
-    This is a first test message
-    This is a second test message
-    ...
-    ```
+1. Enable TLS/SSL to configure secure communication:
+   ```properties
+   listeners=SSL://localhost:9092
+   ssl.keystore.location=/path/to/keystore.jks
+   ssl.keystore.password=your-keystore-password
+   ssl.key.password=your-key-password
+   ssl.truststore.location=/path/to/truststore.jks
+   ssl.truststore.password=your-truststore-password
+   ```
+
+2. Use SASL or OAuth2 for authentication and define ACLs for resource access.
 
 ## Importing and exporting data with Kafka Connect
 

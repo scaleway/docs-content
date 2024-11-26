@@ -34,11 +34,17 @@ In this tutorial, you will learn how to implement RAG using LangChain, a leading
 
 ### Install required packages
 
-Run the following command to install the required packages:
+Run the following command to install the required python packages:
 
    ```sh
-   pip install langchain psycopg2 python-dotenv langchainhub
+   pip install langchain langchainhub langchain_openai langchain_community langchain_postgres unstructured "unstructured[pdf]" libmagic psycopg2 python-dotenv boto3
    ```
+
+If you are on MacOS, run the following command to install dependencies required by `unstructured` package:
+   ```sh
+   brew install libmagic poppler tesseract qpdf
+   ```
+
 ### Create a .env file
 
 Create a .env file and add the following variables. These will store your API keys, database connection details, and other configuration values.
@@ -49,7 +55,7 @@ Create a .env file and add the following variables. These will store your API ke
    # Scaleway API credentials https://console.scaleway.com/iam/api-keys
    ## Will be used to authenticate to Scaleway Object Storage and Scaleway Generative APIs
    SCW_ACCESS_KEY=your_scaleway_access_key_id
-   SCW_API_KEY=your_scaleway_secret_key
+   SCW_SECRET_KEY=your_scaleway_secret_key
 
    # Scaleway Managed Database (PostgreSQL) credentials
    ## Will be used to store embeddings of your proprietary data
@@ -83,13 +89,6 @@ You can use any PostgreSQL client, such as [psql](https://www.postgresql.org/doc
 ```sql
    CREATE EXTENSION IF NOT EXISTS vector;
 ```
-### Create a table to track processed documents
-
-To prevent reprocessing documents that have already been loaded and vectorized, you should create a table to keep track of them. This will ensure that new documents added to your object storage bucket are only processed once, avoiding duplicate downloads and redundant vectorization:
-
-```sql
- CREATE TABLE IF NOT EXISTS object_loaded (id SERIAL PRIMARY KEY, object_key TEXT);
-```
 
 ### Connect to PostgreSQL programmatically
 
@@ -101,6 +100,7 @@ Connect to your PostgreSQL instance and perform tasks programmatically.
 from dotenv import load_dotenv
 import psycopg2
 import os
+import logging
 
 # Load environment variables
 load_dotenv()
@@ -129,30 +129,24 @@ from langchain_openai import OpenAIEmbeddings
 from langchain_postgres import PGVector
 ```
 
-### Configure OpenAI Embeddings
+### Configure embeddings client
 
-We will use the [OpenAIEmbeddings](https://api.python.langchain.com/en/latest/embeddings/langchain_openai.embeddings.base.OpenAIEmbeddings.html) class from LangChain and store the embeddings in PostgreSQL using the PGVector integration.
+Configure [OpenAIEmbeddings](https://api.python.langchain.com/en/latest/embeddings/langchain_openai.embeddings.base.OpenAIEmbeddings.html) class from LangChain to use your API Secret Key, Generative APIs Endpoint URL and a supported model (`bge-multilingual-gemma2` in our example).
 
 ```python
 # rag.py
 
 embeddings = OpenAIEmbeddings(
-                openai_api_key=os.getenv("SCW_API_KEY"),
+                openai_api_key=os.getenv("SCW_SECRET_KEY"),
                 openai_api_base=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
-                model="sentence-t5-xxl",
-                tiktoken_enabled=False,
+                model="bge-multilingual-gemma2",
+                check_embedding_ctx_length=False
             )
 ```
 
-#### Key parameters:
-- `openai_api_key`: This is your API key for accessing the OpenAI-powered embeddings service, in this case, hosted by Scaleway’s Generative APIs.
-- `openai_api_base`: This is the base URL that points Scaleway Generative APIs where the embedding model is hosted. This URL serves as the entry point to make API calls for generating embeddings.
-- `model="sentence-t5-xxl"`: This defines the specific model being used for text embeddings. sentence-transformers/sentence-t5-xxl is a powerful model optimized for generating high-quality sentence embeddings, making it ideal for tasks like document retrieval in RAG systems.
-- `tiktoken_enabled=False`: This parameter disables the use of TikToken for tokenization within the embeddings process.
+### Configure vector store client
 
-### Create a pgvector store
-
-Configure the connection string for your PostgreSQL instance and create a pgvector store to store these embeddings.
+Configure connection to your PostgreSQL instance storing vectors.
 
 ```python
 # rag.py
@@ -189,7 +183,7 @@ By loading the metadata for all objects in your bucket, you can speed up the pro
 session = boto3.session.Session()
 client_s3 = session.client(service_name='s3', endpoint_url=os.getenv("SCW_BUCKET_ENDPOINT", ""),
                                aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
-                               aws_secret_access_key=os.getenv("SCW_API_KEY", ""))
+                               aws_secret_access_key=os.getenv("SCW_SECRET_KEY", ""))
 paginator = client_s3.get_paginator('list_objects_v2')
 page_iterator = paginator.paginate(Bucket=os.getenv("SCW_BUCKET_NAME", ""))
 ```
@@ -218,7 +212,7 @@ for page in page_iterator:
                     key=obj['Key'],
                     endpoint_url=os.getenv("SCW_BUCKET_ENDPOINT", ""),
                     aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
-                    aws_secret_access_key=os.getenv("SCW_API_KEY", "")
+                    aws_secret_access_key=os.getenv("SCW_SECRET_KEY", "")
                 )
             file_to_load = file_loader.load()
             cur.execute("INSERT INTO object_loaded (object_key) VALUES (%s)", (obj['Key'],))
@@ -271,7 +265,7 @@ Now, set up the RAG system to handle queries
 
 llm = ChatOpenAI(
         base_url=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
-        api_key=os.getenv("SCW_API_KEY"),
+        api_key=os.getenv("SCW_SECRET_KEY"),
         model="llama-3.1-8b-instruct",
         )
 

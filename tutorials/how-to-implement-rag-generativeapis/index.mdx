@@ -34,20 +34,20 @@ In this tutorial, you will learn how to implement RAG using LangChain, a leading
 
 ### Install required packages
 
-Run the following command to install the required python packages:
+1. Run the following command to install the required python packages:
 
    ```sh
    pip install langchain langchainhub langchain_openai langchain_community langchain_postgres unstructured "unstructured[pdf]" libmagic psycopg2 python-dotenv boto3
    ```
 
-If you are on MacOS, run the following command to install dependencies required by the `unstructured` package:
+   If you are on MacOS, run also the following command to install dependencies required by the `unstructured` package:
    ```sh
    brew install libmagic poppler tesseract qpdf
    ```
 
 ### Create a .env file
 
-Create a .env file and add the following variables. These will store your API keys, database connection details, and other configuration values.
+2. Create a `.env` file and add the following variables. These will store your API keys, database connection details, and other configuration values.
 
    ```sh
    # .env file
@@ -61,7 +61,7 @@ Create a .env file and add the following variables. These will store your API ke
    ## Will be used to store embeddings of your proprietary data
    SCW_DB_USER=your_scaleway_managed_db_username
    SCW_DB_PASSWORD=your_scaleway_managed_db_password
-   SCW_DB_NAME="rdb"
+   SCW_DB_NAME=rdb
    SCW_DB_HOST=your_scaleway_managed_db_host  # The IP address of your database instance
    SCW_DB_PORT=your_scaleway_managed_db_port  # The port number for your database instance
 
@@ -76,142 +76,115 @@ Create a .env file and add the following variables. These will store your API ke
    SCW_GENERATIVE_APIs_ENDPOINT="https://api.scaleway.ai/v1"
    ```
 
-## Setting Up Scaleway Managed Database
-
-### Connect to PostgreSQL programmatically
-
-Connect to your PostgreSQL instance and perform tasks programmatically.
-
- ```python
- # rag.py file
-
-
-
-   ```
-
 ## Embeddings and vector store setup
 
 ### Import required modules
 
-```python
-# rag.py
-from dotenv import load_dotenv
-import os
-
-from langchain_openai import OpenAIEmbeddings
-from langchain_postgres import PGVector
-
-# Load environment variables from .env file
-load_dotenv()
-```
+3. Create a `rag.py` file and add the following code to it:
+   ```python
+   # rag.py
+   from dotenv import load_dotenv
+   import os
+   
+   from langchain_openai import OpenAIEmbeddings
+   from langchain_postgres import PGVector
+   
+   # Load environment variables from .env file
+   load_dotenv()
+   ```
 
 ### Configure embeddings client
 
-Configure [OpenAIEmbeddings](https://api.python.langchain.com/en/latest/embeddings/langchain_openai.embeddings.base.OpenAIEmbeddings.html) class from LangChain to use your API Secret Key, Generative APIs Endpoint URL and a supported model (`bge-multilingual-gemma2` in our example).
+4. Configure [OpenAIEmbeddings](https://api.python.langchain.com/en/latest/embeddings/langchain_openai.embeddings.base.OpenAIEmbeddings.html) class from LangChain to use your API Secret Key, Generative APIs Endpoint URL and a supported model (`bge-multilingual-gemma2` in our example).
 
 ```python
 # rag.py
 
 embeddings = OpenAIEmbeddings(
-                openai_api_key=os.getenv("SCW_SECRET_KEY"),
-                openai_api_base=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
-                model="bge-multilingual-gemma2",
-                check_embedding_ctx_length=False
-            )
+    openai_api_key=os.getenv("SCW_SECRET_KEY"),
+    openai_api_base=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
+    model="bge-multilingual-gemma2",
+    check_embedding_ctx_length=False
+)
 ```
 
 ### Configure vector store client
 
-Configure connection to your PostgreSQL instance storing vectors.
+5. Configure connection to your Managed Database for PostgreSQL Instance storing vectors:
 
 ```python
 # rag.py
 
-connection_string = f"postgresql+psycopg2://{conn.info.user}:{conn.info.password}@{conn.info.host}:{conn.info.port}/{conn.info.dbname}"
+connection_string = f'postgresql+psycopg2://{os.getenv("SCW_DB_USER")}:{os.getenv("SCW_DB_PASSWORD")}@{os.getenv("SCW_DB_HOST")}:{os.getenv("SCW_DB_PORT")}/{os.getenv("SCW_DB_NAME")}'
 vector_store = PGVector(connection=connection_string, embeddings=embeddings)
 ```
 
+    <Message type="tip">
+    You do not need to install pgvector manually using `CREATE EXTENSION vector` as Langchain will automatically detect it is not present and install it when calling adapter `PGVector`.
+    </Message>
+
 ## Load and process documents
 
-At this stage, you need to have proprietary data (e.g., PDF, CSV) stored in your Scaleway Object storage bucket.
+6. At this stage, you need to have data (e.g. PDF files) stored in your Scaleway Object storage bucket. As examples, you can download our [Instance CLI cheatsheet](https://www-uploads.scaleway.com/Instances_CLI_Cheatsheet_7ae4ed5564.pdf) and our [Kubernetes cheatsheets](https://www.scaleway.com/en/docs/static/be9a6e5821a4e8e268c7c5bd3624e256/scaleway-kubernetes-cheatsheet.pdf) and store them into your [Object Storage bucket](https://console.scaleway.com/object-storage/buckets).
 
 Below we will use LangChain's [`S3FileLoader`](https://api.python.langchain.com/en/latest/document_loaders/langchain_community.document_loaders.s3_file.S3FileLoader.html) to load documents, and split them into chunks. 
-Then, we will embed and store them in your PostgreSQL database.
+Then, we will embed them as vectors and store these vectors in your PostgreSQL database.
 
 ### Import required modules
 
-```python
-#rag.py
+7. Edit the beginning of `rag.py` to import `boto3`, `S3FileLoader` and `RecursiveCharacterTextSplitter`:
 
-import boto3
-from langchain_community.document_loaders import S3FileLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+   ```python
+   #rag.py
+   
+   import boto3
+   from langchain_community.document_loaders import S3FileLoader
+   from langchain.text_splitter import RecursiveCharacterTextSplitter
+   
+   ```
 
-```
+### Configure S3 client and list objects from bucket
 
-### Load metadata for improved efficiency
+8. Edit `rag.py` to list objects:
 
-By loading the metadata for all objects in your bucket, you can speed up the process significantly. This allows you to quickly check if a document has already been embedded without the need to load the entire document.
+   ```python
+   # rag.py
+   
+   session = boto3.session.Session()
+   client_s3 = session.client(
+       service_name='s3', 
+       endpoint_url=os.getenv("SCW_BUCKET_ENDPOINT", ""),
+       aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
+       aws_secret_access_key=os.getenv("SCW_API_KEY", "")
+   )
+   paginator = client_s3.get_paginator('list_objects_v2')
+   page_iterator = paginator.paginate(Bucket=os.getenv("SCW_BUCKET_NAME", ""))
+   ```
 
-```python
-# rag.py
+### Iterate through objects
 
-session = boto3.session.Session()
-client_s3 = session.client(service_name='s3', 
-                           endpoint_url=os.getenv("SCW_BUCKET_ENDPOINT", ""),
-                           aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
-                           aws_secret_access_key=os.getenv("SCW_SECRET_KEY", ""))
-paginator = client_s3.get_paginator('list_objects_v2')
-page_iterator = paginator.paginate(Bucket=os.getenv("SCW_BUCKET_NAME", ""))
-```
+9. Edit `rag.py` to load all files in your bucket using `S3DirectoryLoader`, split them into chunks of 500 characters using `RecursiveCharacterTextSplitter` and embed them and store them into your PostgreSQL database using `PGVector`.
 
-### Iterate through metadata
+   ```python
+   # rag.py
+   
+   text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0, add_start_index=True, length_function=len, is_separator_regex=False)
+   file_loader = S3DirectoryLoader(
+       bucket=os.getenv("SCW_BUCKET_NAME", ""),
+       prefix="",
+       endpoint_url=os.getenv("SCW_BUCKET_ENDPOINT", ""),
+       aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
+       aws_secret_access_key=os.getenv("SCW_API_KEY", ""),
+       verify=None
+   )
+   for file in file_loader.lazy_load():
+       chunks = text_splitter.split_text(file.page_content)
+       embeddings_list = [embeddings.embed_query(chunk) for chunk in chunks]
+       vector_store.add_embeddings(chunks, embeddings_list)
+       print('Vectors successfully added for document',file.metadata['source'])
+   ```
 
-Next, we will iterate through the metadata to determine if each object has already been embedded. If an object hasn’t been processed yet, we will embed it and load it into the database.
-
-```python
-# rag.py
-
-text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0, add_start_index=True, length_function=len, is_separator_regex=False)
-for page in page_iterator:
-    for obj in page.get('Contents', []):
-        cur.execute("SELECT object_key FROM object_loaded WHERE object_key = %s", (obj['Key'],))
-        response = cur.fetchone()
-        if response is None:
-            file_loader = S3FileLoader(
-                    bucket=os.getenv("SCW_BUCKET_NAME", ""),
-                    key=obj['Key'],
-                    endpoint_url=os.getenv("SCW_BUCKET_ENDPOINT", ""),
-                    aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
-                    aws_secret_access_key=os.getenv("SCW_SECRET_KEY", "")
-                )
-            file_to_load = file_loader.load()
-            cur.execute("INSERT INTO object_loaded (object_key) VALUES (%s)", (obj['Key'],))
-            chunks = text_splitter.split_text(file_to_load[0].page_content)
-            try:
-                embeddings_list = [embeddings.embed_query(chunk) for chunk in chunks]
-                vector_store.add_embeddings(chunks, embeddings_list)
-                cur.execute("INSERT INTO object_loaded (object_key) VALUES (%s)", (obj['Key'],))
-            except Exception as e:
-                logger.error(f"An error occurred: {e}")
-
-conn.commit()
-```
-
-- S3FileLoader: the S3FileLoader loads each file individually from your **Scaleway Object Storage bucket** using the file's `object_key` (extracted from the file's metadata). It ensures that only the specific file is loaded from the bucket, minimizing the amount of data being retrieved at any given time.
-- RecursiveCharacterTextSplitter: the RecursiveCharacterTextSplitter breaks each document into smaller chunks of text. This is crucial, because embeddings models, like those used in Retrieval-Augmented Generation (RAG), typically have a limited context window (the number of tokens they can process at once).
-- Embedding the chunks: for each document, the text is split into smaller chunks using the text splitter, and an embedding is generated for each chunk using the embeddings.embed_query(chunk) function. This function transforms each chunk into a vector representation that can later be used for similarity search.
-- Embedding storage: after generating the embeddings for each chunk, they are stored in a vector database (e.g., PostgreSQL with pgvector) using the vector_store.add_embeddings(embedding, chunk) method. Each embedding is stored alongside its corresponding text chunk, enabling retrieval during a query.
-- Avoiding redundant processing: the script checks the `object_loaded` table in PostgreSQL to see if a document has already been processed (i.e., the `object_key` exists in the table). If it has, the file is skipped, avoiding redundant downloads, vectorization, and database inserts. This ensures that only new or modified documents are processed, reducing the system's computational load and saving both time and resources.
-
-#### Why 500 characters?
-
-The chunk size of 500 characters is chosen to fit comfortably within the context size limit of the embedding model used in this tutorial. By keeping chunks small, we avoid exceeding the model’s context window, which could lead to truncated embeddings or poor performance during inference.
-
-#### Why store both chunk and embedding?
-
-Storing both the chunk and its corresponding embedding allows for efficient document retrieval later.
-When a query is made, the RAG system will retrieve the most relevant embeddings, and the corresponding text chunks will be used to generate the final response.
+   The chunk size of 500 characters is chosen to fit within the context size limit of the embedding model used in this tutorial, but could be raised up to 4096 characters (or slightly more as context size is counted in tokens). Keeping chunks small also optimize performance during inference.
 
 ### Query the RAG System with a pre-defined prompt template
 

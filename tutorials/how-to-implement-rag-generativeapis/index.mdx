@@ -37,7 +37,7 @@ In this tutorial, you will learn how to implement RAG using LangChain, a leading
 1. Run the following command to install the required python packages:
 
    ```sh
-   pip install langchain langchainhub langchain_openai langchain_community langchain_postgres unstructured "unstructured[pdf]" libmagic python-dotenv
+   pip install langchain langchainhub langchain_openai langchain_community langchain_postgres unstructured "unstructured[pdf]" libmagic python-dotenv psycopg2 boto3
    ```
 
    If you are on MacOS, run also the following command to install dependencies required by the `unstructured` package:
@@ -110,14 +110,14 @@ embeddings = OpenAIEmbeddings(
 
 5. Edit `embed.py` to configure connection to your Managed Database for PostgreSQL Instance storing vectors:
 
-```python
-connection_string = f'postgresql+psycopg2://{os.getenv("SCW_DB_USER")}:{os.getenv("SCW_DB_PASSWORD")}@{os.getenv("SCW_DB_HOST")}:{os.getenv("SCW_DB_PORT")}/{os.getenv("SCW_DB_NAME")}'
-vector_store = PGVector(connection=connection_string, embeddings=embeddings)
-```
+   ```python
+   connection_string = f'postgresql+psycopg2://{os.getenv("SCW_DB_USER")}:{os.getenv("SCW_DB_PASSWORD")}@{os.getenv("SCW_DB_HOST")}:{os.getenv("SCW_DB_PORT")}/{os.getenv("SCW_DB_NAME")}'
+   vector_store = PGVector(connection=connection_string, embeddings=embeddings)
+   ```
 
-    <Message type="tip">
-    You do not need to install pgvector manually using `CREATE EXTENSION vector` as Langchain will automatically detect it is not present and install it when calling adapter `PGVector`.
-    </Message>
+   <Message type="tip">
+   You do not need to install pgvector manually using `CREATE EXTENSION vector` as Langchain will automatically detect it is not present and install it when calling adapter `PGVector`.
+   </Message>
 
 ## Load and process documents
 
@@ -133,28 +133,11 @@ Then, we will embed them as vectors and store these vectors in your PostgreSQL d
    ```python
    from langchain_community.document_loaders import S3DirectoryLoader
    from langchain.text_splitter import RecursiveCharacterTextSplitter
-   
-   ```
-
-### Configure S3 client and list objects from bucket
-
-8. Edit `embed.py` to list objects:
-
-   ```python
-   session = boto3.session.Session()
-   client_s3 = session.client(
-       service_name='s3', 
-       endpoint_url=os.getenv("SCW_BUCKET_ENDPOINT", ""),
-       aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
-       aws_secret_access_key=os.getenv("SCW_API_KEY", "")
-   )
-   paginator = client_s3.get_paginator('list_objects_v2')
-   page_iterator = paginator.paginate(Bucket=os.getenv("SCW_BUCKET_NAME", ""))
    ```
 
 ### Iterate through objects
 
-9. Edit `embed.py` to load all files in your bucket using `S3DirectoryLoader`, split them into chunks of 500 characters using `RecursiveCharacterTextSplitter` and embed them and store them into your PostgreSQL database using `PGVector`.
+8. Edit `embed.py` to load all files in your bucket using `S3DirectoryLoader`, split them into chunks of 500 characters using `RecursiveCharacterTextSplitter` and embed them and store them into your PostgreSQL database using `PGVector`.
 
    ```python
    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0, add_start_index=True, length_function=len, is_separator_regex=False)
@@ -163,7 +146,7 @@ Then, we will embed them as vectors and store these vectors in your PostgreSQL d
        prefix="",
        endpoint_url=os.getenv("SCW_BUCKET_ENDPOINT", ""),
        aws_access_key_id=os.getenv("SCW_ACCESS_KEY", ""),
-       aws_secret_access_key=os.getenv("SCW_API_KEY", ""),
+       aws_secret_access_key=os.getenv("SCW_SECRET_KEY", ""),
        verify=None
    )
    for file in file_loader.lazy_load():
@@ -175,7 +158,7 @@ Then, we will embed them as vectors and store these vectors in your PostgreSQL d
 
    The chunk size of 500 characters is chosen to fit within the context size limit of the embedding model used in this tutorial, but could be raised up to 4096 characters for `bge-multilingual-gemma2` model (or slightly more as context size is counted in tokens). Keeping chunks small also optimize performance during inference.
 
-10. You can now run you vector embedding script with:
+9. You can now run you vector embedding script with:
 
    ```sh
    python embed.py
@@ -255,10 +238,10 @@ Then, we will embed them as vectors and store these vectors in your PostgreSQL d
    for r in rag_chain.stream("Provide the CLI command to shut down a scaleway instance. Its instance-uuid is example-28f3-4e91-b2af-4c3502562d72"):
        print(r, end="", flush=True)
    ```
-   - `hub.pull("rlm/rag-prompt")` uses a standard RAG template, ensuring documents content retrieved will be passed as proper context along your prompt to the LLM.
-   - `vector_store.as_retriever()` configure your vector store as additional context to collect based on your prompt.
-   - `rag_chain` defines a workflow performing context retrieving, LLM prompting and finall pasing output in a streamlined way.
-   - `for r in rag_chain.stream("Prompt question")` defines a workflow performing context retrieving, LLM prompting and finall pasing output in a streamlined way.
+   - `hub.pull("rlm/rag-prompt")` uses a standard RAG template. This ensures documents content retrieved will be passed as context along your prompt to the LLM using a compatible format.
+   - `vector_store.as_retriever()` configures your vector store as additional context to retrieve before calling the LLM.
+   - `rag_chain` defines a workflow performing the following steps in order: Retrieve relevant documents, Prompt LLM with document as context, and final output parsing.
+   - `for r in rag_chain.stream("Prompt question")` starts the rag workflow with `Prompt question` as input.
 
 4. You can now execute your RAG pipeline with:
 
@@ -273,8 +256,8 @@ Then, we will embed them as vectors and store these vectors in your PostgreSQL d
    This will shut down the instance with the specified instance-uuid. 
    Please note that this command only stops the instance, it doesn't shut it down completely
    ```
-   This command is fully correct and can be used with Scaleway CLI. Note especially that vector embedding enabled the system to retrieve proper document chunks even if the Scaleway cheatsheet doesn't mention `shutdown` but only `power off`.
-   You can compare this result without RAG (for instance using [Generative APIs Playground](https://console.scaleway.com/generative-api/models/fr-par/playground?modelName=llama-3.1-8b-instruct)):
+   This command is fully correct and can be used with Scaleway CLI. Note especially that vector embedding enabled the system to retrieve proper document chunks even if the Scaleway cheatsheet never mention `shut down` but only `power off`.
+   You can compare this result without RAG (for instance by using the same prompt in [Generative APIs Playground](https://console.scaleway.com/generative-api/models/fr-par/playground?modelName=llama-3.1-8b-instruct)):
    ```sh
    scaleway instance shutdown --instance-uuid example-28f3-4e91-b2af-4c3502562d72
    ```
@@ -330,11 +313,19 @@ Personalizing your prompt template allows you to tailor the responses from your 
        print(r, end="", flush=True)
    ```
 
-   - `PromptTemplate` enable you to customize how retrieved context and question are passed through LLM prompt.
-   - `retriever.invoke` let you customize which part of the LLM input is used to retrieve context.
-   - `create_stuff_documents_chain`
+   - `PromptTemplate` enables you to customize how retrieved context and question are passed through LLM prompt.
+   - `retriever.invoke` lets you customize which part of the LLM input is used to retrieve documents.
+   - `create_stuff_documents_chain` provides the prompt template to the llm
 
-Congratulations ! You built a custom RAG pipeline to improve LLM answers based on specific documentation.
+6. You can now execute your custom RAG pipeline with:
+
+   ```sh
+   python rag.py
+   ```
+
+   Note that with Scaleway cheatsheets example, the CLI answer should be similar, but without additional explanations regarding the command line performed.
+
+Congratulations! You built a custom RAG pipeline to improve LLM answers based on specific documentation.
 
 You can now go further by:
 - Specializing your RAG pipeline for your use case (whether it's providing better answers for Customer support, finding relevant content through Internal Documentation, helping user generate more creative and personalized content, or much more)

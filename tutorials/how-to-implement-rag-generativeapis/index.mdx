@@ -207,49 +207,91 @@ Then, we will embed them as vectors and store these vectors in your PostgreSQL d
    ```python
    #rag.py
    
+   import os
+   from dotenv import load_dotenv
+   
+   from langchain_openai import OpenAIEmbeddings
+   from langchain_postgres import PGVector
    from langchain import hub
    from langchain_core.output_parsers import StrOutputParser
    from langchain_core.runnables import RunnablePassthrough
    from langchain_openai import ChatOpenAI
    ```
+   Note that we need to import Langchain components `StrOutputParser`, `RunnablePassthrough` and `ChatOpenAI` to implement a RAG pipeline.
 
-### Set up LLM for querying
+### Configure vector store
 
-Now, set up the RAG system to handle queries
+2. Edit `rag.py` to load `.env` file, and configure Embeddings format and Vector store:
 
-```python
-#rag.py
+   ```python
+   
+   load_dotenv()
+   
+   embeddings = OpenAIEmbeddings(
+       openai_api_key=os.getenv("SCW_SECRET_KEY"),
+       openai_api_base=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
+       model="bge-multilingual-gemma2",
+       check_embedding_ctx_length=False
+   )
+   
+   connection_string = f'postgresql+psycopg2://{os.getenv("SCW_DB_USER")}:{os.getenv("SCW_DB_PASSWORD")}@{os.getenv("SCW_DB_HOST")}:{os.getenv("SCW_DB_PORT")}/{os.getenv("SCW_DB_NAME")}'
+   vector_store = PGVector(connection=connection_string, embeddings=embeddings)
+   ```
+    <Message type="tip">
+    Note that configuration should be similar to the one used in `embed.py` to ensure vectors will be read in the same format as the one used to create and store them.
+    </Message>
 
-llm = ChatOpenAI(
-        base_url=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
-        api_key=os.getenv("SCW_SECRET_KEY"),
-        model="llama-3.1-8b-instruct",
-        )
 
-prompt = hub.pull("rlm/rag-prompt")
-retriever = vector_store.as_retriever()
+### Configure LLM client and create a basic RAG pipeline
 
+3. Edit `rag.py` to configure LLM client using `ChatOpenAI` and create a simple RAG pipeline:
 
-rag_chain = (
-        {"context": retriever, "question": RunnablePassthrough()}
-        | prompt
-        | llm
-        | StrOutputParser()
-    )
+   ```python
+   #rag.py
+   
+   llm = ChatOpenAI(
+           base_url=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
+           api_key=os.getenv("SCW_SECRET_KEY"),
+           model="llama-3.1-8b-instruct",
+           )
+   
+   prompt = hub.pull("rlm/rag-prompt")
+   retriever = vector_store.as_retriever()
+   
+   rag_chain = (
+           {"context": retriever, "question": RunnablePassthrough()}
+           | prompt
+           | llm
+           | StrOutputParser()
+       )
+   
+   for r in rag_chain.stream("Provide the CLI command to shut down a scaleway instance. Its instance-uuid is example-28f3-4e91-b2af-4c3502562d72"):
+       print(r, end="", flush=True)
+   ```
+   - `hub.pull("rlm/rag-prompt")` uses a standard RAG template, ensuring documents content retrieved will be passed as proper context along your prompt to the LLM.
+   - `vector_store.as_retriever()` configure your vector store as additional context to collect based on your prompt.
+   - `rag_chain` defines a workflow performing context retrieving, LLM prompting and finall pasing output in a streamlined way.
+   - `for r in rag_chain.stream("Prompt question")` defines a workflow performing context retrieving, LLM prompting and finall pasing output in a streamlined way.
 
-for r in rag_chain.stream("Your question"):
-    print(r, end="", flush=True)
-    time.sleep(0.1)
-```
-- LLM initialization: we initialize the ChatOpenAI instance using the endpoint and API key from the environment variables, along with the specified model name.
+4. You can now execute your RAG pipeline with:
 
-- Prompt setup: the prompt is pulled from the hub using a predefined template, ensuring consistent query formatting.
+   ```sh
+   python rag.py
+   ```
 
-- Retriever configuration: we set up the retriever to access the vector store, allowing the RAG system to retrieve relevant information based on the query.
+   If you used the Scaleway cheatsheet provided as examples, and asked for a CLI command to power of instance, you should see the following answer:
+   ```sh
+   scw instance server stop example-28f3-4e91-b2af-4c3502562d72 
 
-- RAG chain construction: we create the RAG chain, which connects the retriever, prompt, LLM, and output parser in a streamlined workflow.
-
-- Query execution: finally, we stream the output of the RAG chain for a specified question, printing each response with a slight delay for better readability.
+   This will shut down the instance with the specified instance-uuid. 
+   Please note that this command only stops the instance, it doesn't shut it down completely
+   ```
+   This command is fully correct and can be used with Scaleway CLI. Note especially that vector embedding enabled the system to retrieve proper document chunks even if the Scaleway cheatsheet doesn't mention `shutdown` but only `power off`.
+   You can compare this result without RAG (for instance using [Generative APIs Playground](https://console.scaleway.com/generative-api/models/fr-par/playground?modelName=llama-3.1-8b-instruct)):
+   ```sh
+   scaleway instance shutdown --instance-uuid example-28f3-4e91-b2af-4c3502562d72
+   ```
+   This is command is not correct at all, and hallucinate in several ways to fit the question prompt content: `scaleway` instead of `scw`, `instance` instead of `instance server`, `shutdown` instead of `stop` and `--instance-uuid` parameter doesn't exist.
 
 ### Query the RAG system with your own prompt template
 
@@ -277,7 +319,6 @@ custom_rag_chain = create_stuff_documents_chain(llm, custom_rag_prompt)
 context = retriever.invoke("your question")
 for r in custom_rag_chain.stream({"question":"your question", "context": context}):
     print(r, end="", flush=True)
-    time.sleep(0.1)
 ```
 
 - Prompt template: the prompt template is meticulously crafted to direct the model's responses. It clearly instructs the model on how to leverage the provided context and emphasizes the importance of honesty in cases where it lacks information.

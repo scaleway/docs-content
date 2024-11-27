@@ -297,55 +297,62 @@ Then, we will embed them as vectors and store these vectors in your PostgreSQL d
 
 Personalizing your prompt template allows you to tailor the responses from your RAG (Retrieval-Augmented Generation) system to better fit your specific needs. This can significantly improve the relevance and tone of the answers you receive. Below is a detailed guide on how to create a custom prompt for querying the system.
 
-```python
-#rag.py
+5. Replace `rag.py` content with the following:
 
-from langchain.chains.combine_documents import create_stuff_documents_chain
-from langchain_core.prompts import PromptTemplate
-from langchain_openai import ChatOpenAI
+   ```python
+   #rag.py
+   
+   import os
+   from dotenv import load_dotenv
+   
+   from langchain_openai import OpenAIEmbeddings
+   from langchain_postgres import PGVector
+   from langchain import hub
+   from langchain_core.output_parsers import StrOutputParser
+   from langchain_core.runnables import RunnablePassthrough
+   from langchain_openai import ChatOpenAI
+   from langchain.chains.combine_documents import create_stuff_documents_chain
+   from langchain_core.prompts import PromptTemplate
+   
+   load_dotenv()
+   
+   embeddings = OpenAIEmbeddings(
+       openai_api_key=os.getenv("SCW_SECRET_KEY"),
+       openai_api_base=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
+       model="bge-multilingual-gemma2",
+       check_embedding_ctx_length=False
+   )
+   
+   connection_string = f'postgresql+psycopg2://{os.getenv("SCW_DB_USER")}:{os.getenv("SCW_DB_PASSWORD")}@{os.getenv("SCW_DB_HOST")}:{os.getenv("SCW_DB_PORT")}/{os.getenv("SCW_DB_NAME")}'
+   vector_store = PGVector(connection=connection_string, embeddings=embeddings)
+   
+   llm = ChatOpenAI(
+       base_url=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
+       api_key=os.getenv("SCW_SECRET_KEY"),
+       model="llama-3.1-8b-instruct",
+   )
+   
+   prompt = """Use the following pieces of context to answer the question at the end. Provide only the answer in CLI commands, do not add anything else. {context} Question: {question} CLI Command Answer:"""
+   custom_rag_prompt = PromptTemplate.from_template(prompt)
+   retriever = vector_store.as_retriever()
+   custom_rag_chain = create_stuff_documents_chain(llm, custom_rag_prompt)
+   
+   
+   context = retriever.invoke("Provide the CLI command to shut down a scaleway instance. Its instance-uuid is example-28f3-4e91-b2af-4c3502562d72")
+   for r in custom_rag_chain.stream({"question":"Provide the CLI command to shut down a scaleway instance. Its instance-uuid is example-28f3-4e91-b2af-4c3502562d72", "context": context}):
+       print(r, end="", flush=True)
+   ```
 
-llm = ChatOpenAI(
-        base_url=os.getenv("SCW_GENERATIVE_APIs_ENDPOINT"),
-        api_key=os.getenv("SCW_SECRET_KEY"),
-        model="llama-3.1-8b-instruct",
-        )
-prompt = """Use the following pieces of context to answer the question at the end. If you don't know the answer, just say that you don't know, don't try to make up an answer. Always finish your answer with "Thank you for asking". {context} Question: {question} Helpful Answer:"""
-custom_rag_prompt = PromptTemplate.from_template(prompt)
-retriever = vector_store.as_retriever()
-custom_rag_chain = create_stuff_documents_chain(llm, custom_rag_prompt)
+   - `PromptTemplate` enable you to customize how retrieved context and question are passed through LLM prompt.
+   - `retriever.invoke` let you customize which part of the LLM input is used to retrieve context.
+   - `create_stuff_documents_chain`
 
+Congratulations ! You built a custom RAG pipeline to improve LLM answers based on specific documentation.
 
-context = retriever.invoke("your question")
-for r in custom_rag_chain.stream({"question":"your question", "context": context}):
-    print(r, end="", flush=True)
-```
-
-- Prompt template: the prompt template is meticulously crafted to direct the model's responses. It clearly instructs the model on how to leverage the provided context and emphasizes the importance of honesty in cases where it lacks information.
-To make the responses more engaging, consider adding a light-hearted conclusion or a personalized touch. For example, you might modify the closing line to say, "Thank you for asking! I'm here to help with anything else you need!"
-Retrieving context:
-- The retriever.invoke(new_message) method fetches relevant information from your vector store based on the user’s query. It's essential that this step retrieves high-quality context to ensure that the model's responses are accurate and helpful.
-You can enhance the quality of the context by fine-tuning your embeddings and ensuring that the documents in your vector store are relevant and well-structured.
-Creating the RAG chain:
-- The create_stuff_documents_chain function connects the language model with your custom prompt. This integration allows the model to process the retrieved context effectively and formulate a coherent and context-aware response.
-Consider experimenting with different chain configurations to see how they affect the output. For instance, using a different chain type may yield varied responses.
-Streaming responses:
-- The loop that streams responses from the custom_rag_chain provides a dynamic user experience. Instead of waiting for the entire output, users can see responses as they are generated, enhancing interactivity.
-You can customize the streaming behavior further, such as implementing progress indicators or more sophisticated UI elements for applications.
-
-#### Example use cases
-- Customer support: use a custom prompt to answer customer queries effectively, making the interactions feel more personalized and engaging.
-- Research assistance: tailor prompts to provide concise summaries or detailed explanations on specific topics, enhancing your research capabilities.
-- Content generation: personalize prompts for creative writing, generating responses that align with specific themes or tones.
-
-## Conclusion
-
-In this tutorial, we explored essential techniques for efficiently processing and storing large document datasets within a Retrieval-Augmented Generation (RAG) system. By leveraging metadata, we ensured that our system avoids redundant data handling, allowing for smooth and efficient operations. The use of chunking optimizes document processing, maximizing the performance of the language model. Storing embeddings in PostgreSQL via pgvector enables rapid and scalable retrieval, ensuring quick responses to user queries.
-
-Furthermore, you can continually enhance your RAG system by implementing mechanisms to retain chat history. Keeping track of past interactions allows for more contextually aware responses, fostering a more engaging user experience. This historical data can be used to refine your prompts, adapt to user preferences, and improve the overall accuracy of responses.
-
-By integrating Scaleway Object Storage, Managed Database for PostgreSQL with pgvector, and LangChain’s embedding tools, you have the foundation to build a powerful RAG system that scales with your data while offering robust information retrieval capabilities. This approach equips you with the tools necessary to handle complex queries and deliver accurate, relevant results efficiently.
-
-With ongoing refinement and adaptation, your RAG system can evolve to meet the changing needs of your users, ensuring that it remains a valuable asset in your AI toolkit.
+You can now go further by:
+- Specializing your RAG pipeline for your use case (whether it's providing better answers for Customer support, finding relevant content through Internal Documentation, helping user generate more creative and personalized content, or much more)
+- Storing chat history to increase prompt relevancy. 
+- Adding a complete testing pipeline to test which prompt, models and retrieval strategy to provide a better experience for your users. You can for instance leverage [Serverless Jobs](https://console.scaleway.com/serverless-jobs/jobs/fr-par) to do so.
 
 ## Troubleshooting
 
@@ -364,4 +371,3 @@ If you encounter the following error message, try corresponding solutions:
 - `ERROR:root:An error occurred: bge-multilingual-gemma2 is not a local folder and is not a valid model identifier listed on 'https://huggingface.co/models'
 If this is a private repository, make sure to pass a token having permission to this repo either by logging in with `huggingface-cli login` or by passing `token=<your_token>``
   - This is caused by Langchain OpenAI adapter trying to tokenize content. Ensure you set `check_embedding_ctx_length=False` in OpenAIEmbedding configuration to avoid tokenizing content (as tokenization will be performed server-side, in Generative APIs).
-

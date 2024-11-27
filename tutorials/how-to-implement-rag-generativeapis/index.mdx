@@ -37,7 +37,7 @@ In this tutorial, you will learn how to implement RAG using LangChain, a leading
 1. Run the following command to install the required python packages:
 
    ```sh
-   pip install langchain langchainhub langchain_openai langchain_community langchain_postgres unstructured "unstructured[pdf]" libmagic psycopg2 python-dotenv boto3
+   pip install langchain langchainhub langchain_openai langchain_community langchain_postgres unstructured "unstructured[pdf]" libmagic python-dotenv
    ```
 
    If you are on MacOS, run also the following command to install dependencies required by the `unstructured` package:
@@ -80,9 +80,9 @@ In this tutorial, you will learn how to implement RAG using LangChain, a leading
 
 ### Import required modules
 
-3. Create a `rag.py` file and add the following code to it:
+3. Create a `embed.py` file and add the following code to it:
    ```python
-   # rag.py
+   # embed.py
    from dotenv import load_dotenv
    import os
    
@@ -98,7 +98,7 @@ In this tutorial, you will learn how to implement RAG using LangChain, a leading
 4. Configure [OpenAIEmbeddings](https://api.python.langchain.com/en/latest/embeddings/langchain_openai.embeddings.base.OpenAIEmbeddings.html) class from LangChain to use your API Secret Key, Generative APIs Endpoint URL and a supported model (`bge-multilingual-gemma2` in our example).
 
 ```python
-# rag.py
+# embed.py
 
 embeddings = OpenAIEmbeddings(
     openai_api_key=os.getenv("SCW_SECRET_KEY"),
@@ -113,7 +113,7 @@ embeddings = OpenAIEmbeddings(
 5. Configure connection to your Managed Database for PostgreSQL Instance storing vectors:
 
 ```python
-# rag.py
+# embed.py
 
 connection_string = f'postgresql+psycopg2://{os.getenv("SCW_DB_USER")}:{os.getenv("SCW_DB_PASSWORD")}@{os.getenv("SCW_DB_HOST")}:{os.getenv("SCW_DB_PORT")}/{os.getenv("SCW_DB_NAME")}'
 vector_store = PGVector(connection=connection_string, embeddings=embeddings)
@@ -132,23 +132,22 @@ Then, we will embed them as vectors and store these vectors in your PostgreSQL d
 
 ### Import required modules
 
-7. Edit the beginning of `rag.py` to import `boto3`, `S3FileLoader` and `RecursiveCharacterTextSplitter`:
+7. Edit the beginning of `embed.py` to import `S3DirectoryLoader` and `RecursiveCharacterTextSplitter`:
 
    ```python
-   #rag.py
+   #embed.py
    
-   import boto3
-   from langchain_community.document_loaders import S3FileLoader
+   from langchain_community.document_loaders import S3DirectoryLoader
    from langchain.text_splitter import RecursiveCharacterTextSplitter
    
    ```
 
 ### Configure S3 client and list objects from bucket
 
-8. Edit `rag.py` to list objects:
+8. Edit `embed.py` to list objects:
 
    ```python
-   # rag.py
+   # embed.py
    
    session = boto3.session.Session()
    client_s3 = session.client(
@@ -163,10 +162,10 @@ Then, we will embed them as vectors and store these vectors in your PostgreSQL d
 
 ### Iterate through objects
 
-9. Edit `rag.py` to load all files in your bucket using `S3DirectoryLoader`, split them into chunks of 500 characters using `RecursiveCharacterTextSplitter` and embed them and store them into your PostgreSQL database using `PGVector`.
+9. Edit `embed.py` to load all files in your bucket using `S3DirectoryLoader`, split them into chunks of 500 characters using `RecursiveCharacterTextSplitter` and embed them and store them into your PostgreSQL database using `PGVector`.
 
    ```python
-   # rag.py
+   # embed.py
    
    text_splitter = RecursiveCharacterTextSplitter(chunk_size=500, chunk_overlap=0, add_start_index=True, length_function=len, is_separator_regex=False)
    file_loader = S3DirectoryLoader(
@@ -184,21 +183,35 @@ Then, we will embed them as vectors and store these vectors in your PostgreSQL d
        print('Vectors successfully added for document',file.metadata['source'])
    ```
 
-   The chunk size of 500 characters is chosen to fit within the context size limit of the embedding model used in this tutorial, but could be raised up to 4096 characters (or slightly more as context size is counted in tokens). Keeping chunks small also optimize performance during inference.
+   The chunk size of 500 characters is chosen to fit within the context size limit of the embedding model used in this tutorial, but could be raised up to 4096 characters for `bge-multilingual-gemma2` model (or slightly more as context size is counted in tokens). Keeping chunks small also optimize performance during inference.
+
+10. You can now run you vector embedding script with:
+
+   ```sh
+   python embed.py
+   ```
+
+   You should see the following output for all files embedding loaded successfully in your Managed Database Instance:
+   ```sh
+   Vectors successfully added for document s3://{bucket_name}/{file_name}
+   ```
+
+   If you experience any issue, check [Troubleshooting section](#troubleshooting) to find solutions.
 
 ### Query the RAG System with a pre-defined prompt template
 
-### Import required modules
+### Create a new file and import required modules
 
-```python
-#rag.py
+1. Create a new file called `rag.py` and add the following content to it:
 
-from langchain import hub
-from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnablePassthrough
-from langchain_openai import ChatOpenAI
-
-```
+   ```python
+   #rag.py
+   
+   from langchain import hub
+   from langchain_core.output_parsers import StrOutputParser
+   from langchain_core.runnables import RunnablePassthrough
+   from langchain_openai import ChatOpenAI
+   ```
 
 ### Set up LLM for querying
 
@@ -293,3 +306,22 @@ Furthermore, you can continually enhance your RAG system by implementing mechani
 By integrating Scaleway Object Storage, Managed Database for PostgreSQL with pgvector, and LangChain’s embedding tools, you have the foundation to build a powerful RAG system that scales with your data while offering robust information retrieval capabilities. This approach equips you with the tools necessary to handle complex queries and deliver accurate, relevant results efficiently.
 
 With ongoing refinement and adaptation, your RAG system can evolve to meet the changing needs of your users, ensuring that it remains a valuable asset in your AI toolkit.
+
+## Troubleshooting
+
+If you happen to encounter any issues, first check that you meet all the requirements:
+
+- You have the right [IAM permissions](/identity-and-access-management/iam/reference-content/policy/), specifically **ContainersRegistryFullAccess**, **ContainersFullAccess** 
+- You created an [IAM API Key capable of interacting with Object Storage](https://www.scaleway.com/en/docs/identity-and-access-management/iam/api-cli/using-api-key-object-storage/).
+- You stored the right credentials in your `.env` file, especially credentials allowing to connect to your [Managed Database Instance with admin rights](https://www.scaleway.com/en/docs/managed-databases/postgresql-and-mysql/how-to/add-users/).
+
+If you encounter the following error message, try corresponding solutions:
+
+- `botocore.exceptions.ClientError: An error occurred (SignatureDoesNotMatch) when calling the ListObjectsV2 operation: The request signature we calculated does not match the signature you provided. Check your key and signing method.`
+  - **Solution:** Ensure your `SCW_BUCKET_NAME`, `SCW_REGION`, `SCW_BUCKET_ENDPOINT` and `SCW_SECRET_KEY` are properly configured, that corresponding IAM Principal have the proper rights and that your [IAM API Key can interact with Object Storage]
+- `urllib.error.URLError: <urlopen error [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:992)>`
+  - On MacOS, ensure your Python version has loaded certificates trusted by MacOS. You can fix this by `Applications/Python 3.X` (where X is your version number), and double click on `Certificates.command`.
+- `ERROR:root:An error occurred: bge-multilingual-gemma2 is not a local folder and is not a valid model identifier listed on 'https://huggingface.co/models'
+If this is a private repository, make sure to pass a token having permission to this repo either by logging in with `huggingface-cli login` or by passing `token=<your_token>``
+  - This is caused by Langchain OpenAI adapter trying to tokenize content. Ensure you set `check_embedding_ctx_length=False` in OpenAIEmbedding configuration to avoid tokenizing content (as tokenization will be performed server-side, in Generative APIs).
+

@@ -1,0 +1,335 @@
+---
+meta:
+  title: How to use function calling
+  description: Learn how to implement function calling capabilities using Scaleway's Chat Completions API service.
+content:
+  h1: How to use function calling
+  paragraph: Learn how to enhance AI applications by integrating external tools using Scaleway's Chat Completions API service.
+tags: chat-completions-api
+dates:
+  validation: 2024-11-18
+  posted: 2024-09-24
+---
+
+Scaleway's Chat Completions API supports function calling as introduced by OpenAI. 
+
+## What is function calling?
+
+Function calling allows a large language model (LLM) to interact with external tools or APIs, executing specific tasks based on user requests. The LLM identifies the appropriate function, extracts the required parameters, and returns the tool call to be done as structured data, typically in JSON format. While errors can occur, custom parsers or tools like LlamaIndex and LangChain can help ensure valid results.
+
+<Macro id="requirements" />
+
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/identity-and-access-management/iam/how-to/create-api-keys/) for API authentication
+- Python 3.7+ installed on your system
+
+## Supported models
+
+* llama-3.1-8b-instruct
+* llama-3.1-70b-instruct
+* mistral-nemo-instruct-2407
+* pixtral-12b-2409
+
+## Understanding function calling
+
+Function calling consists of three main components:
+- **Tool definitions**: JSON schemas that describe available functions and their parameters
+- **Tool selection**: Automatic or manual selection of appropriate functions based on user queries
+- **Tool execution**: Processing function calls and handling their responses
+
+The workflow typically follows these steps:
+1. Define available tools using JSON schema
+2. Send system and user query along with tool definitions
+3. Process model's function selection
+4. Execute selected functions
+5. Return results to model for final response
+
+## Code examples
+
+<Message type="tip">
+    Before diving into the code examples, ensure you have the necessary libraries installed:
+    ```bash
+    pip install openai
+    ```
+</Message>
+
+We will demonstrate function calling using a flight scheduling system that allows users to check available flights between European airports.
+
+### Basic function definition
+
+First, let's define our flight schedule function and its schema:
+
+```python
+from openai import OpenAI
+import json
+
+def get_flight_schedule(departure_airport: str, destination_airport: str, departure_date: str) -> dict:
+    """
+    Retrieves flight schedules between two European airports on a specific date.
+    """
+    # Mock flight schedule data
+    flights = {
+        "CDG-LHR-2024-11-01": [
+            {"flight_number": "AF123", "airline": "Air France", "departure_time": "08:00", "arrival_time": "09:00"},
+            {"flight_number": "BA456", "airline": "British Airways", "departure_time": "10:00", "arrival_time": "11:00"},
+            {"flight_number": "LH789", "airline": "Lufthansa", "departure_time": "14:00", "arrival_time": "15:00"}
+        ],
+        "AMS-MUC-2024-11-01": [
+            {"flight_number": "KL101", "airline": "KLM", "departure_time": "07:30", "arrival_time": "09:00"},
+            {"flight_number": "LH202", "airline": "Lufthansa", "departure_time": "12:00", "arrival_time": "13:30"}
+        ]
+    }
+    
+    key = f"{departure_airport}-{destination_airport}-{departure_date}"
+    return flights.get(key, {"error": "No flights found for this route and date."})
+
+# Define the tool specification
+tools = [{
+    "type": "function",
+    "function": {
+        "name": "get_flight_schedule",
+        "description": "Get available flights between two European airports on a specific date",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "departure_airport": {
+                    "type": "string",
+                    "description": "The IATA code of the departure airport (e.g., CDG, LHR)"
+                },
+                "destination_airport": {
+                    "type": "string",
+                    "description": "The IATA code of the destination airport"
+                },
+                "departure_date": {
+                    "type": "string",
+                    "description": "The date of departure in YYYY-MM-DD format"
+                }
+            },
+            "required": ["departure_airport", "destination_airport", "departure_date"]
+        }
+    }
+}]
+```
+
+### Simple function call example
+
+Here is how to implement a basic function call:
+
+```python
+# Initialize the OpenAI client
+client = OpenAI(
+    base_url="https://api.scaleway.ai/v1",
+    api_key="<YOUR_API_KEY>"
+)
+
+# Create a simple query
+messages = [
+    {
+        "role": "system",
+        "content": "You are a helpful flight assistant."
+    },
+    {
+        "role": "user",
+        "content": "What flights are available from CDG to LHR on November 1st, 2024?"
+    }
+]
+
+# Make the API call
+response = client.chat.completions.create(
+    model="llama-3.1-70b-instruct",
+    messages=messages,
+    tools=tools,
+    tool_choice="auto"
+)
+```
+
+<Message type="note">
+    The model automatically decides which functions to call. However, you can specify a particular function by using the `tool_choice` parameter. In the example above, you can replace `tool_choice=auto` with `tool_choice={"type": "function", "function": {"name": "get_flight_schedule"}}` to explicitly call the desired function.
+</Message>
+
+<Message type="important">
+    Some models must be told they can use external functions in the system prompt. If you do not provide a system prompt when using tools, Scaleway will automatically add one that works best for that specific model.
+</Message>
+
+### Multi-turn conversation handling
+
+For more complex interactions, you will need to handle multiple turns of conversation:
+
+```python
+# Process the tool call
+if response.choices[0].message.tool_calls:
+    tool_call = response.choices[0].message.tool_calls[0]
+    
+    # Execute the function
+    if tool_call.function.name == "get_flight_schedule":
+        function_args = json.loads(tool_call.function.arguments)
+        function_response = get_flight_schedule(**function_args)
+        
+        # Add results to the conversation
+        messages.extend([
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [tool_call]
+            },
+            {
+                "role": "tool",
+                "name": tool_call.function.name,
+                "content": json.dumps(function_response),
+                "tool_call_id": tool_call.id
+            }
+        ])
+        
+        # Get final response
+        final_response = client.chat.completions.create(
+            model="llama-3.1-70b-instruct",
+            messages=messages
+        )
+        print(final_response.choices[0].message.content)
+```
+
+### Parallel function calling
+
+<Message type="important">
+    Meta models do not support parallel tool calls.
+</Message>
+
+In addition to one function call described above, you can also call multiple functions in a single turn.
+This section shows an example for how you can use parallel function calling.
+
+Define the tools:
+
+```
+def open_floor_space(floor_number: int) -> bool:
+    """Opens up the specified floor for party space by unlocking doors and moving furniture."""
+    print(f"Floor {floor_number} is now open party space!")
+    return True
+
+def set_lobby_vibe(party_mode: bool) -> str:
+    """Switches lobby screens and lighting to party mode."""
+    status = "party mode activated!" if party_mode else "back to business mode"
+    print(f"Lobby is now in {status}")
+    return "The lobby is ready to party!"
+
+def prep_snack_station(activate: bool) -> bool:
+    """Converts the cafeteria into a snack and drink station."""
+    print(f"Snack station is {'open and stocked!' if activate else 'closed.'}")
+    return True
+```
+
+Define the specifications:
+
+```
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "open_floor_space",
+            "description": "Opens up an entire floor for the party",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "floor_number": {
+                        "type": "integer",
+                        "description": "Which floor to open up"
+                    }
+                },
+                "required": ["floor_number"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_lobby_vibe",
+            "description": "Transform lobby atmosphere into party mode",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "party_mode": {
+                        "type": "boolean",
+                        "description": "True for party, False for business"
+                    }
+                },
+                "required": ["party_mode"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "prep_snack_station",
+            "description": "Set up the snack and drink station",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "activate": {
+                        "type": "boolean",
+                        "description": "True to open, False to close"
+                    }
+                },
+                "required": ["activate"]
+            }
+        }
+    }
+]
+```
+
+Next, call the model with proper instructions
+
+```
+system_prompt = """
+You are an office party control assistant. When asked to transform the office into a party space, you should:
+1. Open up a floor for the party
+2. Transform the lobby into party mode
+3. Set up the snack station
+Make all these changes at once for an instant office party!
+"""
+
+messages = [
+    {"role": "system", "content": system_prompt},
+    {"role": "user", "content": "Turn this office building into a party!"}
+]
+```
+
+## Best practices
+
+When implementing function calling, follow these guidelines for optimal results:
+
+1. **Function design**
+   - Keep function names clear and descriptive
+   - Limit the number of functions to 7 or fewer per conversation
+   - Use detailed parameter descriptions in your JSON schema
+
+2. **Parameter handling**
+   - Always specify required parameters
+   - Use appropriate data types and validation
+   - Include example values in parameter descriptions
+
+3. **Error handling**
+   - Implement robust error handling for function execution
+   - Return clear error messages that the model can interpret
+   - Handle edge cases gracefully
+
+4. **Performance optimization**
+   - Set appropriate temperature values (lower for more precise function calls)
+   - Cache frequently accessed data when possible
+   - Minimize the number of turns in multi-turn conversations
+
+<Message type="note">
+    For production applications, always implement proper error handling and input validation. The examples above focus on the happy path for clarity.
+</Message>
+
+## Further resources
+
+For more information about function calling and advanced implementations, refer to these resources:
+
+- [OpenAI Function Calling Guide](https://platform.openai.com/docs/guides/function-calling)
+- [JSON Schema Specification](https://json-schema.org/specification)
+- [Chat Completions API Reference](/ai-data/generative-apis/api-cli/using-chat-api/)
+
+Function calling significantly extends the capabilities of language models by allowing them to interact with external tools and APIs. 
+
+<Message type="note">
+  We can't wait to see what you will build with function calls. Tell us what you are up to, share your experiments on Scaleway's [Slack community](https://slack.scaleway.com/) #ai 
+</Message>

@@ -1,16 +1,16 @@
 ---
 meta:
-  title: Deploying NextCloud with Object Storage
-  description: This page shows how to deploy and configure NextCloud with Object Storage
+  title: Deploying NextCloud with Scaleway Object Storage
+  description: This page shows how to deploy and configure NextCloud with Scaleway Object Storage
 content:
-  h1: Deploying NextCloud with Object Storage
-  paragraph: This page shows how to deploy and configure NextCloud with Object Storage
+  h1: Deploying NextCloud with Scaleway Object Storage
+  paragraph: This page shows how to deploy and configure NextCloud with Scaleway Object Storage
 categories:
   - object-storage
   - instances
 tags: NextCloud mariadb apache
 dates:
-  validation: 2024-04-09
+  validation: 2024-10-15
   posted: 2018-11-16
 ---
 
@@ -23,25 +23,27 @@ Combining NextCloud with Scaleway Object Storage gives you infinite storage spac
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - An [SSH key](/identity-and-access-management/organizations-and-projects/how-to/create-ssh-key/)
-- An [Instance](/compute/instances/how-to/create-an-instance/) running on Ubuntu Jammy Jellyfish (22.04)
+- An [Instance](/compute/instances/how-to/create-an-instance/) running on Ubuntu Jammy Jellyfish (22.04) or later
 - Installed and configured [MariaDB](/tutorials/mariadb-ubuntu-bionic/) on your Instance
 - `sudo` privileges or access to the root user
 
 ## Installing NextCloud
 
-1. Log in to your server via SSH.
+1. Log in to your Instance via SSH.
+    ```
+    ssh root@<your_instance_public_ip>
+    ```
 2. Update the apt-sources and the already installed software on the server:
     ```
     apt update && apt upgrade -y
     ```
 3. Install the required software from the apt repositories:
     ```
-    apt install apache2 mariadb-server libapache2-mod-php
-    apt install php-gd php-json php-mysql php-curl php-mbstring php-intl php-imagick php-xml php-zip
+    apt update && apt upgrade -y && apt install apache2 mariadb-server libapache2-mod-php php-gd php-json php-mysql php-curl php-mbstring php-intl php-imagick php-xml php-zip -y
     ```
 4. Download the [latest version](https://nextcloud.com/changelog/) of NextCloud:
     ```
-    wget https://download.nextcloud.com/server/releases/latest.tar.bz2
+    wget https://download.nextcloud.com/server/releases/latest.tar.bz2 -O nextcloud.tar.bz2
     ```
 
     <Message type="tip">
@@ -51,16 +53,23 @@ Combining NextCloud with Scaleway Object Storage gives you infinite storage spac
     ```
     tar -xjf latest.tar.bz2
     ```
-6. Copy the NextCloud directory to the document root of Apache:
+6. Move the extracted folder to the Apache web directory:
     ```
-    cp -r nextcloud /var/www
+    mv nextcloud /var/www/
     ```
-7. Create an Apache configuration file for NextCloud:
+7. Set the correct file permissions:
+    ```
+    chown -R www-data:www-data /var/www/nextcloud/
+    ```
+
+## Configuring Apache
+
+1. Create an Apache configuration file for NextCloud:
     ```
     nano /etc/apache2/sites-available/nextcloud.conf
     ```
 
-    And put the following content into it:
+2. Insert the following content:
     ```
     Alias /nextcloud "/var/www/nextcloud/"
 
@@ -108,14 +117,11 @@ Combining NextCloud with Scaleway Object Storage gives you infinite storage spac
     mysql -u root -p
     ```
 2. Create an empty database for NextCloud:
-    ```
-    CREATE USER 'nextcloud'@'localhost' IDENTIFIED BY 'password';
-    CREATE DATABASE IF NOT EXISTS nextcloud;
-    GRANT ALL PRIVILEGES ON nextcloud.* TO 'nextcloud'@'localhost' IDENTIFIED BY 'password';
-    FLUSH privileges;
-    ```
-3. Log out from the MariaDB shell:
-    ```
+    ```sql
+    CCREATE DATABASE nextcloud;
+    CREATE USER 'nextclouduser'@'localhost' IDENTIFIED BY 'your_secure_password';
+    GRANT ALL PRIVILEGES ON nextcloud.* TO 'nextclouduser'@'localhost';
+    FLUSH PRIVILEGES;
     EXIT;
     ```
 
@@ -137,7 +143,7 @@ NextCloud can use Object Storage as primary storage. This gives you the possibil
     ```
     nano /var/www/nextcloud/config/config.php
     ```
-3. Add a configuration block for S3-compatible storage, as follows:
+3. Add a configuration block for Amazon S3-compatible storage, as follows:
     ```
     'objectstore' => array(
           'class' => '\\OC\\Files\\ObjectStore\\S3',
@@ -201,7 +207,7 @@ NextCloud can use Object Storage as primary storage. This gives you the possibil
 
 ### Configuring Object Storage as external storage in NextCloud
 
-You can use NextCloud as a client for Object Storage while using the local storage as primary storage. This can be useful for the migration of an existing NextCloud instance to Object Storage.
+You can use NextCloud as a client for Object Storage while using the Local Storage as primary storage. This can be useful for the migration of an existing NextCloud instance to Object Storage.
 
 1. Log into your NextCloud to configure the Object Storage bucket.
 2. From the NextCloud interface, click **Apps** in the drop-down menu to access the list of available apps:

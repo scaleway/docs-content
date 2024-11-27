@@ -1,0 +1,217 @@
+---
+meta:
+  title: Monitor GPU Instances using Cockpit and the NVIDIA Data Center GPU Manager (DCGM) Exporter
+  description: This page explains how to visualize metrics and logs from GPU Instances using Cockpit and the NVIDIA Data Center GPU Manager (DCGM) Exporter
+content:
+  h1: Monitor GPU Instances using Cockpit and the NVIDIA Data Center GPU Manager (DCGM) Exporter
+  paragraph: This page explains how to visualize metrics and logs from GPU Instances using Cockpit and the NVIDIA Data Center GPU Manager (DCGM) Exporter
+tags: cockpit monitor grafana-alloy monitoring nvidia gpu-instance
+categories:
+  - cockpit
+dates:
+  validation: 2024-10-21
+  posted: 2024-10-21
+---
+
+This tutorial guides you through the process of monitoring your [GPU Instances](/compute/instances/concepts/#gpu-instance) using Cockpit and the [NVIDIA Data Center GPU Manager (DCGM) Exporter](https://docs.nvidia.com/datacenter/cloud-native/gpu-telemetry/latest/dcgm-exporter.html). Visualize your GPU Instances' metrics and ensure optimal performance and usage of your resources.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Created a [GPU Instance](/compute/gpu/how-to/create-manage-gpu-instance/)
+- [Connected to your Instance via SSH](/compute/gpu/how-to/create-manage-gpu-instance/#how-to-connect-to-a-gpu-instance)
+- Installed [Docker Engine](https://docs.docker.com/engine/install/) and [Docker Compose](https://docs.docker.com/compose/install/linux/#install-using-the-repository) on your GPU Instance.
+
+## Create a Cockpit data source and credentials
+
+### Create a Cockpit data source
+
+We are creating a Cockpit data source because your GPU Instance's metrics will be stored in it and the exporter agent needs data source configuration information to then export your Instance's metrics.
+
+1. Create a metrics [custom data source in Cockpit](/observability/cockpit/how-to/create-external-data-sources/). For the sake of this tutorial, we will name it `gpu-instance-metrics`.
+
+        <Message type="important">
+         - To fill in the cost estimator, you can assume that **1 metric sent without [specific cardinality](https://grafana.com/docs/tempo/latest/metrics-generator/cardinality/)** (ie. without labels or value duplication for a same metric) **every minute will generate around 50 000 samples per month** (60 minutes x 730 hours per month = 43 800 samples). By default, DCGM and node exporter will send multiple metrics and add labels to these metrics leading to a higher number of samples.
+         - **We recommend that you complete this tutorial first** to visualize your data, and **then review your configuration to optimize the number of metrics or labels sent**.
+        </Message>
+2. Click your metrics data source to view information such as its **URL** and **push path**.
+
+### Create a token
+
+1. Create a [Cockpit token](/observability/cockpit/how-to/create-token/) from the [Scaleway console](https://console.scaleway.com/cockpit/tokens).
+2. Select a region for the data source.
+3. Tick the **Push Metrics** box and click **Create token** to confirm.
+
+    <Message type="important">
+      Copy and store your token securely. We will use it to allow the Grafana Alloy agent to push your metrics to the metrics data source you have created earlier.
+    </Message>
+
+## Collect metrics from your GPU Instance
+
+### Install the NVIDIA DCGM Exporter, node exporter and Grafana Alloy agent on your GPU Instance
+
+1. [Connect to your GPU Instance through SSH](/compute/gpu/how-to/create-manage-gpu-instance/#how-to-connect-to-a-gpu-instance).
+2. Copy and paste the following command to create a configuration file named `config.alloy` in your Instance:
+    ```sh
+     touch config.alloy
+    ```
+3. Copy and paste the following template inside `config.alloy`:
+    ```json
+    prometheus.remote_write "cockpit" {
+        endpoint {
+            url = "https://example-afc6-4d02-a2fd-bc020bbaa7d0.metrics.cockpit.fr-par.scw.cloud/api/v1/push"
+            headers = {
+                "X-TOKEN" = "example_bKNpXZZP6BSKiYzV8fiQL1yR_kP_VLB-h0tpYAkaNoVTHVm8q",
+            }
+        }
+    }
+
+    prometheus.scrape "dcgm_exporter" {
+        scrape_interval = "60s"
+        targets         = [{__address__ = "dcgm_exporter:9400"}]
+        forward_to      = [prometheus.remote_write.cockpit.receiver]
+    }
+
+    prometheus.exporter.unix "node_exporter" {
+        set_collectors = [
+            "uname",
+            "cpu",
+            "cpufreq",
+            "loadavg",
+            "meminfo",
+            "filesystem",
+            "netdev",
+        ]
+    }
+
+    prometheus.scrape "node_exporter" {
+        scrape_interval = "60s"
+        targets         = prometheus.exporter.unix.node_exporter.targets
+        forward_to      = [prometheus.remote_write.cockpit.receiver]
+    }
+    ```
+4. Replace the values of `cockpit.endpoint.url` (`https://example-afc6-4d02-a2fd-bc020bbaa7d0.metrics.cockpit.fr-par.scw.cloud/api/v1/push`) and `cockpit.endpoint.headers.X-TOKEN` (`example_bKNpXZZP6BSKiYzV8fiQL1yR_kP_VLB-h0tpYAkaNoVTHVm8q`) with the ones of your `gpu-instance-metrics`[Cockpit data source](https://console.scaleway.com/cockpit/dataSource).
+
+        This configuration allows you to:
+        - collect performance data (using `dcgm_exporter`) from your GPU Instance. This includes information like GPU load (how much of the GPU's processing power is being used), temperature, and other relevant metrics.
+        - collect standard Instance metrics with `node_exporter` (CPU load, disk size, etc.)
+        - push the collected data to your Cockpit data source (using `cockpit`).
+
+        <Message type="note">
+          - The current configuration is set to send only a limited number of metrics from `node_exporter` (the tool collecting CPU, disk, memory, etc. data). Because of this, some data might not show up on your Cockpit dashboards in Grafana when you import them.
+          - If you want to send all available data from `node_exporter`, you need to edit its configuration. Specifically, you need to remove the `set_collectors` list from the configuration. This list defines which metrics are being collected, and removing it will allow all metrics to be sent.
+          - While removing the `set_collectors` list will provide more detailed metrics, it may come with **higher resource usage and associated costs**, especially if you are using a paid service for data monitoring or storage.
+        </Message>
+
+5. Copy and paste the following command to create a `docker-compose.yaml` file in your Instance:
+    ```sh
+     touch docker-compose.yaml
+    ```
+6. Copy and paste the following configuration inside `docker-compose.yaml`, save it and exit the file.
+    ```yaml
+    services:
+      dcgm_exporter:
+        image: nvcr.io/nvidia/k8s/dcgm-exporter:3.3.0-3.2.0-ubuntu22.04
+        deploy:
+          resources:
+            reservations:
+              devices:
+              - driver: nvidia
+                count: all
+                capabilities: [ gpu ]
+        cap_add:
+        - SYS_ADMIN
+        ports:
+        - "9400:9400"
+
+      agent:
+        image: grafana/alloy:latest
+        ports:
+        - "12345:12345"
+        volumes:
+        - "./config.alloy:/etc/alloy/config.alloy"
+        command: [
+        "run",
+        "--server.http.listen-addr=0.0.0.0:12345",
+        "/etc/alloy/config.alloy",
+        ]
+    ```
+        This configuration will:
+        - deploy the DCGM exporter
+        - deploy the Grafana Alloy agent
+
+7. Run docker services using the following command:
+    ```yaml
+    docker compose up
+    ```
+
+## Create Cockpit dashboards in Grafana
+
+### Create a GPU metrics dashboard
+
+1. Access the **Overview** tab of your [Cockpit](https://console.scaleway.com/cockpit/overview) and click **Open dashboards** to open your Cockpit dashboards in Grafana.
+
+2. Click the **+** icon in the top-right-hand corner, then click **Import dashboard**.
+
+3. Copy the ID (`12219`) of the [Grafana NVIDIA DCGM Exporter dashboard](https://grafana.com/grafana/dashboards/12219-nvidia-dcgm-exporter-dashboard/) and paste it in the **Import via grafana.com** field.
+
+4. Click **Load**.
+
+5. Select your Prometheus data source named `gpu-instance-metrics`, then click **Import**
+
+You should see your dashboard with data such as **GPU Temperature** or **GPU Power Usage**.
+
+    <Message type="tip">
+     If you see only an empty dashboard with the "Dashboard not Found" and "Access denied to this dashboard" error, wait a few seconds and refresh the page. Your dashboard should then display.
+     Alternatively, you can also click the **Menu** icon on the left, then on **Dashboards** and search through your dashboards. You should see your newly created dashboard.
+    </Message>
+
+### Create a CPU and disk metrics Cockpit dashboard in Grafana
+
+1. Access the **Overview** tab of your [Cockpit](https://console.scaleway.com/cockpit/overview) and click **Open dashboards** to open your Cockpit dashboards in Grafana.
+
+2. Click the **+** icon in the top-right-hand corner, then click **Import dashboard**.
+
+3. Copy the ID (`1860`) of the [Node Exporter Full dashboard](https://grafana.com/grafana/dashboards/1860-node-exporter-full/) and paste it in the **Import via grafana.com** field.
+
+4. Click **Load**.
+
+5. Select your Prometheus data source named `gpu-instance-metrics`, then click **Import**
+
+You should now see your dashboard with data such as **CPU usage** and **Memory Usage**.
+
+    <Message type="tip">
+     If you see only an empty dashboard with the "Dashboard not Found" and "Access denied to this dashboard" error, wait a few seconds and refresh the page. Your dashboard should then display.
+     If you still do not see any data, make sure that you select the `gpu-instance-metrics` in the **Datasource** dropdown list located in the top-left-hand corner.
+    </Message>
+
+    <Message type="note">
+     The current configuration of the Node Exporter agent does not include certain metrics, such as:
+         - Swap used: How much swap space (virtual memory) is currently being used by the system.
+         - Root FS used: How much of the root file system (main storage partition) is being used.
+    </Message>
+
+You can now find your newly created dashboards in your list of Cockpit dashboards in Grafana. This allows you to access your GPU Instances data to monitor and optimize your resources.
+
+### Going further
+
+- **Add more metrics to your dashboards**
+    - Connect to your GPU Instance via SSH
+    - Edit the `config.alloy` file and restart the agents using the `docker compose up` command
+    - Update your Cockpit dashboards in Grafana
+
+- **Create custom dashboards**
+    - In Grafana explore the metrics you have sent by clicking the **Menu** icon on the left, then **Explore**.
+    - Select your custom data source named `gpu-instance-metrics` in the **Datasource** dropdown list located in the top-left-hand corner.
+    - Click **Metrics browser**. You should see a list of metrics appear (for example, `DCGM_FI_DEV_GPU_TEMP` or `node_cpu_seconds_total`).
+    - Write the desired query, click **Run query** to visualize data, and then **Add to dashboard** to add it to a new or existing dashboard.
+
+## Troubleshooting
+
+If you encounter any issues, make sure that you meet all the requirements listed at the beginning of this tutorial.
+
+You can run `docker -v` in your terminal to check your docker version. You should see an output similar to the following:
+    ```
+    Docker version 24.0.6, build ed223bc820
+    ```

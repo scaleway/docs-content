@@ -16,7 +16,7 @@ categories:
 - A Dedibox account logged into the [console](https://console.online.net)
 - An active Dedibox server
 
-### How to terminate your Web Hosting plan
+## How to terminate your Dedibox server
 1. Click your username, next to _logged in as_, in the top right corner of the console. From the drop-down menu, select **Services**. The service page displays.
 2. Click the **detail** of the **Dedibox server** you want to terminate. The **Server information** page will display.
 3. Click **Terminate**. A pop-up will display.

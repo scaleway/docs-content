@@ -9,7 +9,8 @@
 
 The goal of this platform is to provide you with information about all the resources in the Scaleway Ecosystem and the procedures you should follow to get the best experience from our products and services. 
 
-- [Contribution guidelines](./docs/CONTRIBUTING.md#use-repository-locally)
+- [How to contribute](./docs/CONTRIBUTING.md)
+- [How to write documentation](https://www.scaleway.com/en/docs/guidelines/)
 - [MDX components reference](https://scaleway.com/en/docs/components/)
 - [Scaleway documentation website](www.scaleway.com/en/docs/)
 - [Documentation page template](./docs/DOC_PAGE_TEMPLATE.mdx)

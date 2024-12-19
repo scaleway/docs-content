@@ -1,0 +1,132 @@
+---
+meta:
+  title: Setting up Encryption at Rest for your Managed Databases with the Scaleway API
+  description: This page explains how to set up Encryption at Rest for your Managed Databases with the Scaleway API.
+content:
+  h1: Setting up Encryption at Rest for your Managed Databases with the Scaleway API
+  paragraph: This page explains how to set up Encryption at Rest for your Managed Databases with the Scaleway API.
+tags: managed-database postgresql mysql encryption at rest
+dates:
+  validation: 2024-12-19
+  posted: 2024-12-19
+categories:
+  - managed-databases
+  - postgresql-and-mysql
+---
+
+Encryption at rest allows you to permanently encrypt your database data. The data is encrypted at volume level using [LUKS](https://en.wikipedia.org/wiki/Linux_Unified_Key_Setup). The management of the encryption key is done by Scaleway.
+
+The feature can be activated upon Database Instance creation via the console and the API, or after creation exclusively through the API with the [upgrade endpoint](https://www.scaleway.com/en/developers/api/managed-database-postgre-mysql/#path-database-instances-upgrade-a-database-instance).
+
+<Message type="important">
+  - Once activated on a Database Instance, encryption at rest cannot be disabled.
+  - All databases, data (including logs), and snapshots will be encrypted. Logical backup encryption is not currently available.
+  - Enabling encryption means your database data will be copied into a new, encrypted block volume. This takes approximately 1 hour per 100 GB of storage. When switching volumes, expect a few seconds of downtime towards the end of the copying process. Refer to the [Encryption at rest performance benchmark on Database Instances](/managed-databases/postgresql-and-mysql/reference-content/encryption-at-rest-performance-benchmark) page.
+</Message>
+
+## Creating a Database Instance with encryption at rest
+
+1. Edit the POST request payload you will use to create your Database Instance. Make sure you include the `encryption` parameter and set the `enabled` attribute to `true`.
+    <Message type="note">
+      In all examples below the UUIDs, passwords and IP addresses displayed are not real. For more details about the parameters shown, refer to the [Managed Databases for PostgreSQL and MySQL API documentation](https://www.scaleway.com/en/developers/api/managed-database-postgre-mysql/)
+    </Message>
+
+    ```json
+      '{
+      "project_id": "d8e65f2b-cce9-40b7-80fc-6a2902db6826",
+      "name": "myDB",
+      "engine": "PostgreSQL-15",
+      "tags": ["donnerstag"],
+      "is_ha_cluster": true,
+      "node_type": "db-pro2-xxs",
+      "disable_backup": false,
+      "user_name": "my_initial_user",
+      "password": "thiZ_is_v0ry_s3cret",
+      "volume_type": "sbs_5k",
+      "volume_size": "30000000000",
+      "encryption": {
+        "enabled": true
+        }
+      }'
+    ```
+
+3. Create a Database Instance by running the following command. Make sure you include the payload you edited in the previous step.
+    ```bash
+    curl -X POST \
+      -H "X-Auth-Token: $SCW_SECRET_KEY" \
+      "Content-Type: application/json" \
+      https://api.scaleway.com/rdb/v1/regions/$SCW_REGION/instances \
+      -d '{
+        "project_id": "d8e65f2b-cce9-40b7-80fc-6a2902db6826",
+        "name": "myDB",
+        "engine": "PostgreSQL-15",
+        "tags": ["donnerstag"],
+        "is_ha_cluster": true,
+        "node_type": "db-pro2-xxs",
+        "disable_backup": false,
+        "user_name": "my_initial_user",
+        "password": "thiZ_is_v0ry_s3cret",
+        "volume_type": "sbs_5k",
+        "volume_size": "30000000000",
+        "encryption": {
+        "enabled": true
+        }
+      }'
+    ```
+    You should get a response like the following confirming that the Database Instance was created, and encryption at rest is enabled.
+
+    ```json
+    {
+          "id": "f5122f66-fb50-4cef-aa02-487ef4fc1af0",
+          "name": "myDB",
+          "organization_id": "895693aa-3915-4896-8761-c2923b008be7",
+          "project_id": "d8e65f2b-cce9-40b7-80fc-6a2902db6826",
+          "status": "ready",
+          "engine": "PostgreSQL-15",
+          "endpoint": {
+            "ip": "198.51.100.0",
+            "port": 22245,
+            "name": null
+          },
+          "tags": [
+            "donnerstag"
+          ],
+          "settings": [],
+          "backup_schedule": {
+            "frequency": 24,
+            "retention": 7,
+            "disabled": true
+          },
+          "is_ha_cluster": true,
+          "read_replicas": [],
+          "node_type": "db-pro2-xxs",
+          "volume": {
+            "type": "sbs_5k",
+            "size": 30000000000
+          },
+          "encryption": {
+            "enabled": true
+            },
+          "created_at": "2019-04-19T16:24:52.591417Z",
+          "region": "fr-par"
+    }
+    ```
+
+## Enabling encryption at rest in an existing Database Instance
+
+To enable encryption at rest after a Database Instance has already been created, you can use the upgrade endpoint of the Managed Databases API.
+
+Run the following command. Make sure you replace the `instance_id` in the endpoint, and the `enable_encryption` parameter set to `true`
+
+    ```json
+      curl -X POST \
+        -H "X-Auth-Token: $SCW_SECRET_KEY" \
+        -H "Content-Type: application/json" \
+        -d '{
+              "enable_encryption": true
+            }' \
+        "https://api.scaleway.com/rdb/v1/regions/fr-par/instances/{instance_id}/upgrade"
+    ```
+
+If the operation is successful, you see an output containing all the details of your Database Instance, including `"encryption":{"enabled":true}`.
+

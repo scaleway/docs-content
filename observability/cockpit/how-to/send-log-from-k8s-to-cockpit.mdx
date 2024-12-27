@@ -1,0 +1,144 @@
+---
+meta:
+  title: How to send logs from your Kubernetes cluster to your Cockpit
+  description: Learn how to send your pod logs to your Cockpit using Scaleway's comprehensive guide. This tutorial covers sending Kubernetes pods logs to Scaleway's Cockpit for centralized monitoring and analysis using Grafana, ensuring efficient monitoring and log analysis in your infrastructure.
+content:
+  h1: How to send logs from your Kubernetes cluster to your Cockpit
+  paragraph: Learn how to send your pod logs to your Cockpit using Scaleway's comprehensive guide. This tutorial covers sending Kubernetes pods logs to Scaleway's Cockpit for centralized monitoring and analysis using Grafana, ensuring efficient monitoring and log analysis in your infrastructure.
+tags: kubernetes cockpit logs observability monitoring cluster
+categories:
+  - observability
+dates:
+  validation: TBD
+  posted: TBD
+---
+
+This page shows you how to send your application logs created in a Kubernetes cluster to your Cockpit either by using a Helm Chart or by deploying this Helm chart with Terraform.
+
+In this example, we use [k8s-monitoring](https://artifacthub.io/packages/helm/grafana/k8s-monitoring/1.6.16) which install an Alloy Daemon set to your Kubernetes Cluster to export logs to your Cockpit.
+
+<Macro id="requirements" />
+
+ - A Scaleway account logged into the [console](https://console.scaleway.com)
+ - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+ - [Created](/observability/cockpit/how-to/create-external-data-sources/) an custom external data source
+ - [Created](/observability/cockpit/how-to/create-token/) a Cockpit Token for the same region as the data source
+ - A running Kubernetes Cluster containing your application deployed
+ - For Terraform : [Created](/identity-and-access-management/iam/how-to/create-api-keys/) an API key and retrieved your API secret key
+
+
+
+<Message type="important">
+  - Sending logs for Scaleway resources or personal data using an external path is a billable feature. In addition, any data that you push yourself is billed, even if you send data from Scaleway products. Refer to the [product pricing](https://www.scaleway.com/en/pricing/?tags=available,managedservices-observability-cockpit) for more information.
+<Message/>
+
+## Configure the Helm chart
+
+Create a `values.yml` file to configure your Helm chart, here is an example: 
+
+<Message type="Note">
+  Do not forget to replace: 
+  - `$SCW_CLUSTER_NAME` by the name of your Scaleway Cluster
+  - `$COCKPIT_CUSTOM_DATASOURCE_HOST` by the hostname of your custom endpoint (do not include the `/loki/api/v1/push` )
+  - `$COCKPIT_TOKEN` by your Cockpit Token
+<Message/>
+
+```yaml
+cluster:
+      name: "$SCW_CLUSTER_NAME"
+externalServices:
+  loki:
+    host: "$COCKPIT_CUSTOM_DATASOURCE_HOST"
+    tenantId: "$COCKPIT_TOKEN"
+    authMode: none
+    externalLabels: {
+      cluster: "$SCW_CLUSTER_NAME"
+    }
+
+logs:
+  enabled: true
+  pod_logs:
+    enabled: true
+    discovery: "all"
+    annotation: "cockpit.scw.cloud/logs.autogather"
+    # -- Only capture logs from pods in these namespaces (`[]` means all namespaces).
+    namespaces: []
+    # -- Do not capture logs from any pods in these namespaces.
+    excludeNamespaces: []
+
+metrics:
+  enabled: false
+kube-state-metrics:
+  enabled: false
+prometheus-node-exporter:
+  enabled: false
+prometheus-operator-crds:
+  enabled: false
+opencost:
+  enabled: false
+
+alloy:
+  logging:
+    level: info
+    format: logfmt
+alloy-events:
+  logging:
+    level: info
+    format: logfmt
+alloy-logs:
+  logging:
+    # -- Level at which Alloy log lines should be written.
+    level: info
+    # -- Format to use for writing Alloy log lines.
+    format: logfmt
+```
+
+<Message type="info">
+- Note that this is only an example to send logs to your cockpit, you can also send metrics to cockpit using this Helm chart
+</Message>
+
+## Send Kubernetes logs to your Cockpit using Helm chart
+
+1. Connect your kubectl to your Scaleway Cluster
+2. Apply your Helm chart with the `values.yml` file by running
+  ```
+  helm install -f /your-path/to/values.yml my-log-ingester k8s-monitoring --version 1.6.16
+  ```
+  Do not forget to change the -f flag with the correct path to your `values.yml` file
+
+## Send Kubernetes logs to your Cockpit using Helm chart with Terraform
+
+1. Set up the Helm Terraform provider
+  ```terraform
+  provider "helm" {
+    kubernetes {
+      host = your_k8s_cluster_host
+      token = your_k8s_cluster_token
+      cluster_ca_certificate = base64decode(
+      your_k8s_cluster_ca_certificate
+      )
+    }
+  }
+  ```
+2. Create a Helm release ressource with the path to your `values.yml`
+  ```
+  resource "helm_release" "log-ingester" {
+    name = "my-log-ingester"
+    repository = "https://grafana.github.io/helm-charts"
+    chart = "k8s-monitoring"
+    version = "1.6.16"
+
+    namespace = "log-ingester"
+    create_namespace = true
+    values = [file("/your-path/to/values.yml")]
+  }
+  ```
+3. Apply the new terraform configuration with `terraform apply`
+
+## Explore your logs 
+
+Now that your logs are exported to your Cockpit, you can access and query them.
+
+1. Open your Cockpit Dashboard
+2. Click the **Home** icon > **Explore**. Select your custom data source in the upper left corner.
+3. Filter the query by only searching for the label `cluster` with the value corresponding to your cluster name and your log should display

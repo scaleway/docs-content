@@ -1,0 +1,268 @@
+---
+meta:
+  title: Enabling Encryption in Kapsule (Kubernetes 1.31) with Cilium
+  description: Learn how to enable WireGuard encryption in Scaleway’s Kapsule Managed Kubernetes service using Cilium. This guide covers configuration steps, verification, and testing encryption for secure network traffic.
+content:
+  h1: Enabling Encryption in Kapsule (Kubernetes 1.31) with Cilium
+  paragraph: Learn how to enable WireGuard encryption in Scaleway’s Kapsule Managed Kubernetes service using Cilium. This guide covers configuration steps, verification, and testing encryption for secure network traffic.
+tags: hashicorp vault kubernetes k8s easy deploy
+categories:
+  - containers
+dates:
+  validation: 2024-12-31
+  posted: 2024-12-31
+  validation_frequency: 24
+---
+
+
+This guide explains how to enable WireGuard encryption in Scaleway’s Kapsule Managed Kubernetes service. 
+By default, Cilium is selected as the CNI when creating a cluster. We will configure encryption via a `CiliumNodeConfig` resource and then verify that traffic is indeed encrypted.
+
+<Macro id="requirements" />
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A functional [Kubernetes Kapsule](/containers/kubernetes/concepts/#kubernetes-kapsule) cluster running **version 1.31**.-
+- `kubectl` installed and configured for your cluster.
+- Cilium is selected as the [CNI](/containers/kubernetes/concepts/#container-network-interface-cni) in your cluster (default in Kapsule).
+
+## Creating a `CiliumNodeConfig` resource for encryption
+
+The `CiliumNodeConfig` resource defines encryption settings for Cilium. It enables **WireGuard encryption** across all nodes in your Kapsule cluster.
+
+1. Prepare the Resource Definition by saving the following content to a file named `cilium-encryption.yaml`:
+    ```
+    apiVersion: cilium.io/v2
+    kind: CiliumNodeConfig
+    metadata:
+    namespace: kube-system
+    name: enable-encryption
+    spec:
+    nodeSelector:
+        matchLabels: {}
+    defaults:
+        enable-wireguard: "true"
+        enable-wireguard-userspace-fallback: "false"
+        wireguard-persistent-keepalive: "0s"
+        encrypt-node: "false"
+    ```
+    <Message type="note">
+    * `matchLabels: {}` applies encryption to **all nodes** in the cluster.  
+    * Adjust `nodeSelector` if you want to target specific nodes (e.g., nodes labeled `k8s.scaleway.com/managed: "true"`).
+    </Message>
+2. Deploy the `CiliumNodeConfig` resource to your cluster using `kubectl`:
+    ```
+    kubectl apply -f cilium-encryption.yaml
+    ```
+
+## Restarting the Cilium DaemonSet
+
+After creating the `CiliumNodeConfig`, you must restart Cilium to apply these encryption settings.
+
+1. Rollout Restart Cilium using `kubectl`
+    ```
+    kubectl rollout restart daemonset cilium -n kube-system
+    ```
+
+2. Wait for rollout completion. You can check the status of the rollout using the following command:
+    ```
+    kubectl rollout status daemonset cilium -n kube-system
+    ```
+
+3. Verify the pod status using the following `kubectl` command:
+    ```
+    kubectl get pods -n kube-system -l k8s-app=cilium
+    ```
+    All Cilium pods should eventually show as **Running** and **Ready**.
+
+## Validating encryption
+
+In this step, you will deploy test applications along with a `tcpdump` DaemonSet to observe network traffic before and after enabling encryption.
+
+### 3.1 Deploying test applications and `tcpdump`
+
+Below is an example YAML manifest that deploys:
+
+* An **nginx** Deployment and a corresponding **Service**.
+* A **curl** Deployment that continuously makes requests to **nginx**.
+* A **tcpdump** DaemonSet to capture traffic on each node’s `kapsule0` interface.
+
+1. Save the following template in a `test-and-tcpdump.yaml` file:
+    ```
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+    name: nginx
+    spec:
+    replicas: 1
+    selector:
+        matchLabels:
+        k8s-app: nginx
+    template:
+        metadata:
+        labels:
+            k8s-app: nginx
+        spec:
+        terminationGracePeriodSeconds: 1
+        containers:
+            - name: nginx
+            image: nginx:1.21.6
+            ports:
+                - containerPort: 80
+            resources:
+                limits:
+                cpu: 100m
+                memory: 100Mi
+        affinity:
+            podAntiAffinity:
+            requiredDuringSchedulingIgnoredDuringExecution:
+                - topologyKey: "kubernetes.io/hostname"
+                labelSelector:
+                    matchExpressions:
+                    - key: k8s-app
+                        operator: In
+                        values:
+                        - nginx
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+    name: nginx
+    spec:
+    selector:
+        k8s-app: nginx
+    ports:
+        - protocol: TCP
+        port: 80
+        targetPort: 80
+    type: ClusterIP
+    ---
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+    name: curl
+    spec:
+    replicas: 1
+    selector:
+        matchLabels:
+        k8s-app: curl
+    template:
+        metadata:
+        labels:
+            k8s-app: curl
+        spec:
+        terminationGracePeriodSeconds: 1
+        containers:
+            - name: curl
+            image: curlimages/curl:7.78.0
+            command: ["/bin/sh", "-c"]
+            args:
+                - |
+                while sleep 2; do
+                    date && curl -fsSL http://nginx
+                done
+            resources:
+                limits:
+                cpu: 100m
+                memory: 100Mi
+        affinity:
+            podAntiAffinity:
+            preferredDuringSchedulingIgnoredDuringExecution:
+                - weight: 50
+                podAffinityTerm:
+                    topologyKey: "kubernetes.io/hostname"
+                    labelSelector:
+                    matchExpressions:
+                        - key: k8s-app
+                        operator: In
+                        values:
+                            - nginx
+    ---
+    apiVersion: apps/v1
+    kind: DaemonSet
+    metadata:
+    name: tcpdump
+    spec:
+    selector:
+        matchLabels:
+        k8s-app: tcpdump
+    template:
+        metadata:
+        labels:
+            k8s-app: tcpdump
+        spec:
+        hostNetwork: true
+        terminationGracePeriodSeconds: 1
+        containers:
+            - name: tcpdump
+            image: alpine:latest
+            securityContext:
+                privileged: true
+            command: ["sh"]
+            args:
+                - -c
+                - |
+                apk add --no-cache tcpdump
+                # Verify the Kapsule interface
+                if ! ip link show kapsule0; then
+                    echo "kapsule0 not found"
+                    exit 1
+                fi
+                # Capture traffic on kapsule0 for ports 80 or 51871 (WireGuard)
+                tcpdump -Anevi kapsule0 -T vxlan 2>&1 | grep -E '(([0-9]+\.){3}[0-9]+\.(80|51871))'
+            resources:
+                limits:
+                cpu: 100m
+                memory: 100Mi
+    ```
+
+2. Apply the manifest using `kubectl`:
+    ```
+    kubectl apply -f test-and-tcpdump.yaml
+    ```
+
+### Observing traffic before encryption
+
+If you have **not yet** applied the `CiliumNodeConfig` and restarted Cilium, you should see traffic on **port 80** in the logs of the `tcpdump` pods:
+
+```
+kubectl logs -n default daemonset/tcpdump -f
+```
+
+(Select any pod if multiple logs are shown.)
+
+### Checking encryption status in Cilium
+
+After applying the `CiliumNodeConfig` and restarting Cilium, you can verify the configuration by checking each Cilium pod:
+
+```
+for pod in $(kubectl -n kube-system get pod -l app.kubernetes.io/name=cilium-agent -o name); do
+  echo "Pod: $pod"
+  kubectl -n kube-system exec -it $pod -c cilium-agent -- cilium-dbg status | grep Encryption
+done
+```
+
+You should see **WireGuard** encryption enabled.
+
+### Observing traffic after encryption
+
+After the encryption rollout, traffic between pods should traverse **WireGuard** on port **51871** (the default WireGuard port used by Cilium). Check the `tcpdump` logs again:
+
+```
+kubectl logs -n default daemonset/tcpdump -f
+```
+
+You should now see traffic matching **port 51871**, indicating the packets are encrypted via WireGuard.
+
+## Additional notes
+
+* **Target specific nodes**
+   If you only want to enable encryption on specific nodes, modify the `nodeSelector` in your `CiliumNodeConfig` (e.g., `matchLabels: { k8s.scaleway.com/managed: "true" }` for managed nodes).
+
+* **Persistence**
+   Encryption settings defined in `CiliumNodeConfig` persist through cluster upgrades and changes.
+
+* **Performance impact**
+   Enabling encryption may slightly increase CPU usage on the nodes. Monitor resource utilization to ensure adequate capacity.
+
+For more details, refer to [Cilium’s WireGuard Encryption Documentation](https://docs.cilium.io/en/stable/security/network/encryption-wireguard/).
+

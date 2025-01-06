@@ -1,95 +1,94 @@
 ---
 meta:
-  title: Installing OpenVPN on Ubuntu 20.04 or later
-  description: Discover how to install OpenVPN on Ubuntu 20.04 and later versions with this detailed tutorial. Follow our step-by-step guide to set up a secure VPN connection effortlessly.
+  title: Installing OpenVPN on a Scaleway Instance running Ubuntu 24.04
+  description: Discover how to install OpenVPN on Ubuntu 24.04 and later versions with this detailed tutorial. Follow our step-by-step guide to set up a secure VPN connection effortlessly.
 content:
-  h1: Installing OpenVPN on Ubuntu 20.04 or later
-  paragraph: Discover how to install OpenVPN on Ubuntu 20.04 and later versions with this detailed tutorial. Follow our step-by-step guide to set up a secure VPN connection effortlessly.
-tags: vpn OpenVPN Ubuntu Bionic-Beaver
+  h1: Installing OpenVPN on a Scaleway Instance running Ubuntu 24.04
+  paragraph: Discover how to install OpenVPN on Ubuntu 24.04 and later versions with this detailed tutorial. Follow our step-by-step guide to set up a secure VPN connection effortlessly.
+tags: vpn OpenVPN Ubuntu
 categories:
   - instances
 dates:
-  validation: 2024-07-02
+  validation: 2025-01-06
   posted: 2019-01-16
 ---
 
-OpenVPN is an open-source software to run a virtual Private Network (VPN) to create secure point-to-point or site-to-site connections in routed or bridged configurations. The software uses a proprietary security protocol that uses SSL/TLS for key exchange.
+Learn how to install and configure OpenVPN on Ubuntu 24.04 LTS with this comprehensive guide. Follow our step-by-step instructions to establish a secure VPN connection via your Scaleway Instance with ease.
 
 <Macro id="requirements" />
 
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - An [SSH key](/identity-and-access-management/organizations-and-projects/how-to/create-ssh-key/)
-- An [Instance](/compute/instances/how-to/create-an-instance/) running on Ubuntu 20.04 or later
+- An [Instance](/compute/instances/how-to/create-an-instance/) running on Ubuntu 24.04 LTS
 
-## Installing Easy-RSA
+## Installing OpenVPN and Easy-RSA
 
-The first step in building an OpenVPN configuration is to establish a PKI (Public Key Infrastructure). It is composed of the following elements:
-
-  - a public and private key for the server and each client
-  - the certification authority (CA) and the key used to identify servers as well as the client certificate
-
-OpenVPN supports two-way certificate-based authentication, this means that the client must authenticate the server certificate and the server must authenticate the client certificate before mutual trust is established.
-
-Both the server and the client will authenticate each other. First, the certificate needs to be signed by the certification authority (CA) then, the information in the header (common name of the certificate or the certificate type) of the authenticated certificate can be tested.
-
-1. [Connect to your Instance](/compute/instances/how-to/connect-to-instance/) via SSH.
-2. Update the package List:
+1. Connect to your Instance via SSH.
    ```sh
-   apt update
-   apt upgrade -y
+   root@<YOUR_INSTANCE_IP>
+   ```
+2. Update the package list and upgrade already installed packages:
+   ```sh
+   sudo apt update
+   sudo apt upgrade -y
+   ```
+3. Install OpenVPN and Easy-RSA using `apt`:
+   ```sh
+   sudo apt install -y openvpn easy-rsa
    ```
 
-3. Install OpenVPN and Easy-RSA:
-   ```sh
-   apt install -y openvpn easy-rsa
-   ```
+## Setting up the Certificate Authority (CA)
 
-4. Set Up the CA Directory:
+1. Create a directory for Easy-RSA and navigate to it:
    ```sh
-   make-cadir ~/openvpn-ca
+   mkdir -p ~/openvpn-ca
    cd ~/openvpn-ca
    ```
-
-5. Initialize the PKI:
+2. Initialize the Public Key Infrastructure (PKI):
    ```sh
-   ./easyrsa init-pki
+   sudo cp -r /usr/share/easy-rsa/* /etc/openvpn/easy-rsa/
+   cd /etc/openvpn/easy-rsa/
+   sudo ./easyrsa init-pki
+   ```
+3. Build the Certificate Authority (CA):
+
+   ```sh
+   sudo ./easyrsa build-ca
+   ```
+   You will be prompted to set a passphrase and provide a Common Name (e.g., "OpenVPN-CA").
+
+## Generating server and client certificates
+
+1. Generate the server certificate and key:
+   ```sh
+   sudo ./easyrsa gen-req server nopass
+   sudo ./easyrsa sign-req server server
+   ```
+   Approve the signing request when prompted.
+2. Generate Diffie-Hellman parameters:
+   ```sh
+   sudo ./easyrsa gen-dh
+   ```
+3. Generate a shared secret for additional security:
+   ```sh
+   sudo openvpn --genkey secret /etc/openvpn/ta.key
    ```
 
-6. Build the Certificate Authority:
-   ```sh
-   ./easyrsa build-ca nopass
-   ```
+## Configuring the OpenVPN Server
 
-7. Generate the server certificate and key:
+1. Copy the necessary files to the OpenVPN directory:
    ```sh
-   ./easyrsa gen-req server nopass
-   ./easyrsa sign-req server server
+   sudo cp pki/ca.crt pki/private/server.key pki/issued/server.crt /etc/openvpn/
+   sudo cp /etc/openvpn/easy-rsa/pki/dh.pem /etc/openvpn/
+   sudo cp /etc/openvpn/ta.key /etc/openvpn/
    ```
-
-8. Generate the Diffie-Hellman parameters:
+2. Create the OpenVPN server configuration file:
    ```sh
-   ./easyrsa gen-dh
+   sudo nano /etc/openvpn/server.conf
    ```
-
-9. Generate a shared secret:
-   ```sh
-   openvpn --genkey secret ta.key
+   Add the following configuration:
    ```
-
-## Configuring the OpenVPN server
-
-1. Copy the server certificate and key files:
-   ```sh
-   cp pki/ca.crt pki/private/server.key pki/issued/server.crt ta.key /etc/openvpn/
-   ```
-
-2. Create the OpenVPN Server configuration file:
-   ```sh
-   nano /etc/openvpn/server.conf
-   ```
-   Add the following configuration, save the file and quit `nano`:
-   ```conf
    port 1194
    proto udp
    dev tun
@@ -105,7 +104,7 @@ Both the server and the client will authenticate each other. First, the certific
    push "dhcp-option DNS 8.8.8.8"
    push "dhcp-option DNS 8.8.4.4"
    keepalive 10 120
-   cipher AES-256-CBC
+   cipher AES-256-GCM
    user nobody
    group nogroup
    persist-key
@@ -114,120 +113,155 @@ Both the server and the client will authenticate each other. First, the certific
    log-append /var/log/openvpn.log
    verb 3
    ```
+   Save and exit the editor.
 
-## Setting up a Let's Encrypt TLS certificate
-
-1. Install Certbot:
-   ```sh
-   apt install -y certbot
-   ```
-
-2. Obtain the TLS certificate:
-   ```sh
-   certbot certonly --standalone -d your_domain
-   ```
-   <Message type="tip">
-      Make sure to replace `your_domain` with your actual domain name. **You need to ensure that your domain points to the IP address of your Scaleway Instance.**
-   </Message>
-
-3. Configure OpenVPN to use the Let's Encrypt certificate:
-   - Update the `server.conf` file to use the Let's Encrypt certificate and key:
-     ```conf
-     ca /etc/letsencrypt/live/your_domain/fullchain.pem
-     cert /etc/letsencrypt/live/your_domain/cert.pem
-     key /etc/letsencrypt/live/your_domain/privkey.pem
-     ```
-
-## Enabling IP forwarding and adjusting the firewall
+## Enabling IP forwarding and configuring the firewall
 
 1. Enable IP forwarding:
    ```sh
-   echo 1 > /proc/sys/net/ipv4/ip_forward
+   echo 'net.ipv4.ip_forward=1' | sudo tee -a /etc/sysctl.conf
+   sudo sysctl -p
    ```
-   - Make the change permanent by editing the `sysctl.conf` file:
-     ```sh
-     nano /etc/sysctl.conf
-     ```
-     Uncomment the following line:
-     ```sh
-     net.ipv4.ip_forward=1
-     ```
-
-2. Configure the firewall of the Instance (UFW):
+2. Configure the firewall ([UFW](/tutorials/installation-uncomplicated-firewall/)):
    ```sh
-   ufw allow 1194/udp
-   ufw allow OpenSSH
-   ufw enable
+   sudo ufw allow 1194/udp
+   sudo ufw allow OpenSSH
    ```
-
-   Add the following rules to `before.rules` to allow forwarding:
+   Edit the UFW configuration to allow forwarding:
    ```sh
-   nano /etc/ufw/before.rules
+   sudo nano /etc/ufw/before.rules
    ```
-   Add these lines before the `*filter` line:
-   ```sh
+   Add the following lines before the `*filter` line:
+   ```
    *nat
    :POSTROUTING ACCEPT [0:0]
-   -A POSTROUTING -s 10.8.0.0/8 -o eth0 -j MASQUERADE
+   -A POSTROUTING -s 10.8.0.0/24 -o eth0 -j MASQUERADE
    COMMIT
+   ```
+   Save and exit, then reload UFW:
+   ```sh
+   sudo ufw disable
+   sudo ufw enable
    ```
 
 ## Starting the OpenVPN server
 
-1. Start and enable OpenVPN:
+1. Start and enable the OpenVPN service:
    ```sh
-   systemctl start openvpn@server
-   systemctl enable openvpn@server
+   sudo systemctl start openvpn@server
+   sudo systemctl enable openvpn@server
    ```
+2. Check the status of the OpenVPN service:
 
-2. Check the status of the OpenVPN server:
    ```sh
-   systemctl status openvpn@server
+   sudo systemctl status openvpn@server
    ```
+   Ensure it is active and running.
 
-## Setting up client configuration
+## Generating client configuration
 
 1. Generate client certificates:
+
    ```sh
-   cd ~/openvpn-ca
-   ./easyrsa gen-req client1 nopass
-   ./easyrsa sign-req client client1
+   cd /etc/openvpn/easy-rsa/
+   sudo ./easyrsa gen-req client1 nopass
+   sudo ./easyrsa sign-req client client1
    ```
+   Approve the signing request when prompted.
 
 2. Create the client configuration file:
+   On your server, create a new client configuration file named `client1.ovpn`:
    ```sh
-   nano ~/client1.ovpn
+   sudo nano ~/client1.ovpn
    ```
-   Add the following configuration:
-   ```conf
+   Add the following configuration, replacing `your_server_ip_or_domain` with your server's IP address or domain name:
+   ```
    client
    dev tun
    proto udp
-   remote your_domain 1194
+   remote your_server_ip_or_domain 1194
    resolv-retry infinite
    nobind
    persist-key
    persist-tun
-   ca ca.crt
-   cert client1.crt
-   key client1.key
-   tls-auth ta.key 1
-   cipher AES-256-CBC
+   remote-cert-tls server
+   auth SHA256
+   cipher AES-256-GCM
    verb 3
+   <ca>
+   -----BEGIN CERTIFICATE-----
+   # Insert the content of /etc/openvpn/ca.crt here
+   -----END CERTIFICATE-----
+   </ca>
+   <cert>
+   -----BEGIN CERTIFICATE-----
+   # Insert the content of /etc/openvpn/easy-rsa/pki/issued/client1.crt here
+   -----END CERTIFICATE-----
+   </cert>
+   <key>
+   -----BEGIN PRIVATE KEY-----
+   # Insert the content of /etc/openvpn/easy-rsa/pki/private/client1.key here
+   -----END PRIVATE KEY-----
+   </key>
+   <tls-auth>
+   -----BEGIN OpenVPN Static key V1-----
+   # Insert the content of /etc/openvpn/ta.key here
+   -----END OpenVPN Static key V1-----
+   </tls-auth>
+   key-direction 1
    ```
-
-3. Transfer the client configuration files to the remote (client) machine:
+   Replace the placeholder text (e.g., `# Insert the content of /etc/openvpn/ca.crt here`) with the actual contents of the respective files. You can use the `cat` command to display the contents of each file and then copy and paste them into the appropriate sections of the `client1.ovpn` file.
+   For example:
    ```sh
-   scp ~/openvpn-ca/pki/ca.crt ~/openvpn-ca/pki/issued/client1.crt ~/openvpn-ca/pki/private/client1.key ta.key user@your_client_machine:~/client1/
-   scp ~/client1.ovpn user@your_client_machine:~/client1/
+   cat /etc/openvpn/ca.crt
    ```
+   Copy the output and paste it between the `<ca>` and `</ca>` tags in the `client1.ovpn` file.
+3. Transfer the client configuration file to the client device:
+   Use a secure method to transfer the `client1.ovpn` file to the device you intend to use as a client. You can use `scp` (secure copy) for this purpose:
+   ```sh
+   scp ~/client1.ovpn user@client_device_ip:/path/to/destination/
+   ```
+   Replace `user` with your username on the client device, `client_device_ip` with the client's IP address, and `/path/to/destination/` with the desired directory on the client device.
+4. Install OpenVPN on the client device:
+   Ensure that the OpenVPN client is installed on your client device. Installation methods vary depending on the operating system:
 
-Your OpenVPN server is now set up on your Scaleway Instance, secured with a Let's Encrypt certificate, and ready for clients to connect. Follow the client configuration steps for each device you want to connect to your VPN.
+   - **Linux:**
+     ```sh
+     sudo apt update
+     sudo apt install -y openvpn
+     ```
 
-<Message type="tip">
-    For ongoing maintenance, remember to renew your Let's Encrypt certificates regularly (they expire every 90 days), and you can automate this with a cron job:
-    ```sh
-    echo "0 0 1 */2 * certbot renew --quiet" | crontab -
-    ```
-</Message>
+   - **Windows:**
+
+     Download and install the OpenVPN client from the [official website](https://openvpn.net/community-downloads/).
+
+   - **macOS:**
+
+     Download and install [Tunnelblick](https://tunnelblick.net/), a free OpenVPN client for macOS.
+
+5. Connect to the VPN:
+
+   - **Linux:**
+
+     Use the following command to start the VPN connection:
+     ```sh
+     sudo openvpn --config /path/to/client1.ovpn
+     ```
+
+   - **Windows/macOS:**
+
+     Import the `client1.ovpn` file into your OpenVPN client application and initiate the connection through the application's interface.
+
+6. Verify the connection:
+   Once connected, verify that your public IP address matches the VPN server's IP address, indicating that your internet traffic is being routed through the VPN. You can check your public IP address by visiting [WhatIsMyIP.com](https://www.whatismyip.com/) or a similar service.
+
+Your OpenVPN server is now configured on your Ubuntu 24.04 LTS instance, and your client device is set up to connect securely.
+
+## Maintenance
+
+For ongoing maintenance, remember to renew your Let's Encrypt certificates regularly (they expire every 90 days). You can automate this process with a cron job:
+```sh
+echo "0 0 1 */2 * certbot renew --quiet" | sudo tee -a /etc/crontab
+```
+This cron job runs the `certbot renew` command on the first day of every second month at midnight.
 

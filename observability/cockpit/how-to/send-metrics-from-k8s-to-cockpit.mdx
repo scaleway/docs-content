@@ -1,0 +1,164 @@
+---
+meta:
+  title: How to send metrics from your Kubernetes cluster to your Cockpit
+  description: Learn how to send your pod metrics to your Cockpit using Scaleway's comprehensive guide. This tutorial covers sending Kubernetes pods metrics to Scaleway's Cockpit for centralized monitoring and analysis using Grafana, ensuring efficient monitoring and metrics analysis in your infrastructure.
+content:
+  h1: How to send metrics from your Kubernetes cluster to your Cockpit
+  paragraph: Learn how to send your pod metrics to your Cockpit using Scaleway's comprehensive guide. This tutorial covers sending Kubernetes pods metrics to Scaleway's Cockpit for centralized monitoring and analysis using Grafana, ensuring efficient monitoring and metrics analysis in your infrastructure.
+tags: kubernetes cockpit metrics observability monitoring cluster
+categories:
+  - observability
+dates:
+  validation: 2025/01/07
+  posted: 2025/01/07
+---
+
+
+This page shows you how to send application metrics created in a Kubernetes cluster to your Cockpit either by using a Helm chart or by deploying a Helm chart with [Terraform](https://www.terraform.io/).
+
+In this example, we use [k8s-monitoring](https://artifacthub.io/packages/helm/grafana/k8s-monitoring/1.6.16) which installs an Alloy Daemon set to your Kubernetes cluster to export metrics to your Cockpit.
+
+<Macro id="requirements" />
+
+ - A Scaleway account metricsged into the [console](https://console.scaleway.com)
+ - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+ - [Created](/observability/cockpit/how-to/create-external-data-sources/) a custom external data source of type metrics
+ - [Created](/observability/cockpit/how-to/create-token/) a Cockpit token for the same region as the data source
+ - A running Kubernetes cluster containing a deployed application exposing metrics
+ - [Created](/identity-and-access-management/iam/how-to/create-api-keys/) an API key and retrieved your API secret key
+
+<Message type="important">
+  - Sending metrics for Scaleway resources or personal data using an external path is a billable feature. In addition, any data that you push yourself is billed, even if you send data from Scaleway products. Refer to the [product pricing](https://www.scaleway.com/en/pricing/?tags=available,managedservices-observability-cockpit) for more information.
+</Message>
+
+
+## Configure the Helm chart
+
+Create a `values.yml` file to configure your Helm chart, using the example below. Make sure that you replace `$SCW_CLUSTER_NAME` with the name of your Scaleway Kubernetes cluster, `$COCKPIT_CUSTOM_DATASOURCE_HOST` with the hostname of your custom endpoint (excluding the `/loki/api/v1/push` part), and `$COCKPIT_TOKEN` with your Cockpit token.
+
+```yaml
+cluster:
+  name: "$SCW_CLUSTER_NAME"
+externalServices:
+  prometheus:
+    host: "$COCKPIT_CUSTOM_DATASOURCE_HOST"
+    tenantId: "$COCKPIT_TOKEN"
+    writeEndpoint: "/api/v1/push"
+    authMode: none
+    externalLabels: {
+      cluster: "$SCW_CLUSTER_NAME"
+    }
+
+metrics:
+  enabled: true
+  scrapeInterval: 60s
+  autoDiscover:
+    enabled: true
+    # -- Only capture metrics from pods in these namespaces (`[]` means all namespaces).
+    namespaces: []
+
+logs:
+  enabled: false
+kube-state-metrics:
+  enabled: false
+prometheus-node-exporter:
+  enabled: false
+prometheus-operator-crds:
+  enabled: false
+opencost:
+  enabled: false
+```
+
+<Message type="info">
+The template above is only an example to send metrics to your Cockpit. You can also send logs to Cockpit using this Helm chart.
+You can check our guide to [send logs from your cluster to Cockpit](// ADD LINK TO LOGS TUTO)
+</Message>
+
+## Add annotation to your deployed pod to enable auto-discovery
+
+In order for k8s-monitoring to discover the pods it needs to scrape, you need to add specific annotation to the pods you want to scrape
+
+Add annotation to indicate to k8s-monitoring to scrape the pods from your deployment. Make sure to replace $METRIC_PORT with your Prometheus port.
+
+### Kubernetes
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  ...
+  annotations:
+    "k8s.grafana.com/metrics.portNumber" = "$METRIC_PORT"
+    "k8s.grafana.com/scrape" = "true"
+spec:
+  ...
+```
+
+### Terraform
+
+```terraform
+resource "kubernetes_deployment_v1" "your_application_deployment" {
+  ...
+  spec {
+    ...
+    template {
+      metadata {
+        ...
+        annotations = {
+          "k8s.grafana.com/metrics.portNumber" = "$METRIC_PORT"
+          "k8s.grafana.com/scrape" = "true"
+        }
+      }
+      ...
+    }
+  }
+}
+```
+
+## Send Kubernetes metrics to your Cockpit using Helm chart with Terraform
+
+1. Set up the Helm Terraform provider:
+  ```terraform
+  provider "helm" {
+    kubernetes {
+      host = your_k8s_cluster_host
+      token = your_k8s_cluster_token
+      cluster_ca_certificate = base64decode(
+      your_k8s_cluster_ca_certificate
+      )
+    }
+  }
+  ```
+2. Create a Helm release resource with the path to your `values.yml`:
+  ```
+  resource "helm_release" "metrics-ingester" {
+    name = "my-metrics-ingester"
+    repository = "https://grafana.github.io/helm-charts"
+    chart = "k8s-monitoring"
+    version = "1.6.16"
+
+    namespace = "metrics-ingester"
+    create_namespace = true
+    values = [file("/your-path/to/values.yml")]
+  }
+  ```
+3. Run `terraform apply` to apply the new Terraform configuration.
+
+## Send Kubernetes metrics to your Cockpit using Helm chart
+
+1. Connect your kubectl to your Kubernetes cluster
+2. Run the following command to apply your Helm chart with the `values.yml` file:
+  ```
+  helm install -f /your-path/to/values.yml my-metrics-ingester k8s-monitoring --version 1.6.16
+  ```
+  Make sure to replace `-f` flag with the correct path to your `values.yml` file.
+
+
+## Explore your metrics in Grafana
+
+Now that your metrics are exported to your Cockpit, you can access and query them.
+
+1. Click **Cockpit** in the Observability section of the [console](https://console.scaleway.com/) side menu. The **Cockpit** overview page displays.
+2. Click **Open dashboards** to open your managed dashboards in Grafana. You are redirected to the Grafana website.
+3. Click the **Home** icon > **Explore**. Select your custom data source in the upper left corner.
+4. You can now query your metrics from your Kubernetes cluster and use the datasource to create graph.

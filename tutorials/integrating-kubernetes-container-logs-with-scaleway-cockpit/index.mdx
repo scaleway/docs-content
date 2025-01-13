@@ -1,0 +1,143 @@
+---
+meta:
+  title: Integrating Kubernetes container logs with Scaleway Cockpit
+  description: This page explains how to integrate Kubernetes container logs with Scaleway Cockpit using Promtail
+content:
+  h1: Integrating Kubernetes Container Logs with Scaleway Cockpit
+  paragraph: This page explains how to integrate Kubernetes container logs with Scaleway Cockpit using Promtail
+categories:
+  - iot-hub
+tags: kubernetes kapsule kosmos cockpit promtail logs
+dates:
+  validation: 2025-01-13
+  posted: 2025-01-13
+---
+
+You can now send **data plane** logs from your [Kapsule or Kosmos](https://www.scaleway.com/en/kubernetes) clusters to [Cockpit](https://www.scaleway.com/en/cockpit/), providing centralized, real-time access to application and system logs. Reduce complexity and manual work thanks to this integration, powered by a **Promtail** deployment via [Easy Deploy](https://www.scaleway.com/en/docs/containers/kubernetes/how-to/enable-easy-deploy/).
+
+With this feature:
+
+- **Enhance observability**: View logs from all your Kubernetes containers in one place.
+- **Simplify troubleshooting**: Quickly drill down into specific pods or containers without needing to configure a separate logging stack.
+
+<Message type="important">
+    This feature does incur costs based on the volume of logs ingested. Refer to [Cockpit Usage and Pricing](/observability/cockpit/reference-content/understanding-cockpit-usage/) for more details and best practices to avoid unexpected bills.
+</Message>
+
+<Macro id="requirements" />
+
+- A running [Kapsule](/containers/kubernetes/how-to/create-cluster/) or [Kosmos](/containers/kubernetes/how-to/create-kosmos-cluster/) cluster.
+- Sufficient permissions to deploy Easy Deploy applications on your cluster
+
+## Architecture and limitations
+
+### Control Plane vs. Data Plane
+
+- **Control Plane**: Fully managed by Scaleway. Users can already [monitor control plane components](/containers/kubernetes/how-to/monitor-cluster/) (e.g., `kube-apiserver`, `CCM`, `CSI`) via Cockpit.
+- **Data Plane**: Runs in your Scaleway Project (customer-managed instances, `kubelet`, `containerd`, customer Pods, etc.). You have **full access** to the data plane, including the ability to SSH into nodes.
+
+Because the data plane is entirely under your control, **logs from any components running on these nodes are considered your own data**. Consequently, shipping these logs to Cockpit is billed based on data ingestion.
+
+## How it works
+
+The system leverages **Promtail** (a lightweight log collector) running on your Kapsule or Kosmos cluster. Promtail forwards logs to your Cockpit instance’s Loki endpoint:
+
+1. **Promtail** can collect logs from:
+   - **Container stdout/stderr** (pods)
+   - **systemd journal** (e.g., `kubelet.service`)
+2. **Log data** is transmitted to **Cockpit** (Loki).
+3. **Cockpit** stores and indexes these logs.
+
+## Step-by-Step: Enabling container logs in Cockpit
+
+You can use Scaleway’s **Easy Deploy** to add a Promtail deployment to your cluster:
+
+1. **Open the Scaleway Console** and go to your **Kubernetes** cluster.
+2. Navigate to the **Easy Deploy** tab.
+3. Select **Promtail for Cockpit** from the library.
+4. **Deploy** the application. Promtail will install on your cluster with default settings that:
+   - Collect container logs for **all namespaces** (by default).
+   - Collect systemd journal logs (e.g., `kubelet.service`).
+   - Forward logs securely to **Cockpit**.
+
+<Message type="note">
+    You may edit the default configuration of the deployment to specify the sources of logs to ingest (under `config.snippets.scrapeConfigs` in the yaml file): `cockpit_promtail_scrape_config_pods: “… list of namespaces…” cockpit_promtail_scrape_config_journal: “… list of system components…”` |
+</Message>
+
+### Example Promtail configuration
+
+Below is a simplified snippet of the configuration that Easy Deploy generates by default:
+
+```
+config:
+  clients:
+    - bearer_token: "{{{ cockpit_bearer_token }}}" # no need to modify
+      url: "{{{ cockpit_loki_push_url }}}" # no need to modify
+
+  snippets:
+    scrapeConfigs: |
+      {{{- cockpit_promtail_scrape_config_pods }}} #default all pods are logged
+      {{{- cockpit_promtail_scrape_config_journal }}} #default all system components are logged
+extraVolumeMounts:
+  - mountPath: /var/log/journal
+    name: journal
+    readOnly: true
+extraVolumes:
+  - hostPath:
+      path: /var/log/journal
+    name: journal
+```
+
+<Message type="note">
+    The placeholders like `{{{ cockpit_bearer_token }}}` and `{{{ cockpit_loki_push_url }}}` are automatically replaced by the Easy Deploy system with your actual values. |
+</Message>
+
+## Observing logs in Cockpit
+
+Once Promtail is running:
+
+1. Go to **Cockpit** → **Kubernetes Cluster Pod Logs** in the Scaleway Console (or open your own Grafana connected to Cockpit).
+2. **Filter** by:
+   - `Datasource` which is automatically created upon deployment, and visible in the Cockpit console
+   - `Cluster Name` ( e.g. `my-kapsule-cluster`)
+   - `namespace`, `pod`, or `container` labels to isolate specific workloads
+   - **Time range** to limit how far back in history you want to query
+3. **Analyze** logs in real-time or historical mode to troubleshoot issues, watch for errors, or track performance.
+
+## Usage & pricing
+
+Sending logs to Cockpit is billed based on the **total volume of logs ingested**. You are charged *€0.15 per million log lines*\* (samples) or partial million.
+
+For more details on controlling your costs, see our [Cockpit Usage and Pricing guide](#) (link to your existing doc or the excerpt below). Key points include:
+
+- **Logging rate**: The more logs you produce (e.g. high-traffic workloads or verbose logging), the higher the bill.
+- **Filtering**: Limit logs to critical namespaces or system components only.
+
+<Message type="tip">
+    Always monitor the logs ingestion rate in the dedicated dashboards provided in Cockpit, just below the log tables, to avoid surprises. |
+</Message>
+
+## Security considerations
+
+- **Authentication**: The Promtail client uses a Cockpit Bearer Token to authenticate. Keep this token secret; do not store it in publicly accessible repos.
+- **Encryption**: Communication between Promtail and Cockpit (HTTPS) encrypts logs in transit.
+- **Access Control**: Ensure only trusted team members can deploy Easy Deploy applications or modify cluster-level configurations.
+
+## Troubleshooting
+
+- **No logs appearing** in Cockpit:
+  1. Verify that the Promtail pod is running (`kubectl get pods -n <promtail-namespace>`).
+  2. Inspect Promtail logs for errors.
+
+
+- **High log ingestion cost**:
+  1. Review your **deployment configuration** to filter out verbose logs or unneeded namespaces.
+  2. Check **log ingestion rate** in the dedicated dashboards for unusual spikes.
+
+## Further resources
+
+- [Observability Overview](https://www.scaleway.com/en/docs/observability/)
+- [Push Logs to Cockpit (How-To)](https://www.scaleway.com/en/docs/observability/cockpit/how-to/send-metrics-logs-to-cockpit/)
+- [Promtail Documentation](https://grafana.com/docs/loki/latest/clients/promtail/)
+- [Scaleway Kapsule Documentation](https://www.scaleway.com/en/docs/containers/kubernetes/kapsule/quickstart/)
+- [Scaleway Kosmos Documentation](https://www.scaleway.com/en/docs/containers/kubernetes/kosmos/quickstart/)

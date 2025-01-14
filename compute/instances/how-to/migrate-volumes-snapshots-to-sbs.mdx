@@ -7,7 +7,7 @@ content:
   paragraph: This guide provides step-by-step instructions to help you migrate your existing Block Storage volumes and snapshots to Scaleway's new Block Storage management system.
 tags: instance snapshot volume b_ssd sbs
 dates:
-  validation: 2024-11-15
+  validation: 2025-01-14
   posted: 2024-08-07
 categories:
   - compute
@@ -15,37 +15,57 @@ categories:
 
 To enhance performance and reliability, Scaleway is transitioning the management of Block Storage volumes and snapshots from Compute to Storage.
 
-The migration process ensures that the characteristics of your volumes and snapshots remain unchanged, even for volumes attached to running Instances.
+To facilitate the transition to Scaleway's new Block Storage management, two main approaches for migrating your volumes exist, each with its unique benefits and drawbacks:
 
-After migration, these resources will be managed under [Storage](/storage/block/quickstart/) instead of Compute.
+- [Using the Instance API/CLI migration endpoint (Plan and Apply)](#migrating-using-the-migration-endpoint-of-the-instances-api-cli):
+   - **Advantage:** Migration can occur without service interruption, as the volume remains attached to the running Instance and fully accessible.
+   - **Drawback:** Only the volume's representation is migrated to the SBS API; the data itself doesn't move. This means the migrated volume will not benefit from low latency or higher IOPS, as it retains the original `b_ssd` characteristics.
 
-During migration, unified snapshots will be converted into [Block Storage Low Latency](/storage/block/) snapshots and removed from Compute. If a unified snapshot is part of an image, it will be replaced by the corresponding Block Storage Low Latency snapshot.
+- [Using the snapshot export/import features](#migrating-using-the-snapshot-exportimport-features):
+   - **Advantage:** The migrated volume will fully support low latency, and it is possible to modify the IOPS up to 15k. All existing data of the old volume will be copied to the new Block Storage Low Latency volume.
+   - **Drawback:** A snapshot must be manually created, exported, and then imported and attached to the Instance which may require downtime.
+
+Each method caters to different needs, balancing uninterrupted service against achieving maximum performance benefits. After migration, these resources will be managed under [Storage](/storage/block/quickstart/) instead of Compute.
+
+## Comparison of migration methods
+
+| Migration Method               | Advantage                                      | Drawback                                     |
+|--------------------------------|-----------------------------------------------|---------------------------------------------|
+| Instance API/CLI migration     | No service interruption, volume remains accessible | Data characteristics remain the same; no performance boost |
+| Snapshot export/import         | Full support for low latency and customizable IOPS | Requires downtime; manual snapshot handling |
+
 
 This guide offers step-by-step instructions to migrate your volumes and snapshots using either the [Scaleway Command Line Interface (CLI)](/developer-tools/scaleway-cli/quickstart/) tool (recommended) or the [Instances API](https://www.scaleway.com/en/developers/api/instance/#path-volumes-migrate-a-volume-andor-snapshots-to-sbs-scaleway-block-storage).
-
-<Message type="note">
-  - The easiest way to migrate your Block Storage volumes and snapshots is by using the [Scaleway Command Line Interface (CLI)](/developer-tools/scaleway-cli/quickstart/) tool
-  - If you encounter an error about quota limitations during the migration process, [contact our support team](https://console.scaleway.com/support/tickets/create) for assistance.
-</Message>
-
-<Message type="important">
-  To ensure continued access to managing your volumes, you must [convert](/faq/blockstorage/#how-can-i-convert-a-block-storage-legacy-volume-into-a-block-storage-low-latency-volume) your **unified volumes and snapshots** into either **local** or **Block volumes** before the **end-of-life date of June 2nd, 2024**. After this date, unified volumes and snapshots will no longer be supported by any API.
-
-  ### Key migration deadlines:
-  - **April 30th:**
-    - Creation of new unified volumes via the Instance API will be disabled.
-    - Unified volumes will no longer be supported by the Block Storage API.
-  - **June 2nd:**
-    - Unified volumes and snapshots can no longer be managed via any API. Existing unified resources must be converted by this date to avoid loss of manageability.
-</Message>
-
+Alternatively, you can use the [snapshot export/import feature](/compute/instances/api-cli/snapshot-import-export-feature/) to migrate your unified volumes and snapshots to Block Storage Low Latency volumes.
 
 <Macro id="requirements" />
 
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - An [Instance](/compute/instances/how-to/create-an-instance/) using [Block Storage volumes](/storage/block/how-to/create-a-volume/)
 
-## Migrating an existing Block Storage volume to Scaleway Block Storage management
+<Message type="tip">
+  - The easiest way to migrate your Block Storage volumes and snapshots is by using the [Scaleway Command Line Interface (CLI)](/developer-tools/scaleway-cli/quickstart/) tool.
+  - If you encounter an error about quota limitations during the migration process, [contact our support team](https://console.scaleway.com/support/tickets/create) for assistance.
+</Message>
+
+<Message type="important">
+  To ensure continued access to managing your volumes, you must convert your **unified volumes and snapshots** into either **local** or **Block volumes** before the **end-of-life date of June 2nd, 2025**. After this date, unified volumes and snapshots will no longer be supported by any API.
+
+  #### Key migration deadlines:
+  - April 30th, 2025:
+    - Creation of new unified volumes via the Instance API will be disabled.
+    - Unified volumes will no longer be supported by the Block Storage API.
+  - June 2nd, 2025:
+    - Unified volumes and snapshots can no longer be managed via any API. Existing unified resources must be converted by this date to avoid loss of manageability.
+</Message>
+
+## Migrating using the Instance API/CLI migration endpoint (Plan and Apply):
+
+<Message type="note">
+  During migration, unified snapshots will be converted into [Block Storage](/storage/block/) snapshots and removed from Compute. If a unified snapshot is part of an image, it will be replaced by the corresponding Block Storage snapshot.
+</Message>
+
+### Migrating an existing Block Storage volume to Scaleway Block Storage management
 
 <Message type="important">
     This process applies only to Block SSD (`b_ssd`) volumes.
@@ -138,7 +158,7 @@ This guide offers step-by-step instructions to migrate your volumes and snapshot
   </TabsTab>
 </Tabs>
 
-## Migrating an existing Block Storage snapshot to Scaleway Block Storage management
+### Migrating an existing Block Storage snapshot to Scaleway Block Storage management
 
 <Message type="important">
     This process applies to Block SSD (`b_ssd`) or Unified (`unified`) snapshots.
@@ -230,6 +250,18 @@ This guide offers step-by-step instructions to migrate your volumes and snapshot
       ```
   </TabsTab>
 </Tabs>
+
+## Migrating using the snapshot import/export features
+
+To convert your unified volumes and snapshots you can use the snapshot export/import feature as an alternative solution to transition a Block Storage legacy volume into a Block Storage Low Latency volume.
+
+    <Message type="important">
+      The process below requires manual intervention and **does not preserve the original volume’s ID**. While this approach allows you to transition to a Block Storage Low Latency volume, it is only a workaround.
+    </Message>
+
+   Steps:
+   1. [Export a snapshot of your unified volume](https://www.scaleway.com/en/docs/compute/instances/api-cli/snapshot-import-export-feature/#exporting-snapshots).
+   2. [Import the snapshot into a new local or Block volume](https://www.scaleway.com/en/docs/compute/instances/api-cli/snapshot-import-export-feature/#importing-snapshots).
 
 ## Going further
 

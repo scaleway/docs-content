@@ -1,23 +1,23 @@
 ---
 meta:
-  title: Create a serverless scraping architecture, with Scaleway Messaging and Queuing SQS, Serverless Functions, and Managed Database.
-  description: Learn how to construct a scalable serverless scraping architecture with Scaleway Messaging, SQS, Serverless Functions, and Managed Database. Dive into this Terraform-based tutorial for step-by-step guidance on asynchronous data processing.
+  title: Create a serverless scraping architecture, with Scaleway Queues, Serverless Functions, and Managed Database.
+  description: Learn how to construct a scalable serverless scraping architecture with Scaleway Queues, Serverless Functions, and Managed Database. Dive into this Terraform-based tutorial for step-by-step guidance on asynchronous data processing.
 content:
-  h1: Create a serverless scraping architecture, with Scaleway Messaging and Queuing SQS, Serverless Functions, and Managed Database.
-  paragraph: Learn how to construct a scalable serverless scraping architecture with Scaleway Messaging, SQS, Serverless Functions, and Managed Database. Dive into this Terraform-based tutorial for step-by-step guidance on asynchronous data processing.
+  h1: Create a serverless scraping architecture, with Scaleway Queues, Serverless Functions, and Managed Database.
+  paragraph: Learn how to construct a scalable serverless scraping architecture with Scaleway Queues, Serverless Functions, and Managed Database. Dive into this Terraform-based tutorial for step-by-step guidance on asynchronous data processing.
 categories:
   - functions
   - messaging
   - postgresql-and-mysql
 tags: terraform scraping-architecture
 dates:
-  validation: 2024-09-16
+  validation: 2024-10-21
   posted: 2023-12-08
 ---
 
 In this tutorial, we show how to set up a simple application that reads [Hacker News](https://news.ycombinator.com) and processes the articles it finds there asynchronously. To do so, we  use Scaleway serverless products and deploy two functions:
- - A producer function, activated by a recurrent cron trigger, that scrapes HackerNews for articles published in the last 15 minutes and pushes the title and URL of the articles to an SQS queue created with Scaleway Messaging and Queuing.
- - A consumer function, triggered by each new message on the SQS queue, that consumes messages published to the queue, scrapes some data from the linked article, and then writes the data into a Scaleway Managed Database.
+ - A producer function, activated by a recurrent cron trigger, that scrapes HackerNews for articles published in the last 15 minutes and pushes the title and URL of the articles to a queue created with Scaleway Queues.
+ - A consumer function, triggered by each new message on the queue, that consumes messages published to the queue, scrapes some data from the linked article, and then writes the data into a Scaleway Managed Database.
 
 <Lightbox src="scaleway-scraping-architecture.webp" alt="" />
 
@@ -45,7 +45,7 @@ We start by creating the scraper program, or the "data producer".
 3. Create a subdirectory `handlers` within the `scraper` directory, and add a `scrape_hn.py` file inside it.
 4. Complete the `scrape_hn.py` file by adding the function code [as shown in the repository](https://github.com/scaleway/serverless-examples/blob/main/mnq/serverless-scraping/scraper/handlers/scrape_hn.py). The main code blocks are briefly explained as follows:
 
-    SQS credentials and queue URL are read by the function from environment variables. Those variables are set by Terraform as explained in [one of the next sections](#create-a-terraform-file-to-provision-the-necessary-scaleway-resources). *If you choose another deployment method, such as the [console](https://console.scaleway.com/), do not forget to set them.*
+    Queue credentials and URL are read by the function from environment variables. Those variables are set by Terraform as explained in [one of the next sections](#create-a-terraform-file-to-provision-the-necessary-scaleway-resources). *If you choose another deployment method, such as the [console](https://console.scaleway.com/), do not forget to set them.*
     ```python
     queue_url = os.getenv('QUEUE_URL')
     sqs_access_key = os.getenv('SQS_ACCESS_KEY')
@@ -62,7 +62,7 @@ We start by creating the scraper program, or the "data producer".
         titlelines = soup.find_all(class_="titleline")
         ages = soup.find_all(class_="age")
     ```
-    Using the AWS python sdk `boto3`, connect to the SQS queue and push the `title` and `url` of articles published less than 15 minutes ago.
+    Using the AWS python sdk `boto3`, connect to the queue and push the `title` and `url` of articles published less than 15 minutes ago.
     ```python
         sqs = boto3.client(
           'sqs',
@@ -80,7 +80,7 @@ We start by creating the scraper program, or the "data producer".
             body = json.dumps({'url': titleline.a["href"], 'title': titleline.a.get_text()})
             response = sqs.send_message(QueueUrl=queue_url, MessageBody=body)
     ```
-As explained in the [Scaleway Functions documentation](/serverless/functions/how-to/package-function-dependencies-in-zip/#how-to-configure-your-package-using-python), dependencies need to be installed in a `package` folder, and uploaded as an archive. This is done via Terraform, but if you decide to deploy using another system, you can create the archive as follows:
+As explained in the [Scaleway Functions documentation](/serverless/functions/how-to/package-function-dependencies-in-zip/#how-to-configure-your-package), dependencies need to be installed in a `package` folder, and uploaded as an archive. This is done via Terraform, but if you decide to deploy using another system, you can create the archive as follows:
     ```bash
     cd scraper
     pip install -r requirements.txt --target ./package
@@ -99,7 +99,7 @@ Next, let's create our consumer function. When receiving a message containing th
 3. Create a subdirectory `handlers` within the `consumer` directory, and add a `consumer.py` file inside it.
 4. Complete the `consumer.py` file by adding the function code [as shown in the repository](https://github.com/scaleway/serverless-examples/blob/main/mnq/serverless-scraping/consumer/handlers/consumer.py). The main code blocks are briefly explained as follows:
 
-    SQS credentials and queue URLs are accessed by the function as environment variables. These variables are set by Terraform as explained in [one of the next sections](#create-a-terraform-file-to-provision-the-necessary-scaleway-resources). If you choose another deployment method, such as the [console](https://console.scaleway.com/), do not forget to set them.
+    Queue credentials and URLs are accessed by the function as environment variables. These variables are set by Terraform as explained in [one of the next sections](#create-a-terraform-file-to-provision-the-necessary-scaleway-resources). If you choose another deployment method, such as the [console](https://console.scaleway.com/), do not forget to set them.
     ```python
     db_host = os.getenv('DB_HOST')
     db_port = os.getenv('DB_PORT')
@@ -107,7 +107,7 @@ Next, let's create our consumer function. When receiving a message containing th
     db_user = os.getenv('DB_USER')
     db_password = os.getenv('DB_PASSWORD')
     ```
-    From the trigger event we can read the *body* of the SQS message, and use the passed URL to scrape the page for stats.
+    From the trigger event we can read the *body* of the message, and use the passed URL to scrape the page for stats.
     ```python
     def scrape_and_save_to_db(event):
       body = json.loads(event["body"])
@@ -126,7 +126,7 @@ Next, let's create our consumer function. When receiving a message containing th
           if conn is not None:
               conn.close()
     ```
-As explained in the [Scaleway Functions documentation](/serverless/functions/how-to/package-function-dependencies-in-zip/#how-to-configure-your-package-using-python), dependencies need to be installed in a `package` folder, and uploaded as an archive. This is done via Terraform, but if you decide to deploy using another system, you can create the archive as follows:
+As explained in the [Scaleway Functions documentation](/serverless/functions/how-to/package-function-dependencies-in-zip/#how-to-configure-your-package), dependencies need to be installed in a `package` folder, and uploaded as an archive. This is done via Terraform, but if you decide to deploy using another system, you can create the archive as follows:
     ```bash
     cd consumer
     pip install -r requirements.txt --target ./package
@@ -140,10 +140,10 @@ For the purposes of this tutorial, we show how to provision all resources via Te
 
 <Message type="tip">
 If you do not want to use Terraform, you can also create the required resources via the [console](https://console.scaleway.com/), the [Scaleway API](https://www.scaleway.com/en/developers/api/), or any other [developer tool](https://www.scaleway.com/en/developers/). Remember that if you do so, you will need to set up environment variables for functions as previously specified. The following documentation may help create the required resources:
-- **Messaging and Queuing SQS resources**: [console documentation](/serverless/messaging/quickstart/) | [API documentation](https://www.scaleway.com/en/developers/api/messaging-and-queuing/sqs-api/)
+- **Scaleway Queues resources**: [console documentation](/serverless/messaging/quickstart/) | [API documentation](https://www.scaleway.com/en/developers/api/messaging-and-queuing/sqs-api/)
 - **Managed Database for PostgreSQL**: [console documentation](/managed-databases/postgresql-and-mysql/quickstart/) | [API documentation](https://www.scaleway.com/en/developers/api/managed-database-postgre-mysql/)
-- **Serverless Functions**: [console documentation](https://www.scaleway.com/en/docs/serverless/functions/quickstart/) | [API documentation](https://www.scaleway.com/en/developers/api/serverless-functions/)
-  - **Serverless Functions triggers**: [console documentation](https://www.scaleway.com/en/docs/serverless/functions/how-to/add-trigger-to-a-function/) | [API documentation](https://www.scaleway.com/en/developers/api/serverless-functions/#path-triggers-list-all-triggers)
+- **Serverless Functions**: [console documentation](/serverless/functions/quickstart/) | [API documentation](https://www.scaleway.com/en/developers/api/serverless-functions/)
+  - **Serverless Functions triggers**: [console documentation](/serverless/functions/how-to/add-trigger-to-a-function/) | [API documentation](https://www.scaleway.com/en/developers/api/serverless-functions/#path-triggers-list-all-triggers)
 </Message>
 
 1. Create a directory called `terraform` (at the same level as the `scraper` and `consumer` directories created in the previous steps).
@@ -166,8 +166,8 @@ If you do not want to use Terraform, you can also create the required resources 
       name = "mnq-tutorial"
     }
     ```
-4. Still in the same file, add the code below to provision the SQS resources: SQS activation for the project, separate credentials with appropriate permissions for producer and consumer, and an SQS queue:
-    ```hcl
+4. Still in the same file, add the code below to provision the queue resources: separate credentials with appropriate permissions for producer and consumer, and a Scaleway queue:
+    ```
     resource "scaleway_mnq_sqs" "main" {
       project_id = scaleway_account_project.mnq_tutorial.id
     }
@@ -384,7 +384,7 @@ terraform apply
 
 ### How to check that everything is working correctly
 
-Go to the [Scaleway console](https://console.scaleway.com/), and check the logs and metrics for Serverless Functions' execution and Messaging and Queuing SQS queue statistics.
+Go to the [Scaleway console](https://console.scaleway.com/), and check the logs and metrics for Serverless Functions' execution and the queue's statistics.
 
 To make sure the data is correctly stored in the database, you can [connect to it directly](/managed-databases/postgresql-and-mysql/how-to/connect-database-instance/) via a CLI tool such as `psql`.
 Retrieve the instance IP and port of your Managed Database from the console, under the [Managed Database section](https://console.scaleway.com/rdb/instances).
@@ -400,9 +400,9 @@ terraform destroy
 ```
 
 ## Summary, going further, key takeaways
-We have shown how to asynchronously decouple the producer and the consumer using SQS, adhering to serverless patterns.
+We have shown how to asynchronously decouple the producer and the consumer using Scaleway Queues, adhering to serverless patterns.
 
-While the volume of data processed in this example is quite small, thanks to the Messaging and Queuing SQS queue's robustness and the auto-scaling capabilities of the Serverless Functions, you can adapt this example to manage larger workloads.
+While the volume of data processed in this example is quite small, thanks to robustness of Scaleway Queues and the auto-scaling capabilities of the Serverless Functions, you can adapt this example to manage larger workloads.
 
 Here are some possible extensions to this basic example:
  - Replace the simple proposed logic with your own. What about counting how many times some keywords (e.g: copilot, serverless, microservice) appear in Hacker News articles?

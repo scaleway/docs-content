@@ -1,0 +1,505 @@
+---
+meta:
+  title: Migrating from another managed Kubernetes service to Scaleway Kapsule
+  description: Step-by-step guide to migrate your Kubernetes clusters from services like GKE, EKS, or AKS to Scaleway Kapsule with minimal downtime.
+content:
+  h1: Migrating from another managed Kubernetes service to Scaleway Kapsule
+  paragraph: Step-by-step guide to migrate your Kubernetes clusters from services like GKE, EKS, or AKS to Scaleway Kapsule with minimal downtime.
+tags: kubernetes kapsule k8s migration
+categories:
+  - kubernetes
+dates:
+  validation: 2024-11-13
+  posted: 2024-11-13
+---
+
+This guide provides a step-by-step process to help you migrate your existing Kubernetes clusters from other managed services like GKE (Google Kubernetes Engine), EKS (Amazon Elastic Kubernetes Service), or AKS (Azure Kubernetes Service) to **[Scaleway Kapsule](/containers/kubernetes/quickstart/)**. The migration aims to minimize downtime and ensure a smooth transition of your workloads.
+
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Access to an existing Kubernetes cluster
+- Basic knowledge and familiarity with Kubernetes concepts and tools.
+- Installed the following tools: `kubectl`, `helm` (if used), and `scaleway CLI` (optional but recommended).
+- Access to your container images stored in a registry (Scaleway Container Registry, Docker Hub, ECR, GCR, etc.).
+
+## Overview of migration steps
+
+- [Step 1: Assess and document current cluster resources](#step-1-assess-and-document-current-cluster-resources)
+- [Step 2: Set up Scaleway environment](#step-2-set-up-scaleway-environment)
+- [Step 3: Migrate container images to Scaleway Container Registry](#step-3-migrate-container-images-to-scaleway-container-registry)
+- [Step 4: Create a Kapsule Kubernetes cluster](#step-4-create-a-kapsule-kubernetes-cluster)
+- [Step 5: Configure kubectl for Kapsule](#step-5-configure-kubectl-for-kapsule)
+- [Step 6: Adapt Kubernetes manifests and configurations](#step-6-adapt-kubernetes-manifests-and-configurations)
+- [Step 7: Migrate persistent data and storage](#step-7-migrate-persistent-data-and-storage)
+- [Step 8: Deploy applications to Kapsule](#step-8-deploy-applications-to-kapsule)
+- [Step 9: Update networking and DNS configurations](#step-9-update-networking-and-dns-configurations)
+- [Step 10: Test and validate deployments](#step-10-test-and-validate-deployments)
+- [Step 11: Switch over production traffic](#step-11-switch-over-production-traffic)
+- [Step 12: Monitor and optimize the new cluster](#step-12-monitor-and-optimize-the-new-cluster)
+- [Step 13: Decommission the old cluster](#step-13-decommission-the-old-cluster)
+
+## Step 1: Assess and document current cluster resources
+
+Begin by documenting your existing cluster configuration. This includes namespaces, deployments, services, storage, and any custom resources or policies in use.
+
+### 1.1 Inventory of resources
+
+- **Namespaces**: List all namespaces in use.
+- **Deployments and StatefulSets**: Identify all applications and workloads running.
+- **Services**: Document `LoadBalancers`, `NodePorts`, `ClusterIPs`.
+- **ConfigMaps and Secrets**: Export configurations and sensitive data.
+- **Ingress Controllers**: Note any Ingress resources and controllers used.
+- **Persistent Volumes and Claims**: List all storage resources.
+- **Custom Resource Definitions (CRDs)**: Document any CRDs and associated operators.
+- **Network Policies**: Record any network policies in place.
+
+### 1.2 Export manifests
+
+Use `kubectl` to export the manifests of your resources:
+
+```
+kubectl get all --all-namespaces -o yaml > cluster-resources.yaml
+
+kubectl get pvc --all-namespaces -o yaml > pvcs.yaml
+
+kubectl get configmaps --all-namespaces -o yaml > configmaps.yaml
+
+kubectl get secrets --all-namespaces -o yaml > secrets.yaml
+
+kubectl get ingress --all-namespaces -o yaml > ingress.yaml
+
+kubectl get crd --all-namespaces -o yaml > crds.yaml
+```
+
+<Message type="note">
+  Be cautious with secrets; ensure they are handled securely.
+</Message>
+
+## Step 2: Set Up Scaleway environment
+
+### 2.1 Create a Scaleway account
+
+If you do not already have one, [sign up for a Scaleway account](https://console.scaleway.com/register/).
+
+### 2.2 Install Scaleway CLI (Optional)
+
+[Installing the Scaleway CLI](https://github.com/scaleway/scaleway-cli) can simplify some tasks.
+
+Run the following command in a terminal to install the Scaleway CLI:
+```sh
+curl -s <https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh> | sh
+scw init
+```
+
+Follow the prompts to configure your access keys.
+
+## Step 3: Migrate container images to Scaleway Container Registry
+
+Your new cluster will need access to your container images.
+
+### 3.1 Set Up Scaleway Container Registry
+
+#### Create a namespace
+
+1. Log in to the [Scaleway Console](https://console.scaleway.com/).
+2. Navigate to **Container Registry**.
+3. Click **Create a Namespace**.
+4. Provide a **Name** (e.g., `my-apps`) and select a **Region**.
+5. Click **Create a Namespace**.
+
+<Message type="note">
+  Refer to the dedicated documentation [How to create a namespace](/containers/container-registry/how-to/create-namespace/) for detailed information how to create a Scaleway Container Registry namespace.
+</Message>
+
+### 3.2 Authenticate Docker with Scaleway Registry
+
+Use the following command to login to your Scaleway Registry using Docker:
+
+```sh
+docker login rg.<region>.scw.cloud
+```
+
+<Message type="tip">
+  Use your **Scaleway credentials** or generate a dedicated token.
+</Message>
+
+### 3.3 Pull images from existing registry and push to Scaleway
+
+For each image, you need to migrate:
+
+```sh
+# Pull the image from your existing registry
+
+docker pull <original-registry>/<image-name>:<tag>
+
+# Tag the image for Scaleway Registry
+
+docker tag <original-registry>/<image-name>:<tag> rg.<region>.scw.cloud/<namespace>/<image-name>:<tag>
+
+# Push the image to Scaleway Registry
+
+docker push rg.<region>.scw.cloud/<namespace>/<image-name>:<tag>
+```
+
+<Message type="tip">
+  **Automate the process**: Consider scripting this process if you have many images.
+</Message>
+
+## Step 4: Create a Kapsule Kubernetes cluster
+
+To create and configure a new Kapsule Kubernetes cluster, follow the steps below:
+
+### 4.1 Using the Scaleway console
+
+#### Cluster configuration
+
+1. Navigate to **Kubernetes** under the **Containers** section of the [Scaleway console](https://console.scaleway.com/) side menu. The Kubernetes dashboard displays.
+2. Click **Create cluster** to launch the cluster creation wizard.
+3. On the cluster configuration page, provide the following details:
+    * Check the Organization and Project for the new cluster.
+        <Message type="important">
+          You cannot move a cluster from one Organization or Project to another once created.
+        </Message>
+    * Select **Kubernetes Kapsule** as the cluster type, which uses exclusively Scaleway Instances.
+    * Choose the geographical **region** for the cluster.
+    * Select the control plane offer for your cluster. Options include shared or dedicated control planes.
+        <Message type="tip">
+          Need help deciding on a control plane offer? Learn more about our [Kubernetes control plane offers](/containers/kubernetes/reference-content/kubernetes-control-plane-offers/).
+        </Message>
+    * Specify the **Kubernetes version** for your cluster.
+4. Enter the **cluster's details**. Provide a name for the cluster. Optionally, you can add a description and tags for better organization.
+5. Configure the **Private Network** for the cluster to ensure secure and isolated network communication. Each cluster is auto-configured with a /22 IP subnet. Click **Select Private Network** to:
+    * Attach an existing Private Network (VPC) within the same Availability Zone from the drop-down menu.
+    * Attach a new Private Network to the cluster.
+    <Message type="important">
+      The Private Network cannot be detached, and the cluster cannot be moved to another Private Network post-creation.
+    </Message>
+6. Click **Configure pools** to proceed.
+
+#### Pool configuration
+
+1. Configure the following for each pool:
+    * Choose an **Availability Zone** for the pool's nodes.
+    * Select the **node type** for the pool.
+        <Message type="tip">
+          Need advice on choosing a node type? [Learn more about Kubernetes nodes.](/containers/kubernetes/concepts/#node)
+        </Message>
+    * Configure the **system volume**. This volume contains the operating system of the nodes in your pool.
+    * Configure **pool options**, including node count and whether to enable autoscaling. Options also include enabling autoheal and linking to a placement group, or you can retain default settings.
+        <Message type="tip">
+          - Unsure about the autoheal feature? [Learn more about autoheal.](/containers/kubernetes/concepts/#autoheal)
+          - Need more information about placement groups? [Learn more about placement groups.](/compute/instances/concepts/#placement-groups)
+        </Message>
+    * Enable full isolation, if required.
+        <Message type="tip">
+          Need more information on full isolation? [Learn more about full isolation.](/containers/kubernetes/reference-content/secure-cluster-with-private-network/#what-is-the-difference-between-controlled-isolation-and-full-isolation)
+        </Message>
+2. Click **Add pool** to integrate the pool into the cluster.
+3. To add more pools, click **Expand** and repeat the steps above.
+    <Message type="tip">
+      You can add or remove pools as needed before finalizing your cluster configuration. To remove a pool, click **Remove** within the respective pool.
+    </Message>
+4. Once all pools are configured, click **Review** to finalize your cluster setup.
+
+#### Review configuration
+
+1. Review the configuration details of your Kubernetes cluster and its pools.
+    <Message type="tip">
+      To modify any element, click the <Icon name="edit" /> **Edit** icon next to the respective configuration component.
+    </Message>
+2. Click **Create cluster** to deploy your cluster. Once deployment is complete, the cluster appears in the clusters list.
+
+### 4.2 Wait for cluster provisioning
+
+- The process may take several minutes.
+- Once ready, the cluster status will be **Ready**.
+
+## Step 5: Configure kubectl for Kapsule
+
+### 5.1 Download the kubeconfig file
+
+1. In the Scaleway console, go to your cluster's **Overview** page.
+2. Click **Download kubeconfig**.
+3. Save the file to `~/.kube/kapsule-config`.
+
+### 5.2 Update kubeconfig
+
+```sh
+export KUBECONFIG=~/.kube/kapsule-config:~/.kube/config
+
+kubectl config view --flatten > ~/.kube/config_combined
+
+mv ~/.kube/config_combined ~/.kube/config
+
+unset KUBECONFIG
+
+```
+This merges the Kapsule `kubeconfig` with your existing config.
+
+### 5.3 Set the current context
+
+1. List available contexts to identify the name of the context for your Kapsule cluster
+  ```
+  kubectl config get-contexts
+  ```
+2. Set the Kapsule cluster as the current context by replacing `<kapsule-context-name>` with the context name for your Kapsule cluster.
+    ```
+    kubectl config use-context <kapsule-context-name>
+    ```
+3. Confirm that your context has been updated
+    ```
+    kubectl config current-context
+    ```
+
+### 5.4 Verify connection
+
+```
+kubectl get nodes
+```
+
+## Step 6: Adapt Kubernetes manifests and configurations
+
+Your existing manifests may contain cloud-provider-specific settings that need adjustment to align with Scaleway Kapsule's configuration.
+
+### 6.1 Review and modify manifests
+
+#### Storage classes
+
+- Update storage classes to match Scaleway's offerings.
+- List available storage classes:
+    ```sh
+    kubectl get storageclass
+    ```
+- Common storage classes in Scaleway:
+  - `scw-bssd` (Block Storage)
+  - `scw-sbs` (Faster Block Storage)
+
+#### Load Balancers
+
+- Modify Service definitions of type `LoadBalancer` to use [Scaleway's Load Balancers](/network/load-balancer/quickstart/). Refer to our [annotations documentation](/containers/kubernetes/reference-content/using-load-balancer-annotations/).
+- Ensure annotations specific to other cloud providers are removed or replaced.
+
+#### Ingress controllers
+
+- [Deploy an Ingress controller](/containers/kubernetes/how-to/deploy-ingress-controller/) compatible with Kapsule (e.g., NGINX Ingress Controller).
+
+#### Networking policies
+
+- Review and adjust network policies as needed.
+- Ensure they align with Scaleway's network architecture.
+
+#### ConfigMaps and secrets
+
+- Ensure sensitive data is securely managed.
+- Recreate secrets in the new cluster.
+
+#### Persistent Volume Claims (PVCs)
+
+- Update PVC definitions to use appropriate storage classes.
+
+### 6.2 Remove unsupported resources
+
+- Remove any resources or configurations that are not supported in Kapsule.
+- For example, certain annotations or cloud-specific resource definitions.
+
+## Step 7: Migrate persistent Data and storage
+
+### 7.1 Backup data from existing cluster
+
+- Use appropriate tools to back up data from Persistent Volumes.
+- Methods include:
+  - **Database dumps**: For databases, perform data exports.
+  - **File system copy**: For file storage, copy data to a temporary location.
+
+### 7.2 Restore data to Kapsule cluster
+
+- Create PersistentVolumeClaims in Kapsule.
+- Restore data into the new volumes:
+  - **Init containers**: Use init containers to populate data.
+  - **Data import jobs**: Run Kubernetes jobs to import data.
+
+## Step 8: Deploy applications to Kapsule
+
+### 8.1 Apply manifests to the new cluster
+
+```
+kubectl apply -f adjusted-manifests
+```
+
+<Message type="tip">
+  Ensure you are using the correct context for Kapsule.
+</Message>
+
+### 8.2 Deploy Ingress Controller
+
+- Deploy NGINX Ingress Controller:
+    ```
+    kubectl apply -f <https://raw.githubusercontent.com/kubernetes/ingress-nginx/controller-v1.2.1/deploy/static/provider/cloud/deploy.yaml>
+    ```
+
+### 8.3 Verify deployments
+
+```
+kubectl get pods --all-namespaces
+
+kubectl get services --all-namespaces
+
+kubectl get ingress --all-namespaces
+```
+<Message type="note">
+  Ensure all pods are running and services are correctly configured.
+</Message>
+
+## Step 9: Update networking and DNS configurations
+
+### 9.1 External DNS (if used)
+
+- If you use external DNS, configure it to work with Scaleway's DNS or your DNS provider.
+
+### 9.2 Update DNS records
+
+- Point your domain names to the new load balancer IPs or addresses.
+- Update A records, CNAMEs, or configure your CDN as necessary.
+
+### 9.3 Configure SSL/TLS certificates
+
+- Use Cert-Manager to manage SSL certificates in Kapsule.
+- Install Cert-Manager:
+    ```
+    kubectl apply -f <https://github.com/jetstack/cert-manager/releases/download/v1.8.0/cert-manager.yaml>
+    ```
+
+Configure issuers and certificates as per your requirements.
+
+## Step 10: Test and validate deployments
+
+Conduct functional, performance, and end-to-end testing to verify the applications work as expected in the new environment.
+
+### 10.1 Functional testing
+
+- Access your applications via their URLs.
+- Perform end-to-end testing to ensure functionality.
+
+### 10.2 Performance testing
+
+- Conduct load testing to verify performance under expected loads.
+
+### 10.3 Monitoring and logging
+
+- Set up monitoring tools (e.g., Prometheus, Grafana) to observe cluster health.
+- Configure logging solutions to collect and analyze logs.
+
+## Step 11: Switch over production traffic
+
+### 11.1 Plan for cutover
+
+- Choose a low-traffic period if possible.
+- Notify stakeholders of potential downtime or changes.
+
+### 11.2 Final synchronization
+
+- Sync any data changes that occurred during testing.
+
+### 11.3 Update DNS TTL
+
+- Reduce DNS Time-to-Live (TTL) to allow for quicker propagation.
+
+### 11.4 Update DNS to point to Kapsule
+
+- Change DNS records to point to the new cluster's ingress endpoints.
+
+### 11.5 Monitor traffic
+
+- Ensure that traffic is flowing to the new cluster.
+- Monitor for any errors or issues.
+
+## Step 12: Monitor and optimize the new cluster
+
+### 12.1 Resource usage
+
+- Monitor CPU, memory, and storage usage in [Scaleway Cockpit](/observability/cockpit/quickstart/).
+- Adjust node pool sizes or autoscaling settings as needed.
+
+### 12.2 Security
+
+- Review security configurations.
+- Ensure network policies and IAM roles are properly set.
+
+### 12.3 Cost monitoring
+
+- Keep an eye on the cluster's costs.
+- Optimize resource allocation to balance performance and expenses.
+
+## Step 13: Decommission the old cluster
+
+### 13.1 Ensure stability
+
+- Allow the new cluster to run in production for a sufficient period.
+- Confirm that there are no outstanding issues.
+
+### 13.2 Backup data
+
+- Take final backups from the old cluster if needed.
+
+### 13.3 Delete resources
+
+- Carefully delete resources in the old cluster to avoid incurring costs.
+- Delete the cluster following your provider's procedures.
+
+### 13.4 Update documentation
+
+- Document the new cluster setup.
+- Update any operational runbooks or procedures.
+
+## Troubleshooting tips
+
+- **Authentication Issues**: Verify kubeconfig contexts and credentials.
+- **Resource Quotas**: Check for any limitations in Scaleway that may affect deployments.
+- **Persistent Volume Issues**: Ensure storage classes and PVCs are correctly configured.
+- **Networking Problems**: Verify VPC configurations, network policies, and firewall rules.
+- **Image Pull Errors**: Confirm that images are correctly tagged and accessible in [Scaleway Container Registry](/containers/container-registry/quickstart/).
+
+## Additional considerations
+
+### Leveraging Scaleway features
+
+- **Elastic Metal nodes**: For workloads requiring dedicated resources, consider adding [Production-Optimized or Workload-Optimized nodes](/compute/instances/reference-content/choosing-instance-type/) to your cluster.
+- **Autoscaling**: Use cluster and [pod autoscaling](/containers/kubernetes/concepts/#autoscale) to handle variable workloads efficiently.
+- **Private Networking**: Use [VPC and Private Networks](/network/vpc/quickstart/) for enhanced security.
+
+### Cost management
+
+- **Transparent pricing**: Familiarize yourself with [Scaleway's pricing models](https://www.scaleway.com/en/pricing/containers/#kubernetes-kapsule).
+- **Cost estimation tools**: Use Scaleway's tools or third-party services to estimate and monitor costs.
+
+### Security best practices
+
+- **IAM policies**: Set up proper [access controls](/identity-and-access-management/iam/how-to/create-policy/).
+- **Regular updates**: Keep Kubernetes and applications up to date with security patches.
+- **Secrets management**: Use Kubernetes Secrets securely, and consider external secret management solutions if necessary.
+
+## Additional resources
+
+- **Scaleway Documentation**:
+  - [Kubernetes Kapsule](/containers/kubernetes/)
+  - [Scaleway Container Registry](/containers/container-registry/)
+  - [Block Storage](/storage/block/)
+- **Kubernetes Documentation**:
+  - [Kubernetes Official Documentation](https://kubernetes.io/docs/home/)
+  - [Storage Classes](https://kubernetes.io/docs/concepts/storage/storage-classes/)
+  - [Ingress Controllers](https://kubernetes.io/docs/concepts/services-networking/ingress-controllers/)
+- **Community and Support**:
+  - [Scaleway Support](https://console.scaleway.com/support/tickets)
+  - [Scaleway Community](https://slack.scaleway.com/)
+  - [Kubernetes Slack](https://slack.k8s.io/)
+
+## Feedback and assistance
+
+If you encounter issues or have questions during your migration:
+
+- **Contact support**: Use the [Scaleway support portal](https://console.scaleway.com/support/tickets) for technical assistance.
+- **Community Slack**: Engage with other users and experts in the [Scaleway Community](https://slack.scaleway.com).
+- **Provide feedback**: Your input helps improve services and documentation.

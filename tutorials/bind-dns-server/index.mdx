@@ -9,7 +9,7 @@ tags: dns bind
 categories:
   - domains-and-dns
 dates:
-  validation: 2024-05-13
+  validation: 2024-11-18
   posted: 2018-12-05
 ---
 
@@ -26,12 +26,21 @@ DNS (Domain Name System) is a service that translates the IP address of computer
 
 ## Installing BIND
 
-Install BIND and its related tools.
+1. Install the latest version of BIND 9.20 and related tools:
     ```
     apt-get install bind9 bind9utils bind9-doc dnsutils
     ```
+2. Verify the installed version:
+    ```
+    named -v
+    ```
+    The expected output should be:
+    ```
+    BIN 9.20.x
+    ```
 
-## Configuring BIND on the primary Instance
+
+## Configuring the primary DNS server
 
 1. Edit the `name.conf.local` file:
     ```
@@ -48,52 +57,61 @@ Install BIND and its related tools.
     // organization
     //include "/etc/bind/zones.rfc1918";
 
-    zone "scw-domain.ml" IN {
-                    type master;
-                    file "/etc/bind/db.scw-domain.ml";
-                    allow-update { 51.15.250.21; };
-                    allow-transfer { 51.15.250.21; };
-                    notify yes;
-            };
+    zone "example.com" IN {
+        type master;
+        file "/etc/bind/db.example.com";
+        allow-update { 192.0.2.2; };
+        allow-transfer { 192.0.2.2; };
+        notify yes;
+    };
     ```
 3. Create your zone file. A zone file must contain at least an SOA, an NS, and an A record or CNAME.
     ```
-    nano db.scw-domain.ml
+    sudo nano /etc/bind/db.example.com
     ```
 4. Paste the following:
     ```
-    ;
-    ; BIND data file for local loopback interface
-    ;
     $TTL    10800
-    scw-domain.ml.  IN      SOA     ns1.scw-domain.ml. admin.scw-domain.ml. (
-                            2018120615      ; Serial
-                              10800         ; Refresh
-                              3600          ; Retry
-                            2419200         ; Expire
-                            604800 )       ; Negative Cache TTL
-    ;
+    @       IN      SOA     ns1.example.com. admin.example.com. (
+                            2024111801 ; Serial
+                            10800      ; Refresh
+                            3600       ; Retry
+                            604800     ; Expire
+                            86400 )    ; Negative Cache TTL
 
-    ; Nameserver
+    ; Name servers
+    @       IN      NS      ns1.example.com.
+    @       IN      NS      ns2.example.com.
 
-    scw-domain.ml.  IN      NS      ns1.scw-domain.ml.
-    scw-domain.ml.  IN      NS      ns2.scw-domain.ml.
-    ns1     86400   IN      A       51.15.242.21
-    ns1     86400   IN      AAAA    2001:bc8:4400:2c00::14:229
-    ns2     86400   IN      A       51.15.250.21
-    ns2     86400   IN      AAAA    2001:bc8:4400:2c00::2c:1f
-    www     86400   IN      A       51.15.242.21
-    www     86400   IN      AAAA    2001:bc8:4400:2c00::14:229
+    ; A and AAAA records
+    ns1     IN      A       192.0.2.1
+    ns2     IN      A       192.0.2.2
+
+    ; Example host
+    www     IN      A       192.0.2.3
+    www     IN      AAAA    2001:db8::1
     ```
 
-## Configuring Bind on the secondary Instance
+5. Enable DNSSEC (optional but recommended):
+    ```
+    sudo dnssec-keygen -a RSASHA256 -b 2048 -n ZONE example.com
+    sudo dnssec-signzone -o example.com /etc/bind/db.example.com-
+    ```
+
+6. Restart the BIND server:
+    ```
+    systemctl restart bind9
+    ```
+
+## Configuring the secondary DNS server
 
 1. Edit the `name.conf.local` file:
     ```
     cd /etc/bind
     nano named.conf.local
     ```
-2. Paste the following:
+
+2. Add the slave zone definition:
     ```
     //
     // Do any local configuration here
@@ -102,34 +120,55 @@ Install BIND and its related tools.
     // Consider adding the 1918 zones here, if they are not used in your
     // organization
     //include "/etc/bind/zones.rfc1918";
-    zone "scw-domain.ml" IN {
-                    type slave;
-                    file "/etc/bind/db.scw-domain.ml";
-                    masters { 51.15.242.21; };
-                    allow-transfer { none; };
-                    allow-notify { 127.0.0.1; 51.15.242.21; 51.15.250.21; 2001:bc8:4400:2c00::14:229;  };
-            };
+    zone "example.com" IN {
+        type slave;
+        file "/etc/bind/db.example.com";
+        masters { 192.0.2.1; };
+        allow-transfer { none; };
+    };
     ```
-3. On the primary machine, restart the service to verify that the zone replication works properly.
+    <Message type="note">
+      Replace `example.com` and the IP address of your primary server.
+    </Message>
+
+3. Restart the BIND service.
     ```
     service bind9 restart
     ```
 
-The following output displays in the syslog file of the secondary machine:
+### Testing the Configuration
 
-```
-tail /var/log/syslog
+1. Check the primary DNS server:
+   ```bash
+   dig @192.0.2.1 www.example.com
+   ```
 
-Jan 11 17:24:22 bind-client named[11492]: client @0x7fa0d00c7260 51.15.242.21#42782: received notify for zone 'scw-domain.ml'
-Jan 11 17:24:22 bind-client named[11492]: zone scw-domain.ml/IN: notify from 51.15.242.21#42782: zone is up to date
-Jan 11 17:24:22 bind-client named[11492]: client @0x7fa0d003b900 2001:bc8:4400:2c00::14:229#53121: received notify for zone 'scw-domain.ml'
-Jan 11 17:24:22 bind-client named[11492]: zone scw-domain.ml/IN: notify from 2001:bc8:4400:2c00::14:229#53121: zone is up to date
-```
+2. Verify the secondary DNS server:
+   ```bash
+   dig @192.0.2.2 www.example.com
+   ```
 
-You can try to resolve hostnames on both servers by typing `dig www.scw-domain.ml @ns1.scw-domain.ml` & `dig www.scw-domain.ml @ns2.scw-domain.ml`
+   Expected output for both:
+   ```
+   ;; ANSWER SECTION:
+   www.example.com.    86400   IN  A   192.0.2.3
+   ```
 
-You should see in the answer section the following:
-```
-;; ANSWER SECTION:
-www.scw-domain.ml.	86400	IN	A	51.15.242.21
-```
+3. Test zone replication:
+   Restart the primary DNS server and check the logs on the secondary server:
+   ```bash
+   sudo tail -f /var/log/syslog
+   ```
+
+## Security and best Practices
+
+- Use `allow-transfer` and `allow-update` directives to limit who can query or modify your DNS zones.
+- Sign your zones using DNSSEC to protect against DNS spoofing and man-in-the-middle attacks.
+- Use `rndc` or log analysis tools to monitor DNS queries and server performance.
+
+
+## Conclusion
+
+You have successfully configured a DNS server using BIND 9.20. You can now resolve domain names within your infrastructure or serve DNS queries to external clients.
+
+For more advanced configurations and features, refer to the [official BIND 9.20 documentation](https://kb.isc.org/docs/isc-bind-9).

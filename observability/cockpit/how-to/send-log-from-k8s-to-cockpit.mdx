@@ -32,57 +32,48 @@ In this example, we use [k8s-monitoring](https://artifacthub.io/packages/helm/gr
 
 ## Configure the Helm chart
 
-Create a `values.yml` file to configure your Helm chart, using the example below. Make sure that you replace `$SCW_CLUSTER_NAME` with the name of your Scaleway Kubernetes cluster, `$COCKPIT_CUSTOM_DATASOURCE_HOST` with the hostname of your custom endpoint (excluding the `/loki/api/v1/push` part), and `$COCKPIT_TOKEN` with your Cockpit token.
+Create a `values.yml` file to configure your Helm chart, using the example below. Make sure that you replace `$SCW_CLUSTER_NAME` with the name of your Scaleway Kubernetes cluster, `$COCKPIT_CUSTOM_DATASOURCE_HOST` with the hostname of your custom endpoint, and `$COCKPIT_TOKEN` with your Cockpit token.
 
 ```yaml
 cluster:
-      name: "$SCW_CLUSTER_NAME"
-externalServices:
-  loki:
-    host: "$COCKPIT_CUSTOM_DATASOURCE_HOST"
+  name: "$SCW_CLUSTER_NAME"
+global:
+  scrape_interval: 60s
+destinations:
+  - name: "my-cockpit-logs"
+    type: "loki"
+    protocol: "http"
+    logs: 
+      enabled: true
+    url: "$COCKPIT_CUSTOM_DATASOURCE_HOST/loki/api/v1/push"
     tenantId: "$COCKPIT_TOKEN"
-    authMode: none
-    externalLabels: {
-      cluster: "$SCW_CLUSTER_NAME"
-    }
-
-logs:
+    
+    metrics: 
+      enabled: false
+    traces: 
+      enabled: false
+clusterEvents:
   enabled: true
-  pod_logs:
+  destinations: ["my-cockpit-logs"]
+# -- Node logs.
+nodeLogs:
     enabled: true
-    discovery: "all"
-    # This annotation is mandatory to gather your logs
-    annotation: "cockpit.scw.cloud/logs.autogather"
-    # -- Only capture logs from pods in these namespaces (`[]` means all namespaces).
-    namespaces: []
-    # -- Do not capture logs from any pods in these namespaces.
-    excludeNamespaces: []
+    destinations: ["my-cockpit-logs"]
+# -- Pod logs.
+podLogs:
+  enabled: true
+  destinations: ["my-cockpit-logs"]
+  volumeGatherSettings:
+    onlyGatherNewLogLines: true
 
-metrics:
-  enabled: false
-kube-state-metrics:
-  enabled: false
-prometheus-node-exporter:
-  enabled: false
-prometheus-operator-crds:
-  enabled: false
-opencost:
-  enabled: false
-
-alloy:
-  logging:
-    level: info
-    format: logfmt
-alloy-events:
-  logging:
-    level: info
-    format: logfmt
+# An Alloy instance for collecting log data.
 alloy-logs:
+  enabled: true
   logging:
-    # -- Level at which Alloy log lines should be written.
     level: info
-    # -- Format to use for writing Alloy log lines.
     format: logfmt
+alloy-singleton:
+  enabled: true
 ```
 
 <Message type="info">
@@ -119,7 +110,7 @@ You can check our guide to [send metrics from your cluster to Cockpit](// ADD LI
     name = "my-log-ingester"
     repository = "https://grafana.github.io/helm-charts"
     chart = "k8s-monitoring"
-    version = "1.6.16"
+    version = "2.0.2"
 
     namespace = "log-ingester"
     create_namespace = true

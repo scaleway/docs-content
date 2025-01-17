@@ -21,7 +21,7 @@ With this feature:
 - **Simplify troubleshooting**: Quickly drill down into specific pods or containers without needing to configure a separate logging stack.
 
 <Message type="important">
-    This feature does incur costs based on the volume of logs ingested. Refer to [Cockpit FAQ](/faq/cockpit/#how-am-i-billed-for-using-cockpit-with-custom-data) for more details and best practices to avoid unexpected bills. |
+    This feature does incur costs based on the volume of logs ingested. Refer to [Cockpit FAQ](/faq/cockpit/#how-am-i-billed-for-using-cockpit-with-custom-data) for more details and best practices to avoid unexpected bills.
 </Message>
 
 <Macro id="requirements" />
@@ -30,12 +30,19 @@ With this feature:
 - An API Key with [IAM permissions](/identity-and-access-management/iam/reference-content/permission-sets/) to edit your cluster `(KubernetesFullAccess` or `KubernetesSystemMastersGroupAccess`)
 - [A token](/observability/cockpit/how-to/create-token/) with permissions to push to, and query logs from Cockpit
 
-## Architecture and Limitations
+## Architecture and limitations
 
 ### Control Plane vs. Data Plane
 
 - **Control Plane**: Fully managed by Scaleway. Users can already [monitor control plane components](/containers/kubernetes/how-to/monitor-cluster/) (e.g., `kube-apiserver`, `CCM`, `CSI`) via Cockpit.  
 - **Data Plane**: Runs in your Scaleway Project (customer-managed instances, `kubelet`, `containerd`, customer Pods, etc.). You have **full access** to the data plane, including the ability to SSH into nodes.
+
+| Feature            | Control Plane                                                                                                                                            | Data Plane                                                                                                        |
+|--------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------|
+| Responsibility     | Fully managed by Scaleway                                                                                                                                | Managed by the customer (runs in your Scaleway Project)                                                           |
+| Components         | `kube-apiserver`, `CCM`, `CSI`, etc.                                                                                                                     | `kubelet`, `containerd`, customer Pods, and system components like `kubelet.service`.                             |
+| Access             | Users can monitor components via Cockpit ([see how-to guide](/containers/kubernetes/how-to/monitor-cluster/))                                            | Full access to data, including SSH into nodes, log management, and custom configurations.                        |
+| Billing            | Included in cluster costs                                                                                                                                | Billed based on log ingestion volume (see pricing below).                                                         |
 
 Because the data plane is entirely under your control, **logs from any components running on these nodes are considered your own data**. Consequently, shipping these logs to Cockpit is billed based on data ingestion.
 
@@ -60,24 +67,28 @@ You can use Scaleway’s **[Easy Deploy](/containers/kubernetes/how-to/enable-ea
    - Collect container logs for **all namespaces** (by default).
    - Collect systemd journal logs (e.g., `kubelet.service`).
    - Forward logs securely to **Cockpit**.
-  <Message type="note">
-    You may edit the default configuration of the deployment to specify the sources of logs to ingest (under `config.snippets.scrapeConfigs` in the yaml file): `cockpit_promtail_scrape_config_pods: “… list of namespaces…” cockpit_promtail_scrape_config_journal: “… list of system components…”` |
-  </Message>
+    <Message type="note">
+      You can edit the default deployment configuration to filter logs by source (under `config.snippets.scrapeConfigs` in the YAML file). For example:
+      ```yaml
+      cockpit_promtail_scrape_config_pods: "namespace1,namespace2"
+      cockpit_promtail_scrape_config_journal: "kubelet.service,kube-proxy.service"
+      ```
+    </Message>
 
 ### Example Promtail configuration
 
 Below is a simplified snippet of the configuration that Easy Deploy generates by default:
 
-```
+```yaml
 config:
   clients:
-    - bearer_token: "{{{ cockpit_bearer_token }}}" # no need to modify
-      url: "{{{ cockpit_loki_push_url }}}" # no need to modify
+    - bearer_token: "{{{ cockpit_bearer_token }}}" # Automatically set by Easy Deploy
+      url: "{{{ cockpit_loki_push_url }}}" # Automatically set by Easy Deploy
 
   snippets:
     scrapeConfigs: |
-      {{{- cockpit_promtail_scrape_config_pods }}} #default all pods are logged
-      {{{- cockpit_promtail_scrape_config_journal }}} #default all system components are logged
+      {{{- cockpit_promtail_scrape_config_pods }}} # Default: log all pods
+      {{{- cockpit_promtail_scrape_config_journal }}} # Default: log all system components
 extraVolumeMounts:
   - mountPath: /var/log/journal
     name: journal
@@ -89,7 +100,7 @@ extraVolumes:
 ```
 
 <Message type="note">
-  Template values like `{{{ cockpit_bearer_token }}}` and `{{{ cockpit_loki_push_url }}}` are automatically replaced by the Easy Deploy system with your actual values. Please do not overwrite any of these two values.  |
+  Template values like `{{{ cockpit_bearer_token }}}` (Bearer Token) and `{{{ cockpit_loki_push_url }}}` (Loki URL) are automatically set. Avoid modifying these values.
 </Message>
 
 ## Observing logs in Cockpit
@@ -114,7 +125,15 @@ Key points include:
 - **Filtering**: Limit logs to critical namespaces or system components only.
 
 <Message type="note">
-  You may edit the default configuration of the deployment to adjust the volume of logs to ingest: `extraLimitsConfig: |   readline_rate_enabled: true #rate limiting   readline_rate: 10000 #log lines / sec   readline_burst: 10000 #cap for burst lines   readline_rate_drop: true #drop excess lines`
+  You may edit the default configuration of the deployment to adjust the volume of logs to ingest:
+  ```yaml
+  extraLimitsConfig: |
+    readline_rate_enabled: true # rate limiting
+    readline_rate: 10000 # log lines / sec
+    readline_burst: 10000 # cap for burst lines
+    readline_rate_drop: true # drop excess lines
+  ```
+
 </Message>
 
 <Message type="tip">
@@ -130,15 +149,20 @@ Key points include:
 ## Troubleshooting
 
 - **No logs appearing** in Cockpit:
-  - Verify that the Promtail pod is running (`kubectl get pods -n <promtail-namespace>`).
+  - Verify that the Promtail pod is running.
+    ```bash
+    kubectl get pods -n <promtail-namespace>
+    ```
   - Inspect Promtail logs for errors.
-
+    ```bash
+    kubectl logs <promtail-pod-name> -n <promtail-namespace>
+    ```
 
 - **High log ingestion cost**:
   - Review your **deployment configuration** to filter out verbose logs or unneeded namespaces.
   - Check **log ingestion rate** in the dedicated dashboards for unusual spikes.
 
-## Further Resources
+## Further resources
 
 - [Observability Cockpit Overview](/observability/cockpit/)
 - [Push Logs to Cockpit (How-To)](/observability/cockpit/how-to/send-metrics-logs-to-cockpit/)

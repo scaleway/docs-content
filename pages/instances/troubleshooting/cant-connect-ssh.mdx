@@ -1,0 +1,140 @@
+---
+meta:
+  title: Troubleshooting SSH connection issues to Instances
+  description: This page helps you troubleshoot problems when you cannot connect to your Scaleway Instance via SSH
+content:
+  h1: Troubleshooting SSH connection issues to Instances
+  paragraph: This page helps you troubleshoot problems when you cannot connect to your Scaleway Instance via SSH
+tags: connection instance ssh ssh-key error publickey public-key
+dates:
+  validation: 2024-08-01
+  posted: 2021-10-19
+categories:
+  - compute
+---
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An [Instance](/instances/how-to/create-an-instance/)
+
+Discover how to resolve common SSH connection problems with your Scaleway Instance. Learn to fix errors like "Permission denied (publickey)" and "Remote host identification has changed" with our step-by-step troubleshooting guides.
+
+## Permission denied (publickey)
+
+You may try to connect to your Instance and see a message like the following:
+
+```
+marie-curie:/# ssh root@51.15.40.150
+Permission denied (publickey)
+```
+
+In this case, the Instance rejected your attempt to connect. There is most probably a problem with the SSH key pair - either the public key on the Instance or the private key on your local machine, or both.
+
+### Check that the Instance has the correct public key
+
+When you create your Instance, check step 6 of the creation wizard and make sure you are uploading a public key to which you have the corresponding private key on your local machine.
+
+- You can view and manage your public SSH keys from the [credentials section of the console](https://console.scaleway.com/project/credentials).
+- Credentials are specific to each [Project](/organizations-and-projects/concepts/#project) of your Organization.
+- If you [add a new public key to your Project credentials](/organizations-and-projects/how-to/create-ssh-key/#how-to-upload-the-public-ssh-key-to-the-scaleway-interface) **after** creating a new Instance, it will not automatically be uploaded to the existing Instance. Scaleway only uploads the public SSH keys specified at the time of the Instance's creation. To add a new public SSH key after that point, you will need to connect to your Instance and add the additional public key yourself. Public keys are stored by default in `~/.ssh` with a filename similar to `id_rsa.pub`.
+
+### Check that you have the correct private key on your local machine
+
+To connect to your remote Instance from your local machine, your local machine must have the corresponding private key to the Instance's public key.
+
+#### On Linux / Mac
+
+By default, your SSH keys are stored on your local machine in the hidden `.ssh` folder of the home or root directory.
+
+1. Navigate to the directory on your local machine as follows:
+    ```
+    cd ~/.ssh
+    ```
+2.  List all the keys in the directory as follows:
+    ```
+    ls
+    ```
+
+    You should now see a list of all your keys. Public keys should have the `.pub` suffix, private keys do not have this suffix.
+3. Use `cat <filename>` to view the contents of a public key file. Alternatively use your favorite text editor, e.g., `nano <filename>`.
+
+    Check that you have the corresponding private key to the public key you uploaded to your Instance.
+
+#### On Windows
+
+Check that you uploaded the correct public key to PuTTY:
+
+1. Open PuTTY.
+2. Navigate to **Connection**>**SSH**>**Auth** in the side menu.
+3. Check the file and path for the **Private key file for authentication**, using **Browse** to replace it if necessary.
+
+## Warning: Remote host identification has changed
+
+You may try to connect to your Instance and see a message like the following:
+
+```
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+@ WARNING: REMOTE HOST IDENTIFICATION HAS CHANGED! @
+@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@
+IT IS POSSIBLE THAT SOMEONE IS DOING SOMETHING NASTY!
+Someone could be eavesdropping on you right now (man-in-the-middle attack)!
+It is also possible that a host key has just been changed.
+The fingerprint for the ECDSA key sent by the remote host is
+SHA256:xxxxxxxxxxxxxxxxxxxxxxxxxxxxx.
+Please contact your system administrator.
+Add correct host key in /home/marie-curie/.ssh/known_hosts to get rid of this message.
+Offending ECDSA key in /home/marie-curie/.ssh/known_hosts:24
+  remove with:
+  ssh-keygen -f "/home/marie-curie/.ssh/known_hosts" -R "51.15.40.150"
+ECDSA host key for 51.15.40.150 has changed and you have requested strict checking.
+Host key verification failed.
+```
+
+This may happen if you are connecting to a newly created Instance that has a flexible IP address you previously used to connect to a different Instance.
+
+The warning message itself tells you how to solve this problem, in the following extract:
+
+```
+Add correct host key in /home/marie-curie/.ssh/known_hosts to get rid of this message.
+Offending ECDSA key in /home/marie-curie/.ssh/known_hosts:24
+  remove with:
+  ssh-keygen -f "/home/marie-curie/.ssh/known_hosts" -R "51.15.40.150"
+```
+
+1. Execute the following command in the terminal of your local machine, replacing the path and IP address with those shown in your own error message:
+    ```
+    ssh-keygen -f "/home/marie-curie/.ssh/known_hosts" -R "51.15.40.150"
+    ```
+    This deletes the key fingerprint from your `known_hosts` file. You should see a message similar to:
+
+    ```
+    # Host 51.15.40.150 found: line 24
+    /home/marie-curie/.ssh/known_hosts updated.
+    Original contents retained as /home/marie-curie/.ssh/known_hosts.old
+    ```
+2. Try to connect to your Instance via SSH again. This time, the connection should be successful.
+
+### Check that the correct public key is installed on your Instance
+
+You must upload the content of the public part of the SSH key pair to the Scaleway console. The public key information is transferred to your Instance during the boot process. You can then connect and authenticate from your local machine (where the private key is) to the remote Instance (where the public key is).
+
+1. Log into the [Scaleway console](https://console.scaleway.com), and navigate to the [SSH keys](https://console.scaleway.com/project/ssh-keys) of your Project dashboard.
+2. Click the **Add SSH key** button.
+3. Paste the content of the public key (which you copied in the previous step) into the pop-up box, and optionally add a description. Then click **Add SSH key**.
+4. [Reboot your Instance](/instances/how-to/use-boot-modes/#how-to-use-local-boot) or run `scw-fetch-ssh-keys --upgrade` to download the new key onto the Instance. You will now be able to [connect to your Instances via SSH](/instances/how-to/connect-to-instance/)
+
+<Message type="important">
+  Do not edit the `authorized_keys` file on your Instance manually. All content in this file is overwritten during the boot process of the Instance. If you want to add SSH keys to it, upload them to the Scaleway console.
+</Message>
+
+<Message type="tip">
+  If you have any difficulties connecting to an Instance after uploading a new public SSH key to your Project, try the following:
+    - If you cannot connect to your Instance at all via SSH, reboot your Instance from the console and try again.
+    - If you can connect to your Instance using a previously uploaded SSH key but not the new one, go ahead and connect to your Instance with the old key. Once connected, run the `scw-fetch-ssh-keys --upgrade` command, which launches a script on your Instance to update your SSH keys. You can then check that the new key has been added to the `authorized_keys` file (`~/.ssh/authorized_keys`). Note that this command works only for Instances.
+</Message>
+
+## Timeout when trying to connect
+
+You may find the SSH connection attempt times out without connecting. This may be expected behavior if the Instance is attached to a Private Network on which there is also a Public Gateway advertising the default route. See our [dedicated troubleshooting](/public-gateways/troubleshooting/cant-connect-to-instance-with-pn-gateway/) page for more help with this issue.

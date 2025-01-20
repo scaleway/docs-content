@@ -1,0 +1,107 @@
+---
+meta:
+  title: Publishing a website to a Windows instance using Web Deploy
+  description: Learn how to configure a Scaleway Instance with Windows Server to remotely publish web applications using Web Deploy.
+content:
+  h1: Publishing a website to a Windows instance using Web Deploy
+  paragraph: Learn how to configure a Scaleway Instance with Windows Server to remotely publish web applications using Web Deploy.
+tags: instances windows-server iis web-deploy
+categories:
+  - instances
+  - elastic-metal
+dates:
+  validation: 2025-01-20
+  posted: 2025-01-20
+---
+
+## How to Use Web Deploy to Publish a Website to Scaleway's Windows Server VMs
+
+This guide explains how to publish a web application to a Scaleway instance with Windows Server using the following tools:
+- (IIS)[https://iis.net/], which is the default web server developed by Microsoft for hosting web applications on Windows.
+- [Web Deploy](https://www.iis.net/downloads/microsoft/web-deploy), a single click remote deployment technology for IIS.
+Throughout this guide, you'll learn how to:
+- Configure the Windows Server instance with Web Deploy;
+- Set up a website in IIS;
+- Publish an application directly from Visual Studio.
+
+<Macro id="requirements" />
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An [Instance](/compute/instances/how-to/create-an-instance/) running Windows Server or Windows Server Core with an attached IPV4 address
+
+<Message type ="note">
+  The Windows Server instance must have an [IPV4 address attached](/compute/instances/concepts/#dynamic-ip).
+</Message>
+
+## Configuring Windows Server to accept Web Deploy
+
+In Windows Server, IIS and its remote management components are not installed by default and need to be added as features. Web Deploy, a tool for deploying web applications, is distributed separately by Microsoft. Here's how to set up your Windows Server to accept Web Deploy:
+
+1. [Connect](/compute/instances/how-to/connect-to-instance/) to your Windows Server instance and open a PowerShell prompt.
+
+2. Install the necessary IIS features and management tools:
+  ```powershell
+  Install-WindowsFeature Web-Server, Web-WebServer, Web-Mgmt-Tools, Web-Mgmt-Service
+  ```
+
+3. Download and run the Web Deploy installer. An up-to-date, direct download link can be found at https://aka.ms/webdeploydownload:
+  ```powershell
+  Invoke-WebRequest -Uri "https://download.microsoft.com/download/b/d/8/bd882ec4-12e0-481a-9b32-0fae8e3c0b78/webdeploy_amd64_en-US.msi" -OutFile webdeploy.msi
+  Start-Process msiexec.exe -ArgumentList '/i webdeploy.msi'
+  ```
+
+4. Follow the installation wizard launched by the previous command. When prompted, select the *Complete* installation.
+
+5. Start the Web Management Service for IIS:
+  ```powershell
+  Start-Service WMSVC
+  ```
+
+## Creating the Website Configuration in IIS
+
+The instance is now ready to accept Web Deploy connections. You will create a configuration for a new website in IIS to use as a Web Deploy target. In this guide, the website is named *MyApplication*.
+
+1. Create a directory for the website:
+```powershell
+mkdir "C:\inetpub\wwwroot\MyApplication"
+```
+
+2. Create a new website in IIS with the specified name and path:
+```powershell
+New-Website -Name "MyApplication" -PhysicalPath "C:\inetpub\wwwroot\MyApplication"
+```
+
+3. Remove port bindings of the default website and create a new binding for the MyApplication website on port 80:
+```powershell
+Remove-WebBinding "Default Web Site"
+New-WebBinding -Name "MyApplication" -IPAddress "*" -Port 80 -HostHeader ""
+```
+
+4. Start the newly created website:
+```powershell
+Start-Website -Name "MyApplication"
+```
+
+## Publishing from Visual Studio
+
+1. Open or create a web project in Visual Studio.
+2. Right-click the solution and select "Publish".
+3. Choose "Web Server (IIS)" and click "Next".
+4. Select "Web Deploy" and click "Next".
+5. Set up the publish profile:
+   - Server: `<Your_Instance_IP>:8172`
+   - Site name: MyApplication
+   - Destination URL: `<Your_Instance_IP>`
+   - User name: Administrator
+   - Password: (Use the password retrieved earlier)
+   <Lightbox src="scaleway-webdeploy_profile.webp" alt="A screenshot of the Web Deploy profile configuration in Visual Studio" size="medium" />
+6. Click "Finish" to create the profile.
+7. Click "Publish" to deploy your website.
+
+## Accessing Your Website
+
+Open a web browser and navigate to your server's IP address. Your website should now be live.
+
+<Message type="note">
+   Depending on your website technology, you may need to install additional runtime components on the Windows Server instance, such as the [.NET hosting bundle](https://dotnet.microsoft.com/en-us/download/dotnet).
+</Message>

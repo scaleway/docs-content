@@ -1,0 +1,177 @@
+---
+meta:
+  title: How to send metrics from your Kubernetes cluster to your Cockpit
+  description: Learn how to send your pod metrics to your Cockpit using Scaleway's comprehensive guide. This tutorial covers sending Kubernetes pods metrics to Scaleway's Cockpit for centralized monitoring and analysis using Grafana, ensuring efficient monitoring and metrics analysis in your infrastructure.
+content:
+  h1: How to send metrics from your Kubernetes cluster to your Cockpit
+  paragraph: Learn how to send your pod metrics to your Cockpit using Scaleway's comprehensive guide. This tutorial covers sending Kubernetes pods metrics to Scaleway's Cockpit for centralized monitoring and analysis using Grafana, ensuring efficient monitoring and metrics analysis in your infrastructure.
+tags: kubernetes cockpit metrics observability monitoring cluster
+categories:
+  - observability
+dates:
+  validation: 2025/01/20
+  posted: 2025/01/20
+---
+
+
+In this page we will show you how to send application metrics from your Kubernetes cluster to your Cockpit, either by using a Helm chart or deploying a Helm chart with [Terraform](https://www.terraform.io/).
+
+We will use the [k8s-monitoring](https://artifacthub.io/packages/helm/grafana/k8s-monitoring/1.6.16) Helm Chart, which installs an Alloy Daemon set to export your Kubernetes cluster's metrics to your Cockpit.
+
+<Macro id="requirements" />
+
+ - A Scaleway account metricsged into the [console](https://console.scaleway.com)
+ - [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+ - [Created](/observability/cockpit/how-to/create-external-data-sources/) a custom external data source of the [metrics type](/observability/cockpit/concepts/#data-types)
+ - [Created](/observability/cockpit/how-to/create-token/) a Cockpit token in the same region as the metrics data source
+ - A running Kubernetes cluster containing your deployed application
+ - [Created](/identity-and-access-management/iam/how-to/create-api-keys/) an API key and retrieved your API secret key
+
+<Message type="important">
+  - Sending metrics for Scaleway resources or personal data using an external path is a billable feature. In addition, any data that you push yourself is billed, even if you send data from Scaleway products. Refer to the [product pricing](https://www.scaleway.com/en/pricing/?tags=available,managedservices-observability-cockpit) page for more information.
+</Message>
+
+
+## Configure the Helm chart
+
+Create a `values.yml` file to configure your Helm chart, using the example below. Make sure that you replace `$SCW_CLUSTER_NAME` with the name of your Scaleway Kubernetes cluster, `$COCKPIT_CUSTOM_METRICS_DATASOURCE_URL` with the URL of your custom metrics data source (you can find it under the "API URL" section in the [Data sources tab](https://console.scaleway.com/cockpit/dataSource) of the Scaleway console), and `$COCKPIT_TOKEN` with your Cockpit token.
+
+```yaml
+cluster:
+  name: "$SCW_CLUSTER_NAME"
+global:
+  scrape_interval: 60s
+destinations:
+  - name: "my-cockpit-metrics"
+    type: "prometheus"
+    protocol: "http"
+    metrics: 
+      enabled: true
+    url: "$COCKPIT_CUSTOM_METRICS_DATASOURCE_URL/api/v1/push"
+    tenantId: "$COCKPIT_TOKEN"
+    
+    logs: 
+      enabled: false
+    traces: 
+      enabled: false
+
+annotationAutodiscovery:
+  enabled: true
+  destinations: ["my-cockpit-metrics"]
+
+alloy-metrics:
+  enabled: true
+alloy-singleton:
+  enabled: true
+```
+
+<Message type="note">
+    The template above is for sending metrics to your Cockpit. You can also configure it to send logs to Cockpit using this Helm chart.
+    Refer to our dedicated documentation to [send logs from your cluster to Cockpit](/observability/cockpit/how-to/send-logs-from-k8s-to-cockpit)
+</Message>
+
+## Add annotations for auto-discovery
+
+Annotations in Kubernetes provide a way to attach metadata to your resources. For `k8s-monitoring`, these annotations signal which pods should be scraped for metrics, and what port to use. For the sake of this documentation, we are adding annotations to specify we want `k8s-monitoring` to scrape the pods from our deployment. Make sure that you replace `$METRICS_PORT` with the port where your application exposes Prometheus metrics.
+
+### Kubernetes deployment template
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  ...
+  annotations:
+    "k8s.grafana.com/metrics.portNumber" = "$METRICS_PORT"
+    "k8s.grafana.com/scrape" = "true"
+spec:
+  ...
+```
+
+### Terraform deployment template
+
+```terraform
+resource "kubernetes_deployment_v1" "your_application_deployment" {
+  ...
+  spec {
+    ...
+    template {
+      metadata {
+        ...
+        annotations = {
+          "k8s.grafana.com/metrics.portNumber" = "$METRICS_PORT"
+          "k8s.grafana.com/scrape" = "true"
+        }
+      }
+      ...
+    }
+  }
+}
+```
+
+## Send Kubernetes metrics using Helm chart with Terraform
+
+1. Create a `provider.tf` file and paste the following template to set up the Helm Terraform provider:
+  ```terraform
+  provider "helm" {
+    kubernetes {
+      host = your_k8s_cluster_host # The URL of your Kubernetes API server.
+      token = your_k8s_cluster_token # Authentication token to access the cluster.
+      cluster_ca_certificate = base64decode(
+      your_k8s_cluster_ca_certificate # The cluster's CA certificate.
+      )
+    }
+  }
+  ```
+2. Create a `maint.tf` file and paste the following template to create a Helm release resource. Make sure that you replace `/your-path/to/values.yml` with the actual path to your values file.
+  ```
+  resource "helm_release" "alloy" {
+    name = "name-of-your-metrics-ingester"
+    repository = "https://grafana.github.io/helm-charts"
+    chart = "k8s-monitoring"
+    version = "2.0.2"
+
+    namespace = "metrics-ingester"
+    create_namespace = true
+    values = [file("/your-path/to/values.yml")]
+  }
+  ```
+3. Save your changes.
+4. Run `terraform init` to initialize your Terraform configuration and download any necessary providers.
+5. Run `terraform apply` to apply your configuration.
+6. Type `yes` when prompted to confirm the actions.
+
+## Send Kubernetes metrics using Helm chart
+
+Once you have configured your `values.yml` file, you can use Helm to deploy the metric-forwarding configuration to your Kubernetes cluster. Before installing the Helm chart, ensure that your `kubectl` tool is properly connected to your Kubernetes cluster. `kubectl` is the command-line tool for interacting with Kubernetes clusters.
+
+1. [Connect](/containers/kubernetes/how-to/connect-cluster-kubectl/) `kubectl` to your Kubernetes cluster
+2. Run the command below to install the `k8s-monitoring` Helm chart:
+  ```
+  helm install -f /your-path/to/values.yml name-of-your-choice-for-your-metric-ingester k8s-monitoring --version 1.6.16
+  ```
+    The `-f` flag specifies the path to your `values.yml` file, which contains the configuration for the Helm chart. Make sure that you replace `/your-path/to/values.yml` with the correct path where your `values.yml` file is stored. Make sure that you also replace `name-of-your-choice-for-your-metric-ingester` with a clear name (ex. `alloy-metrics-ingester`). In our configuration, we are using `alloy-lm-ingester`.
+        
+        Helm installs the `k8s-monitoring` chart, which includes the Alloy DaemonSet configured to collect metrics from your Kubernetes cluster.
+        The DaemonSet ensures that a pod is running on each node in your cluster, which collects metrics and forwards them to the specified Prometheus endpoint in your Cockpit.
+
+3. Optionally, check the status of the release to ensure it was installed:
+
+    ```
+    helm list
+    ```
+
+
+## Explore your metrics in Cockpit
+
+Now that your metrics are exported to your Cockpit, you can access and query them.
+
+1. Click **Cockpit** in the Observability section of the Scaleway [console](https://console.scaleway.com/) side menu. The **Cockpit Overview** page displays.
+2. Click **Open dashboards** to open your managed dashboards in Grafana. You are redirected to the Grafana website.
+3. Log in to Grafana using your [Grafana credentials](/observability/cockpit/how-to/retrieve-grafana-credentials/).
+4. Click the **Home** icon, then click **Explore**.
+5. Select your custom data source in the search drop-down on the upper left corner of your screen.
+6. In the **Labels filter** drop-down, select the `cluster` label and in the **Value** drop-down, select your cluster. 
+7. Optionally, click the **Clock** icon on the top right corner of your screen and filter by time range.
+8. Click **Run query** to see your metrics. An output similar to the following should display.
+<Lightbox src="scaleway-cpt-k8s-terraform-metrics.webp" alt="" />

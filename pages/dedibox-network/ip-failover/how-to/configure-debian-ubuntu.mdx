@@ -1,0 +1,101 @@
+---
+meta:
+  title: How to configure a Dedibox failover IP on Debian and Ubuntu
+  description: This page explains how to configure a Dedibox failover IP on Debian or Ubuntu Linux.
+content:
+  h1: How to configure a Dedibox failover IP on Debian and Ubuntu
+  paragraph: This page explains how to configure a Dedibox failover IP on Debian or Ubuntu Linux.
+tags: failover-failover IP ip debian ubuntu dedibox linux
+dates:
+  validation: 2024-07-22
+  posted: 2021-07-29
+categories:
+  - dedibox-network
+---
+
+This page shows you how to configure a [failover IP](/dedibox-ip-failover/concepts/#failover-ips) on Dedibox servers running on Debian or Ubuntu Linux.
+
+<Macro id="requirements" />
+
+- A Dedibox account logged into the [console](https://console.online.net)
+- [Created](/dedicated-servers/how-to/order-a-server/) a Dedibox dedicated server
+
+## Failover IP configuration on Debian
+
+<Message type="note">
+  If you are using Ubuntu 18.04 or later, you should configure the interfaces using [Netplan](/dedibox-network/how-to/configure-network-netplan/).
+</Message>
+
+1. Connect to your server using SSH.
+2. Open the network configuration file `/etc/network/interfaces` in a text editor, for example `nano`:
+    ```
+    nano /etc/network/interfaces
+    ```
+3. Add the failover IP to the configuration as shown in the following example:
+    ```
+    # This file describes the network interfaces available on your system
+    # and how to activate them. For more information, see interfaces(5).
+    # The loopback network interface
+    auto lo
+    iface lo inet loopback
+    # The primary network interface
+    auto eth0
+    iface eth0 inet static
+        	 address 195.154.123.123
+         	 netmask 255.255.255.0
+        	 gateway 195.154.123.1
+    auto eth0:0
+    iface eth0:0 inet static
+    address ip_failover
+    netmask 255.255.255.255
+    ```
+
+    <Message type="note">
+      The interface name `eth0` may vary, depending on your OS version and system configuration. Use the `ifconfig` command to determine the name of your primary network interface.
+    </Message>
+4. Save the file and exit the editor.
+5. Bring up the interface using the following command:
+    ```
+    ifup eth0:0
+    ```
+
+## Failover IP configuration on Ubuntu
+
+Since the release of version 18.04 (Bionic Beaver) Ubuntu has switched to [Netplan](https://netplan.io/) for the configuration of network interfaces.
+
+It is a YAML-based configuration system, which simplifies the configuration process.
+
+1. Connect to your Dedibox using SSH.
+2. Open the Netplan configuration file of the main interface in a text editor, for example `nano`:
+    ```
+    sudo nano /etc/netplan/01-netcfg.yaml
+    ```
+3. Edit the network configuration. The IP addresses have to be written with their [CIDR notation](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation). The netmask is `/24` for the principal IP of the server and `/32` for each failover IP. Your configuration should look as in the following example:
+    ```yaml
+    network:
+      renderer: networkd
+      ethernets:
+        ensXX:
+          addresses:
+            - <FAILOVER_IP>/32
+          routes:
+            - to: 62.210.0.1
+            - to: default
+              via: 62.210.0.1
+          nameservers:
+            addresses:
+              - 51.159.47.28
+              - 51.159.47.26 # Replace the IP of the DNS cache server with the one located in the same physical location as your machine for optimal performance (https://www.scaleway.com/en/docs/account/reference-content/scaleway-network-information/#dns-cache-servers)
+            search: []
+    version: 2
+    ```
+    <Message type="tip">
+      * Make sure to respect the YAML standards when you edit the file, as it might not work if there is a syntax error in your configuration.
+      * You can find an extended list of [netplan configuration examples](https://github.com/canonical/netplan/tree/main/examples) in the official Canonical Netplan repository.
+    </Message>
+4. Activate the new configuration by running the following command:
+    ```
+    sudo netplan apply
+    ```
+
+

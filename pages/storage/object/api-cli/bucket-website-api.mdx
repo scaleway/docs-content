@@ -1,0 +1,190 @@
+---
+meta:
+  title: Setting up static websites on a bucket with the API
+  description: Configure bucket websites using the API in Scaleway Object Storage.
+content:
+  h1: Setting up static websites on a bucket with the API
+  paragraph: Configure bucket websites using the API in Scaleway Object Storage.
+tags: object storage object-storage bucket static-website api
+dates:
+  validation: 2025-01-15
+  posted: 2021-02-17
+categories:
+  - storage
+  - object-storage
+---
+
+The bucket website feature allows you to host static websites using Scaleway [Object Storage](https://www.scaleway.com/en/object-storage/).
+
+It is possible to enable and configure the bucket website feature via the [AWS-CLI](/object-storage/api-cli/object-storage-aws-cli/).
+
+To enable and configure the bucket website using the Scaleway console, refer to our [dedicated documentation](/object-storage/how-to/use-bucket-website/).
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Installed the [AWS CLI](/object-storage/api-cli/object-storage-aws-cli/)
+- An [Object Storage bucket](/object-storage/how-to/create-a-bucket/)
+
+## Enabling the bucket website feature
+
+To use the bucket website feature, you need to enable it on the bucket or buckets you wish to host your website on.
+
+You can use an API call or the AWS-CLI to enable it using `put-bucket-website`.
+
+### Website JSON grammar
+
+S3 requires you to include index and error pages in your website and to indicate their names in the `bucket-website.json` file.
+
+**Website JSON grammar:**
+
+`IndexDocument`
+
+**Description**
+: suffix of the HTML index document key, commonly named "index.html".
+
+**Required**
+: Yes
+
+**Type**
+: string suffix
+
+**Value**
+: "2023-04-17"
+
+`ErrorDocument`
+
+**Description**
+: error document to return when the requested key access is denied or the key does not exist.
+
+**Required**
+: No
+
+**Type**
+: string
+
+**Sample:**
+```json
+{
+    "IndexDocument" : {
+        "Suffix": "index.html"
+    },
+    "ErrorDocument": {
+        "Key": "error.html"
+    }
+}
+```
+### PutBucketWebsite
+
+This operation enables bucket website and sets the basic configuration for the website.
+
+```json
+PUT /my-bucket?website HTTP/1.1
+{
+    "IndexDocument" : {
+        "Suffix": "index.html"
+    },
+    "ErrorDocument": {
+        "Key": "error.html"
+    }
+}
+```
+To enable bucket website via the CLI, you can create a file called `bucket-website.json` with the index and error page names.
+
+```json
+{
+    "IndexDocument" : {
+        "Suffix": "index.html"
+    },
+    "ErrorDocument": {
+        "Key": "error.html"
+    }
+}
+```
+And upload it using the following command:
+
+```
+aws s3api put-bucket-website --bucket <BUCKET_NAME> --website-configuration file://bucket-website.json
+```
+
+### GetBucketWebsite
+
+To visualize the configuration of your website, retrieve it using `get-bucket-website`.
+
+**Sample request**
+```
+GET /my-bucket?website HTTP/1.1
+```
+**CLI command**
+```
+aws s3api get-bucket-website --bucket <BUCKET_NAME>
+```
+### DeleteBucketWebsite
+
+This operation deletes the bucket website configuration of a specified bucket.
+
+<Message type="note">
+  If the operation is successful, no output will be returned.
+</Message>
+
+**Sample request**
+```
+DELETE /my-bucket?website HTTP/1.1
+```
+**CLI command**
+```
+aws s3api delete-bucket-website --bucket my-bucket
+```
+## Configuring your website
+
+After setting up the basic bucket website configuration with `put-bucket-website`, upload the `index.html` and the `error.html` files to your bucket.
+
+You can also upload the rest of the static web page files that make up your website.
+
+<Message type="note">
+If this is your first time uploading objects into a bucket, you can follow the step-by-step on [this documentation page](/object-storage/how-to/upload-files-into-a-bucket/).
+</Message>
+
+### Configuring access
+
+If you want your website to be accessible, you need to set up a bucket policy.
+
+1. Set the `"Action"` as `"s3:GetObject"` in the `bucket-policy.json` file,
+2. Specify which resources they can access under `"Resource"`:
+    ```json
+      {
+          "Version": "2023-04-17",
+          "Id":"MyBucketPolicy",
+          "Statement": [
+              {
+                  "Sid": "DelegateAccess",
+                  "Effect":"Allow",
+                  "Principal":"*",
+                  "Action":[
+                      "s3:GetObject"
+                  ],
+                  "Resource":[
+                      "<BUCKET_NAME>/*"
+                  ]
+              }
+          ]
+      }
+      ```
+
+    - `"<BUCKET_NAME>/*"` - Grants access to all objects inside a bucket, but not to the bucket itself.
+    - `"<BUCKET_NAME>/<PREFIX>/*"` - Grants access only to objects with the specified prefix inside a bucket, but not to the bucket itself. For example, if you apply a bucket policy that specifies `"my_files/movie/*"` under **Resource**, you would grant access to all objects with the `movie/` prefix, but not to other objects in `my_files/` bucket.
+3. Use [PutBucketPolicy](/object-storage/api-cli/bucket-operations/#putbucketpolicy) or run the following command to implement the policy via the AWS-CLI:
+    ```
+    aws s3api put-bucket-policy --bucket <BUCKET_NAME> --policy file://bucket-policy.json
+    ```
+
+### Configuring your URL
+
+You can access your website using the website endpoint of your bucket, generated by Scaleway Object Storage under the default format:
+
+`https://<bucket_name>.s3-website.<bucket_region>.scw.cloud`
+
+Replace `<bucket_name>` and `<bucket_region>` accordingly.
+
+Alternatively, you can [configure a CNAME Record](/tutorials/s3-customize-url-cname/) for your bucket URL, to be able to access the website through a domain name of your choice.

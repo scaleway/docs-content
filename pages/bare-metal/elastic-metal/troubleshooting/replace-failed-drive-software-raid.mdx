@@ -1,0 +1,122 @@
+---
+meta:
+  title: Replacing a failed drive in a RAID1 software RAID
+  description: Learn how to safely replace a failed drive in a RAID1 software RAID configuration on Scaleway Elastic Metal servers
+content:
+  h1: Replacing a failed drive in a RAID1 software RAID
+  paragraph: Learn how to safely replace a failed drive in a RAID1 software RAID configuration on Scaleway Elastic Metal servers
+tags: RAID elastic-metal failed-drive RAID1 mdadm
+categories:
+  - bare-metal
+  - elastic-metal
+dates:
+  validation: 2025-01-02
+  posted: 2022-08-26
+---
+
+RAID1 configurations offer redundancy by mirroring data across two drives. If one drive fails, the other continues operating, ensuring data integrity. This guide explains how to replace a failed drive and rebuild the RAID1 array using the `mdadm` utility.
+
+Each Elastic Metal server uses a RAID1 configuration after installation from the Scaleway console. If you want to change the RAID configuration of the server, you can modify the RAID array using [rescue mode](/elastic-metal/how-to/use-rescue-mode/).
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An Elastic Metal server with at least two disks in RAID1
+
+## Removing the failed disk from the RAID configuration
+
+<Message type="tip">
+  We recommend [backing up your data](/en/docs/tutorials/restic-s3-backup/) before proceeding.
+</Message>
+
+1. Boot server in [rescue mode](/elastic-metal/how-to/use-rescue-mode/) from the Scaleway console.
+2. Log in to the server using the rescue account:
+    ```
+    ssh em-XXX@<your_elastic_metal_ip>
+    ```
+
+    <Message type="tip">
+      The rescue credentials are available from your server's status page in the Scaleway console.
+    </Message>
+3. Run the following command to make sure all disk caches are written to the disk:
+    ```
+    sync
+    ```
+4. Mark the failed disk as failed using `mdadm`:
+    ```
+    mdadm --manage /dev/md0 --fail /dev/sdb2
+    ```
+5. Visualize the existing `mdadm` RAID devices by running the following command:
+    ```
+    cat /proc/mdstat
+    ```
+
+    An output as follows displays:
+
+    ```sh
+    Personalities : [raid1] [linear] [multipath] [raid0] [raid6] [raid5] [raid4] [raid10]
+    md126 : active (auto-read-only) raid1 sdb3[1] sda3[0]
+          974869504 blocks super 1.2 [2/2] [UU]
+            resync=PENDING
+          bitmap: 8/8 pages [32KB], 65536KB chunk
+
+    md127 : active (auto-read-only) raid1 sdb2[1](F) sda2[0]
+          523264 blocks super 1.2 [2/2] [UU]
+
+    unused devices: <none>
+    ```
+
+    The faulty device is marked with `(F)`.
+6. Remove the failed disk using the `mdadm --manage` command:
+    ```sh
+    mdadm --manage /dev/md0 --remove /dev/sdb2
+    ```
+7. Contact the technical support to replace the failed disk with a working one.
+
+<Message type="important">
+  If the command fails due to the device being busy, ensure the disk is unmounted and re-check the status.
+</Message>
+
+## Adding the replacement disk to the RAID
+
+1. Once the failed disk is replaced, copy the partition table of the source disk to the new disk:
+    ```
+    sfdisk -d /dev/sda | sfdisk /dev/sdb
+    ```
+    <Message type="important">
+      The `sfdisk` command above replaces the entire partition table on the new disk with the one of the source disk. Modify the command if you require preserving other partition information on the disk.
+    </Message>
+2. Create a mirror of the source disk using the `mdadm` command:
+    ```
+    mdadm --manage /dev/md0 --add /dev/sdb2
+    ```
+3. Verify the status of the configuration:
+    ```
+    mdadm --detail /dev/md0
+    ```
+    <Message type="tip">
+      Use the following command to show the progress of the recovery of the mirror disk:
+      ```
+      cat /proc/mdstat
+      ```
+    </Message>
+
+## Post-replacement checks
+
+1. Check for consistency in the RAID setup:
+    ```
+    cat /proc/mdstat
+    ```
+2. Monitor the RAID health and status regularly:
+    ```
+    mdadm --detail /dev/md0
+    ```
+3. Set up email alerts to detect RAID issues early:
+    ```
+    mdadm --monitor --scan --daemonise --mail=root@example.com
+    ```
+
+<Message type="tip">
+  Regularly monitoring RAID health prevents unexpected failures and data loss.
+</Message>

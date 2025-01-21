@@ -1,0 +1,332 @@
+---
+meta:
+  title: Managing multipart uploads
+  description: Manage large object uploads efficiently with multipart uploads in Scaleway.
+content:
+  h1: Managing multipart uploads
+  paragraph: Manage large object uploads efficiently with multipart uploads in Scaleway.
+tags: object storage object-storage multipart multipart-upload
+dates:
+  validation: 2024-12-24
+  posted: 2019-04-19
+categories:
+  - storage
+  - object-storage
+---
+
+Multipart uploads allow you to upload large files to the Object Storage platform by dividing them into multiple fragments to improve throughput and recover quickly in case of network interruption.
+
+A multipart upload consists of three steps:
+
+- The client initiates the upload to a specific bucket
+- The different parts are uploaded
+- Object Storage constructs the object from the uploaded parts
+
+Once the object has been constructed, it can be accessed as any other object in the bucket.
+
+The following technical specifications apply to multipart uploads:
+- 1 to 1000 parts per object
+- 5 MB to 5 GB per part (except for the last one)
+- Each object stores up to 5 TB
+
+<Macro id="requirements" />
+
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Installed the [AWS CLI](/object-storage/api-cli/object-storage-aws-cli/)
+- An [Object Storage bucket](/object-storage/how-to/create-a-bucket/)
+
+## Initiating a multipart upload
+
+When initiating a multipart upload, the Object storage platform generates a unique identifier for the multipart upload. This identifier must be included whenever parts are uploaded, listed, when the upload is completed or to abort an upload.
+
+To initiate a multipart upload, you can send `POST` request as follows:
+```
+<bucketname>.s3.<region>.scw.cloud/<object_key>?uploads
+```
+
+**Sample request**
+
+```xml
+POST /large-file.tar.gz?uploads HTTP/1.1
+
+Host: bucketname.s3.nl-ams.scw.cloud
+x-amz-content-sha256: 4cf002db03f94b9ab876f38ad65863c987af96c6526673cfee22fad443fee9cb
+x-amz-date: 20190517T125417Z
+Authorization: AWS4-HMAC-SHA256 Credential=SCWGJ3BW6Q22HCEB16GJ/20190517/nl-ams/s3/aws4_request,SignedHeaders=host;x-amz-content-sha256;x-amz-date,Signature=4e6b0dea0badf41e2aafca17017d479138ce1d34e1c3fcf2df00193ae3c68c1c
+```
+
+**Sample response**
+```xml
+HTTP/1.1 200 OK
+x-amz-id-2: tx0db175df07644b858daab-005cdeaef9
+Content-Length: 265
+x-amz-request-id: tx0db175df07644b858daab-005cdeaef9
+Date: Fri, 17 May 2019 12:54:17 GMT
+
+<?xml version="1.0" encoding="UTF-8"?>
+  <InitiateMultipartUploadResult xmlns="http://s3.amazonaws.com/doc/2006-03-01">
+    <Bucket>bucketname</Bucket>
+    <Key>large-file.tar.gz</Key>
+    <UploadId>Y2VhZDUxYjAtNjVjMC00NTIxLWEwNWUtNWM3NDAyOTQ4ZWYz</UploadId>
+  </InitiateMultipartUploadResult>'
+```
+
+## Uploading a part
+
+Once the multipart upload is initiated, Object Storage keeps all parts of the upload until it is completed or aborted.
+When uploading a part, a part number must be specified in addition to the upload ID returned when the multipart upload was initiated. The part number can be any number between 1 and 1000. It identifies uniquely the part and its position in the object being uploaded.
+
+During the lifecycle of a multipart upload, billing will occur for all storage and bandwidth usage for its associated parts.
+If a multipart upload is aborted, all parts already uploaded are deleted and billing for these resources stops.
+
+<Message type="important">
+Incomplete multipart uploads that have not been aborted are still subject to billing. For more information on how to view and abort incomplete MPUs, refer to the [dedicated documentation](/object-storage/how-to/abort-incomplete-mpu/).
+</Message>
+
+To upload a part of an object in an initiated multipart upload, send a POST request as follows:
+
+```
+<bucketname>.s3.<region>.scw.cloud/<object_key>partNumber=<part_number>&uploadId=<upload_id>.
+```
+
+* `<part_number` specifies the position of the part uploaded inside the object.
+* `<upload_id>` is the unique identifier returned during the initialization of the multi-part upload.
+
+**Sample request**
+```
+PUT /large-file.tar.gz?partNumber=1&uploadId=Y2VhZDUxYjAtNjVjMC00NTIxLWEwNWUtNWM3NDAyOTQ4ZWYz HTTP/1.1
+host: bucketname.s3.nl-ams.scw.cloud
+x-amz-content-sha256: 4cf002db03f94b9ab876f38ad65863c987af96c6526673cfee22fad443fee9cb
+x-amz-date: 20190517T131738Z
+Authorization': AWS4-HMAC-SHA256 Credential=SCWGJ3BW6Q22HCEB16GJ/20190517/nl-ams/s3/aws4_request,SignedHeaders=host;x-amz-content-sha256;x-amz-date
+```
+
+**Sample response**
+```
+Content-Length: 0
+x-amz-id-2: txc9ed83e20cd84f56b826c-005cdeb472
+Date: Fri, 17 May 2019 13:17:38 GMT
+ETag: "d41d8cd98f00b204e9800998ecf8427e"
+x-amz-request-id: txc9ed83e20cd84f56b826c-005cdeb472
+```
+
+## Completing a multipart upload
+
+To complete a multipart upload session and to generate the final object, a POST request is required. 
+
+```
+<bucketname>.s3.<region>.scw.cloud/<object_key>?uploadId=<object_key>
+```
+
+<Message type="note">
+  In the example above, `<upload_id>` corresponds to the unique identifier returned during the initialization of the multi-part upload.
+</Message>
+
+The request requires that an XML element named `CompleteMultipartUpload` containing information about each part of the multipart upload is present. The element requires the following contents:
+
+- `Part`:	Information about each individual part of a multipart upload
+- `PartNumber`:	A sequential identifier specifying the part of the object
+- `ETag`:	The entity tag (Etag) containing an MD5 hash of the object part
+
+**Sample request**
+
+```xml no-copy
+POST /large-file.tar.gz?uploadId=Y2VhZDUxYjAtNjVjMC00NTIxLWEwNWUtNWM3NDAyOTQ4ZWYz HTTP/1.1
+
+X-Amz-Date: 20190517T140506Z
+X-Amz-Content-SHA256: 4cf002db03f94b9ab876f38ad65863c987af96c6526673cfee22fad443fee9cb
+Authorization: AWS4-HMAC-SHA256 Credential=SCWGJ3BW6Q22HCEB16GJ/20190517/nl-ams/s3/aws4_request,SignedHeaders=host;x-amz-content-sha256;x-amz-date,Signature=2ab2471b862268c3509aad01974153fc44455f7f6998c0e3e7fbdfaf8f4f5efd
+Content-Length: 0
+
+<CompleteMultipartUpload>
+  <Part>
+    <PartNumber>1</PartNumber>
+    <ETag>"4cb0d956600bab287520b442e83035a6"</ETag>
+  </Part>
+  <Part>
+    <PartNumber>2</PartNumber>
+    <ETag>"d41d8cd98f00b204e9800998ecf8427e"</ETag>
+  </Part>
+</CompleteMultipartUpload>
+```
+
+**Sample response**
+
+```xml
+HTTP/1.1 200 OK
+
+x-amz-id-2: tx321faae63fb14971a8d8a-005cdec63e
+Date: Fri, 17 May 2019 14:05:06 GMT
+x-amz-request-id: tx321faae63fb14971a8d8a-005cdec63e
+Connection: close
+
+<?xml version="1.0" encoding="UTF-8"?>
+  <CompleteMultipartUploadResult xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Location>bucketname.s3.nl-ams.scw.cloud</Location>
+    <Bucket>bucketname</Bucket>
+    <Key>large-file.tar.gz</Key>
+    <ETag>6eb393dac21d595a813f0c8bf4e9bc23</ETag>
+  </CompleteMultipartUploadResult>
+```
+
+## Listing multipart uploads
+
+This command lists in-progress multipart uploads. An in-progress multipart upload is an active multipart upload request that is still ongoing and has not yet been completed or aborted. 
+
+The response of this command includes a list of all ongoing multipart uploads, with a maximum of 1000 in-progress multipart uploads, ordered by their key.
+
+To get a list of in-progress multipart uploads, send a `GET` request to the URI of the multipart-uploads subresource of the bucket. Use the `max-uploads` attribute to limit the number of returns in the output.  
+
+```
+<bucketname>.s3.<region>.scw.cloud/?uploads
+```
+
+**Sample request**
+
+```
+GET /?uploads&max-uploads=2 HTTP/1.1
+Host: bucketname.s3.nl-ams.scw.cloud
+Date: FThu, 03 Sep 2020 13:29:39 GMT
+Authorization: authorization string
+```
+
+**Sample response**
+
+```xml
+x-amz-id-2: txa0875396ef3e47e9ac144-005f50efc4
+Content-Length: 1609
+x-amz-request-id: txa0875396ef3e47e9ac144-005f50efc4
+Content-Type: application/xml
+Date: Thu, 03 Sep 2020 13:29:40 GMT
+
+<?xml version='1.0' encoding='UTF-8'?>
+<ListMultipartUploadsResult
+    xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+    <Bucket>bucketname</Bucket>
+    <KeyMarker></KeyMarker>
+    <UploadIdMarker></UploadIdMarker>
+    <NextKeyMarker>multipart/02</NextKeyMarker>
+    <NextUploadIdMarker>MzdjNzJlM2QtYjc5NC00YzI4LTk2MjItM2M1NjQ2YmYwMjlm</NextUploadIdMarker>
+    <MaxUploads>2</MaxUploads>
+    <IsTruncated>false</IsTruncated>
+    <Upload>
+        <Key>multipart/01</Key>
+        <UploadId>Y2RmMTk4OTgtYzZjYS00OTgzLWIzZWYtYWNiYjVhMTUzNWNm</UploadId>
+        <Initiator>
+            <ID>a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527</ID>
+            <DisplayName>a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527</DisplayName>
+        </Initiator>
+        <Owner>
+            <ID>a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527</ID>
+            <DisplayName>a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527</DisplayName>
+        </Owner>
+        <StorageClass>STANDARD</StorageClass>
+        <Initiated>2020-09-03T13:14:44.000Z</Initiated>
+    </Upload>
+    <Upload>
+        <Key>multipart/02</Key>
+        <UploadId>MzdjNzJlM2QtYjc5NC00YzI4LTk2MjItM2M1NjQ2YmYwMjlm</UploadId>
+        <Initiator>
+            <ID>a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527</ID>
+            <DisplayName>a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527</DisplayName>
+        </Initiator>
+        <Owner>
+            <ID>a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527</ID>
+            <DisplayName>a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527</DisplayName>
+        </Owner>
+        <StorageClass>STANDARD</StorageClass>
+        <Initiated>2020-09-03T13:15:40.000Z</Initiated>
+    </Upload>
+</ListMultipartUploads>
+```
+**CLI command**
+
+In this example, we use a 3 GB .mp4 file.
+
+```json
+aws s3api list-parts --bucket my-bucket --upload-id "OWZiZTA4YzUtODExZC00ZjE5LTkyMjUtZGVmNjcwNjBiYWQ1" --key video.mp4
+{
+    "Parts": [
+        {
+            "PartNumber": 34,
+            "LastModified": "2020-12-14T12:59:42.000Z",
+            "ETag": "\"3ed6157a7f0b59ba8b2acfcd7e7f9f5f\"",
+            "Size": 10485760
+        },
+        {
+            "PartNumber": 85,
+            "LastModified": "2020-12-14T12:59:42.000Z",
+            "ETag": "\"ef553a411c2194543155f6f1e711fcee\"",
+            "Size": 10485760
+        }
+    ],
+    "Initiator": {
+        "ID": "0457951d-0186-4e23-897c-1895b192844c:0457951d-0186-4e23-897c-1895b192844c",
+        "DisplayName": "0457951d-0186-4e23-897c-1895b192844c:0457951d-0186-4e23-897c-1895b192844c"
+    },
+    "Owner": {
+        "DisplayName": "0457951d-0186-4e23-897c-1895b192844c:0457951d-0186-4e23-897c-1895b192844c",
+        "ID": "0457951d-0186-4e23-897c-1895b192844c:0457951d-0186-4e23-897c-1895b192844c"
+    },
+    "StorageClass": "STANDARD"
+}
+``` 
+
+## Aborting a multipart upload
+
+After initiating a multipart upload, and beginning to upload parts, Object Storage stores these parts, but the final object is only assembled from the parts upon request once the multipart upload has been completed.
+
+If the multipart upload is not completed, the parts will not be assembled and no object will be created. The parts remain on the Object Storage platform and stored parts are subject to billing.
+
+In case these parts are no longer needed, it is possible to clear them by aborting the multipart upload session.
+
+<Message type="note">
+You can also [abort incomplete multipart uploads manually](/object-storage/how-to/abort-incomplete-mpu/) using the Scaleway console, or automatically using [lifecycle rules](/object-storage/how-to/manage-lifecycle-rules).
+</Message>
+
+To abort an active multipart upload session, send a `DELETE` request to the platform, as follows:
+
+```
+<bucketname>.<region>.scw.cloud/<object_key>?uploadId=<object_key>
+```
+
+**Sample request**
+```
+X-Amz-Date: 20190517T145721Z
+X-Amz-Content-SHA256: 4cf002db03f94b9ab876f38ad65863c987af96c6526673cfee22fad443fee9cb
+Authorization: AWS4-HMAC-SHA256 Credential=SCWGJ3BW6Q22HCEB16GJ/20190517/nl-ams/s3/aws4_request,SignedHeaders=host;x-amz-content-sha256;x-amz-date,Signature=96eff1cd4072eec6cb805037e1819c8c1a39666aa1a7d49d9a994e8b287f24b6'
+```
+
+**Sample response**
+```
+x-amz-id-2: tx43fe9acf22a7494493750-005cdecbd1
+x-amz-request-id: 'tx43fe9acf22a7494493750-005cdecbd1
+Content-Length: 0
+Date: Fri, 17 May 2019 14:57:21 GMT
+```
+
+**CLI command**
+
+<Message type="important">
+  The file size threshold for regular uploads done through the AWS CLI is 8 MB. When uploading a file larger than 8 MB, the AWS CLI automatically starts an ongoing Multipart Upload.
+</Message>
+
+1. Run the command below to abort the upload and clear the parts:
+
+    ```json
+    aws s3api abort-multipart-upload --bucket my-bucket --upload-id "OWZiZTA4YzUtODExZC00ZjE5LTkyMjUtZGVmNjcwNjBiYWQ1" --key <my-file>
+    ```
+
+2. Run the command below to make sure the upload has been aborted:
+
+    ```
+    aws s3api list-multipart-uploads --bucket my-bucket
+    ```
+
+An output similar to the following displays:
+
+    ```
+    {
+      "Uploads": []
+    }
+    ```

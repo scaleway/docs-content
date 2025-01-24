@@ -1,0 +1,232 @@
+---
+meta:
+  title: Configuring IoT Hub routes via the CLI
+  description: This page explains how to configure IoT Hub routes.
+content:
+  h1: Configuring IoT Hub routes via the CLI
+  paragraph: This page explains how to configure IoT Hub routes.
+categories:
+  - managed-services
+dates:
+  validation: 2024-11-04
+tags: iot iot-hub mqtt cli s3cmd amazon-s3
+---
+
+Routes are integrations with the Scaleway ecosystem: they can forward MQTT messages to Scaleway services.
+
+<Message type="note">
+  Find out more about IoT Hub Routes in the [Routes reference page](/iot-hub/reference-content/routes/).
+</Message>
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Installed `mosquitto-clients` (mqtt client) and `jq` (JSON parsing tool) on your computer
+- Installed the [Scaleway CLI](https://github.com/scaleway/scaleway-cli#scaleway-cli-v2) and [read the accompanying IoT document](/iot-hub/api-cli/getting-started-with-iot-hub-cli/)
+- Installed and configured [`s3cmd`](/tutorials/s3cmd/) for Scaleway
+
+## Amazon S3 Routes
+
+The Amazon S3 route allows you to put the payload of MQTT messages directly into Scaleway's Object Storage.
+
+<Message type="important">
+  This section is a continuation of the [Iot Hub CLI quickstart](/iot-hub/api-cli/getting-started-with-iot-hub-cli/). Make sure to follow the quickstart before beginning.
+</Message>
+
+1. Run the following commands in a terminal on your computer:
+	```bash
+	BUCKET="my-bucket-$RANDOM" # Buckets are globally unique, suffix with a random number
+	REGION="fr-par"
+	PREFIX="iot/messages"
+	# Create the bucket
+	s3cmd mb --region "$REGION" "s3://$BUCKET"
+	# Grant write access to IoT Hub Amazon S3 Route Service to your bucket
+	s3cmd setacl --region "$REGION" "s3://$BUCKET" --acl-grant=write:555c69c3-87d0-4bf8-80f1-99a2f757d031:555c69c3-87d0-4bf8-80f1-99a2f757d031
+	# Create the IoT Hub Amazon S3 Route
+	scw iot route create \
+	  hub-id=$(jq -r '.id' hub.json) \
+	  name=route-s3-cli topic="hello/world" \
+	  s3-config.bucket-region="$REGION" \
+	  s3-config.bucket-name="$BUCKET" \
+	  s3-config.object-prefix="$PREFIX" \
+	  s3-config.strategy=per_topic
+	```
+
+	The output will contain something like:
+
+	```
+	ID                     5ce53577-6905-4b22-970f-d1e345e7345a
+	Name                   route-s3-cli
+	HubID                  b20c3639-9030-496c-a1b2-6feb15846726
+	Topic                  hello/world
+	Type                   s3
+	CreatedAt              now
+	S3Config.BucketRegion  fr-par
+	S3Config.BucketName    my-bucket-26793
+	S3Config.ObjectPrefix  iot/messages
+	S3Config.Strategy      per_topic
+	UpdatedAt              now
+	```
+2. Publish and see the result.
+	```bash
+		sleep 5 # wait a little for the route to start
+		mosquitto_pub \
+		  -h $(jq -r '.endpoint' hub.json) \
+		  -i $(jq -r '.device.id' dev2.json) \
+		  -t hello/world \
+		  -m 'Hello, world!'
+	```
+		An object called `iot/messages/hello/world` should now be stored in your bucket. Its content should be the words "hello world".
+
+3. Retrieve the object using `s3cmd`:
+	```bash
+	s3cmd get --region "$REGION" "s3://$BUCKET/$PREFIX/hello/world"
+	cat world
+	```
+
+## Database Routes
+
+Database route allows you to store messages in your database.
+
+When creating a Database route for one of your hubs, you must specify a topic (wildcards are allowed), a database (with valid credentials), and a query to execute (the query may contain `$TOPIC` and `$PAYLOAD` variables).
+
+<Message type="note">
+  `$TOPIC` and `$PAYLOAD` are the only available variables for Database routes.
+</Message>
+
+The route will subscribe on this hub to this topic, and execute the query onto the given database for each received message:
+
+- First, `$TOPIC` and `$PAYLOAD` are replaced with the topic and payload of the received MQTT message,
+- Then the generated query is executed
+
+<Message type="important">
+  In PostgreSQL, the `topic` database field **must** be a of _text_ type, and the `payload` must be a _bytea_.
+</Message>
+
+This tutorial covers the **PostgreSQL** database system. You can use a [Scaleway Database instance](https://console.scaleway.com/rdb/instances), or any other PostgreSQL instance publicly accessible.
+
+### Setting up a Database Route
+
+<Macro id="requirements" />
+
+- A working PostgreSQL database, with valid credentials (username and password)
+
+1. Run the following commands in a terminal on your computer:
+	```bash
+	# Database settings
+	DBHOST=<your db host>
+	DBPORT=<your db port>
+	DBNAME=<your db name>
+	DBUSER=<your db user>
+	DBPASS=<your db password>
+
+	# Create the target database table
+	psql -h $DBHOST --port $DBPORT -U $DBUSER -d $DBNAME -c '
+	  CREATE TABLE messages (
+	    time timestamp,
+	    topic text,
+	    payload bytea
+	  )
+	'
+
+	# Create the IoT Hub Database Route
+	# The query will insert message topic and payload with current timestamp
+	scw iot route create \
+	  hub-id=$(jq -r '.id' hub.json) \
+	  name=route-db-cli \
+	  topic="hello/world" \
+	  db-config.engine="$DBENGINE" \
+	  db-config.host="$DBHOST" \
+	  db-config.port=$DBPORT \
+	  db-config.dbname="$DBNAME" \
+	  db-config.username="$DBUSER" \
+	  db-config.password="$DBPASS" \
+	  db-config.query='INSERT INTO messages VALUES (NOW(), $TOPIC, $PAYLOAD)'
+	```
+
+	The output should look like the example below:
+	```
+	ID                 2251e2b1-c616-4a7e-9e72-b658da656424
+	Name               route-db-cli
+	HubID              b20c3639-9030-496c-a1b2-6feb15846726
+	Topic              hello/world
+	Type               database
+	CreatedAt          now
+	DbConfig.Engine    postgresql
+	DbConfig.Host      127.0.0.1
+	DbConfig.Port      5432
+	DbConfig.Dbname    route_tests
+	DbConfig.Username  jdoe
+	DbConfig.Password  <your_pass>
+	DbConfig.Query     INSERT INTO messages VALUES (NOW(), $TOPIC, $PAYLOAD)
+	UpdatedAt          now
+	```
+2. Publish a message and check whether it is inserted into the `message` table.
+	```bash
+	sleep 5 # wait a little for the route to start
+	mosquitto_pub \
+	  -h $(jq -r '.endpoint' hub.json) \
+	  -i $(jq -r '.device.id' dev2.json) \
+	  -t hello/world \
+	  -m 'Hello, world!'
+	psql -h $DBHOST --port $DBPORT -U $DBUSER -d $DBNAME -c "SELECT * FROM messages"
+	```
+
+<Message type="tip">
+  More examples including MySQL and more advanced features are available on the [Database Routes tips & tricks](/iot-hub/api-cli/cli-db-tips-tricks/) page.
+</Message>
+
+## Rest Routes
+
+Rest route allows you to call any HTTP(s) endpoint on the received MQTT message.
+You can choose the HTTP verb used to call your REST uri, as well as add extra headers.
+
+We can see what a rest route would publish on a rest API by simply listening to the port 80 on a public IP.
+
+You can use a [Scaleway Instance](https://console.scaleway.com/instance/servers), or any other machine with a public IP address.
+
+1. Launch the following command as `root`:
+	```bash
+	nc -p 80 -l
+	```
+2. Define a variable with the public IP address of your Instance.
+	```bash
+	RESTHOST=<the_public_ip_address>
+	```
+3. Create the route by running the following command:
+	```bash
+	# Create the IoT Hub Rest Route
+	scw iot route create \
+	  hub-id=$(jq -r '.id' hub.json) \
+	  name=route-rest-cli \
+	  topic="hello/world" \
+	  rest-config.verb=post \
+	  rest-config.uri="http://$RESTHOST/" \
+	  rest-config.headers.X-My-Header="Tutorial"
+	```
+4. Publish a message and check that it triggers a request on the Instance.
+	```bash
+	sleep 5 # wait a little for the route to start
+	mosquitto_pub \
+	  -h $(jq -r '.endpoint' hub.json) \
+	  -i $(jq -r '.device.id' dev2.json) \
+	  -t hello/world \
+	  -m 'Hello, world!'
+	```
+
+  The output should be:
+	```bash
+	POST / HTTP/1.1
+	Host: <the_public_ip_address>
+	User-Agent: Go-http-client/1.1
+	Content-Length: 13
+	X-Mqtt-Retain: false
+	X-Mqtt-Topic: hello/world
+	X-My-Header: Tutorial
+	Accept-Encoding: gzip
+
+	Hello, world!
+	```
+
+

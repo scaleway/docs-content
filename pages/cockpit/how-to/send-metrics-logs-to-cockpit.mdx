@@ -1,0 +1,123 @@
+---
+meta:
+  title: How to send metrics and logs to your Cockpit
+  description: Learn how to send metrics and logs to your Cockpit using Scaleway's comprehensive guide. This tutorial covers sending Python logs to Scaleway's Cockpit for centralized monitoring and analysis using Grafana, ensuring efficient data management and analysis in your infrastructure.
+content:
+  h1: How to send metrics and logs to your Cockpit
+  paragraph: Learn how to send metrics and logs to your Cockpit using Scaleway's comprehensive guide. This tutorial covers sending Python logs to Scaleway's Cockpit for centralized monitoring and analysis using Grafana, ensuring efficient data management and analysis in your infrastructure.
+tags: metrics cockpit logs observability
+categories:
+  - observability
+dates:
+  validation: 2024-12-26
+  posted: 2022-10-31
+---
+
+This page shows you how to send data such as [metrics](/cockpit/concepts/#metric) and [logs](/cockpit/concepts/#logs) to your [Cockpit](/cockpit/concepts/#cockpit). You can push metrics with any `Prometheus Remote Write` compatible agent such as the [Prometheus](https://prometheus.io/docs/introduction/overview/), [Grafana](https://grafana.com/docs/agent/latest/) or [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/) agents.
+You can push logs with any Loki compatible agent such as the [Promtail](https://grafana.com/docs/loki/latest/clients/promtail/), [Fluentd](https://docs.fluentd.org/), [Fluent Bit](https://docs.fluentbit.io/manual/) or [Logstash](https://www.elastic.co/guide/en/logstash/current/introduction.html) agents.
+
+<Macro id="requirements" />
+
+ - A Scaleway account logged into the [console](https://console.scaleway.com)
+ - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+ - Configured an agent. Read our dedicated [documentation](/cockpit/how-to/send-metrics-with-grafana-alloy/) to find out how to configure the Grafana Alloy agent
+ - [Created](/iam/how-to/create-api-keys/) an API key and retrieved your API secret key
+
+
+<Message type="important">
+ - Having the default configuration on your agents might lead to more of your resources' metrics being sent, a high consumption, and a high bill at the end of the month.
+ - Sending metrics and logs for Scaleway resources or personal data using an external path is a billable feature. In addition, any data that you push yourself is billed, even if you send data from Scaleway products. Refer to the [product pricing](https://www.scaleway.com/en/pricing/?tags=available,managedservices-observability-cockpit) for more information.
+</Message>
+
+## Send metrics and logs to your Cockpit
+
+1. Click **Cockpit** in the Observability section of the [console](https://console.scaleway.com/) side menu. The **Cockpit** overview page displays.
+2. [Create a token](/cockpit/how-to/create-token/) with the **Push** permission for metrics and logs.
+    <Message type="important">
+     - Make sure that you create your token in the same region as the [data sources](/cockpit/concepts/#data-sources) you want to use it for.
+     - Make sure that you copy your token's secret key and save it before you exit the page.
+    </Message>
+3. Configure your applications to send metrics and logs to your Cockpit [endpoints](/cockpit/concepts/#endpoints), using your token's secret key for authentication.
+
+    <Message type="important">
+     Retrieve your metrics' and logs' push endpoints in the [Data sources tab](https://console.scaleway.com/cockpit/dataSource) of the Scaleway console.
+    </Message>
+4. [Log in to your Grafana account](/cockpit/how-to/access-grafana-and-managed-dashboards/).
+5. Create your [Grafana dashboard](/cockpit/how-to/access-grafana-and-managed-dashboards/) and start monitoring your data.
+
+---
+
+
+    ## Sending Python logs to Cockpit
+
+    <Message type="important">
+     You need custom logs in the `fr-par` region to follow the procedure below. Find out [how to create custom logs](/cockpit/how-to/create-external-data-sources/).
+    </Message>
+
+    1. Open a terminal and run `pip install python-logging-loki` or `pip3 install python-logging-loki` if you are using Python 3, to install the [logging_loki](https://pypi.org/project/python-logging-loki/) package to send your Python logs.
+    2. [Create a token](/cockpit/how-to/create-token/) with the **Push** permission for logs.
+    3. Create a `python_logs.py` Python file and paste the following code snippet into it. Make sure that you replace `$SCW_SECRET_KEY` with your API secret key and `$COCKPIT_TOKEN_SECRET_KEY` with your Cockpit token's secret key.
+
+      ```
+      import logging
+      import logging_loki
+      import time
+
+      handler = logging_loki.LokiHandler(
+          url="https://logs.cockpit.fr-par.scw.cloud/loki/api/v1/push",
+          tags={"job": "logs_from_python"},
+          auth=("$SCW_SECRET_KEY", "$COCKPIT_TOKEN_SECRET_KEY"),
+          version="1",
+
+      )
+
+      logger = logging.getLogger("my-first-python-logger")
+      logger.addHandler(handler)
+
+      def main():
+          # Start generating log messages
+          for i in range(10):
+              logger.error(f"Error message {i}")
+              time.sleep(1)
+
+      if __name__ == "__main__":
+          main()
+
+
+      ```
+
+      This script sets up a logger that sends error log messages to the Loki endpoint in Cockpit. It then generates 10 error log messages with a one-second delay between each message. These log messages are sent to Cockpit and can be viewed and analyzed via the Grafana dashboard we will create in the next part.
+
+      <Message type="tip">
+        If you are using the Scaleway Loki API, you can `POST` through the `Authorization: Bearer <token>` header, or `POST` using the following endpoint: `https://api_key:YOUR_COCKPIT_TOKEN@logs.cockpit.fr-par.scw.cloud/loki/api/v1/push`.
+      </Message>
+
+  ### Creating a Grafana dashboard and visualizing your Python logs
+
+    1. [Log into Grafana](/cockpit/how-to/access-grafana-and-managed-dashboards/) using your [Grafana credentials](/cockpit/how-to/retrieve-grafana-credentials/).
+    2. Click **Toggle menu**, then click **Dashboards**.
+    3. Click **New** in the top right corner of your screen, then **Import**.
+    4. Upload the JSON file of the [Grafana Log Viewer dashboard for Loki](https://grafana.com/grafana/dashboards/13639-logs-app/) or enter `13639` in the **Import via grafana.com** field.
+    5. Click **Load**.
+    6. Enter a name for the dashboard or leave the default name.
+    7. Select a folder in which to store the dashboard.
+    8. Select your custom logs data source in the **Loki** drop-down. Make sure that the data source you select is in the `fr-par` region.
+    9. Click **Import**.
+    10. Open a terminal and enter the following command.
+        ```
+        python3 python_logs.py
+        ```
+    11. Click the **Home** icon > **Dashboards**. Your **Logs / App** dashboard should display.
+    12. Click the **Logs / App** dashboard. Your log lines from the Python snippet should appear.
+
+        If your logs do not display, try changing the time range to match the time at which you ran your Python file.
+
+        <Lightbox src="scaleway-logs-python.webp" alt="Error logs display" />
+    13. Click the **View in Explore** button for more configuration options.
+        <Lightbox src="scaleway-explore-python-logs.webp" alt="" />
+
+<Message type="tip">
+  Read our more in depth-documentation on [how to configure the Grafana alloy agent](/cockpit/how-to/send-metrics-with-grafana-alloy/) to push your Scaleway metrics, and visualize them in a Grafana dashboard.
+</Message>
+
+

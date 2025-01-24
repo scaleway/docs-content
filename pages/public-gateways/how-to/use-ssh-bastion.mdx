@@ -1,0 +1,113 @@
+---
+meta:
+  title: How to use SSH bastion
+  description: This page explains how to use SSH bastion
+content:
+  h1: How to use SSH bastion
+  paragraph: This page explains how to use SSH bastion
+tags: ssh-bastion ssh bastion activation reimport public-gateway
+dates:
+  validation: 2024-12-10
+  posted: 2022-03-31
+categories:
+  - network
+---
+
+SSH bastion is a server dedicated to managing connections to the infrastructure behind your Public Gateway. When you activate SSH bastion on your Public Gateway, all [SSH keys held in your Project](https://console.scaleway.com/project/ssh-keys/) are imported to the SSH bastion, providing a single point of entry. You can then connect to resources behind the bastion (connected to the same Private Network as the Public Gateway) via the bastion. This makes management of your infrastructure easier and more secure, as you do not need to expose your other resources to the internet in order to connect to them, neither do you need to upload SSH keys to individual resources.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Created a Public Gateway](/public-gateways/how-to/create-a-public-gateway/)
+- [Attached](/vpc/how-to/attach-resources-to-pn/) your Public Gateway to a Private Network
+
+## How to activate SSH bastion
+
+1. Click **Public Gateways** in the **Network** section of the Scaleway console side menu.
+2. Click the Public Gateway for which you want to activate SSH bastion. You are taken to the **Overview** page for that Public Gateway.
+    <Lightbox src="scaleway-ssh-bastion-activate.webp" alt="" />
+3. Under **SSH Bastion** click the **Activate** button. A pop-up displays:
+    <Lightbox src="scaleway-activate-ssh-bastion-popup.webp" alt="" />
+4. Enter the port that you want your SSH bastion to listen on (or leave the default port in place).
+    <Message type="tip">
+      The default port is 61000. When setting your own port, you must choose a port number between 1024 and 59999. The port that the SSH bastion listens on must not be a port already in use by a [NAT rule](/public-gateways/concepts/#nat).
+    </Message>
+5. Copy the command to connect to a resource, and click **Save SSH bastion settings**.
+
+    You are redirected to your Public Gateway's **Overview** page, where SSH bastion is now activated. All the SSH keys in your [Project credentials](/iam/concepts/#api-key) at the time of activation are copied to the SSH bastion.
+
+## How to reimport SSH keys
+
+If you add new SSH keys to your [Project credentials](/iam/concepts/#api-key) after activating SSH bastion, you will need to perform a reimport to update the bastion with the new keys.
+
+1. Click **Public Gateways** in the **Network** section of the Scaleway console side menu.
+2. Click the Public Gateway for which you want to update the SSH bastion. You are taken to the **Overview** page for that Public Gateway.
+3. Under **SSH Bastion** click the **Reimport SSH keys** button.
+    <Lightbox src="scaleway-ssh-bastion-reimport.webp" alt="" />
+
+    Your SSH bastion is updated with the new SSH keys.
+
+## How to connect to a resource behind your SSH bastion
+
+In this section, we use the example of a Public Gateway attached to a Private Network, with different resources (Instances, Elastic Metal servers etc) attached to the Private Network. SSH bastion has been activated on the Public Gateway, listening on port 61000.  
+
+### How to connect using the resource's private IP address
+
+You can connect to a resource behind the bastion using its private IP address on the Private Network. The command to use is shown in the Scaleway console at the time of activating the bastion, e.g.
+
+`ssh -J bastion@<public-IP-of-gateway>:61000 root@<private-IP-of-resource>`
+
+### How to connect using the resource's fully-qualified domain name (FQDN)
+
+The domain to use is set when the Public Gateway is attached to the Private Network. Therefore, the FQDN to use depends on how you made this attachment:
+
+- **Via the Scaleway console**: The FQDN takes the form `resource-name.priv`
+- **Via Terraform**: The FQDN takes the form `resource-name.dns_local_name` where `dns_local_name` is [this](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/vpc_public_gateway_dhcp#dns_local_name) Terraform option.
+- **Via the Scaleway CLI or API**:  The FQDN takes the form `resource-name.dns_local_name` where `dns_local_name` follows the specification [here](https://www.scaleway.com/en/developers/api/public-gateway/#path-dhcp-create-a-dhcp-configuration), defaulting to `.priv`.
+
+Carry out the following command on your terminal to connect to a resource inside your Private Network. Remember to replace `FQDN` with the FQDN in the format specified above.
+
+```bash
+ssh -J bastion@PUBLIC_IP_OF_PUBLIC_GATEWAY:61000 user@FQDN
+```
+
+### How to edit your SSH configuration files for connection
+
+Carry out the following steps to avoid the need to repeat `-J bastion@<public-IP-of-gateway>:61000` in your SSH connection commands. The following steps must be repeated on all local machines that want to connect to a resource behind the SSH bastion in this way.
+
+1. To configure at user/local level, open your user SSH configuration file on your local machine with a text-editor such as `nano`: 
+    ```bash
+    nano ~/.ssh/config
+    ```
+    Paste the following code into the file, then save and exit. Ensure that you make the following replacements:
+      - `.priv`: If you attached the Public Gateway to the Private Network via the console, this is the correct value. However, if you used another method such as Terraform, API, or CLI you may need to replace this value - see [above](#how-to-connect-using-the-resources-fully-qualified-domain-name-fqdn).
+      - `PUBLIC_IP_OF_PUBLIC_GATEWAY`: The public IP address of your gateway
+      - `SSH_BASTION_PORT`: The port you set when activating SSH bastion on your gateway
+
+    ```bash
+    Host *.priv
+      ProxyJump bastion@PUBLIC_IP_OF_PUBLIC_GATEWAY:SSH_BASTION_PORT
+    ```
+2. Alternatively, to configure at system-wide level, open your system-wide configuration file on your local machine with a text-editor such as `nano`: 
+    ```bash
+    nano /etc/ssh/ssh_config
+    ```
+    Paste the code into the file, then save and exit.
+
+3. Carry out the following command on your terminal to connect to a resource inside your Private Network using its FQDN. Check the information [above](#how-to-connect-using-the-resources-fully-qualified-domain-name-fqdn) to identify the FQDN of your resource. 
+    ```bash
+    ssh FQDN
+    ```
+
+## How to edit or deactivate SSH bastion
+
+1. Click **Public Gateways** in the **Network** section of the Scaleway console side menu.
+2. Click the Public Gateway for which you want to edit or deactivate SSH bastion. You are taken to the **Overview** page for that Public Gateway.
+3. Under **SSH Bastion** click the "edit" icon (<Icon name="edit" />) **Edit** button. A pop-up displays.
+4. Edit your SSH bastion as required. You can make the following edits:
+    - Use the <Icon name="toggle" /> toggle to disable SSH bastion.
+    - Change the port on which your SSH bastion listens.
+5. Click **Save settings**.
+
+    Your edits are saved, and you are redirected to your Public Gateway's **Overview** page.

@@ -1,0 +1,85 @@
+---
+meta:
+  title: Understanding Scaleway DNS for VPC and Private Networks
+  description: Learn more about how internal DNS works within the Scaleway ecosystem, and how to ensure your infrastructure is using DNS efficiently.
+content:
+  h1: Understanding Scaleway DNS for VPC and Private Networks
+  paragraph: Learn more about how internal DNS works within the Scaleway ecosystem, and how to ensure your infrastructure is using DNS efficiently.
+tags: vpc private-network dns dns-server dns-resolution hostname
+dates:
+  validation: 2024-12-31
+  posted: 2024-12-31
+categories:
+  - network
+---
+
+Scaleway VPC and Private Networks integrate managed DNS, for the effective resolution of hostnames to IP addresses. Read on to find out more.
+
+## What is DNS?
+
+The **D**omain **N**ame **S**ystem (DNS) is a naming system for devices connected to the internet or any network. Most prominently, DNS servers translate text-based domain names (e.g. www.scaleway.com) to numerical IP addresses (e.g. 51.158.66.220). This allows traffic to find its destination by resolving a human-readable text-based name, to the numerical IP addresses used by networks and servers.
+
+## Scaleway DNS overview
+
+Scaleway Private Networks benefit from managed internal DNS. This allows the resolution of resources' **hostnames** on the Private Network, into their private IP addresses. This managed DNS service is automatically exposed in each Private Network and no user configuration is required.
+
+<Message type="note">
+When a Private Network is attached to a [legacy Public Gateway](/public-gateways/concepts/#ipam), the gateway’s DNS takes priority over that of the Private Network.
+</Message>
+
+## Hostname format
+
+A resource's hostname is equivalent to the name you gave the resource when creating it. The full format for internal addressing is `<hostname>.<private-network-name>.internal`. For example, if you have an Instance with the name `instance123` attached to a Private Network named `prodpn`, its address on that network is `instance123.prodpn.internal`.
+
+<Message type="tip">
+- If you update the resource's name after creating it, and thus its hostname changes, it will not be automatically updated on our DNS records unless you detach and reattach the resource to the Private Network. <br/><br/>
+- If you created the resource via the API, and it has dots in its name, these dots should be replaced by dashes for the purposes of DNS resolution (`my.instance` --> `my-instance`). We generally recommend avoiding using dots in your resource names to avoid issues.<br/><br/>
+</Message>
+
+## DNS resolution details
+
+The managed DNS resolver service is exposed on each Private Network through the following IP addresses:
+
+- IPv4: `169.254.169.254`
+- IPv6: `fe80::200:22ff:fe05:ca1e`
+
+The service resolves both regular public records, as well as internal VPC records.
+
+<Message type="tip">
+The `.internal` at the end of internal addresses is important in enabling the resolver to distinguish between internal and external/public DNS. For this reason, you should always add `.internal` when addressing resources within your VPC.
+</Message>
+
+The DNS service resolves the following formats:
+
+```
+<resource_name>.<private-network_name>.internal
+<resource_name>.<private-network_uuid>.internal
+<resource_uuid>.<private-network_uuid>.internal
+```
+
+<Message type="tip">
+The `resource_uuid` does not generally correspond to the ID of the principal resource (e.g. Instance, Elastic Metal server, Public Gateway), but rather to the ID of the sub-resource that facilitates the attachment to the Private Network. For example:
+- Instances: `resource_uuid` corresponds to the [Private NIC](https://www.scaleway.com/en/developers/api/instance/#path-private-nics-list-all-private-nics) ID
+- Elastic Metal: `resource_uuid` corresponds to the ID of the [Server-to-Private Network mapping](https://www.scaleway.com/en/developers/api/elastic-metal/private-network-api/#path-private-networks-add-a-server-to-a-private-network)
+- Public Gateways: `resource_uuid` corresponds to the [GatewayNetwork](https://www.scaleway.com/en/developers/api/public-gateway/#path-gateway-networks-list-public-gateway-connections-to-private-networks) ID.
+</Message>
+
+DNS cannot resolve or forward queries between different VPCs. It can only resolve hostnames for resources within the same VPC, though they may be on different Private Networks within that VPC.
+
+## Rate limiting
+
+Currently, DNS requests are rate-limited to 50 requests per second per resource. Watch this space as we work to be able to increase this limit to accommodate higher traffic volumes.
+
+## Troubleshooting
+
+If you experience problems with DNS, try the following steps:
+
+1. **Detach and reattach the affected resources from/to the Private Network.** This is effective in solving many issues for older resources, or resources whose name you have changed.
+
+2. **Check resource hostname**. Issues can arise if your resource has a dot in its name. Rename it if necessary to eliminate the dot, and detach/reattach it from the Private Network.
+
+3. **Check Private Network name**. Issues can arise with Private Networks who share a name with a TLD. See our [dedicated document](/vpc/troubleshooting/pn-name/) for more help.
+
+4. **Check whether you are using Network Manager**: DNS does not work out of the box for Linux distributions using Network Managed, such as **RockyLinux**. Find out how to resolve this problem [on our troubleshooting page](/vpc/troubleshooting/private-dns-dhcp-not-working/#distributions-running-network-manager)
+
+If you are still having problems reaching a resource attached to a Private Network via its hostname, [open a support ticket](https://console.scaleway.com/support).

@@ -1,0 +1,134 @@
+---
+meta:
+  title: Configuring a SQL storage backend in Helm on Scaleway Kubernetes Kapsule
+  description: Troubleshoot issues deploying large Helm releases on Scaleway Kubernetes Kapsule by configuring a SQL storage backend.
+content:
+  h1: Configuring a SQL storage backend in Helm on Scaleway Kubernetes Kapsule
+  paragraph: Troubleshoot issues deploying large Helm releases on Scaleway Kubernetes Kapsule by configuring a SQL storage backend.
+tags: kapsule helm sql backend
+dates:
+  validation: 2024-11-22
+  posted: 2024-11-22
+categories:
+  - kubernetes
+---
+
+When deploying large Helm releases on Scaleway Kapsule Kubernetes, you might encounter errors like the following:
+
+```bash
+rpc error: code = ResourceExhausted desc = etcd quota exceeded: size 55000000/55000000, burst 424242/100000000
+```
+
+This happens because Helm stores release information in Kubernetes **Secrets** or **ConfigMaps**, which are limited to 1 MB due to **etcd** storage constraints.
+
+To resolve this issue, you can configure Helm to use an SQL storage backend such as **PostgreSQL**, bypassing the etcd size limitations and enabling larger Helm releases.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Created a [Kubernetes Kapsule cluster](/kubernetes/how-to/create-cluster/)
+
+## Setting up a PostgreSQL database
+
+You can set up a PostgreSQL database using one of the two options below.
+
+### Option A: Scaleway's managed PostgreSQL Service
+1. [Create a PostgreSQL instance](/managed-databases-for-postgresql-and-mysql/how-to/create-a-database/) using Scaleway's Managed Database service to create a PostgreSQL database.
+2. [Whitelist your cluster's IPs](/managed-databases-for-postgresql-and-mysql/how-to/manage-allowed-ip-addresses/) to allow your Kubernetes cluster to connect to the database.
+3. Note down the connection details. Save the host, port, database name, username, and password for later use.
+
+### Option B: Deploy PostgreSQL in Kubernetes
+1. Deploy PostgreSQL using Helm in your cluster:
+   ```bash
+   helm repo add bitnami https://charts.bitnami.com/bitnami
+   helm install helm-postgres bitnami/postgresql \
+       --set auth.username=helm,auth.password=yourpassword,auth.database=helm_db
+   ```
+2. [Expose](https://kubernetes.io/docs/tutorials/kubernetes-basics/expose/expose-intro/) the PostgreSQL service within the cluster.
+
+<Message type="important">
+    **Update security group rules**<br />
+    When you create a Scaleway Kapsule cluster, a new security group blocks incoming traffic by default. To allow external traffic (if needed):
+
+    1. Navigate to **Compute > Security Groups** in the Scaleway console.
+    2. Locate the security group associated with your cluster (e.g., `kubernetes-<cluster-id>`).
+    3. Modify rules to allow:
+    - TCP traffic on port `80` for HTTP (from `0.0.0.0/0`).
+    - TCP traffic on port `443` for HTTPS (from `0.0.0.0/0`).
+</Message>
+
+## Configuring Helm to use the SQL backend
+
+To use PostgreSQL as Helm's storage backend, set the following environment variables in your terminal:
+```bash
+export HELM_DRIVER=sql
+export HELM_DRIVER_SQL_CONNECTION_STRING="postgresql://username:password@host:port/database"
+```
+<Message type="note">
+    Replace `username`, `password`, `host`, `port`, and `database` with your PostgreSQL details.
+</Message>
+
+Once set, Helm will store release metadata in the specified PostgreSQL database instead of Kubernetes Secrets or ConfigMaps.
+
+## Verifying the configuration
+
+To confirm Helm is configured correctly, run:
+```bash
+helm list --all-namespaces
+```
+
+Expected output:
+
+- A list of Helm releases managed by the PostgreSQL backend.
+- If there are no releases, ensure the connection string is correct and PostgreSQL is reachable.
+
+If configured correctly, Helm will use the SQL backend, and you will not encounter etcd size limitations.
+
+## Migrating existing releases (if applicable)
+
+Helm does not automatically migrate releases between storage backends. Follow these steps to manually migrate existing releases:
+
+### Backup existing releases
+
+- Run the following command to back up your existing releases:
+    ```bash
+    kubectl get secrets --all-namespaces -l "owner=helm" -o yaml > helm-backup.yaml
+    ```
+
+### Reinstall releases
+
+- Redeploy the releases using the SQL backend:
+    ```bash
+    helm upgrade --install <release-name> <chart-name> --namespace <namespace>
+    ```
+    <Message type="note">
+    Ensure you use the same release names and namespaces.
+    </Message>
+
+### Verify releases
+
+- Run the following command to verify your releases:
+    ```bash
+    helm list --all-namespaces
+    ```
+
+### Clean up old secrets (after confirming everything works)
+
+- Use the following command to delete your backup (after confirming everything works):
+    ```bash
+    kubectl delete -f helm-backup.yaml
+    ```
+
+## Troubleshooting common issues and solutions
+
+| Issue                               | Solution                                                                 |
+|-------------------------------------|--------------------------------------------------------------------------|
+| Connection timeout or authentication failures | Verify network connectivity, firewall rules, and database credentials. |
+| Errors persist after switching to SQL backend | Check `HELM_DRIVER` and `HELM_DRIVER_SQL_CONNECTION_STRING` variables. |
+| Missing previous releases           | Releases in Secrets/`ConfigMaps` are not auto-migrated. Redeploy them.    |
+
+### Need further assistance?
+
+Learn more about configuring Helm with an SQL storage backend by visiting the [official Helm documentation on SQL storage](https://helm.sh/docs/topics/plugins/helm-secrets/).<br />
+If you have further questions, feel free to engage with the [Scaleway Slack community](https://slack.scaleway.com) to exchange insights, share experiences, and discover practical solutions.

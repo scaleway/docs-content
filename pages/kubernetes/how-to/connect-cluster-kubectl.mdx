@@ -1,45 +1,121 @@
 ---
 meta:
-  title: How to connect to a cluster with kubectl
+  title: How to connect to a Kubernetes Kapsule cluster with kubectl
   description: Learn how to connect to a Kubernetes cluster using kubectl. Follow steps to manage cluster resources, deploy applications, and view logs easily from your local computer.
 content:
-  h1: How to connect to a cluster with kubectl
-  paragraph: This page explains how to connect to a Kubernetes cluster via kubectl
+  h1: How to connect to a Kubernetes Kapsule cluster with kubectl
+  paragraph: This guide details the steps to connect to a Kubernetes cluster using kubectl, the Kubernetes command-line tool.
 tags: connection cluster kubectl
 dates:
-  validation: 2024-11-18
+  validation: 2025-01-27
   posted: 2020-09-20
 categories:
   - kubernetes
 ---
 
-Once your [cluster is created](/kubernetes/how-to/create-cluster/), a `.kubeconfig` file is available for download to manage several Kubernetes clusters. You can use this with `kubectl`, the Kubernetes command line tool, allowing you to run commands against your Kubernetes clusters. You can use `kubectl` from a terminal on your local computer to deploy applications, inspect and manage cluster resources, and view logs.
+Once your [cluster is created](/kubernetes/how-to/create-cluster/), you can install a `kubeconfig` file using Scaleway's command-line tool on your local machine to manage your Kubernetes cluster.
+
+You can use this with `kubectl`, the Kubernetes command-line tool, allowing you to run commands against your Kubernetes cluster. This enables you to deploy applications, inspect and manage cluster resources, and view logs directly from your local machine.
 
 <Macro id="requirements" />
 
-- A Scaleway account logged into the [console](https://console.scaleway.com)
-- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- Created a [Kubernetes Kapsule cluster](/kubernetes/how-to/create-cluster/)
+- A [Scaleway account](https://console.scaleway.com) logged into the console.
+- [Owner status](https://console.scaleway.com) or [IAM permissions](/iam/concepts/#permission) to perform actions in the intended Organization.
+- Created a [Kubernetes Kapsule cluster](/kubernetes/how-to/create-cluster/).
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) installed locally.
+- The [Scaleway CLI](/scaleway-cli/quickstart/) installed locally.
 
-1. [Install kubectl](https://kubernetes.io/docs/tasks/tools/) on your local computer.
-2. Download the `.kubeconfig` files from your cluster's **overview** page:
-    <Lightbox src="scaleway-kapsule_kubeconfig.webp" alt="" />
-3. Configure access to your cluster. You can do this in one of two ways:
+## Setting fine-grained permissions (IAM Policies) for Kubernetes access
 
-    Set the `KUBECONFIG` environment variable:
-    ```
-    export KUBECONFIG=/$HOME/Downloads/Kubeconfig-ClusterName.yaml
-    ```
+If your Organization uses IAM to control access, ensure that you or your group/application has the following permission sets assigned at the Project scope:
 
-    Or use `use $HOME/.kube/config file`:
-    ```
-    mv $HOME/Downloads/Kubeconfig-ClusterName.yaml $HOME/.kube/config
-    ```
+- `KubernetesFullAccess` (or `KubernetesReadOnly`, depending on your needs):
+  Grants you the ability to manage (or list/read) Kubernetes clusters, nodes, and related actions in your Scaleway Project.
 
-    Either way, make sure you replace `/$HOME/Downloads/Kubeconfig-ClusterName.yaml` with the correct name and path of your downloaded `.kubeconfig` file.
-4. Run the following command to finish:
-    ```
-    kubectl get nodes
-    ```
+To create a new policy with the correct permission sets, follow these steps:
+
+### Configure an IAM policy
+
+1. **Create a new policy**: Navigate to the **Policies** tab in your Organization’s IAM console and create a new policy.
+2. **Add your user (or group/application)**: Assign your user, group, or application as the **Principal**.
+3. **Add an IAM rule**:
+   - **Scope**: Set to **Access to resources** and specify the desired Project(s).
+   - **Permission Sets**: Include the following as needed:
+     - `KubernetesFullAccess` for full cluster management.
+     - `KubernetesReadOnly` for read-only access.
+4. Click **Validate** and then **Create Policy**.
+  <Message type="tip">
+    - Refer to our [policy and permission sets documentation](/iam/reference-content/permission-sets/) for more details.
+    - Scaleway may **automatically generate IAM resources**, such as applications, groups and policies. Refer to [auto-generated IAM resources](/iam/reference-content/auto-generated-iam-resources/) for further information.
+  </Message>
+
+## Accessing the cluster
+
+You can use the Scaleway CLI to automatically retrieve (and merge) your `kubeconfig` file, then interact with your Kubernetes cluster.
+
+### Install and configure the Scaleway CLI
+
+If you have not set up the Scaleway CLI yet:
+
+1. Follow our [installation guide](/scaleway-cli/quickstart) for platform-specific instructions using Homebrew, Chocolatey, or manual methods.
+2. Run the following command and follow the prompts to set up your CLI with your Scaleway API keys:
+   ```bash
+   scw init
+   ```
+   You will need your [API Key](/iam/how-to/create-api-keys/) (access key and secret key).
 
 
+### Retrieve and install the kubeconfig using scw
+
+1. Run the following command to install the `kubeconfig` file for your cluster:
+   ```bash
+   scw k8s kubeconfig install <cluster-id>
+   ```
+   This command will:
+   - Download the `kubeconfig` for the specified cluster.
+   - Merge it into your existing `kubeconfig` file (default location: `~/.kube/config`).
+
+2. Verify the installation:
+   ```bash
+   kubectl get nodes
+   ```
+   A list of nodes from your Kapsule cluster should appear.
+
+<Message type="tip">
+  Refer to our complete [Documentation for `scw k8s`](https://github.com/scaleway/scaleway-cli/blob/master/docs/commands/k8s.md) to learn more about all available commands to manage your Kubernetes cluster using `scw`.
+</Message>
+
+
+## Revoking user access to the Kubernetes cluster
+
+When a user loses access rights (e.g., departs from the Organization), the Kubernetes administrator must take steps to revoke their access to the cluster.
+This is typically done by modifying IAM settings, such as adjusting policies or deleting the user’s credentials.
+
+### Steps to revoke access
+
+To revoke a user's access to the cluster, ensure that any API keys associated with the user are no longer granted permission. Here are the steps you can take:
+
+#### Delete the API key
+   - Locate the API key associated with the user.
+   - Remove the key to immediately revoke access.
+
+#### Modify IAM policies
+   - Adjust the IAM policy linked to the API key to limit or remove its permissions.
+
+#### Reassign the user to a restricted group
+   - Transfer the principal (application or user) to a group with reduced permissions that does not allow cluster access.
+
+#### Delete the principal
+   - Permanently remove the user or application from the IAM system to ensure no further access is possible.
+
+### Revoking kubeconfig access
+
+To permanently revoke `kubeconfig` access via IAM:
+
+- **Delete the API Key**: This will ensure that the user's `kubeconfig` file becomes invalid immediately.
+- **Delete the Principal**: Removing the user or application guarantees that no further access can be gained, even if residual configurations exist.
+
+<Message type="note">
+  - Be cautious when modifying IAM policies to avoid unintended access issues for other users or services.
+  - Regularly audit IAM settings and API keys to ensure compliance with organizational security policies.
+</Message>

@@ -40,9 +40,18 @@ You can also download the work files by cloning our [Scaleway Serverless example
     import (
       "fmt"
       "os"
+      "time"
 
       "github.com/scaleway/scaleway-sdk-go/api/instance/v1"
       "github.com/scaleway/scaleway-sdk-go/scw"
+    )
+
+    const (
+      envOrgID        = "SCW_DEFAULT_ORGANIZATION_ID"
+      envAccessKey    = "SCW_ACCESS_KEY"
+      envSecretKey    = "SCW_SECRET_KEY"
+      envInstanceID   = "INSTANCE_ID"
+      envInstanceZone = "INSTANCE_ZONE"
     )
 
     func main() {
@@ -51,12 +60,13 @@ You can also download the work files by cloning our [Scaleway Serverless example
       // Create a Scaleway client with credentials from environment variables.
       client, err := scw.NewClient(
         // Get your organization ID at https://console.scaleway.com/organization/settings
-        scw.WithDefaultOrganizationID(os.Getenv("SCW_DEFAULT_ORGANIZATION_ID")),
+        scw.WithDefaultOrganizationID(os.Getenv(envOrgID)),
 
         // Get your credentials at https://console.scaleway.com/iam/api-keys
-        scw.WithAuth(os.Getenv("SCW_ACCESS_KEY"), os.Getenv("SCW_SECRET_KEY")),
+        scw.WithAuth(os.Getenv(envAccessKey), os.Getenv(envSecretKey)),
 
-        // Get more about our availability zones at https://www.scaleway.com/en/docs/my-account/reference-content/products-availability/
+        // Get more about our availability
+        // zones at https://www.scaleway.com/en/docs/account/reference-content/products-availability/
         scw.WithDefaultRegion(scw.RegionFrPar),
       )
       if err != nil {
@@ -80,16 +90,24 @@ You can also download the work files by cloning our [Scaleway Serverless example
         return fmt.Errorf("error while getting instance %w", err)
       }
 
+      now := time.Now().Format(time.DateOnly)
+
       for _, volume := range gotInstance.Server.Volumes {
+        snapshotName := fmt.Sprintf("snap-vol-%s-%s-%s",
+          volume.VolumeType.String(),
+          now,
+          os.Getenv(envInstanceZone))
+
         snapshotResp, err := instanceAPI.CreateSnapshot(&instance.CreateSnapshotRequest{
-          Name:       volume.Name + RandomString(4),
+          Name:       snapshotName,
           VolumeID:   &volume.ID,
-          VolumeType: instance.SnapshotVolumeTypeBSSD,
-          Zone:       scw.Zone(os.Getenv("INSTANCE_ZONE")),
+          VolumeType: instance.SnapshotVolumeType(volume.VolumeType),
+          Zone:       scw.Zone(os.Getenv(envInstanceZone)),
         })
         if err != nil {
-          return fmt.Errorf("error while creating snapshopt %w", err)
+          return fmt.Errorf("error while creating snapshot %w", err)
         }
+
         fmt.Println("created snapshot ", snapshotResp.Snapshot.ID)
       }
 
@@ -97,26 +115,15 @@ You can also download the work files by cloning our [Scaleway Serverless example
     }
 
     func init() {
-      if os.Getenv("SCW_DEFAULT_ORGANIZATION_ID") == "" {
-        panic("missing SCW_DEFAULT_ORGANIZATION_ID")
-      }
+      mandatoryVariables := [...]string{envOrgID, envAccessKey, envSecretKey, envInstanceID, envInstanceZone}
 
-      if os.Getenv("SCW_ACCESS_KEY") == "" {
-        panic("missing SCW_ACCESS_KEY")
-      }
-
-      if os.Getenv("SCW_SECRET_KEY") == "" {
-        panic("missing SCW_SECRET_KEY")
-      }
-
-      if os.Getenv("INSTANCE_ID") == "" {
-        panic("missing INSTANCE_ID")
-      }
-
-      if os.Getenv("INSTANCE_ZONE") == "" {
-        panic("missing INSTANCE_ZONE")
+      for idx := range mandatoryVariables {
+        if os.Getenv(mandatoryVariables[idx]) == "" {
+          panic("missing environment variable " + mandatoryVariables[idx])
+        }
       }
     }
+
     ```
 
 2. Create a file called `go.mod`, and add the code below to it:
@@ -124,9 +131,9 @@ You can also download the work files by cloning our [Scaleway Serverless example
     ```go
     module github.com/scaleway/serverless-examples/jobs/instances-snapshot
 
-    go 1.22.2
+    go 1.23
 
-    require github.com/scaleway/scaleway-sdk-go v1.0.0-beta.21
+    require github.com/scaleway/scaleway-sdk-go v1.0.0-beta.30
 
     require gopkg.in/yaml.v2 v2.4.0 // indirect
     ```
@@ -137,32 +144,6 @@ You can also download the work files by cloning our [Scaleway Serverless example
     go get
     ```
 
-4. Create a file named `string.go`, and add the code below to it:
-
-    ```go
-    package main
-
-    import "crypto/rand"
-
-    // RandomString is used to generate a random string containing upper and lower characters
-    // + number, of size n.
-    func RandomString(n int) string {
-      const letters = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz"
-
-      bytes := make([]byte, n)
-
-      if _, err := rand.Read(bytes); err != nil {
-        panic(err)
-      }
-
-      for i, b := range bytes {
-        bytes[i] = letters[b%byte(len(letters))]
-      }
-
-      return string(bytes)
-    }
-    ```
-
 ## Building and pushing the image to Container Registry
 
 Serverless Jobs rely on containers to run in the cloud, and therefore require a [container image](/serverless-jobs/concepts/#container-image) hosted in the cloud using [Scaleway Container Registry](/container-registry/).
@@ -171,7 +152,7 @@ Serverless Jobs rely on containers to run in the cloud, and therefore require a 
 
     ```dockerfile
     # Using apline/golang image
-    FROM golang:1.22-alpine
+    FROM golang:1.23-alpine
 
     # Set destination for COPY
     WORKDIR /app
@@ -198,6 +179,9 @@ Serverless Jobs rely on containers to run in the cloud, and therefore require a 
 
     ```sh
     docker build -t rg.fr-par.scw.cloud/your-namespace-name/jobs-snapshot:v1 .
+
+    ## TIP: for Apple Silicon or other ARM processors, please use the following command as Serverless Jobs supports amd64 architecture
+    # docker buildx build --platform linux/amd64 -t rg.fr-par.scw.cloud/jobs-snapshot/jobs-snapshot:v1 .
     ```
 
 4. Run the following command to push the container image to the registry:

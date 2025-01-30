@@ -87,16 +87,16 @@ def get_doc_cat_name(filepath, prod_cat_ref):
     trimmed_filepath = filepath[2:-4]
     filepath_list = trimmed_filepath.split("/")
 
-    if filepath_list[1] == "tutorials":
+    if filepath_list[0] == "tutorials":
         category_product = "Tutorials"
-    elif filepath_list[1] == "faq":
+    elif filepath_list[0] == "faq":
         category_product = "FAQ"
     else:
         # catches everything in pages
         print("Currently checking FILEPATH", filepath)
         print("filepath_list is", filepath_list)
-        category = prod_cat_ref.get(filepath_list[2], ["Unknown", "Unknown"])[0]
-        product = prod_cat_ref.get(filepath_list[2], ["Unknown", "Unknown"])[1]
+        category = prod_cat_ref.get(filepath_list[1], ["Unknown", "Unknown"])[0]
+        product = prod_cat_ref.get(filepath_list[1], ["Unknown", "Unknown"])[1]
         category_product = category + ": " + product
         
     return category_product, trimmed_filepath

@@ -2,9 +2,10 @@ import os
 import logging
 from slack_sdk import WebClient
 from datetime import timedelta, date, datetime
+import json
 
 DEFAULT_VAL_FREQ = 6
-FILEPATH = "."
+FILEPATH = "./" ## for local testing use "../"
 
 def convert_to_date_and_delta(val_date, val_freq):
     "Converts validation date string to datetime and validation frequency string (months) to timedelta."
@@ -22,7 +23,7 @@ def get_prod_cat_ref():
     product_categories = {}
 
     # Load the menu file
-    with open('menu/navigation.json', 'r') as file:
+    with open(FILEPATH + 'menu/navigation.json', 'r') as file:
         data = json.load(file)  # Parse the JSON content into a Python dictionary or list
 
         for grouping in data:

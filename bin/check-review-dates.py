@@ -5,7 +5,7 @@ from datetime import timedelta, date, datetime
 import json
 
 DEFAULT_VAL_FREQ = 6
-FILEPATH = "./" ## for local testing use "../"
+FILEPATH = "./" ## for local testing use "../" and shift filepath_list[] indexes +1
 
 def convert_to_date_and_delta(val_date, val_freq):
     "Converts validation date string to datetime and validation frequency string (months) to timedelta."
@@ -93,8 +93,6 @@ def get_doc_cat_name(filepath, prod_cat_ref):
         category_product = "FAQ"
     else:
         # catches everything in pages
-        print("Currently checking FILEPATH", filepath)
-        print("filepath_list is", filepath_list)
         category = prod_cat_ref.get(filepath_list[1], ["Unknown", "Unknown"])[0]
         product = prod_cat_ref.get(filepath_list[1], ["Unknown", "Unknown"])[1]
         category_product = category + ": " + product
@@ -128,7 +126,7 @@ def prep_message(docs_to_review_by_cat):
     message = ":wave: Hi doc team, here are some docs to review: \n \n"
 
     for key in docs_to_review_by_cat:
-        message += "*" + key.title() + "*" + "\n"
+        message += "*" + key + "*" + "\n"
         for doc in docs_to_review_by_cat[key]:
             message += doc + "\n"
         message += "\n"

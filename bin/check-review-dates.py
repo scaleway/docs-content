@@ -93,6 +93,8 @@ def get_doc_cat_name(filepath, prod_cat_ref):
         category_product = "FAQ"
     else:
         # catches everything in pages
+        print("Currently checking FILEPATH", filepath)
+        print("filepath_list is", filepath_list)
         category = prod_cat_ref.get(filepath_list[2], ["Unknown", "Unknown"])[0]
         product = prod_cat_ref.get(filepath_list[2], ["Unknown", "Unknown"])[1]
         category_product = category + ": " + product

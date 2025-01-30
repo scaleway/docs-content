@@ -1,0 +1,186 @@
+---
+meta:
+  title: Migrating persistent volumes in a multi-zone Scaleway Kapsule cluster
+  description: This tutorial provides information about how to migrate existing Persistent Volumes in a Scaleway Kapsule multi-zone cluster to enhance availability and fault tolerance.
+content:
+  h1: Migrating persistent volumes in a multi-zone Scaleway Kapsul cluster
+  paragraph: This tutorial provides information about how to migrate existing Persistent Volumes in a Scaleway Kapsule multi-zone cluster to enhance availability and fault tolerance.
+tags: kapsule elastic-metal migration persistent-volumes
+categories:
+  - kubernetes
+dates:
+  validation: 2025-01-30
+  posted: 2025-01-30
+---
+
+Historically, Scaleway Kapsule clusters were single-zone, meaning workloads and their associated storage were confined to a single location. With the introduction of multi-zone support, distributing workloads across multiple zones can enhance availability and fault tolerance.
+
+This tutorial provides a generalized approach to migrating Persistent Volumes (PVs) from one zone to another in a Scaleway Kapsule multi-zone cluster, applicable to various applications.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Created a Kapsule cluster](/kubernetes/how-to/create-cluster/) with multi-zone support enabled
+- An existing `StatefulSet` using **Persistent Volumes** in a single-zone cluster.
+- [kubectl](/kubernetes/how-to/connect-cluster-kubectl/) installed and configured to interact with your Kubernetes cluster
+- [Scaleway CLI](/scaleway-cli/quickstart/) installed and configured
+- Familiarity with Kubernetes Persistent Volumes, `StatefulSets`, and Storage Classes.
+
+<Message type="important">
+    **Backing up your data is crucial before making any changes.**  
+    Ensure you have a backup strategy in place. You can use tools like Velero for Kubernetes backups or manually copy data to another storage solution. Always verify the integrity of your backups before proceeding.
+</Message>
+
+## Identify existing Persistent Volumes
+
+1. Use `kubectl` to interact with your cluster and list the Persistent Volumes in your cluster:
+    ```sh
+    kubectl get pv
+    ```
+
+2. Identify the volumes attached to your StatefulSet and note their `PersistentVolumeClaim` (PVC) names and `StorageClass`.
+    Example output:
+    ```plaintext
+    NAME                CAPACITY   ACCESS MODES   RECLAIM POLICY   STATUS   CLAIM                        STORAGECLASS   ZONE
+    pvc-123abc         10Gi       RWO            Retain           Bound    default/my-app-pvc           scw-bssd       fr-par-1
+    ```
+    To find the `VOLUME_ID`, correlate this with the scw command output:
+    ```
+    scw instance volume list
+    ```
+
+## Create snapshots of your existing Persistent Volumes
+
+Use the Scaleway CLI to create snapshots of your volumes.
+
+1. Retrieve the volume ID associated with the Persistent Volume:
+    ```sh
+    scw instance volume list
+    ```
+
+2. Create a snapshot for each volume:
+    ```sh
+    scw instance snapshot create volume-id=<VOLUME_ID> name=my-app-snapshot
+    ```
+
+3. Verify snapshot creation:
+    ```sh
+    scw instance snapshot list
+    ```
+
+## Create multi-zone Persistent Volumes
+
+Once the snapshots are available, create new volumes in different zones:
+
+```sh
+scw instance volume create name=my-app-volume-new size=10GB type=bssd snapshot-id=<SNAPSHOT_ID> zone=fr-par-2
+```
+
+Repeat this for each zone required.
+
+<Meessage type="tip">
+    Choose zones based on your distribution strategy. Check Scaleway's [zone availability](/account/reference-content/products-availability/) for optimal placement.
+</Message>
+
+## Update Persistent Volume Claims (PVCs)
+
+<Message type="important">
+    Deleting a PVC can lead to data loss if not managed correctly. Ensure your application is scaled down or data is backed up.
+</Message>
+
+Modify your `PersistentVolumeClaims` to reference the newly created volumes.
+
+1. Delete the existing PVC (PVCs are immutable and cannot be updated directly):
+    ```sh
+    kubectl delete pvc my-app-pvc
+    ```
+
+2. Create a new PVC with a multi-zone compatible `StorageClass`:
+    ```yaml
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+      name: my-app-pvc
+    spec:
+      accessModes:
+        - ReadWriteOnce
+      storageClassName: "scw-bssd-multi-zone"
+      resources:
+        requests:
+          storage: 10Gi
+    ```
+
+3. Apply the updated PVCs:
+    ```sh
+    kubectl apply -f my-app-pvc.yaml
+    ```
+
+## Reconfigure the StatefulSet to use multi-zone volumes
+
+1. Edit the `StatefulSet` definition to use the newly created Persistent Volume Claims.
+    Example `StatefulSet` configuration:
+
+    ```yaml
+    apiVersion: apps/v1
+    kind: StatefulSet
+    metadata:
+      name: my-app
+    spec:
+      volumeClaimTemplates:
+        - metadata:
+            name: my-app-pvc
+          spec:
+            storageClassName: "scw-bssd-multi-zone"
+            accessModes:
+              - ReadWriteOnce
+            resources:
+              requests:
+                storage: 10Gi
+    ```
+
+2. Apply the `StatefulSet` changes:
+    ```sh
+    kubectl apply -f my-app-statefulset.yaml
+    ```
+
+## Verify migration
+
+1. Check that the `StatefulSet` pods are running in multiple zones:
+    ```sh
+    kubectl get pods -o wide
+    ```
+
+2. Ensure that the new Persistent Volumes are bound and correctly distributed across the zones:
+    ```sh
+    kubectl get pv
+    ```
+
+## Considerations for volume expansion
+
+If you need to **resize the Persistent Volume**, ensure that the `StorageClass` supports volume expansion. 
+
+1. Check if the feature is enabled:
+    ```sh
+    kubectl get storageclass scw-bssd-multi-zone -o yaml | grep allowVolumeExpansion
+    ```
+
+2. If `allowVolumeExpansion: true` is present, you can modify your PVC:
+    ```yaml
+    spec:
+    resources:
+        requests:
+        storage: 20Gi
+    ```
+
+3. Then apply the change:
+    ```sh
+    kubectl apply -f my-app-pvc.yaml
+    ```
+
+## Conclusion
+
+You have successfully migrated your Persistent Volumes to a multi-zone Kapsule setup. Your `StatefulSet` is now distributed across multiple zones, improving resilience and availability.
+
+For further optimization, consider implementing [Pod anti-affinity](https://kubernetes.io/docs/concepts/scheduling-eviction/assign-pod-node/#affinity-and-anti-affinity) rules to ensure an even distribution of workloads across zones.
+

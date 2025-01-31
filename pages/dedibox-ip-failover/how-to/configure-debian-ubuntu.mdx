@@ -41,15 +41,14 @@ This page shows you how to configure a [failover IP](/dedibox-ip-failover/concep
     # The primary network interface
     auto eth0
     iface eth0 inet static
-        	 address 195.154.123.123
-         	 netmask 255.255.255.0
-        	 gateway 195.154.123.1
+         address 195.154.123.123
+         netmask 255.255.255.0
+         gateway 195.154.123.1
     auto eth0:0
     iface eth0:0 inet static
     address ip_failover
     netmask 255.255.255.255
     ```
-
     <Message type="note">
       The interface name `eth0` may vary, depending on your OS version and system configuration. Use the `ifconfig` command to determine the name of your primary network interface.
     </Message>
@@ -59,43 +58,73 @@ This page shows you how to configure a [failover IP](/dedibox-ip-failover/concep
     ifup eth0:0
     ```
 
-## Failover IP configuration on Ubuntu
+## Failover IP configuration on Ubuntu (Netplan)
 
-Since the release of version 18.04 (Bionic Beaver) Ubuntu has switched to [Netplan](https://netplan.io/) for the configuration of network interfaces.
+Since Ubuntu 18.04, Netplan has been the default network configuration system.
 
-It is a YAML-based configuration system, which simplifies the configuration process.
+### Steps for Configuring Netplan with Failover IP
 
-1. Connect to your Dedibox using SSH.
-2. Open the Netplan configuration file of the main interface in a text editor, for example `nano`:
-    ```
-    sudo nano /etc/netplan/01-netcfg.yaml
-    ```
-3. Edit the network configuration. The IP addresses have to be written with their [CIDR notation](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing#CIDR_notation). The netmask is `/24` for the principal IP of the server and `/32` for each failover IP. Your configuration should look as in the following example:
-    ```yaml
-    network:
-      renderer: networkd
-      ethernets:
-        ensXX:
-          addresses:
-            - <FAILOVER_IP>/32
-          routes:
-            - to: 62.210.0.1
-            - to: default
-              via: 62.210.0.1
-          nameservers:
-            addresses:
-              - 51.159.47.28
-              - 51.159.47.26 # Replace the IP of the DNS cache server with the one located in the same physical location as your machine for optimal performance (https://www.scaleway.com/en/docs/account/reference-content/scaleway-network-information/#dns-cache-servers)
-            search: []
-    version: 2
-    ```
-    <Message type="tip">
-      * Make sure to respect the YAML standards when you edit the file, as it might not work if there is a syntax error in your configuration.
-      * You can find an extended list of [netplan configuration examples](https://github.com/canonical/netplan/tree/main/examples) in the official Canonical Netplan repository.
-    </Message>
-4. Activate the new configuration by running the following command:
-    ```
-    sudo netplan apply
-    ```
+1. Disable cloud-init network configuration:
+   ```bash
+   sudo mkdir -p /etc/cloud/cloud.cfg.d
+   echo 'network: {config: disabled}' | sudo tee /etc/cloud/cloud.cfg.d/99-disable-network-config.cfg
+   ```
+2. Backup and modify the existing Netplan configuration:
+   ```bash
+   sudo cp /etc/netplan/50-cloud-init.yaml /etc/netplan/01-myplan.yaml
+   sudo mv /etc/netplan/50-cloud-init.yaml /etc/netplan/50-cloud-init.yaml-backup
+   ```
+3. Update the Netplan Configuration
+   Edit `/etc/netplan/01-myplan.yaml` using `nano`:
+   ```yaml
+   network:
+     renderer: networkd
+     ethernets:
+       enp5s0:
+         critical: true
+         dhcp-identifier: mac
+         dhcp4: false
+         dhcp6: false
+         addresses:
+           - 51.111.222.333/24  # Server main IP (/24)
+           - 212.111.222.333/32  # Alternate IPs / IP redirects (/32)
+           - 212.111.222.334/32
+           - 212.111.222.335/32
+         routes:
+           - to: 0.0.0.0/0
+             via: 62.210.0.1
+             metric: 1
+             on-link: true
+         nameservers:
+           addresses:
+             - 51.159.69.156
+             - 51.159.69.162
+       enp6s0:
+         dhcp4: true
+         dhcp4-overrides:
+           use-routes: false
+         routes:
+           - to: 10.88.0.0/13  # Use appropriate IP/gateway from DHCP
+             via: 10.89.23.129
+   version: 2
+   ```
+4. Run the following command to test the configuration:
+   ```bash
+   sudo netplan try
+   ```
+   If everything works as expected, apply the configuration:
+   ```bash
+   sudo netplan apply
+   ```
+   <Message type="warning">
+     If there is an error in your configuration, it might render your network inaccessible. You may need to revert changes using KVM/IPMI access.
+   </Message>
 
+### Additional Notes
 
+- Ensure that indentation and formatting are correct to avoid YAML syntax errors.
+- If networking issues persist, check logs using:
+  ```bash
+  sudo journalctl -u systemd-networkd --no-pager
+  ```
+- More Netplan examples can be found in the [official Canonical repository](https://github.com/canonical/netplan/tree/main/examples).

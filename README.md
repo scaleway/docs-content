@@ -13,7 +13,7 @@ You will find several types of content:
 
 - **Concepts**: we explain a core concept in simple terms.
 
-- **Quickstart guides**: we give a shortened version of a How to which enables you to have access to the most common instructions.
+- **Quickstart guides**: we give a shortened version of a How-to which enables you to have access to the most common instructions.
 
 - **How-tos**: we explain how to create and manage all your resources from the Scaleway console.
 

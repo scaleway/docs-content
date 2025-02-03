@@ -7,7 +7,7 @@
 
 ## What is the Scaleway Documentation Platform?
 
-The goal of this platform is to provide you with information about all the resources in the Scaleway Ecosystem and the procedures you should follow to get the best experience from our products and services.
+The goal of this platform is to provide you with information about all the resources in the Scaleway ecosystem and the procedures you should follow to get the best experience from our products and services.
 
 You will find several types of content:
 

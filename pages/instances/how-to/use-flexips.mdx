@@ -5,7 +5,7 @@ meta:
 content:
   h1: How to use flexible IP addresses with Instances
   paragraph: This page explains how to use flexible IP addresses with Scaleway Instances.
-tags: flexible-ip Instance flexible ip detach delete attach
+tags: flexible-ip Instance flexible ip detach delete attach ipv6
 dates:
   validation: 2024-08-26
   posted: 2021-05-26
@@ -17,12 +17,12 @@ This page provides guidance on using [flexible IP addresses](/instances/concepts
 
 When creating an Instance, you have options for network connectivity:
 
-- **Flexible Routed IP addresses**: These are public IP addresses routed directly to your Instance. **Recommended.**
-- **Flexible NAT IP addresses (Legacy)**: Comprising a public IP address (also a flexible IP address) and a private IP address routed to your Instance via a [CG-NAT](/instances/concepts/#carrier-grade-nat-cgnat).
+- **Flexible Routed IPv4 addresses**: These are public IPv4 addresses routed directly to your Instance.
+- **Flexible Routed IPv6 addresses**: These are public IPv6 prefixes routed directly to your Instance.
 
 Flexible IP addresses can be managed independently of any Instance. You can attach and detach them from any of your Instances and maintain multiple flexible IP addresses in your account simultaneously. They facilitate [live migration of IP addresses between your Instances](/instances/how-to/migrate-instances/).
 
-You can assign up to five (5) flexible routed IP addresses to each Instance or one set of flexible NAT IP addresses.
+You can assign up to five (5) flexible routed IP addresses to each Instance.
 
 <Message type="tip">
   Instances using routed public IPv4 addresses can also use flexible IPv6 addresses.
@@ -81,5 +81,162 @@ When you no longer want one of your existing flexible IP addresses, you can dele
 4. Confirm that you want to delete the flexible IP in the pop-up window which opens, by clicking **Delete flexible IP**.
 
     The flexible IP is deleted. If it was attached to an Instance, that Instance now has no public IP address.
+
+## Flexible IPv6
+
+### About routed IPv6
+
+Since [mid 2023](https://www.scaleway.com/en/blog/ip-mobility-removing-nat/), we built a new network stack for Scaleway Instances to enable new features. One of those is the ability to have Flexible/Reserved IPv6 whose main purpose is to allow to keep the same IPv6 whenever you stop/start your Instance.
+
+Prior to routed IPs, IPv6 addresses were statically routed to the Hypervisors, which means your IP changed depending on which Hypervisor your Instance was running on.
+
+### IPv6 prefix and SLAAC
+
+Now let's dive into the routed IPv6. Whenever you book a `routed_ipv6` IP type, you get assigned a full IPv6 prefix of 64bits length. According to the [section 2.4](https://datatracker.ietf.org/doc/html/rfc4291#section-2.4) of the RFC4291, except a few prefixes, anything is a Global Unicast  address type. Today's [best practice](https://www.ripe.net/publications/docs/ripe-690/#4-1-1---64-prefix-from-a-dedicated-pool-of-ipv6-prefixes) is to provide a /64 prefix.
+
+Another reason we decided to provide you with a /64 prefix is to be able to use [SLAAC](https://datatracker.ietf.org/doc/html/rfc4862) as the configuration mechanism. But SLAAC has been designed to work [exclusively with /64 prefixes](https://notes.networklessons.com/ipv6-prefix-length-used-for-slaac).
+
+We chose SLAAC over DHCPv6 because it doesn't require any client-side configuration in most of the cases, allowing the feature to work with old instances too.
+
+### Limitations
+
+As you may have already noticed, there are some limitations to this design that we tried to minimize.
+
+The first one is that, in order not to break already deployed SDKs, or CLIs, we had to introduce a new `prefix` field to the `/ips` endpoint:
+
+```
+        {
+            "address": null,
+            "id": "153e451e-866b-4f58-9241-3bdbe98a0175",
+            "ipam_id": "a81665be-0059-431f-bf44-8d7bdf1dac01",
+            "organization": "8e214357-66e2-43ee-8898-0da03fd869e2",
+            "prefix": "2025:bd8:911::/64",
+            "project": "8e214357-66e2-43ee-8898-0da03fd869e2",
+            "reverse": null,
+            "server": null,
+            "state": "detached",
+            "tags": [],
+            "type": "routed_ipv6",
+            "zone": "fr-par-1"
+        }
+```
+
+On the other hand, the `/servers/<id>` endpoint provides the `public_ip` (deprecated) field and its replacement `public_ips`. This struct also contain an address field of type IP that doesn't accept a prefix:
+
+```
+[
+  {
+    "id": "e37b038d-c5f7-4fc7-8ac2-407807f723dd",
+    "address": "2025:bd8:911:46:dc00:ff:fe08:ab0c",
+    "dynamic": false,
+    "gateway": "fe80::dc00:ff:fe08:ab0c",
+    "netmask": "64",
+    "family": "inet6",
+    "provisioning_mode": "slaac",
+    "tags": [],
+    "state": "attached",
+    "ipam_id": "45791fdb-c576-4447-985b-19b45740714b"
+  }
+]
+```
+
+Instead, we return the SLAAC address based on the EUI-64 of the interface.
+
+One consequence is that, if you move your `routed_ipv6` **prefix** to another instance (hence, with another MAC address), the `public_ips` list will show you a **different** address because its EUI-64 will differ.
+
+## Workaround
+
+Since the whole /64 prefix is routed to your Instance, it is possible to define a second IPv6 address within the prefix that may be used to reach your instance. However, this requires some custom settings.
+
+In order to do that, we will use the **cloud-init** mechanism to define the second IPv6 address.
+
+Let's say your prefix is: `2025:bd8:911::/64`
+
+We will use the following /128 address within this range: `2025:bd8:911:a7f1::1/128`
+
+The cloud-init configuration can be uploaded with the Scaleway CLI:
+
+
+```
+scw instance server update <SERVER_UUID> cloud-init=@ipv6-cloud-init.txt
+```
+
+### Debian >= 11 and Ubuntu >= 20.04
+
+First of all, create a file with the following content
+
+```
+cat << EOF > ipv6-cloud-init.txt
+#cloud-config
+write_files:
+  - path: /etc/netplan/100-ipv6-config.yaml
+    owner: root
+    permissions: '0400'
+    content: |
+      network:
+          ethernets:
+              ens2:
+                  addresses:
+                  - 2025:bd8:911:a7f1::1/128
+runcmd:
+  - ['netplan', 'apply']
+EOF
+```
+
+This cloud-init configuration file will add the `netplan` definition of a second IPv6 address within the /64 prefix (you can choose any /128 contained in your prefix). It will then apply the `netplan` configuration so the new IPv6 address becomes available.
+
+### CentOS Stream 9, AlmaLinux >= 8 and RockyLinux >= 8
+
+For CentOS Stream 9, AlmaLinux >= 8 and RockyLinux >= 8 you need to interact with `NetworkManager` instead of `netplan`.
+
+```
+cat << EOF > ipv6-cloud-init.txt
+#cloud-boothook
+#!/bin/sh
+if ! nmcli connection show | grep eth0-ipv6; then
+  nmcli connection clone --temporary "System eth0" eth0-ipv6
+  nmcli connection modify eth0-ipv6 +ip6 2025:bd8:911:a7f1::1/128
+else
+  sleep 10
+fi
+nmcli connection up eth0-ipv6
+EOF
+```
+
+### Fedora
+
+Fedora also uses `NetworkManager` but with different configuration names.
+
+There is also a little change between Fedora 40 and 41. The following cloud-init configuration is built for Fedora 40:
+
+```
+cat << EOF > ipv6-cloud-init.txt
+#cloud-boothook
+#!/bin/sh
+if ! nmcli connection show | grep eth0-ipv6; then
+  nmcli connection clone --temporary "cloud-init eth0" eth0-ipv6
+  nmcli connection modify eth0-ipv6 +ip6 2025:bd8:911:a7f1::1/128
+else
+  sleep 10
+fi
+nmcli connection up eth0-ipv6
+EOF
+```
+
+And the following one is built for Fedora 41:
+
+```
+cat << EOF > ipv6-cloud-init.txt
+#cloud-boothook
+#!/bin/sh
+if ! nmcli connection show | grep eth0-ipv6; then
+  nmcli connection clone --temporary "cloud-init eth0" eth0-ipv6
+  nmcli connection modify eth0-ipv6 +ip6 2025:bd8:911:a7f1::1/128
+else
+  sleep 10
+fi
+nmcli connection up eth0-ipv6
+EOF
+```
 
 

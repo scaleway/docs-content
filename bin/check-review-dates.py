@@ -2,8 +2,10 @@ import os
 import logging
 from slack_sdk import WebClient
 from datetime import timedelta, date, datetime
+import json
 
 DEFAULT_VAL_FREQ = 6
+FILEPATH = "./" ## for local testing use "../" and shift filepath_list[] indexes +1
 
 def convert_to_date_and_delta(val_date, val_freq):
     "Converts validation date string to datetime and validation frequency string (months) to timedelta."
@@ -14,6 +16,26 @@ def convert_to_date_and_delta(val_date, val_freq):
     except ValueError:
         # handles the case where validation format is incorrect
         return None, None
+
+def get_prod_cat_ref():
+    "Makes a dictionary where keys are product slugs and values are their category label and product label"
+
+    product_categories = {}
+
+    # Load the menu file
+    with open(FILEPATH + 'menu/navigation.json', 'r') as file:
+        data = json.load(file)  # Parse the JSON content into a Python dictionary or list
+
+        for grouping in data:
+            for category in grouping["items"]:
+                category_label = category["label"]
+                for product in category["items"]:
+                    product_label = product["label"]
+                    product_slug = product["slug"]
+            
+                    product_categories[product_slug] = [category_label, product_label]
+
+    return(product_categories)
 
 def needs_review(val_date, val_freq):
     "Returns true if doc needs to be reviewed, based on val date and frequency"
@@ -60,32 +82,38 @@ def process_files(directory):
                     docs_to_review.append(filepath)
     return docs_to_review
 
-def get_doc_cat_name(filepath):
-    "Returns a document-to-review's category and tidied-up filepath, based on its raw filepath."
+def get_doc_cat_name(filepath, prod_cat_ref):
+    "Returns a document-to-review's category and tidied-up filepath, based on its raw filepath and the prod_cat_ref dict."
     trimmed_filepath = filepath[2:-4]
     filepath_list = trimmed_filepath.split("/")
 
     if filepath_list[0] == "tutorials":
-        category = filepath_list[0]
+        category_product = "Tutorials"
     elif filepath_list[0] == "faq":
-        category = filepath_list[1]
+        category_product = "FAQ"
     else:
-        category = ' '.join(filepath_list[0:2])
-    
-    return category, trimmed_filepath
+        # catches everything in pages
+        category = prod_cat_ref.get(filepath_list[1], ["Unknown", "Unknown"])[0]
+        product = prod_cat_ref.get(filepath_list[1], ["Unknown", "Unknown"])[1]
+        category_product = category + ": " + product
+        
+    return category_product, trimmed_filepath
 
 def organize_docs_by_category(docs_to_review):
     "Organizes docs to review by category into a dictionary."
     print("Organizing docs by category")
     dict_by_cat = {}
-
+    
+    # one shot: make a dict of all products and their categories, based on menu file
+    prod_cat_ref = get_prod_cat_ref()
+    
     for filepath in docs_to_review:
-        category, trimmed_filepath = get_doc_cat_name(filepath)
+        category_product, trimmed_filepath = get_doc_cat_name(filepath, prod_cat_ref)
 
-        if category not in dict_by_cat:
-            dict_by_cat[category] = [trimmed_filepath]
+        if category_product not in dict_by_cat:
+            dict_by_cat[category_product] = [trimmed_filepath]
         else:
-            dict_by_cat[category].append(trimmed_filepath)
+            dict_by_cat[category_product].append(trimmed_filepath)
     
     # sort the dictionary alphabetically by category
     dict_by_cat_sorted = {key: value for key, value in sorted(dict_by_cat.items())}
@@ -98,7 +126,7 @@ def prep_message(docs_to_review_by_cat):
     message = ":wave: Hi doc team, here are some docs to review: \n \n"
 
     for key in docs_to_review_by_cat:
-        message += "*" + key.title() + "*" + "\n"
+        message += "*" + key + "*" + "\n"
         for doc in docs_to_review_by_cat[key]:
             message += doc + "\n"
         message += "\n"
@@ -116,7 +144,7 @@ def send_message(message):
     )
 
 def main():
-    docs_to_review = process_files(".")
+    docs_to_review = process_files(FILEPATH)
     docs_to_review_by_cat = organize_docs_by_category(docs_to_review)
     message = prep_message(docs_to_review_by_cat)
     if os.environ.get("DRY_RUN") != "true":

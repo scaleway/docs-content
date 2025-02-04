@@ -21,6 +21,7 @@ We recommend using Tink with Scaleway’s Key Manager, especially for Go-based a
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - Downloaded and installed [Go](https://go.dev/doc/install)
 - Installed the [Scaleway Go SDK](https://github.com/scaleway/scaleway-sdk-go) with [valid credentials](/scaleway-sdk/go-sdk/)
+- [Created a Key Manager key](/key-manager/how-to/create-km-key)
 
 
 The Scaleway Tink extension generates a unique data encryption key for each piece of data that it encrypts. This method follows the cryptography best practices of using unique data encryption keys for each encryption operation.
@@ -28,17 +29,6 @@ The Scaleway Tink extension generates a unique data encryption key for each piec
 Tink is a library that helps you perform encryption (securing data) and manage encryption keys. It can work with various key management services (KMS), including Scaleway's Key Manager.
 To use Tink with Scaleway Key Manager, you need to install dependencies that let Tink interact with Key Manager.
 
-In order to use Tink for data encryption, you need to provide it with a key URI and a configuration file:
-
-- The key URI points to your key encryption key (KEK) in Scaleway Key Manager.
-
-- The configuration file grants Tink the necessary permissions to access and use the KEK identified by the Key URI.
-
-Tink generates a data encryption key (DEK) which will be used to encrypt your data. The DEK itself is then encrypted using the KEK from Key Manager. This ensures that the DEK is securely protected and can only be decrypted by someone with access to the KEK.
-
-The final output is a single ciphertext that includes both the encrypted data and the encrypted DEK (wrapped DEK). This means that the DEK and the data are both securely packaged together.
-
-Scaleway supports the **Go Tink provider**.
 
 ## Setting up environment variables
 
@@ -54,14 +44,20 @@ Open a terminal and export the following environment variables. Make sure that y
   export SCW_KM_KEY_ID="<key-id>"
   ```
 
-## Installing the necessary dependencies
+## Setting up Tink
 
-1. Open a terminal and initialize a Go module in your project directory:
+1. Open a terminal and access your project directory:
+
+  ```shell
+  cd <your-project-directory>
+  ```
+
+2. Initialize a Go module in your project directory:
     ```shell
     go mod init <your-project-directory>
     ```
 
-2. Run the following commands to install the Tink library and the Scaleway Tink Provider for Go:
+3. Run the following commands to install the Tink library and the Scaleway Tink Provider for Go:
 
     ```shell
     # Install Tink for Go
@@ -71,5 +67,54 @@ Open a terminal and export the following environment variables. Make sure that y
     go get -u github.com/scaleway/tink-go-scwkms
     go mod tidy
     ```
-3. Optionally, create a key encryption key (KEK) to start using Key Manager.
-4. Optionally, create a data encryption key (DEK) that will be used for data encryption and decryption. Find out how to create and manage DEKs in the [dedicated documentation](replace-with-link).
+
+## Configuring Tink
+
+In order to use Tink for data encryption, you need to provide it with a key URI and a configuration file:
+
+- The key URI points to your key encryption key (KEK) in Scaleway Key Manager.
+
+- The configuration file grants Tink the necessary permissions to access and use the KEK identified by the Key URI.
+
+Tink generates a data encryption key (DEK) which will be used to encrypt your data. The DEK itself is then encrypted using the KEK from Key Manager. This ensures that the DEK is securely protected and can only be decrypted by someone with access to the KEK.
+
+The final output is a single ciphertext that includes both the encrypted data and the encrypted DEK (wrapped DEK). This means that the DEK and the data are both securely packaged together.
+
+Scaleway supports the **Go Tink provider**.
+
+1. [Retrieve the ID](/key-manager/how-to/retrieve-km-key-id) (UUIDv4 format) of your Key Manager's key (KEK).
+2. Copy the following template and paste it into a `.go` file:
+
+    ```go
+    import (
+        "github.com/scaleway/scaleway-sdk-go/scw" //  Library that helps your Go program interact with Scaleway
+        "github.com/tink-crypto/tink-go/v2/aead" // Tink library
+        "github.com/scaleway/tink-go-scwkms/integration/scwkms" // Scaleway's Tink extension
+    )
+
+    const region = "<REGION>"                              // Replace the placeholder with the region where your key is created
+    const keyID = "7f967268-bebb-43b0-9fe2-e13bd23bf421" // Replace the placeholder with the unique ID of your key encryption key
+
+    keyURIPrefix := "scw-kms://regions/" + region + "/keys/"
+    keyURI := keyURIPrefix + keyID
+
+    // Set up a connection to Scaleway
+    config, _ := scw.LoadConfig() // Loads your Scaleway configuration
+    profile, _ := config.GetActiveProfile() // Gets the active profile (your account settings)
+
+    // Set up the connection to use your key in Key Manager
+    kms, _ := scwkms.NewClientWithOptions(
+        keyURIPrefix,
+        scw.WithProfile(profile), // Uses your account profile
+        scw.WithEnv(), // Uses environment settings
+    )
+    // Prepare the key for encryption and decryption
+    kekAEAD, _ := kms.GetAEAD(keyURI)
+    ```
+3. Replace the placeholder values with your own.
+
+    <Message type="note">
+     The `kekAEAD` object represents the key in Scaleway’s Key Manager. It allows you to encrypt payloads and decrypt ciphertexts.
+    </Message>
+
+Find out how to encrypt and decrypt data with Tink in the dedicated documentation.

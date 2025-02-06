@@ -1,0 +1,211 @@
+---
+meta:
+  title: Managing your Key Manager keys using Tink
+  description: Learn how to use Tink with Scaleway's Key Manager to securely encrypt and manage keys, including KEKs and DEKs, in Go applications.
+content:
+  h1: Managing your Key Manager keys using Tink
+  paragraph: Learn how to use Tink with Scaleway's Key Manager to securely encrypt and manage keys, including KEKs and DEKs, in Go applications.
+tags: key-manager encryption kms key-management-service cryptographic
+dates:
+  validation: 2025-02-06
+  posted: 2025-02-06
+---
+
+This documentation page provides information on Key Manager Key Encryption Keys (KEKs) and Data Encryption Keys (DEKs), and how to use them with the Tink Go library.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Created and enabled a data encryption key (DEK) in your Key Manager
+- A working Go environment
+- Installed the [Scaleway Go SDK](https://github.com/scaleway/scaleway-sdk-go) with [valid credentials](/scaleway-sdk/go-sdk/)
+- [Set up and configured Tink](/key-manager/api-cli/configuring-tink/)
+
+
+## Encrypting and decrypting data with Tink
+
+Paste the following code into a `.go` file. This template contains an example of data we will encrypt (`"Hello, World!"`), and the code to encrypt and decrypt it.
+
+    ```go
+    associatedData := []byte("") // Refer to the the ##Associated data section below for more information
+    secretData := []byte("Hello, World!") // Defines secretData as the plaintext message ("Hello, World!") we want to encrypt
+
+    ciphertext, _ := kekAEAD.Encrypt(secretData, associatedData) // Encrypts the data, the result is stored in ciphertext
+    fmt.Println(ciphertext) // Prints the encrypted data ("Hello, World!" as unreadable bytes)
+
+    plaintext, _ := kekAEAD.Decrypt([]byte(ciphertext), associatedData) // Decrypts the data, turning the ciphertext back into the original secretData
+    fmt.Println(string(plaintext)) // Converts the decrypted unreadable bytes back to a string and prints "Hello, World!"
+    ```
+
+<Message type="important">
+ While the code shown above functions as intended, this is not a recommended pattern, and the following limitations apply:
+  - It is slow: since the key resides on Scaleway Key Manager, each encryption or decryption operation translates into a remote API call.
+  - The payload to encrypt is limited in size: Key Manager only allows up to 64 KB. As a result, you will not be able to encrypt larger payloads with `kekAEAD`.
+  - You cannot choose the cipher and the algorithm that suit your use case, Key Manager handles that on your behalf.
+</Message>
+
+## Understanding the difference between KEKs and DEKs
+
+**Key encryption key (KEK)**: This is a key (`kekAEAD`) used to encrypt other keys (DEKs, which protect your data), not the actual data. It stays secure in Scaleway Key Manager.
+
+**Data Encryption Key (DEK)**: This key is used to encrypt your actual data. Key Manager does not store or manage your DEK. A DEK is usually stored alongside the data it protects, and it is **always** stored encrypted (by the  KEK).
+
+The KEK secures the DEK, and the DEK secures your data. This double-layer approach improves security.
+
+<Message type="important">
+ - Your application is responsible for storing the encrypted DEKs alongside the encrypted data they protect.
+ - DEKs must **never** reside in plaintext. They must be encrypted by the remote KEK before being stored.
+</Message>
+
+## Using Tink keysets as DEKs
+
+Tink does not handle single keys, it manages groups of keys called **keysets**, a set of related keys kept together with their metadata. We use the terms `key` and `keyset` interchangeably since we work with keysets containing only one key here. Tink can generate keys to be used with the desired algorithm and cipher.
+
+1. Run the following code to create a DEK using Tink and store it encrypted with your KEK, using the `AES256-GCM` algorithm.
+
+    ```go
+    import "github.com/tink-crypto/tink-go/v2/keyset" // Import the package that provides functionalities to create, manage, and store keysets in Tink
+
+    /* ... */
+    /* ... */
+
+    handle, _ := keyset.NewHandle(aead.AES256GCMKeyTemplate())  // Generate an AES256-GCM key
+    associatedData := []byte("")
+
+    f, _ := os.OpenFile("/path/to/encrypted_dek.tink", os.O_RDWR|os.O_CREATE, 0644)
+    defer f.Close()
+    w := keyset.NewBinaryWriter(f)
+
+    // Serialize the keyset and encrypt it with the remote KEK,
+    handle.WriteWithAssociatedData(w, kekAEAD, associatedData)
+    ```
+
+
+    <Message type="note">
+     Check out the full list of supported algorithms and ciphers in the [Tink Go reference](https://pkg.go.dev/github.com/tink-crypto/tink-go/v2/aead) if you need to use another algorithm or cipher. We recommend that you stick with the `AES256-GCM` algorithm if you are unsure.
+    </Message>
+
+
+     Your encrypted DEK is now stored in `/path/to/encrypted_dek.tink`.
+
+2. Run the following code to read and use your encrypted DEK:
+
+    ```go
+    // Load, deserialize, and decrypt the DEK with the remote KEK
+    f, _ := os.Open("/path/to/encrypted_dek.tink")
+    defer f.Close()
+    r := keyset.NewBinaryReader(f)
+    handle, _ := keyset.ReadWithAssociatedData(r, kekAEAD, associatedData)
+
+    // Use the DEK represented by "primitive" to encrypt data. The primitive created from the DEK is used to encrypt a string ("This is a secret") into a ciphertext (secret1)
+    primitive, _ := aead.New(handle)
+
+    secret1, _ := primitive.Encrypt([]byte("This is a secret"), dataAssociatedData1)
+    /*
+    *   Store secret1 somewhere
+    */
+
+    secret2, _ := primitive.Encrypt([]byte("This is another secret"), dataAssociatedData2)
+    /*
+    *   Store secret2 somewhere
+    */
+    ```
+    <Message type="note">
+     Tink only provides methods that work on types that comply with `Reader` and `Writer` interfaces. If you need to write and read Tink keysets as direct bytes, you can use `bytes.Buffer`, which is an in-memory buffer used to hold the encrypted keyset. This allows you to serialize and deserialize keysets directly as byte arrays instead of using files.
+    </Message>
+
+3. Run the following command to store the DEK in memory as bytes:
+
+    ```go
+    buf := new(bytes.Buffer)
+    w := keyset.NewBinaryWriter(buf)
+    handle.WriteWithAssociatedData(w, kekAEAD, associatedData)
+    encDEK := buf.Bytes()  // encrypted DEK in Tink wire format
+    ```
+
+You can then store the bytes of the encrypted DEK in a database, for example, with the encrypted data it protects. For example, the encrypted data (enc_data) and the encrypted DEK (enc_dek) might be stored together in a row in a database (base64-encoded in the following example):
+
+    ```console
+    SELECT id, enc_data, enc_dek FROM sensible_stuff;
+
+    id  | enc_data                   | enc_dek
+    -----|----------------------------|-------------------
+    42  | "7NXIqRms0+TiKj+V0gv1s..." | "vIiYBeypb7Yk..."
+    43  | "7X8v0GVrXWwL/ckzfRms0..." | "vIiYBeypb7Yk..."
+    ...
+    ...
+    ...
+    ```
+
+## Associated Data
+
+Associated Data (AD) is not encrypted, but it is authenticated. It must be the same when you encrypt and decrypt data, otherwise the decryption fails. This is useful to prevent reading the wrong data in the wrong context. In the table above, the data in both rows 42 and 43 is protected by the same DEK. If we swapped the data, an application would be able to decrypt the data from another row. But, by providing the intended ID as the associated data, the decryption would fail.
+
+### Encrypt data with AD before inserting it
+
+Run the following command to encrypt your data with `Associated Data`. In the example below, associated data like `id42` and `id43` is used to ensure that data from row 42 cannot be decrypted in the context of row 43.
+
+    ```go
+    handle, _ := keyset.ReadWithAssociatedData(r, kekAEAD, dekAD)
+    primitive, _ := aead.New(handle)  // Same DEK for the two payloads
+
+    secret1, _ := primitive.Encrypt([]byte("This is a secret"), []byte("id42"))
+    // Insert secret1 into row 42
+
+    secret2, _ := primitive.Encrypt([]byte("This is another secret"), []byte("id43"))
+    // Insert secret2 into row 43
+    ```
+
+Associated Data does not need to be stored, as it can be inferred from the context at decryption time. It is also possible to use a unique DEK for each payload. We recommend using Associated Data.
+
+## Hierarchy of keys
+
+Unlike KEKs that reside and are managed by Key Manager, DEKs are free: you can generate and have as many as you want.
+
+However, your application still needs to call the Key Manager API:
+
+ - At least once to encrypt a newly generated DEK before storing it, and
+ - Each time a DEK needs to be decrypted before use
+
+Thus, you can use a hierarchy of keys to minimize calls to the Key Manager API (or any remote key management service), which can slow down your application and incur charges.
+
+In the example below, the application only needs to call Key Manager once to decrypt the DEK Master Key. All subsequent decryption of DEKs happens locally, which improves efficiency.
+
+```go
+// The DEK Master Key (which protects all other DEKs) is stored and protected by the remote KEK.
+masterKeyFile, _ := os.Open("/path/to/encrypted_masterkey.tink")
+masterKeyHandle, _ := keyset.ReadWithAssociatedData(masterKeyFile, kekAEAD, []byte("master-key-001")) // Call the API
+masterKeyAEAD, _ := aead.New(masterKeyHandle)
+
+// DEK #1 encrypted and decrypted by the Master Key, rather than by the remote KEK directly. This avoids frequent API calls.
+dek1File, _ := os.Open("/path/to/encrypted_dek1.tink")
+dekHandle1, _ := keyset.ReadWithAssociatedData(dek1File, masterKeyAEAD, []byte("dek1"))  // No call to the API
+
+// DEK #2 encrypted and decrypted by the Master Key, rather than by the remote KEK directly. This avoids frequent API calls.
+dek2File, _ := os.Open("/path/to/encrypted_dek2.tink")
+dekHandle2, _ := keyset.ReadWithAssociatedData(dek2File, masterKeyAEAD, []byte("dek2")) // No call to the API
+
+
+// DEKs are used to encrypt and decrypt the actual data
+
+dek1AEAD, _ := aead.New(dekHandle1)
+dek2AEAD, _ := aead.New(dekHandle2)
+
+ct1, _ := dek1AEAD.Encrypt([]byte("this is a secret"), []byte("id42"))
+ct2, _ := dek2AEAD.Encrypt([]byte("this is another secret"), []byte("id43"))
+
+/* ... */
+/* ... */
+```
+
+<Message type="tip">
+ Your DEK and KEK do not need to use the same algorithm and cipher.
+</Message>
+
+The example above can work for most use cases. However, there is no "one fits all" approach when creating the right key hierarchy. It is up to you to decide on a hierarchy that suits you best, according to your application needs and constraints.
+
+
+<Message type="important">
+ Scaleway does not define keys managed by Key Manager (or any other key management service) as DEKs or KEKs. The context in which you use these keys makes them DEKs or KEKs. We usually assume that keys in Key Manager are only used to protect other keys, hence the use of the terms "KEKs" and "DEKs".
+</Message>

@@ -1,0 +1,202 @@
+---
+meta:
+  title: Encrypting and decrypting data with a Key Manager data encryption key
+  description: Learn how to use Tink with Scaleway's Key Manager to securely encrypt and manage keys, including KEKs and DEKs, in Go applications.
+content:
+  h1: Encrypting and decrypting data with a Key Manager data encryption key
+  paragraph: Learn how to use Tink with Scaleway's Key Manager to securely encrypt and manage keys, including KEKs and DEKs, in Go applications.
+tags: key-manager encryption decryption kms dek data-encryption-key go
+dates:
+  validation: 2025-02-06
+  posted: 2025-02-06
+---
+
+This page shows you how to encrypt and decrypt data using your Key Manager [data encryption key](/key-manager/concepts/#data-encryption-key-dek) and [Tink](https://github.com/tink-crypto/tink/tree/master).
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Created a key encryption key either from the [Scaleway console](/key-manager/how-to/create-km-key/) or the [Key Manager API](https://www.scaleway.com/en/developers/api/key-manager/#path-keys-create-a-key)
+- Retrieved your key encryption key's ID
+- A valid [API key](/iam/how-to/create-api-keys/)
+- Downloaded and configured the [Scaleway CLI](https://github.com/scaleway/scaleway-cli?tab=readme-ov-file#getting-started)
+- Dowloaded and installed [Go](https://go.dev/doc/install)
+- [Created a Key Manager data encryption key](/key-manager/how-to/create-manage-dek/)
+- [Created](/key-manager/how-to/create-km-key) and [retrieved the ID](/key-manager/how-to/retrieve-km-key-id) your Key Manager key
+
+### Configuring your environment variables
+
+Open a terminal and paste the following command to export your environment variables. Make sure that you replace the placeholder values with your own.
+
+```bash
+
+    export SCW_ACCESS_KEY="<access-key>"
+    export SCW_SECRET_KEY="<secret-key>"
+    export SCW_DEFAULT_ORGANIZATION_ID="<organization-id>"
+    export SCW_PROJECT_ID="<project-id>"
+    export SCW_DEFAULT_REGION="<region>"
+    export SCW_API_URL="<api-url>"
+    export SCW_KM_KEY_ID="<key-id>"
+```
+
+### Using the Go Tink provider
+
+1. [Set up Tink](/key-manager/api-cli/configuring-tink/#setting-up-tink).
+
+    <Message type="note">
+     The Tink library for Go is a cryptographic library that simplifies encryption, decryption, and key management operations.
+    </Message>
+2. Create a `test.go` file in your Go project.
+3. Copy and paste the following code in your `test.go` file.
+    ```bash
+    package main
+
+    import (
+        "fmt"
+        "github.com/scaleway/tink-go-scwkms/integration/scwkms"
+        "github.com/tink-crypto/tink-go/v2/aead"
+        "log"
+        "os"
+    )
+
+    func main() {
+        const keyURIPrefix = "scw-kms://regions/<region>/keys/"
+        keyURI := keyURIPrefix + os.Getenv("SCW_KMS_KEY_ID")
+
+        client, err := scwkms.NewClient(keyURIPrefix)
+        if err != nil {
+            log.Fatal(err)
+        }
+
+        kekAEAD, err := client.GetAEAD(keyURI)
+        if err != nil {
+            log.Fatal(err)
+        }
+
+        // Get the Key Manager envelope AEAD primitive.
+        dekTemplate := aead.AES256GCMKeyTemplate()
+        primitive := aead.NewKMSEnvelopeAEAD2(dekTemplate, kekAEAD)
+        if err != nil {
+            log.Fatal(err)
+        }
+
+        // Use the primitive.
+        plaintext := []byte("message")
+        associatedData := []byte("example KMS envelope AEAD encryption")
+
+        ciphertext, err := primitive.Encrypt(plaintext, associatedData)
+        if err != nil {
+            log.Fatal(err)
+        }
+
+        fmt.Printf("Plaintext: %s\n", plaintext)
+        fmt.Printf("Ciphertext (base64): %s\n", ciphertext)
+
+        decryptedCiphertext, err := primitive.Decrypt(ciphertext, associatedData)
+        if err != nil {
+            log.Fatal(err)
+        }
+
+        fmt.Printf("Decrypted ciphertext: %s\n", decryptedCiphertext)
+    }
+    ```
+4. Replace `<region>` with the region where your key is located and save your changes.
+5. Run your code:
+    ```bash
+    go run test.go
+    ```
+
+## Manually encrypt and decrypt data with a Key Manager DEK
+
+### OpenSSL overview
+
+OpenSSL is a software library for secure communication over computer networks. It is widely used for cryptographic functions.
+
+To decrypt or encrypt your data using OpenSSL, you need to send your encrypted DEK to Key Manager using the [Decrypt data operation](https://www.scaleway.com/en/developers/api/key-manager/#path-keys-decrypt-data).
+
+Scaleway Key Manager then uses your key encryption key (KEK) to decrypt the encrypted DEK, returning it to its plaintext (unencrypted) form, which you can then use to decrypt your actual data.
+
+<Message type="important">
+ - **We do not recommend using OpenSSL in a production environment**.
+ - You should **never save the plaintext DEK on disk or any permanent storage, as it poses a security risk**.
+</Message>
+
+### Encrypting data with OpenSSL
+
+To encrypt your data using OpenSSl, you need to:
+
+1. Decrypt your encrypted DEK using your Key Manager key (key encryption key).
+
+2. Create a `plaintext.txt` file in which you will paste your plaintext data.
+
+3. Encrypt the content of `plaintext.txt` using OpenSSL and the `AES-256-CBC` cipher encryption algorithm.
+
+4. Open a terminal and paste the following command to perform the actions described above. Make sure that you replace `<kek_id>` and `<my_encrypted_data_key>` with the relevant values.
+
+        ```bash
+        # Decrypt the encrypted DEK using scw key decrypt
+        decrypted_data_key=$(scw keymanager key decrypt key-id=<kek_id> ciphertext=<my_encrypted_data_key> | awk '$1 == "Plaintext" {print $2}' | base64 -d)
+
+        # Put your data plaintext into a .txt file
+        echo -n "Your plaintext here" > plaintext.txt
+
+        # Encrypt your file using OpenSSL and AES-256-CBC
+        openssl enc -aes-256-cbc -in plaintext.txt -out encrypted.bin -K $(echo -n "$decrypted_data_key" | hexdump -ve '/1 "%02x"') -iv 0 -nosalt -p
+
+        # Remove the plaintext data
+        rm plaintext.txt
+        ```
+
+### Decrypting data with OpenSSL
+
+To decrypt your encrypted data using OpenSSL, you need to:
+
+1. Decrypt your encrypted DEK using your Key Manager key (key encryption key).
+
+2. Decrypt the content of `encrypted.bin` which contains your encrypted data, using OpenSSL and the `AES-256-CBC` cipher encryption algorithm.
+
+3. Open a terminal and paste the following command to perform the actions described above. Make sure that you replace `<kek_id>` and `<my_encrypted_data_key>` with the relevant values.
+    ```bash
+        # Decrypt the encrypted DEK using scw key decrypt
+        decrypted_data_key=$(scw keymanager key decrypt key-id=<kek_id> ciphertext=<my_encrypted_data_key> | awk '$1 == "Plaintext" {print $2}' | base64 -d)
+
+        # Decrypt your data using OpenSSL and AES-256-CBC
+        openssl enc -aes-256-cbc -d -in encrypted.bin -out decrypted.bin -K $(echo -n "$decrypted_data_key" | hexdump -ve '/1 "%02x"') -iv 0 -nosalt -p
+    ```
+
+<Message type="tip">
+ If you do not wish to use OpenSSL to encrypt and decrypt your data encryption key, you can do it manually using the procedure below, which follows best practices.
+</Message>
+
+### Encrypting a DEK manually
+
+1. [Create one data encryption key](/key-manager/how-to/create-manage-dek/) **for each plaintext you want to encrypt**.
+
+        <Message type="tip">
+         This ensures that each encryption operation uses a unique encryption key, enhancing security.
+        </Message>
+
+2. Use your newly created DEK to encrypt the desired plaintext securely.
+
+        <Message type="note">
+         We recommend using **standard and well-established ciphers**, such as `AES` (Advanced Encryption Standard), to perform the encryption operation.
+        </Message>
+
+3. After encrypting the plaintext using your DEK, concatenate the encrypted DEK with the resulting ciphertext. This ensures that the encrypted DEK is securely associated with the corresponding ciphertext for decryption.
+
+### Decrypting a DEK manually
+
+1. Extract the encrypted DEK from the ciphertext.
+
+        <Message type="note">
+         Extracting an encrypted DEK from the ciphertext means that we are separating the encrypted DEK from the ciphertext.
+        </Message>
+
+2. Decrypt the encrypted DEK using your Key manager key (key encryption key).
+3. Use the resulting DEK's plaintext to decrypt the ciphertext.
+
+        <Message type="note">
+         Use the same cryptographic algorithm and decryption mechanism as the ones you used during the encryption process.
+        </Message>
+4. Delete the plaintext DEK from permanent storage after using it to enhance security.

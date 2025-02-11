@@ -1,0 +1,174 @@
+---
+meta:
+  title: Exporting Audit Trail events to DataDog
+  description: Learn how to export Scaleway Audit Trail events to DataDog
+content:
+  h1: Exporting Audit Trail events to DataDog
+  paragraph: Learn how to export Scaleway Audit Trail events to DataDog
+tags: audit-trail log events
+categories:
+  - audit-trail
+  - instances
+dates:
+  validation: 2025-02-10
+  posted: 2025-02-10
+---
+
+This tutorial shows you how to export your Audit Trail events to [DataDog](https://www.datadoghq.com/). For the purpose of this tutorail, we are building a [custom OpenTelemetry Collector](https://opentelemetry.io/docs/collector/custom-collector/) to collect Audit Trail events through the [Audit Trail receiver](https://github.com/scaleway/opentelemetry-collector-scaleway/tree/main/receiver/scwaudittrail) and export them with the [DataDog exporter](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/exporter/datadogexporter).
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Created an [SSH key](/organizations-and-projects/how-to/create-ssh-key/)
+- Created a Scaleway [Instance](/instances/how-to/create-an-instance/)
+- Installed the [OpenTelemetry collector builder](https://opentelemetry.io/docs/collector/custom-collector/#step-1---install-the-builder)
+- Created a [Datadog account](https://app.datadoghq.com/account/login) and a [Datadog API key](https://docs.datadoghq.com/account_management/api-app-keys/#api-keys)
+
+## Building the OpenTelemetry collector
+
+1. Open a terminal and check that the `ocb` binary is ready to be used. The output of the `help` command should display, meaning the `ocb` binary is ready to be used.
+
+    ```
+    ./ocb help
+    ```
+
+2. Create a manifest file named `builder-config.yaml` and paste the following content into it. This file is used to defines code generation, the compile process, and the components to include in your Collector’s distribution.
+
+    ```yaml
+    dist:
+      name: otelcol-audit-trail
+      description: OpenTelemetry Collector for Audit Trail
+      output_path: ./otelcol-audit-trail
+    
+    exporters:
+      - gomod:
+          github.com/open-telemetry/opentelemetry-collector-contrib/exporter/datadogexporter v0.118.0
+    
+    processors:
+      - gomod:
+          go.opentelemetry.io/collector/processor/batchprocessor v0.118.0
+    
+    receivers:
+      - gomod:
+          github.com/scaleway/opentelemetry-collector-scaleway/receiver/scwaudittrail v0.1.0
+    
+    providers:
+      - gomod: go.opentelemetry.io/collector/confmap/provider/envprovider v1.24.0
+      - gomod: go.opentelemetry.io/collector/confmap/provider/fileprovider v1.24.0
+      - gomod: go.opentelemetry.io/collector/confmap/provider/httpprovider v1.24.0
+      - gomod: go.opentelemetry.io/collector/confmap/provider/httpsprovider v1.24.0
+      - gomod: go.opentelemetry.io/collector/confmap/provider/yamlprovider v1.24.0
+    ```
+
+3. Run the following command to build the Collector. `GOOS` and `GOARCH` are needed in the command as the target deployment is Linux with an AMD64 CPU.
+
+    ```
+    GOOS=linux GOARCH=amd64 ./ocb --config builder-config.yaml
+    ```
+
+You now have a new folder named `otelcol-audit-trail/` with the binary `otelcol-audit-trail` compiled inside.
+
+## Deploying the Collector
+
+1. Run the following command to upload the Collector binary to your Instance. Make sure that you replace `<INSTANCE_IP_ADDRESS>` with the IP address of your Instance.
+
+    ```
+    scp otelcol-audit-trail/otelcol-audit-trail root@<INSTANCE_IP_ADDRESS>:/usr/local/bin/
+    ```
+
+2. Connect to your Instance via SSH:
+
+    ```
+    ssh root@<INSTANCE_IP_ADDRESS>
+    ```
+
+## Configure the Collector
+
+Create a file named `/etc/opentelemetry-collector/config.yaml` and paste the following content into it. This file is the configuration our custom Collector will run. 
+
+    ```yaml
+    receivers:
+      scwaudittrail:
+        access_key: <SCW_ACCESS_KEY>
+        secret_key: <SCW_SECRET_KEY>
+        organization_id: <SCW_DEFAULT_ORGANIZATION_ID>
+        region: <SCW_DEFAULT_REGION>
+    
+    processors:
+      batch:
+        send_batch_max_size: 1000
+        send_batch_size: 100
+        timeout: 10s
+    
+    exporters:
+      datadog:
+        idle_conn_timeout: 10s
+        api:
+          key: <DD_API_KEY>
+          site: <DD_SITE>
+    
+    service:
+      pipelines:
+        logs:
+          receivers: [scwaudittrail]
+          processors: [batch]
+          exporters: [datadog]
+    ```
+
+Make sure that you replace:
+
+- `<SCW_ACCESS_KEY>` with your Scaleway API access key
+- `<SCW_SECRET_KEY>` with your Scaleway API secret key
+- `<SCW_DEFAULT_ORGANIZATION_ID>` with your Scaleway Organization ID
+- `<SCW_DEFAULT_REGION>` with the Scaleway region to target
+- `<DD_API_KEY>` with your DataDog API secret key
+- `<DD_SITE>` with the [DataDog site](https://docs.datadoghq.com/getting_started/site/#access-the-datadog-site) you are on
+
+## Running the Collector
+
+1. Create a file named `/etc/systemd/system/opentelemetry-collector.service` and paste the following content into it. This file will create the `systemd` service that runs the Collector.
+
+    ```
+    [Unit]
+    Description=OpenTelemetry Collector
+    After=multi-user.target
+    
+    [Service]
+    ExecStart=/usr/local/bin/otelcol-audit-trail --config /etc/opentelemetry-collector/config.yaml
+    Type=simple
+    
+    [Install]
+    WantedBy=multi-user.target
+    ```
+
+2. Run the following command to update `systemd` services:
+
+    ```
+    systemctl daemon-reload
+    ```
+
+3. Run the following commands to enable and start the service:
+
+    ```
+    systemctl enable opentelemetry-collector.service
+    systemctl start opentelemetry-collector.service
+    ```
+
+4. Make sure that the service is running:
+
+    ```
+    systemctl status opentelemetry-collector.service
+    ```
+
+5. Run the command below to visualize your logs:
+
+    ```
+    journalctl -fu opentelemetry-collector.service
+    ```
+
+An output similar to the following should display to confirm that the Collector is polling Audit Trail events:
+
+    ```
+    Feb 07 15:34:30 scw-beautiful-zhukovsky otelcol-audit-trail[1723]: 2025-02-07T15:34:30.687Z        info        scwaudittrail@v0.1.0/receiver.go:80        Polling Audit Trail logs        {"kind": "receiver", "name": "scwaudittrail", "data_type": "logs"}
+    ```

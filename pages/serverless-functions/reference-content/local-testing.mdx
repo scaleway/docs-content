@@ -7,7 +7,7 @@ content:
   paragraph: Learn how to test your Serverless Functions locally before deployment on Scaleway.
 tags: functions serverless local testing
 dates:
-  validation: 2024-10-03
+  validation: 2025-02-11
   posted: 2023-03-06
 categories:
   - serverless
@@ -15,22 +15,278 @@ categories:
 
 Local testing allows you to run your code on your development environment with a short deploy time.
 
-Available frameworks:
-
-- [NodeJS](https://github.com/scaleway/serverless-functions-node#%EF%B8%8F-quickstart)
-- [Python](https://github.com/scaleway/serverless-functions-python#%EF%B8%8F-quickstart)
-- [Go](https://github.com/scaleway/serverless-functions-go#%EF%B8%8F-quickstart)
-
-<Message type="tip">
-  Our real-world examples use local testing. Check our [serverless-examples repository](https://github.com/scaleway/serverless-examples) for more information.
-</Message>
-
-# Local testing
 
 Scaleway Serverless Functions can run outside Scaleway infrastructures. This is useful to set up, develop, and test functions locally. You can run functions directly on your machines to debug them and analyze logs.
 
 Each local testing framework is written in its respective language and emulates the calls made to functions by the Scaleway infrastructure.
 The result is a language-specific executable or script that users can connect to with their favorite debugging and logging tools.
+
+## Local testing quickstarts
+
+<Tabs id="frameworks">
+
+<TabsTab label="NodeJS">
+
+Refer to the [NodeJS local testing repository](https://github.com/scaleway/serverless-functions-node) for more information on testing your function locally using Node.
+
+**Quickstart**
+
+1. Install the Scaleway Serverless Functions package using `npm`:
+    ```sh
+    npm i @scaleway/serverless-functions 
+    ```
+
+2. Add the following code to the file containing your handle:
+  
+    For ES modules
+    ```js
+    // handler.js
+
+    import { pathToFileURL } from "url";
+
+      function handle(event, context, callback) {
+        return {
+          statusCode: 201,
+          body: JSON.stringify({
+            message: "Hello World!",
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        };
+      }
+
+      // This part will execute when testing locally, but not when the function is deployed online
+      if (import.meta.url === pathToFileURL(process.argv[1]).href) {
+        import("@scaleway/serverless-functions").then(scw_fnc_node => {
+          scw_fnc_node.serveHandler(handle, 8080);
+        });
+      }
+      ```
+
+      For common JS:
+      ```js
+      // handler.js
+
+      const url = require("url");
+
+      module.exports.handle = (event, context, callback) => {
+        return {
+          statusCode: 201,
+          body: JSON.stringify({
+            message: "Hello World!",
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        };
+      };
+
+      // This part will execute when testing locally, but not when the function is deployed online
+      if ("file://" + __filename === url.pathToFileURL(process.argv[1]).href) {
+        import("@scaleway/serverless-functions").then(scw_fnc_node => {
+          scw_fnc_node.serveHandler(exports.handle, 8080);
+        });
+      }
+      ```
+3. In a terminal, run the command below to execute your file and start the local webserver:
+
+    ```sh
+    node handler.js
+    ```
+
+4. In another terminal session, run the command below:
+    ```sh
+    curl -X GET http://localhost:8080
+    ```
+  
+  The function returns the content of its body:
+
+  ```js
+  {"message":"Hello World!"}%
+  ```
+</TabsTab>
+
+<TabsTab label="Python">
+
+Refer to the [Python local testing repository](https://github.com/scaleway/serverless-functions-python) for more information on testing your functions locally using Python.
+
+**Quickstart**
+
+1. Install the Scaleway Serverless Functions package using `pip`:
+    ```sh
+    pip install scaleway-functions-python
+    ```
+
+2. Add the following code to the file containing your handle:
+
+    ```python
+    # handler.py
+
+    # Standard entrypoint to a Scaleway serverless function
+    def handler(event, context):
+        if event["httpMethod"] != "GET":
+            return {"statusCode": 405, "body": "Invalid method!"}
+        return "Hello World!"
+
+    if __name__ == "__main__":
+        # The import is conditional so that you do not need
+        # to package the library when deploying on Scaleway Functions.
+        from scaleway_functions_python import local
+        local.serve_handler(handler, port=8080)
+    ```
+
+3. In a terminal, run the command below to execute your file and start the local webserver:
+
+    ```sh
+    python handler.py
+    ```
+
+4. In another terminal session, run the command below:
+    ```sh
+    curl http://localhost:8080
+    ```
+  
+    The function returns the expected output:
+
+    ```python
+    Hello World!
+    ```
+
+    <Message type="note">
+    The function above only processes GET requests, as declared in its code. Other requests will return the defined error message:
+
+    ```sh
+     curl -X POST http://localhost:8080
+    > Invalid method!
+    ```
+
+    </Message>
+
+</TabsTab>
+
+<TabsTab label="Go">
+
+Refer to the [Go local testing repository](https://github.com/scaleway/serverless-functions-go) for more information on testing your functions locally using Go.
+
+**Quickstart**
+
+1. Install the Scaleway Serverless Functions package using `go get`:
+    ```sh
+     go get github.com/scaleway/serverless-functions-go
+    ```
+
+2. In a new folder, create a file named `handler.go` and add the following code to it:
+    ```go
+    package handler
+
+    import (
+      "encoding/json"
+      "net/http"
+    )
+
+    // This handle function comes from our examples and is not modified.
+    func Handle(w http.ResponseWriter, r *http.Request) {
+      response := map[string]any{
+        "message": "We're all good",
+        "healthy": true,
+        "number":  4,
+        "headers": r.Header,
+      }
+
+      responseBytes, err := json.Marshal(response)
+      if err != nil {
+        w.WriteHeader(http.StatusInternalServerError)
+        return
+      }
+
+      // Set the header explicitly depending the returned data
+      w.Header().Set("Content-Type", "application/json")
+
+      // Customize status code
+      w.WriteHeader(http.StatusOK)
+
+      // Add content to the response
+      _, _ = w.Write(responseBytes)
+    }
+    ```
+
+3. Create a `main.go` file in a new `cmd` subfolder, then add the following code to it:
+
+    ```go
+    package main
+
+    import (
+      // "localfunc" is the module name located in your go.mod. To generate a go.mod with "localfunc" as a name, you can use the following command : go mod init localfunc.
+
+      // Otherwise, you can replace "localfunc" with the name of your own module.
+      localfunc "github.com/scaleway/serverless-functions-go/examples/handler"
+      "github.com/scaleway/serverless-functions-go/local"
+    )
+
+    func main() {
+      // Replace "Handle" with your function handler name if necessary
+      local.ServeHandler(localfunc.Handle, local.WithPort(8080))
+    }
+    ```
+
+4. run the commands below to generate a `mod` file, then automatically add the modules to it:
+
+    ```sh
+    go mod init localfunc && go mod tidy
+
+5. Run the command below to create a new function for local testing:
+
+    ```sh
+    go run cmd/main.go
+    ```
+
+4. In another terminal session, run the command below:
+    ```sh
+    curl http://localhost:8080
+    ```
+  
+    The function returns the expected output:
+
+    ```json
+    {
+      "headers": {
+        "Accept": [
+          "*/*"
+        ],
+        "Forwarded": [
+          "for=localhost:8080;proto=http"
+        ],
+        "K-Proxy-Request": [
+          "activator"
+        ],
+        "User-Agent": [
+          "curl/8.4.0"
+        ],
+        "X-Envoy-External-Address": [
+          "localhost:8080"
+        ],
+        "X-Forwarded-For": [
+          "localhost:8080",
+          "127.0.0.1",
+          "127.0.0.2"
+        ],
+        "X-Forwarded-Proto": [
+          "http"
+        ],
+        "X-Request-Id": [
+          "5283e1ee-e88e-11ef-ab6e-acde48001122"
+        ]
+      },
+      "healthy": true,
+      "message": "We're all good",
+      "number": 4
+    }
+    ```
+
+</TabsTab>
+
+</Tabs>
 
 ## Requirements
 

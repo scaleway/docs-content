@@ -29,17 +29,15 @@ When you start adding rules to your NACL, traffic flow is restricted between cer
 
 <Lightbox src="scaleway-nacl-diag-simple.webp" alt="A schema shows how the NACL sits at the intersection of two Private Networks in a Scaleway VPC" />
 
-<Lightbox src="scaleway-nacls-table.webp" alt="A table shows three NACL rules, one to block access to PostgreSQL from a dev PN, the second to block all traffic from PN A to PN B, and the third being a default rule that allows all other traffic" />
-
 NACL rules are stateless, meaning that the state of connections is not tracked, and return traffic is not automatically allowed, just because the outbound request was allowed. Explicit rules are required for each direction of traffic.
 
 NACLs only control traffic as it enters or exits the Private Network(s) of a VPC. They do not:
 - Filter traffic between resources attached to the same Private Network
 - Filter traffic from/to the public internet (for this, use [security groups](/instances/how-to/use-security-groups/) for Instances, or equivalent features for [other resource types](/ipam/reference-content/)).
 
-The diagram below shows how a NACL blocks an Instance on Private Network A from sending any traffic to any resources on Private B. The Instance's attempt to send a packet (in green) is denied.
+The diagram below shows how a NACL allows an Instance on Private Network A to send a packet to an Instance on Private Network 
 
-However, an Instance on Private Network B is able to send a packet to an Instance on Private Network A, because no specific rules deny it from doing so, and the default rule is set to allow.
+However, an Instance on Private Network B is blocked from sending a packet to an Instance on Private Network A, because no specific rules allow it to do so, and the default rule is set to `Deny`.
 
 <Lightbox src="scaleway-nacl-diag-detail.webp" alt="A schema shows how the NACL sits at the intersection of two Private Networks in a Scaleway VPC. Packets attempt to travel between Private Networks, and are either allowed or denied according to NACL rules" />
 
@@ -55,6 +53,8 @@ When defining an NACL rule, you must enter the following settings:
     
 - **Action**: The NACL will either **Allow** or **Deny** traffic that matches the rule, to proceed to its destination.
 
+TODO: add screenshot of rule
+
 ## Rule priority and application
 
 The Network Access Control List should be read from top to bottom. Rules closer to the top of the list are applied first. If traffic matches a rule for an **Allow** or **Deny** action, the action is applied immediately. That traffic is not then subject to any further filtering or any further actions by any rules that follow. 
@@ -65,17 +65,48 @@ The Network Access Control List should be read from top to bottom. Rules closer 
 
 Therefore, if you create a rule to allow traffic in one direction, you may also need a separate rule to allow the response in the opposite direction. There is a functionality to auto-generate matching inverse rules for this purpose when creating a new rule.
 
-TODO: example of how traffic that is allowed to one destination won't be allowed to return without correct rule
+TODO: screenshot from how to of inverse rule (PostgreSQL)
+TODO CHECK HOW THE CREATE INVERSE RULE FUNCTIONALITY WORKS (EPHEMERAL PORTS/ALL PORTS?) - MAY NEED TO ADJUST EXAMPLE LIST
 
 ## Default rule
 
-Each NACL must have a default rule, which is automatically at the bottom of the list of rules. You can choose whether the rule has an action of **Allow** or **Deny**. The default rule applies this action to all traffic that did not match any other rules in the list.
+Each NACL must have a default rule, which is automatically at the bottom of the list of rules. The default rule applies this action to all traffic that did not match any other rules in the list.
 
-TODO: examples of how default rule works as either allow or deny (see https://docs.aws.amazon.com/vpc/latest/userguide/default-network-acl.html )
+Best practice is to set your default rule to **Deny**, and for all other rules to use the **Allow** action. In this way, you have fine-grained control over the traffic that is allowed to flow, and all other traffic is blocked by default.
 
+Nonetheless, you can choose to set your default rule to **Allow** if you wish. In this case, all other rules in the list should use the **Deny** action, to filter out the specific traffic you want to block. All other traffic will be permitted by the default rule.
 
-TODO:
-- Ephemeral ports?
-- Examples
-- Quotas
-- What you can/can't block with NACLs
+## NACL example
+
+The table below shows an example of an NACL for IPv4 traffic:
+
+<Lightbox src="scaleway-nacl-example.webp" alt="A table shows a number of NACL rules" />
+
+- A number of TCP rules allow connections to the specific ports necessary for SSH, HTTP and HTTPS traffic. These rules allow all IPv4 sources within the VPC to connect to these ports, for all IPv4 destinations. 
+
+- An ICMP rule allows all ICMP traffic from/to all IPv4 addresses on all ports, effectively permitting all ping requests within the VPC to function.
+
+- A TCP rule allows PostgreSQL access on port 5432 from one Private Network (172.16.2.0.5/22) to another Private Network (172.16.8.0/22). An **inverse rule** also allows PostgreSQL access from Private Network B to A. TODO CHECK - TEST
+
+- A TCP rule allows connections from all IPv4 sources to all IPv4 destinations on the port range `32768-65535`, effectively allowing all return (incoming) traffic towards ephemeral ports.
+
+- The default rule blocks all traffic not explicitly allowed by one of the rules above.
+
+## NACL limitations
+
+Network ACLs cannot be used to block or filter the traffic to or from the following:
+
+- Scaleway DNS
+- Scaleway DHCP
+- Scaleway Instance metadata
+- Kubernetes Kapsule task metadata endpoints
+- License activation for Windows installation on Elastic Metal or Instances 
+
+NACLs have the same resource limitations as [VPC routing](/vpc/reference-content/understanding-routing/#limitations), they cannot currently be used to filter Managed Database traffic, though this functionality is planned for the future.
+
+## NACL quotas
+
+NACL quotas are as follows:
+
+- A maximum of 255 rules for IPv4 (per VPC)
+- A maximum of 255 rules for IPv6 (per VPC)

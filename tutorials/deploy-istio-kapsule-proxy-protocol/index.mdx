@@ -1,0 +1,169 @@
+---
+meta:
+  title: Deploying Istio on a Kubernetes Kapsule with ProxyProtocol v2 support
+  description: Learn how to deploy Istio on a Kubernetes Kapsule cluster with Proxy Protocol v2 support. Follow our step-by-step tutorial to set up a secure and scalable service mesh infrastructure.
+content:
+  h1: Deploying Istio on a Kubernetes Kapsule with ProxyProtocol v2 support
+  paragraph: Learn how to deploy Istio on a Kubernetes Kapsule cluster with Proxy Protocol v2 support. Follow our step-by-step tutorial to set up a secure and scalable service mesh infrastructure.
+categories:
+  - kubernetes
+  - load-balancer
+tags: kubernetes load-balancer proxy-protocol istio
+dates:
+  validation: 2025-02-18
+  posted: 2025-02-18
+---
+
+Istio is an open source service mesh that lets you run distributed, microservices-based apps anywhere. It helps you manage and connect the different microservices in your Scaleway Kubernetes cluster, making it easier to build and maintain complex applications.
+
+This tutorial describes the steps required to deploy Istio on a Scaleway Kubernetes Kapsule cluster, and configure it to support [Proxy Protocol v2](/load-balancer/concepts/#proxy-protocol). This enables connection information from a client (e.g. their IP address) to be passed through the cluster's Load Balancer onto the target pod or service, via the Istio service mesh.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A [Kubernetes Kapsule cluster](/kubernetes/how-to/create-cluster/) with a Scaleway [Load Balancer service](/kubernetes/reference-content/kubernetes-load-balancer/)
+- Set up [kubetcl](/kubernetes/how-to/connect-cluster-kubectl/) and [Helm](/tutorials/kubernetes-package-management-helm/)
+
+## Install Istio with Helm
+
+1. Add the Istio Helm repository:
+
+    ```
+    helm repo add istio https://istio-release.storage.googleapis.com/charts
+    helm repo update
+    ```
+
+2. Install the Istio control plane:
+
+    ```
+    helm install istiod istio/istiod -n istio-system --create-namespace
+    ```
+
+3. Install the Istio ingress Gateway:
+
+    ```
+    helm install istio-ingressgateway istio/gateway -n istio-system
+    ```
+
+## Verify the ingress Gateway Service
+
+An ingress Gateway service acts as an exntry point for external traffic into the cluster. It is exposed via a Kubernetes LoadBalancer Service, which in our case uses a Scaleway Load Balancer. The Load Balancer forwards external traffic to the ingress Gateway Pod.
+
+1. Run the following command to retrieve the service configuration
+
+    ```
+    kubectl get svc istio-ingressgateway -n istio-system -o yaml
+    ```
+
+2. Verify that the service is of type `LoadBalancer`, and that a Scaleway Load Balancer is associated with it.
+
+## Add annotations for Proxy Protocol
+
+Add the necessary annotations for Proxy Protocol:
+
+    ```
+    kubectl annotate -n istio-system svc istio-ingressgateway "service.beta.kubernetes.io/scw-load-balancer-proxy-protocol-v2=false" --overwrite      
+    kubectl patch svc istio-ingressgateway -n istio-system -p '{"spec": {"externalTrafficPolicy": "Local"}}'
+    ```
+
+## Configure Envoy to support Proxy Protocol
+
+Envoy is a proxy server used by Istio to manage and control the flow of traffic between services in the Kubernetes cluster. It is responsible for routing the traffic between services.
+
+1. Create an EnvoyFilter to enable Proxy Protocol support:
+
+    ```yaml
+    apiVersion: networking.istio.io/v1alpha3
+    kind: EnvoyFilter
+    metadata:
+    name: proxy-protocol
+    namespace: istio-system
+    spec:
+    workloadSelector:
+        labels:
+        istio: ingressgateway
+    configPatches:
+    - applyTo: LISTENER
+        patch:
+        operation: MERGE
+        value:
+            listener_filters:
+            - name: envoy.filters.listener.proxy_protocol
+            - name: envoy.filters.listener.tls_inspector
+    ```
+
+2. Apply the configuration:
+
+    ```
+    kubectl apply -f proxy-protocol.yaml
+    ```
+
+## Enable X-Forwarded-For
+
+1. Create a file named `ingressgateway-settings.yaml` with the following content:
+
+    ```yaml
+    apiVersion: networking.istio.io/v1alpha3
+    kind: EnvoyFilter
+    metadata:
+      name: ingressgateway-settings
+      namespace: istio-system
+    spec:
+      configPatches:
+      - applyTo: NETWORK_FILTER
+        match:
+          listener:
+            filterChain:
+              filter:
+                name: envoy.http_connection_manager
+        patch:
+          operation: MERGE
+          value:
+            name: envoy.http_connection_manager
+            typed_config: 
+              "@type": "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager"
+              skip_xff_append: false
+              use_remote_address: true
+              xff_num_trusted_hops: 1
+    ```
+
+2. Apply the configuration:
+
+    ```
+    kubectl apply -f ingressgateway-settings.yaml
+    ```
+
+3. Update the ingress Gateway service to use the new configuration:
+
+    ```
+    kubectl annotate -n istio-system svc istio-ingressgateway "service.beta.kubernetes.io/scw-load-balancer-proxy-protocol-v2=false" --overwrite
+    kubectl patch svc istio-ingressgateway -n istio-system -p '{"spec": {"externalTrafficPolicy": "Local"}}'
+    ```
+
+## Restart the Istio ingress Gateway pod
+
+Restart the pod to apply the changes:
+
+    ```
+    kubectl delete pod -l istio=ingressgateway -n istio-system
+    ```      
+     
+## Verify the configuration  
+
+1. Retrieve the public IP address of the Load Balancer:
+
+    ```
+    kubectl get svc istio-ingressgateway -n istio-system
+    ```
+         
+2. Test access using curl:
+    ```
+    curl -v http://<LOAD_BALANCER_IP>/get
+    ```
+         
+    If the configuration is correct, the response should include the `X-Forwarded-For` and `X-Envoy-External-Address` headers.
+
+
+For further support with Istio, read their [dedicated documentation](https://istio.io/latest/docs/).
+     

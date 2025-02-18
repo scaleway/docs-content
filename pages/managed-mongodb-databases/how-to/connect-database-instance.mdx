@@ -128,8 +128,10 @@ const databaseName = 'databaseName'
 // Path to your TLS certificate file
 const tlsCertificatePath = path.resolve(__dirname, 'path/to/your_tls_certificate.pem');
 
-// Construct the connection string
-const connectionString = `mongodb+srv://${username}:${password}@${instanceId}.mgdb.${region}.scw.cloud`;
+// Construct the public connection string
+const connectionString = `mongodb+srv://${username}:${password}@${instanceId}.mgdb.${region}.scw.cloud;`
+// Construct the private connection string
+const connectionString = `mongodb+srv://${username}:${password}@${instanceId}.${privateNetworkId}.internal;`
 
 // Create a new MongoClient
 const client = new MongoClient(connectionString, {
@@ -172,50 +174,96 @@ package main
 
 import (
     "context"
+    "crypto/tls"
+    "crypto/x509"
     "fmt"
+    "io/ioutil"
+    "log"
+
     "go.mongodb.org/mongo-driver/mongo"
     "go.mongodb.org/mongo-driver/mongo/options"
 )
 
 func main() {
+    // Replace with your MongoDB connection details
+    username := "your_username"
+    password := "your_password"
+    instanceID := "your_instance_id"  // your instance_id
+    privateNetworkID := "your_private_network_id" // Id of your Private Network
+    region := "your_region" // the region of your database instance. "fr-par" for Paris.
+    tlsCertificate := "path/to/your_tls_certificate.pem" // path to your TLS certificate
+    databaseName = "databaseName"
 
-    username := "<replace_with_user_name>"
-    password := "<replace_with_password>"
-    host := "<endpoint ip>"
-    port := 1234 // replace with endpoint port number
-    caCertPath := "<instance_certificate.crt>"
-    // prepare the uri for the connection
-    uri := fmt.Sprintf(
-        "mongodb://%s:%s@%s:%d/rdb?tls=true&tlsCACert=%s&authMechanism=PLAIN",
-        username,
-        password,
-        host,
-        port,
-        caCertPath,
-    )
-    ctx := context.Background()
-    // connect to the database
-    client, _ := mongo.Connect(ctx, options.Client().ApplyURI(uri))
-    // get the database
-    db := client.Database("rdb")
-    // get the collection
-    cars := db.Collection("cars")
-    // insert a document
-    carToInsert := Car{Name: "Supercar", Year: 2020}
-    cars.InsertOne(ctx, carToInsert)
+    // Read CA certificate
+    caCert, err := ioutil.ReadFile(tlsCertificate)
+    if err != nil {
+        log.Fatalf("Erreur lors de la lecture du fichier CA: %v", err)
+    }
 
-    // read the document
-    carToRead := Car{}
-    cars.FindOne(ctx, map[string]interface{}{"name": "Supercar"}).Decode(&carToRead)
+    // Create certificate pool
+    caCertPool := x509.NewCertPool()
+    caCertPool.AppendCertsFromPEM(caCert)
 
-    // print the document
-    fmt.Println(carToRead)
+    tlsConfig := &tls.Config{
+        RootCAs: caCertPool,
+    }
 
-}
+    // Construct the public connection string
+    connectionString := fmt.Sprintf("mongodb+srv://%s:%s@%s.mgdb.%s.scw.cloud", username, password, instanceID, region)
+    // Construct the private connection string
+    connectionString := fmt.Sprintf("mongodb+srv://%s:%s@%s.%s.internal", username, password, instanceID, privateNetworkID)
 
-type Car struct {
-    Name string
-    Year int
+    // Create a new client and connect to the server
+    clientOptions := options.Client().
+        ApplyURI(connectionString).
+        SetTLSConfig(tlsConfig)
+    client, err := mongo.Connect(context.TODO(), clientOptions)
+
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    // Check the connection
+    err = client.Ping(context.TODO(), nil)
+
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Println("Connected to MongoDB!")
+
+    // Access a specific collection
+    collection := client.Database(databaseName).Collection("your_collection_name")
+
+    // Example: Find documents in the collection
+    cursor, err := collection.Find(context.TODO(), map[string]interface{}{})
+
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    defer cursor.Close(context.TODO())
+
+    for cursor.Next(context.TODO()) {
+        var result map[string]interface{}
+        err := cursor.Decode(&result)
+        if err != nil {
+            log.Fatal(err)
+        }
+        fmt.Println(result)
+    }
+
+    if err := cursor.Err(); err != nil {
+        log.Fatal(err)
+    }
+
+    // Close the connection once no longer needed
+    err = client.Disconnect(context.TODO())
+    if err != nil {
+        log.Fatal(err)
+    }
+
+    fmt.Println("Connection to MongoDB closed.")
 }
 ```
 
@@ -227,20 +275,23 @@ The following code shows you how to use the `Mongoose` schema to connect using T
 const mongoose = require('mongoose');
 const path = require('path');
 
-// Replace with your MongoDB® connection details
+// Replace with your MongoDB connection details
 const username = encodeURIComponent('your_username');
 const password = encodeURIComponent('your_password');
-const region = "your_region" // "fr-par" for Paris.
+const region = "your_region"; // "fr-par" for Paris.
 const instanceId = 'your_instance_id';  // your instance id
+const privateNetworkId = 'your_private_network_id'; // your private network id
 const databaseName = 'databaseName'
 
 // Path to your TLS certificate file
 const tlsCertificatePath = path.resolve(__dirname, 'path/to/your_tls_certificate.pem');
 
-// Construct the connection string
+// Construct the public connection string
 const connectionString = `mongodb+srv://${username}:${password}@${instanceId}.mgdb.${region}.scw.cloud`;
+// Construct the private connection string
+const connectionString = `mongodb+srv://${username}:${password}@${instanceId}.${privateNetworkId}.internal`;
 
-// Connect to MongoDB® using Mongoose
+// Connect to MongoDB using Mongoose
 mongoose.connect(connectionString, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
@@ -248,7 +299,7 @@ mongoose.connect(connectionString, {
     tlsCAFile: tlsCertificatePath, // Path to the CA certificate file
 })
 .then(() => {
-    console.log('Connected to MongoDB® with Mongoose!');
+    console.log('Connected to MongoDB with Mongoose!');
 })
 .catch(err => {
     console.error('Connection error', err);

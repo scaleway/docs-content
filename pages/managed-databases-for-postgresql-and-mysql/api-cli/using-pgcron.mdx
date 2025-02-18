@@ -35,8 +35,10 @@ CREATE EXTENSION
 
 ## Configuring pg_cron
 
+To fully use the extension, you must grant read/write rights to the user who will be running the `pg_cron` functions to manage jobs on the database.
+
 <Message type="note">
-  To fully use the extension, you must grant read/write rights to the user who will be running the `pg_cron` functions to manage jobs on the database. Refer to the [How to add users to a PostgreSQL or MySQL Database Instance](/managed-databases-for-postgresql-and-mysql/how-to/add-users) documentation for more information.
+  Refer to the [How to add users to a PostgreSQL or MySQL Database Instance](/managed-databases-for-postgresql-and-mysql/how-to/add-users) documentation for more information.
 </Message>
 
 ## Scheduling jobs
@@ -49,8 +51,7 @@ SELECT cron.schedule(
   '${JOB_NAME}',
   '${SCHEDULE_SPEC}',
   $$
-    DELETE FROM ${TABLE_NAME}
-    WHERE ${CONDITION_COLUMN} < now() - interval '${TIME_INTERVAL}'
+    ${SQL_COMMAND}
   $$
 );
 ```
@@ -58,28 +59,44 @@ SELECT cron.schedule(
 Replace the variables with the corresponding information:
 
 - `${JOB_NAME}` - set a name for the job
-- `${SCHEDULE_SPEC}` - the schedule specification in cron format (e.g. 0 0 * * * for daily at midnight)
-- `${TABLE_NAME}` - the name of the table to delete from
-- `${CONDITION_COLUMN}` - the column to use for the deletion condition
-- `${TIME_INTERVAL}` - the time interval to use for the deletion condition (e.g. 1 week, 1 month, etc.)
+- `${SCHEDULE_SPEC}` - the schedule specification in [cron format](/serverless-jobs/reference-content/cron-schedules/)
+- `${SQL_COMMAND}` - the SQL command to be executed. Depending on the command, you might need to specify other parameters.
 
+### Job examples
+
+**Example 1 -  Deleting old data**
+
+You can run the command below to delete old data from the `events` table every Saturday at 3:30am:
 
 ```sql
--- Delete old data on Saturday at 3:30am (GMT)
 SELECT cron.schedule('30 3 * * 6', $$DELETE FROM events WHERE event_time < now() - interval '1 week'$$);
 ```
 
+**Example 2 - Scheduling a VACUUM job**
+
+You can run the command below to execute the VACUUM task every day at 10:00am.
+
 ```sql
--- Change to vacuum at 3:00am (GMT)
 SELECT cron.schedule('nightly-vacuum', '0 10 * * *', 'VACUUM');
 ```
 
-**Listing Jobs**
+## Listing Jobs
 
 To list all scheduled jobs, you can run the following command:
 
 ```sql
 SELECT * FROM cron.job;
+```
+Each job is represented by a record. You can see the following information in the response:
+
+- `jobid` - a unique job ID
+- `schedule` - the schedule specification in cron format
+- `command` - the SQL command
+- `database`, `username`, `nodename`, `nodeport` - connection details
+- `active` - whether the job is active or not
+- `jobname` - the name of the job
+
+```sql
 -[ RECORD 1 ]-------------------------------------------------------------
 jobid | 1
 schedule | 30 3 * * 6
@@ -102,31 +119,36 @@ active | t
 jobname | nightly-vacuum
 ```
 
-**Unscheduling Jobs**
+## Unscheduling Jobs
 
 To unschedule a job, you can run the following command:
 
 ```sql
+SELECT cron.unschedule('${JOB_ID}');
+```
+Replace ${JOB_ID} with the ID of the job you want to unschedule.
+
+### Examples
+
+To unschedule the jobs set in the previous section, you can run:
+
+```sql
 SELECT cron.unschedule(1);
-unschedule
-------------
-t
-(1 row)
 ```
 
 or
 
 ```sql
 SELECT cron.unschedule('nightly-vacuum');
-unschedule
-------------
-t
-(1 row)
 ```
 
-**Scheduling Jobs in Other Databases**
+## Scheduling jobs in other databases
 
 To schedule a job in another database, you can use the `schedule_in_database` function:
+
+```sql
+SELECT cron.unschedule('${JOB_ID}');
+```
 
 ```sql
 SELECT cron.schedule_in_database('job-in-another-db', '0 12 * * *', 'INSERT INTO public.another_db_table values (now())', 'mydb');

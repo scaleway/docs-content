@@ -1,0 +1,211 @@
+---
+meta:
+  title: Understanding and preparing for Public Gateways v2
+  description: Find out what to expect from Public Gateways v2, and get ready for deprecation of DHCP entries and the DHCP object, as well as new default behavior for IPAM mode.
+content:
+  h1: Understanding and preparing for Public Gateways v2
+  paragraph: Find out what to expect from Public Gateways v2, and get ready for deprecation of DHCP entries and the DHCP object, as well as new default behavior for IPAM mode.
+tags: public-gateways dhcp dhcp-entries api v2 ipam-mode legacy
+dates:
+  creation: 2025-01-23
+  validation: 2025-01-23
+categories: 
+  - network
+---
+
+TODO CHECK CONSOLE MENTIONS
+TODO CHECK DATES
+
+Scaleway's VPC offering is evolving, and with this comes changes for the Public Gateway product.
+
+This document explains what to expect and how to prepare for the upcoming changes.
+
+## Summary (TL;DR)
+
+All Scaleway Public Gateways until now have been created and managed with the version 1 of the [Public Gateways API](https://www.scaleway.com/en/developers/api/public-gateway/), either explicitly via the API itself, or implicitly behind the scenes of the Scaleway console or other developer tools. 
+
+**We are now deprecating v1 of the API and transitioning to v2.**
+
+|  | **PGW API v1** | **PGW API v2** |
+|---|---|---|
+| Supports [legacy-mode PGWs](/public-gateways/concepts/#ipam) | Yes ✅ | No ❌|
+| Supports [IPAM-mode PGWs](/public-gateways/concepts/#ipam) | Yes ✅ | Yes ✅|
+| Supports custom DHCP via PGW (API only) | Yes ✅ | No ❌|
+| Supports SSH bastion allowed IPs, and future new features | No ❌| Yes ✅ |
+| Deprecated? | Yes ✅ | No ❌|
+| Removal date | 1 Oct 2025 | --- |
+| Compatible with PGW management via Scaleway console? | Only until 1 Oct 2025 | Yes ✅ |
+
+After a deprecation period ending on 1 Oct 2025, the Public Gateways API v1 and associated developer tools will be removed. 
+
+**What you need to do before 1 Oct 2025:**
+
+- Ensure that your Public Gateway is in [IPAM mode](#ipam-mode-becomes-default). Only IPAM-mode gateways are compatible with v2.
+
+- Put any non-IPAM mode ([legacy](/network/public-gateways/concepts/#ipam)) Public Gateways in IPAM mode, by using the **Move to IPAM mode** button in the console, or the [dedicated API call](TODO).
+
+- Update any code or scripts you have that call version 1 of the Public Gateways API, so that they call version 2 instead, and do not refer to [removed functionalities](#introducing-public-gateways-api-v2).
+
+If your Public Gateway is already in IPAM mode, and you only manage it via the console, you will not be affected by these changes and you do not need to take any action.
+
+## Background: DHCP and IPAM
+
+When Scaleway originally introduced Public Gateways, they provided DHCP functionality for resources on attached Private Networks. With the [arrival of Scaleway VPC](/network/vpc/reference-content/vpc-migration/) in 2023, DHCP was moved from Public Gateways to Private Networks themselves.
+
+Scaleway also introduced [IPAM](/network/ipam/concepts/#ipam) to act as a single source of truth for the IP addressing of all Scaleway resources. DHCP uses IPAM to ensure consistent and reliable addressing across all Private Networks. 
+
+When you [create a Private Network](/network/vpc/how-to/create-private-network/), you can either automatically generate a default IPv4 CIDR block, or define a custom block. A default IPv6 block is automatically created. When you attach resources to the Private Network, they automatically receive an IPv4 address (and, if compatible, an IPv6 address) from this block. Alternatively, you can [reserve a specific IP address](/network/ipam/how-to/reserve-ip/) from the block, and [specify this address](/network/ipam/how-to/reserve-ip/#how-to-attach-a-managed-resource-to-a-private-network-using-a-reserved-ip-address) when attaching the resource. When you reserve a private IP with IPAM, you have the option to attach a MAC address to it. This allows you to use the IP with a custom resource e.g. virtual machines hosted on a Proxmox cluster on an Elastic Metal server.
+
+Whether you choose a custom or default CIDR block, automatic address assignment or use a reserved address, **the resource's private IP address does not risk changing** unless you detach the resource from the Private Network. To ensure that you can keep the same address for a resource even after detaching it, use the [reserve IP](/network/ipam/how-to/reserve-ip/) functionality.
+
+## Introducing Public Gateways API v2
+
+Since the assignment and management of IP addresses on Private Networks is now managed by IPAM and the Private Networks themselves, we must complete the removal of the DHCP functionality from Public Gateways. This means releasing a new version (v2) of the [Public Gateways API](https://www.scaleway.com/en/developers/api/public-gateway/), which has until now retained a number of legacy DHCP functions. From this new version, you can expect:
+
+- IPAM mode becomes default
+- Removal of the DHCP object
+- Removal of the `address` field
+- Removal of DHCP entries
+- New SSH bastion feature: Allowed IPs
+
+Read on to find out more.
+
+### IPAM mode becomes default
+
+Scaleway Public Gateways are either in **Legacy mode** or **IPAM mode**. You can see the mode of a given gateway by:
+
+- Checking its badge in the gateway listing page of the [Scaleway console](https://console.scaleway.com/public-gateway/public-gateways) (see screenshot below).
+- Checking the value of the `is_legacy` field via the [Public Gateways API](https://www.scaleway.com/en/developers/api/public-gateway/#path-gateways-get-a-public-gateway).
+
+<Lightbox src="scaleway-pgw-listing.webp" alt="A screen in the Scaleway console shows a listing of two Public Gateways, one of which has a badge saying IPAM, the other a badge saying Legacy." />
+
+<Message type="tip">
+All Public Gateways created via the Scaleway console since 17 October 2023 are necessarily in IPAM mode.
+</Message>
+
+Legacy Public Gateways use a [workaround](/network/vpc/reference-content/vpc-migration/#public-gateways-and-vpc) to ensure IPAM compatibility. IPAM-mode Public Gateways are fully integrated with Scaleway's [IPAM](/network/ipam/concepts/#ipam), which manages the coherent assignment of IP addresses to the gateway itself, and resources on attached Private Networks.
+
+Legacy mode will be deprecated going forward, and will not be compatible with v2 of the Public Gateway API. It will no longer be possible to create legacy-mode Public Gateways, all gateways will necessarily be in IPAM mode.
+
+If you still have a legacy gateway, you must transition it to IPAM mode so that it is compatible with v2 of the API. Do this by using the **Move to IPAM mode** button in the console, or the [dedicated API call](TODO). This will update the auto-calculated `is_legacy` field and put your gateway in IPAM mode.
+
+### Removal of the DHCP object
+
+For some time now, this functionality has been available via the API and developer tools only (not the Scaleway console).
+
+The [DHCP object](https://www.scaleway.com/en/developers/api/public-gateway/#path-dhcp-list-dhcp-configurations) has allowed users to define a DHCP configuration, which specified how the gateway should assign IP addresses to devices on attached Private Networks (parameters including the subnet of the DHCP server, entry validity period and more). 
+
+When attaching a Public Gateway to a Private Network (creating a [Gateway Network](https://www.scaleway.com/en/developers/api/public-gateway/#path-gateway-networks-attach-a-public-gateway-to-a-private-network)) via the API, you can pass a DHCP object, or the ID of an existing DHCP object. 
+
+**The DHCP object does not exist in v2 of the API**. After v1 is removed, it will no longer be possible to create or attach DHCP objects to Gateway Networks. Instead, IPAM configuration, where auto-configuration of `GatewayNetwork` is managed by IPAM, will become default, and replace any need for DHCP configuration via the Public Gateway.
+
+When you move your gateway to IPAM mode, any existing custom DHCP objects will become defunct. Going forward, we expect users who were previously using a custom DHCP object to move to the standard set-up of IPAM and Private Networks' inbuilt DHCP for private IP assignment. Remember that you can define a [custom CIDR block](/vpc/how-to/create-private-network/#how-to-configure-cidr) for a Private Network at the time of creation, and use [reserved IP addresses](/ipam/how-to/reserve-ip/#how-to-reserve-a-private-ip-address) with IPAM when attaching both standard and custom resources.
+
+### Removal of the address field
+
+For some time now, this functionality has been available via the API and developer tools only (not the Scaleway console).
+
+When attaching a Public Gateway to a Private Network (creating a [Gateway Network](https://www.scaleway.com/en/developers/api/public-gateway/#path-gateway-networks-attach-a-public-gateway-to-a-private-network)) via the API, you could use the `address` field to define a single static IP address to assign to the Public Gateway on that Private Network.
+
+**The `address` field does not exist in v2 of the API**. Instead, you can pass an `ipam_ip_id` to specify a reserved IP address to use for a Public Gateway on a Private Network, if you wish. On the Scaleway console, you can select a [reserved IP](/ipam/how-to/reserve-ip/) to use when attaching a Public Gateway to a Private Network. Otherwise, use the default behaviour where IPAM auto-assigns an IP address from the Private Network's CIDR block to the Public Gateway at the moment of attachment.
+
+When you use the **Move to IPAM mode** button in the console, or the [dedicated API call](TODO) to move a legacy Public Gateway to IPAM mode, it will keep its current IP address on all attached Private Networks.
+
+### Removal of DHCP entries
+
+For some time now, this functionality has been available via the API and developer tools only (not the Scaleway console).
+
+[DHCP entries](https://www.scaleway.com/en/developers/api/public-gateway/#path-dhcp-entries-list-dhcp-entries) could be created, belonging to a specified `GatewayNetwork` (Public Gateway / Private Network attachment), holding dynamic DHCP leases or static, user-created DHCP reservations. They have effectively allowed the Public Gateway to assign certain IP addresses to certain resources on the Private Network.
+
+**DHCP entries do not exist in v2 of the API**. Instead, you can rely on the default IPAM/DHCP functionality as described [above](#background-dhcp-and-ipam). The default behavior will auto-assign IP addresses to resources on the Private Network from the network's CIDR block, or you can use the IP reservation functionality to specify the IP address(es) to assign to each resource.
+
+For custom resources, such as VMs hosted on Elastic Metal servers, you can use the IPAM API's [Attach IP to custom resource](https://www.scaleway.com/en/developers/api/ipam/#path-ips-attach-ip-to-custom-resource) method to assign IP addresses on Private Networks. This lets you associate a [reserved IP](https://www.scaleway.com/en/developers/api/ipam/#path-ips-reserve-a-new-ip) address with a resource name and MAC address.
+
+We will automatically migrate any existing DHCP entries to IPAM for you, at the moment you put a legacy Public Gateway into IPAM mode. TODO STUFF ABOUT LATER ON DETACH/REATTACH
+
+### SSH bastion allowed IPs
+
+Allowed IPs is a new functionality of the Public Gateways API v2, that will also be available to all IPAM-mode Public Gateways via the Scaleway console. This feature allows you to specify a list of IP address ranges which should be allowed to connect to the gateway's SSH bastion and the resources behind it. All other IP addresses will be blocked from connecting. Find out more in the [SSH bastion](/network/public-gateways/how-to/use-ssh-bastion/) documentation.
+
+## Timeline and action to take
+
+TODO CHECK DATES
+
+- **7 March 2025 - V2 release**: The Public Gateway v2 API is be released, co-existing with v1. 
+- **7 March 2025 - V1 deprecation**: The Public Gateway v1 API is deprecated. Deprecation means that the API will still function, but it is slated for removal and we do not recommended that you keep using it.
+
+    <Message type="note">
+    You will be able to list and manage all gateways with the **Scaleway console**, which will adapt to use v1 or v2 of the API as necessary depending on whether or not the gateway is in IPAM mode.
+    </Message>
+
+- **7 March 2025 2025 - 1 Oct 2025: Migration period**: You have a six month migration period to complete the following actions
+
+    - Ensure that your Public Gateway is in [IPAM mode](/network/public-gateways/concepts/#ipam). Only IPAM mode gateways are compatible with v2.
+    - Put any non-IPAM mode ([legacy](/network/public-gateways/concepts/#ipam)) Public Gateways in IPAM-mode, by using the **Move to IPAM mode** button in the console, or the [dedicated API call](TODO).
+    - Ensure that [DHCP is activated](TODO) on all Private Networks attached to your IPAM-mode Public Gateways.
+    - Update any code or scripts you have that call version 1 of the Public Gateways API, so that they call version 2 instead. This includes removing any use of the DHCP entries, DHCP objects or address fields as mentioned [above](link).
+
+    If your Public Gateway is already in IPAM-mode, and you only manage it via the console, you will not be affected by these changes and you do not need to take any action.
+
+- **1 Oct 2025 - V1 removal**: The Public Gateway v1 API will be removed. Any code or scripts still pointing to v1 will cease to function. We will automatically put any existing legacy Public Gateways into IPAM mode.
+
+## FAQ
+
+### How do I know if I have to take action?
+
+- Consider whether you mange your Public Gateway uniquely via the Scaleway console, or via calls to the API/devtools in code and scripts:
+
+  - **Code and scripts**: If you have any code or scripts that call v1 of the API, or use devtool functionality that is removed from v2 such as DHCP object or entries, **you must take action before 1 Oct 2025**. Update your code and scripts so they point to v2 of the API. [Follow the examples provided for tools such as Terraform](TODO) to rewrite your devtool templates so they do not refer to removed functionalities. Do this in synchronization with moving your gateway to IPAM mode (if necessary).
+
+  - **Console-only**: You do not need to take any action, except ensuring that your gateway is in IPAM mode.
+
+- Check in the [Scaleway console](https://console.scaleway.com/public-gateway/public-gateways) whether your Public Gateway is in IPAM mode or legacy mode:
+
+  - **Legacy mode**: you must move the gateway to IPAM mode. Only IPAM mode gateways are compatible with v2. Use the **Move to IPAM mode** button in the console, or the [dedicated API call](TODO).
+
+  - **IPAM mode**: you do not have any action to take, except updating any code and scripts that you have (see above).
+
+### How do I move my legacy Public Gateway to IPAM mode?
+
+Use the **Move to IPAM mode** button next to your gateway in the [Scaleway console](https://console.scaleway.com/public-gateway/public-gateways), or the [dedicated API call](TODO).
+
+If you use Terraform to manage your infrastructure as code, modify your templates to reattach your Public Gateways in IPAM mode, and use IPAM functionality to replace any DHCP configurations. Refer to our [Terraform snippets](TODO) for help with this.
+
+### What happens when I move my legacy Public Gateway to IPAM mode?
+
+We will detach your Public Gateway from all attached Private Networks, and reattach it in IPAM mode. You can expect downtime of about 10-20 seconds. We will ensure that the IP used for the new attachment is the same as the old one.
+
+### My Public Gateway is already in IPAM mode, do I need to take any action?
+
+If you only manage your gateway via the Scaleway console, you do not need to take any action once your gateway is in IPAM mode.
+
+If you have any code or scripts that call v1 of the Scaleway Public Gateways API, you must update these to point towards [v2](TODO) before 1 Oct 2025.
+
+### What if I want to keep using my custom gateway DHCP configuration from v1 of the API?
+
+After version 1 of the Public Gateways API is removed on 1 Oct 2025, these functionalities will no longer be available.
+
+Going forward, we expect users who were previously using custom DHCP with a Public Gateway to move to the standard set-up of IPAM and Private Networks' inbuilt DHCP for private IP assignment. Remember that you can define a [custom CIDR block](/vpc/how-to/create-private-network/#how-to-configure-cidr) for a Private Network at the time of creation, and use [reserved IP addresses](/ipam/how-to/reserve-ip/#how-to-reserve-a-private-ip-address) with IPAM when attaching both standard and custom resources.
+
+### I use Terraform to manage my Public Gateway, what should I do?
+
+If you use Terraform to manage your infrastructure as code, ensure that you are not using any functionality associated with v1 of the API (DHCP objects, DHCP entries or the `address` field). If necessary, modify your templates to reattach your Public Gateways in IPAM mode, and use IPAM functionality to replace any DHCP configurations. Refer to our [Terraform snippets](TODO) for help with this.
+
+### Can't I just wait for Scaleway to force the move to IPAM mode?
+
+After the 1 Oct 2025 we will carry out a forced action which will move all existing legacy Public Gateways to IPAM mode, and we will remove v1 of the Public Gateways API.
+
+We highly recommend that you move to IPAM mode **before** this date, so that you can plan a smooth and synchronized transition at a time that suits you. 
+
+If you still have code or scripts pointing to v1 of the API after the 1 Oct 2025, these will cease to function.
+
+## Further help and support
+
+If you have any questions, get in touch with us on the `#public-gateway` channel on the [Scaleway Slack Community](https://www.scaleway.com/en/docs/tutorials/scaleway-slack-community/), or [open a support ticket](https://console.scaleway.com/support/tickets/create).
+
+The following documentation resources may be useful to you:
+
+- [Public Gateway API Documentation](https://www.scaleway.com/en/developers/api/public-gateway/)
+- [Public Gateway Main Documentation](https://www.scaleway.com/en/docs/network/public-gateways/)
+- [IPAM API Documentation](https://www.scaleway.com/en/developers/api/ipam/)
+- [IPAM Main Documentation](https://www.scaleway.com/en/docs/network/ipam/)

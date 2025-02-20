@@ -1,0 +1,212 @@
+---
+meta:
+ title: Setting up and using the pg_cron extension
+ description: This page explains how to set up and use the pg_cron extension.
+content:
+ h1: Setting up and using the pg_cron extension
+ paragraph: This page explains how to set up and use the pg_cron extension on Scaleway's Managed Databases for PostgreSQL.
+tags: managed-database postgresql pg_cron pg-extensions
+dates:
+ validation: 2025-02-18
+ posted: 2025-02-18
+categories:
+ - managed-databases
+ - postgresql-and-mysql
+---
+
+The pg_cron extension for PostgreSQL is used to execute periodic tasks. You can schedule SQL tasks, such as queries and data imports, using jobs that run at the intervals you set. On a daily, weekly or monthly basis, for example.
+
+The `pg_cron` extension is available with Scaleway Managed Databases for PostgreSQL. The extension is natively loaded in the `shared_preload_libraries` of the Database Instances by default.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A [Database Instance](/managed-databases-for-postgresql-and-mysql/how-to/create-a-database/) running a PostgreSQL engine
+
+## Installing pg_cron
+
+<Message type="important">
+  The `pg_cron` extension can only be installed in the `rdb` database, which is created by default upon Database Instance creation. To run jobs in another database, you can use the [schedule_in_database](#scheduling-jobs-in-other-databases) function.
+</Message>
+
+Run the following command to install the extension:
+
+```sql
+rdb=> CREATE EXTENSION pg_cron;
+CREATE EXTENSION
+```
+
+## Configuring pg_cron
+
+To fully use the extension, you must grant read/write rights to the user who will be running the `pg_cron` functions to manage jobs on the database.
+
+<Message type="note">
+  Refer to the [How to add users to a PostgreSQL or MySQL Database Instance](/managed-databases-for-postgresql-and-mysql/how-to/add-users) documentation for more information.
+</Message>
+
+## Scheduling jobs
+
+Jobs allow you to define the SQL command or task you want to run based on a cron schedule.
+
+To schedule jobs, you can run the following command in the SQL client:
+```sql
+SELECT cron.schedule(
+  '${JOB_NAME}',
+  '${SCHEDULE_SPEC}',
+  $$
+    ${SQL_COMMAND}
+  $$
+);
+```
+
+Replace the variables with the corresponding information:
+
+- `${JOB_NAME}` - set a name for the job
+- `${SCHEDULE_SPEC}` - the schedule specification in [cron format](/serverless-jobs/reference-content/cron-schedules/)
+- `${SQL_COMMAND}` - the SQL command to be executed. Depending on the command, you might need to specify other parameters.
+
+### Examples
+
+**Deleting old data**
+
+You can run the command below to delete old data from the `events` table every Saturday at 3:30am:
+
+```sql
+SELECT cron.schedule('30 3 * * 6', $$DELETE FROM events WHERE event_time < now() - interval '1 week'$$);
+```
+
+**Scheduling a VACUUM job**
+
+You can run the command below to execute the VACUUM task every day at 10:00am.
+
+```sql
+SELECT cron.schedule('nightly-vacuum', '0 10 * * *', 'VACUUM');
+```
+
+## Listing jobs
+
+To list all scheduled jobs, you can run the following command:
+
+```sql
+SELECT * FROM cron.job;
+```
+Each job is represented by a record. You can see the following information in the response:
+
+- `jobid` - a unique job ID
+- `schedule` - the schedule specification in cron format
+- `command` - the SQL command
+- `database`, `username`, `nodename`, `nodeport` - connection details
+- `active` - whether the job is active or not
+- `jobname` - the name of the job
+
+```sql
+-[ RECORD 1 ]-------------------------------------------------------------
+jobid | 1
+schedule | 30 3 * * 6
+command | DELETE FROM events WHERE event_time < now() - interval '1 week'
+nodename | /var/run/postgresql
+nodeport | 5432
+database | rdb
+username | myuser
+active | t
+jobname |
+-[ RECORD 2 ]-------------------------------------------------------------
+jobid | 2
+schedule | 0 10 * * *
+command | VACUUM
+nodename | /var/run/postgresql
+nodeport | 5432
+database | rdb
+username | myuser
+active | t
+jobname | nightly-vacuum
+```
+
+## Unscheduling jobs
+
+To unschedule a job, you can run the following command:
+
+```sql
+SELECT cron.unschedule('${JOB_ID}');
+```
+Replace `${JOB_ID}` with the ID of the job you want to unschedule.
+
+### Examples
+
+To unschedule the jobs set in the previous section, you can run:
+
+```sql
+SELECT cron.unschedule(1);
+```
+
+or
+
+```sql
+SELECT cron.unschedule('nightly-vacuum');
+```
+
+## Scheduling jobs in other databases
+
+To schedule a job in another database, you can use the `schedule_in_database` function.
+
+In the example below we create a job to insert values into another table.
+
+```sql
+SELECT cron.schedule_in_database('job-in-another-db', '0 12 * * *', 'INSERT INTO public.another_db_table values (now())', 'mydb');
+```
+<Message type="note">
+  The `cron.schedule_in_database` function runs jobs as the user who created them. Therefore, you need to connect as said user to execute the job. This function does not allow specifying a different user, as it would require superuser privileges.
+</Message>
+
+
+## Editing jobs
+
+To edit a job, you can use the `alter_job` function.
+
+In the example below we alter an existing job to run in a different database. You must specify the `job_id` and `database`.
+
+```sql
+SELECT cron.alter_job(job_id:=3,database:='anotherdb');
+```
+
+## Cron specifications
+
+Schedules in `pg_cron` use the standard Cron syntax:
+
+```
+┌───────────── min (0 - 59)
+│ ┌────────────── hour (0 - 23)
+│ │ ┌─────────────── day of month (1 - 31) or last day of the month ($)
+│ │ │ ┌──────────────── month (1 - 12)
+│ │ │ │ ┌───────────────── day of week (0 - 6) (0 to 6 are Sunday to
+│ │ │ │ │ Saturday, or use names; 7 is also Sunday)
+│ │ │ │ │
+│ │ │ │ │
+* * * * *
+```
+
+<Message type="tip">
+  Refer to the [Cron schedules reference](/serverless-jobs/reference-content/cron-schedules/) for a detailed description of the cron format and examples.
+</Message>
+
+### How to configure your schedule timezone
+
+The time zone of the `pg_cron` extension can be changed in the advanced settings of the Database Instance. By default, the time zone is set to GMT.
+
+<Message type="note">
+  The `cron.timezone` setting is only available with PostgreSQL 16.
+</Message>
+
+1. Go to the **Advanced settings** of your Database Instance in the Scaleway console.
+2. Click <Icon name="edit" />.
+3. Click **+ Add parameters**.
+4. Select `cron.timezone` in the drop-down.
+5. Enter the time zone of your choice.
+    <Message type="tip">
+      Refer to the [official PostgreSQL documentation](https://www.postgresql.org/docs/current/datatype-datetime.html#DATATYPE-TIMEZONES) for more information about timezone conventions.
+    </Message>
+6. Click <Icon name="validate" /> to validate.
+    <Message type="note">
+      The configuration takes a few seconds to be applied. During this time the Database Instance connection remains uninterrupted. However, you must wait until the new configuration is applied to edit your advanced settings again.
+    </Message>

@@ -1,0 +1,108 @@
+---
+meta:
+  title: Setting up logical replication as a subscriber in PostgreSQL
+  description: Learn how to set up and use logical replication as a subscriber in PostgreSQL to migrate your database with zero downtime
+content:
+  h1: Setting up logical replication as a subscriber in PostgreSQL
+  paragraph: This page explains how to set up and use logical replication as a subscriber in PostgreSQL to migrate your database to Scaleway, with zero downtime and real-time data synchronization
+tags: postgresql logical replication subscriber migration database
+dates:
+  validation: 2025-02-20
+  posted: 2025-02-20
+---
+
+The logical replication of databases as a subscriber is available with [PostgreSQL 16](/managed-databases-for-postgresql-and-mysql/reference-content/pg-version-updates#postgresql-16), which is now supported in Scaleway's Managed Databases for PostgreSQL.
+
+The feature allows you to replicate data from a non-managed database to a Managed Database for PostgreSQL in real-time, without having to replicate the entire database and keep them in sync, without having to take the original database offline or lock it for an extended period.
+
+<Message type="important">
+  At Scaleway we use a public interface to connect to an external database, even when you use a private endpoint. The connection, however, is completely secure as all ports are closed and outgoing data is encrypted. Learn more in the [Limitations section](#limitations) of this page.
+</Message>
+
+Logical replication is especially useful when migrating your databases to Scaleway's Managed Databases.
+
+By setting up the new database as a subscriber to the original database you can ensure:
+    - **Zero-downtime** - Migrate your data without taking the original database offline. Your applications can continue to write data on the original database while the new database is being populated.
+    - **Real-time data synchronization** - The subscriber database receives updates in real-time, ensuring that data is consistent across the two databases.
+    - **Flexible migration windows** - You can choose when to switch your application to the new database, without having to worry about data consistency. Logical replication ensures that the new database is always up-to-date with the latest changes in the original database.
+    - **Easy rollback** - If you encounter issues during migration, such as data corruption and application issues, you can point your application back to the original database. Since the subscriber database constantly keeps a copy of the data in sync with the publisher, you can avoid data loss or inconsistencies.
+
+
+## How to set up the subscription
+
+To be able to create a subscription, you must have the privileges of the `pg_create_subscription` role, as well as CREATE privileges on the current database.
+
+1. Grant `pg_create_subscription` and CREATE privileges to your role of choice. In this example we use `my_replication_user`. Make sure you replace all variables with the information of your databases.
+
+    <Message type="note">
+      You must follow the step below as an admin. Only users with admin rights can grant `pg_create_subscription` to other users. 
+    </Message>
+
+    ```sql
+    GRANT pg_create_subscription TO my_replication_user;
+    GRANT CREATE ON DATABASE my_database TO my_replication_user;
+    ```
+2. Create a publication in the original database to define which tables and schemas will be replicated. In the example below we include all tables in the database.
+    <Message type="tip">
+      Refer to the official [Create Publication](https://www.postgresql.org/docs/16/sql-createpublication.html) PostgreSQL documentation to learn how to detail the specific tables or schemas.
+    </Message>
+
+    ```sql
+    CREATE PUBLICATION my_publication FOR ALL TABLES;
+    ```
+3. Subscribe the subscriber database to the publication created in the previous step. This will create a subscription that connects both databases.
+    <Message type="important">
+      Subscriptions in the same database cannot have the same name.
+    </Message>
+
+    ```sql
+    CREATE SUBSCRIPTION my_subscription
+      CONNECTION 'host=publisher_host port=5432 user=my_replication_user password=my_password dbname=my_database'
+      PUBLICATION my_publication;
+    ```
+4. Run the commands below to respectively grant the user read access to the subscription, and to check its statistics. This helps you make sure the subscription was successful. You can check the number of pending changes and last error message in the output.
+    ```sql
+    GRANT pg_read_all_stats TO my_replication_user;
+    SELECT * FROM pg_stat_subscription;
+    ```
+5. Run the command below to get a table containing data about all subscriptions defined in the database. This data includes the subscription ID, name, owner, and whether the subscription is enabled or not.
+    ```sql
+    SELECT subname, subenabled, subenabled, subslotname, subpublications  FROM pg_catalog.pg_subscription;
+    ```
+    <Message type="tip">
+      Refer to the official [PostgreSQL documentation](https://www.postgresql.org/docs/current/catalog-pg-subscription.html) for more information on the `pg_subscription` catalog.
+    </Message>
+
+
+## Limitations
+
+When creating a subscription from a Scaleway Database Instance to a public IP, the public interface of the Database Instance node is used to connect to the publisher. This might incur in the following consequences:
+
+- If you only have a private endpoint, your Database Instance will still have a public management IP address. The ports are all closed, stopping all connections except the one with the publisher database. All outgoing data is securely encrypted. 
+- If your Database Instance set-up is composed of more than one node, your IP address is subject to change. In case of failover, for example, the IP address connecting to the publisher database will change. We cannot predict the new IP your nodes might take. However, you can use [Scaleway's Autonomous System](https://ipinfo.io/AS12876) to check the number (ASN) of your primary node's IP address, and look up the IP address allocation for the ASN. This can help you predict the IP address of your failover nodes.
+- There is a limit to the number of subscriptions that can be created per Database Instance offer. You can find the table of maximum number of subscriptions per node type below.
+
+| Node Type | Maximum subscriptions |
+| :--- | :--- |
+| db-dev-s | 2 |
+| db-dev-m | 4 |
+| db-dev-l | 8 |
+| db-dev-xl | 12 |
+| db-gp-xs | 16 |
+| db-gp-s | 16 |
+| db-gp-m | 16 |
+| db-gp-l | 16 |
+| db-gp-xl | 16 |
+| db-play2-pico | 2 |
+| db-play2-nano | 4 |
+| db-pro2-xxs | 8 |
+| db-pro2-xs | 16 |
+| db-pro2-s | 16 |
+| db-pro2-m | 16 |
+| db-pro2-l | 16 |
+| db-pop2-2c-8g | 8 |
+| db-pop2-4c-16g | 16 |
+| db-pop2-8c-32g | 16 |
+| db-pop2-16c-64g | 16 |
+| db-pop2-32c-128g | 16 |
+

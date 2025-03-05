@@ -5,118 +5,131 @@ meta:
 content:
   h1: How to configure the DELL PERC H700/H710/H730/H730P RAID controller
   paragraph: This page explains how to configure the DELL PERC H700/H710/H730/H730P RAID controller
-tags: dell perc h700 h710 h730 h730p raid controller dedibox 
+tags: dell perc h700 h710 h730 h730p raid controller dedibox
 dates:
-  validation: 2024-08-19
+  validation: 2025-02-25
   posted: 2021-07-16
 categories:
   - dedibox-servers
 ---
 
 <Macro id="requirements" />
+* A Dedibox account logged into the [console](https://console.online.net)
+* A [Dedibox dedicated server](https://www.scaleway.com/en/dedibox/) with a [DELL PERC H700/H710/H730/H730P](https://i.dell.com/sites/csdocuments/Shared-Content_data-Sheets_Documents/en/perc-technical-guidebook.pdf) RAID controller
 
-- A Dedibox account logged into the [console](https://console.online.net)
-- A [Dedibox dedicated server](https://www.scaleway.com/en/dedibox/) with a [DELL PERC H700/H710/H730/H730P](https://i.dell.com/sites/csdocuments/Shared-Content_data-Sheets_Documents/en/perc-technical-guidebook.pdf) RAID controller
+## Checking the SMART status of a disk
+To check the SMART status of a disk connected to a DELL PERC H700/H710/H730/H730P RAID controller, you can use the `smartctl` tool. 
 
-## How to install the required packages
+1. Install the required packages:
+  ```sh
+  apt-get update && apt-get -y install megaclisas-status megacli && megaclisas-status
+  ```
+2. Run the following command to check the SMART status of all disks:
+  ```sh
+  DEVICE=/dev/sda
+  for i in $(megacli -pdlist -a0 | grep Id | cut -d":" -f2); do
+      echo "============================== $i =============================="
+      smartctl -s on -a -d megaraid,${i} ${DEVICE} -T permissive
+  done
+  ```
+3. *(Optional)* To get more information about a specific disk, you can use the following command:
+  ```sh
+  smartctl -d megaraid,0 -i /dev/sda
+  smartctl -d megaraid,1 -i /dev/sda
+  ```
 
-We recommend using the packages provided by [HWraid](http://hwraid.le-vert.net/) to configure your DELL PERC H700/H710/H730/H730P RAID controller. Install them as follows:
+## Removing a logical volume and taking a disk out of a RAID configuration
 
-### Debian 12 (Bookworm)
+To remove a logical volume and take a disk out of a RAID configuration, you can use the following commands:
+```sh
+megaclisas-status
+megacli -PdList -a0
+megacli -LdPdInfo -a0
+megacli -AdpSetProp -EnableJBOD -0 -a0
+megacli -CfgLdDel -Lall -Force -a0
+megacli -CfgForeign -Clear -a0
+```
+
+After running these commands, you can verify that the disk is no longer part of the RAID configuration using:
 
 ```sh
-sudo echo "deb http://hwraid.le-vert.net/debian bullseye main" >> /etc/apt/sources.list
-sudo apt update
-sudo apt install megaclisas-status
-```
-
-### Debian 11 (bullseye)
-
-```sh
-sudo echo "deb http://hwraid.le-vert.net/debian bullseye main" >> /etc/apt/sources.list
-sudo apt update
-sudo apt install megaclisas-status
-```
-
-### Debian 10 (Buster)
-
-```sh
-sudo echo "deb http://hwraid.le-vert.net/debian buster main" >> /etc/apt/sources.list
-sudo apt update
-sudo apt install megaclisas-status
-```
-
-### Debian 9 (Stretch)
-
-```sh
-sudo echo "deb http://hwraid.le-vert.net/debian stretch main" >> /etc/apt/sources.list
-sudo apt update
-sudo apt install megaclisas-status
-```
-
-### Unbuntu 20.04 (Focal Fossa)
-
-```sh
-sudo echo "deb http://hwraid.le-vert.net/ubuntu focal main" >> /etc/apt/sources.list
-sudo apt update
-sudo apt install megaclisas-status
-```
-
-### Unbuntu 18.04 (Bionic Beaver)
-
-```sh
-sudo echo "deb http://hwraid.le-vert.net/ubuntu bionic main" >> /etc/apt/sources.list
-sudo apt update
-sudo apt install megaclisas-status
-```
-
-### Ubuntu 16.04 (Xenial Xerus)
-
-```sh
-sudo echo "deb http://hwraid.le-vert.net/ubuntu xenial main" >> /etc/apt/sources.list
-sudo apt update
-sudo apt install megaclisas-status
-```
-
-## How to check the status of the RAID controller
-
-Run the following command to check the status of the DELL PERC H700/H710/H730/H730P RAID controller:
-
-```
 megaclisas-status
 ```
 
-An output like the following example displays:
+## Checking a SMART from a disk outside of a RAID volume
+
+To check the SMART status of a disk that is not part of a RAID volume, you can use the same commands as before:
+```sh
+megaclisas-status
 ```
--- Controller informations --
--- ID | Model
-c0 | PERC H710
+This will show you the status of all disks, including those that are not part of a RAID volume.
 
--- Arrays informations --
--- ID | Type | Size | Status | InProgress
-c0u0 | RAID0 | 2728G | Optimal | None
-c0u1 | RAID0 | 2728G | Optimal | None
+## Creating a RAID volume
 
--- Disks informations
--- ID | Model | Status
-c0u0p0 | SEAGATE ST3000NM0023 GS0FZ1Y25K8M | Online, Spun Up
-c0u1p0 | SEAGATE ST3000NM0023 GS0FZ1Y25L0X | Online, Spun Up
+To create a RAID volume, you can use the following commands:
+
+- To create a RAID 0 volume with a single disk:
+  ```sh
+  megacli -CfgLdAdd -r0 [32:1] -a0
+  ```
+- To create a RAID 1 volume with two disks:
+  ```sh
+  megacli -CfgLdAdd -r1 [32:0,32:1] -a0
+  ```
+- After creating the RAID volume, you can verify the configuration using:
+  ```sh
+  megaclisas-status
+  ```
+
+## Adding a disk as a hot spare
+
+To add a disk as a hot spare, you can use the following command:
+```sh
+megacli -PDHSP -Set -PhysDrv [32:X] -aY
 ```
-
-## How to check the status of the disks
-
-Run the following command to check the health status of the disks in your RAID:
-
-```
-DEVICE=/dev/sda
-for i in $(megacli -pdlist -a0 | grep Id | cut -d":" -f2); do
-    echo "============================== $i =============================="
-    smartctl -s on -a -d megaraid,${i} ${DEVICE} -T permissive
-done
-```
-
 <Message type="note">
-  Note that you will need to replace `/dev/sda`with the correct disk that represents your Logical Volume, if you have multiple of them.
+  Replace `X` with the slot number of the disk you want to add as a hot spare, and `Y` with the ID of the RAID volume.
 </Message>
 
+## Putting a disk online/offline
 
+To put a disk online or offline, you can use the following commands:
+```sh
+megacli -PDOnline -PhysDrv [32:X] -a0
+megacli -PDOffline -PhysDrv [32:X] -a0
+```
+<Message type="note">
+Replace `X` with the slot number of the disk you want to put online or offline.
+</Message>
+
+## Removing a disk from an ongoing RAID configuration
+
+To remove a disk from an ongoing RAID configuration, you can use the following commands:
+```sh
+megacli -PDOffline -PhysDrv [32:X] -a0
+MegaCli -PDMarkMissing -PhysDrv [32:X] -a0
+```
+<Message type="note">
+Replace `X` with the slot number of the disk you want to remove.
+</Message>
+
+## Checking RAID rebuilding progress
+
+To check the progress of a RAID rebuild, you can use the following command:
+```sh
+megacli -pdrbld -showprog -physdrv[32:1] -a0
+```
+<Message type="tip">
+  A version with a progress bar is also available:
+  ```sh
+  megacli -pdrbld -progdsply -physdrv[32:1] -a0
+  ```
+</Message>
+
+## Lighting on/off the indicator light on a disk
+
+To light on or off the indicator light on a disk, you can use the following commands:
+```sh
+MegaCli64 -PdLocate start -physdrv[32:1] -a0
+MegaCli64 -PdLocate stop -physdrv[32:1] -a0
+```

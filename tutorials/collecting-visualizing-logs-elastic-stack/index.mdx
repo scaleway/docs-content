@@ -11,17 +11,16 @@ categories:
   - instances
   - elastic-metal
 dates:
-  validation: 2024-08-27
+  validation: 2025-03-06
   posted: 2015-06-10
 ---
 
-The Elastic Stack, formerly known as the ELK Stack, is a powerful suite of open-source tools designed for real-time data search, analysis, and visualization. It offers comprehensive capabilities for collecting, processing, and visualizing large volumes of data.
-Its components are:
+The Elastic Stack, formerly known as the ELK Stack, is a powerful suite of open-source tools designed for real-time data search, analysis, and visualization. It offers comprehensive capabilities for collecting, processing, and visualizing large volumes of data. Its components are:
 
-- **[Elasticsearch](https://www.elastic.co/elasticsearch)** A distributed, RESTful search and analytics engine based on the Lucene library.
-- **[Logstash](https://www.elastic.co/logstash)** A flexible data collection, processing, and enrichment pipeline.
-- **[Kibana](https://www.elastic.co/kibana)** A visualization and exploration tool for analyzing and visualizing data stored in Elasticsearch.
-- **[Beats](https://www.elastic.co/beats/)** Lightweight data shippers for ingesting data into Elasticsearch or Logstash.
+- **[Elasticsearch](https://www.elastic.co/elasticsearch)**: A distributed, RESTful search and analytics engine based on the Lucene library.
+- **[Logstash](https://www.elastic.co/logstash)**: A flexible data collection, processing, and enrichment pipeline.
+- **[Kibana](https://www.elastic.co/kibana)**: A visualization and exploration tool for analyzing and visualizing data stored in Elasticsearch.
+- **[Beats](https://www.elastic.co/beats/)**: Lightweight data shippers for ingesting data into Elasticsearch or Logstash.
 
 <Macro id="requirements" />
 
@@ -30,38 +29,66 @@ Its components are:
 - An [SSH key](/organizations-and-projects/how-to/create-ssh-key/)
 - An [Instance](/instances/how-to/create-an-instance/) or an [Elastic Metal server](/elastic-metal/how-to/create-server/) with at least 4 GB of RAM
 
-### Install Elasticsearch
+## Install Elasticsearch
 
 1. Download and install the Elasticsearch signing key:
    ```bash
    curl -fsSL https://artifacts.elastic.co/GPG-KEY-elasticsearch | gpg --dearmor -o /usr/share/keyrings/elasticsearch-archive-keyring.gpg
    ```
-2. Add the Elasticsearch repository.
+
+2. Add the Elasticsearch repository:
    ```bash
    echo "deb [signed-by=/usr/share/keyrings/elasticsearch-archive-keyring.gpg] https://artifacts.elastic.co/packages/8.x/apt stable main" | tee /etc/apt/sources.list.d/elastic-8.x.list
    ```
-3. Update the `apt` package repositories.
+
+3. Update the `apt` package repositories:
    ```bash
    apt update
    ```
-4. Install Elasticsearch using `apt`.
+
+4. Install Elasticsearch:
    ```bash
    apt install elasticsearch
    ```
-5. Start and enable the Elasticsearch service.
+
+5. Start and enable the Elasticsearch service:
    ```bash
    systemctl start elasticsearch
    systemctl enable elasticsearch
    ```
 
+6. Configure Elasticsearch for production:
+   Modify the `elasticsearch.yml` file to optimize Elasticsearch for production use:
+   ```bash
+   nano /etc/elasticsearch/elasticsearch.yml
+   ```
+
+   Add the following:
+   ```yaml
+   cluster.name: "my-cluster"
+   node.name: "node-1"
+   network.host: 0.0.0.0
+   xpack.security.enabled: true
+   xpack.security.transport.ssl.enabled: true
+   xpack.security.http.ssl.enabled: true
+   xpack.security.http.ssl.keystore.path: /etc/elasticsearch/certs/keystore.p12
+   xpack.security.http.ssl.truststore.path: /etc/elasticsearch/certs/truststore.p12
+   ```
+
+   <Message type="note">
+     Make sure you have SSL certificates set up for secure communication.
+   </Message>
+
+
 ## Install and configure Logstash
 
-1. Using the same repository added for Elasticsearch, you can simply install Logstash:
+1. Install Logstash using the same repository added for Elasticsearch:
    ```bash
    apt install logstash
    ```
 
-2. Once installed, you can create and modify configuration files for Logstash to set up your data pipelines. These are typically found in `/etc/logstash/conf.d/`.
+2. Create and modify configuration files for Logstash:
+   The configuration files for Logstash are typically located in `/etc/logstash/conf.d/`. You can create pipelines to manage your data processing.
 
 3. Start and enable the Logstash service:
    ```bash
@@ -71,7 +98,7 @@ Its components are:
 
 ## Install and configure Kibana
 
-1. Install Kibana using the repository:
+1. Install Kibana:
    ```bash
    apt install kibana
    ```
@@ -82,25 +109,96 @@ Its components are:
    systemctl enable kibana
    ```
 
-3. By default, Kibana is accessible on `http://localhost:5601`. If you need to access it from a remote machine, edit the Kibana configuration file `/etc/kibana/kibana.yml` and set the server host:
+3. Configure Kibana for remote access:
+   By default, Kibana is accessible on `http://localhost:5601`. To make Kibana accessible remotely, edit the Kibana configuration file:
+   ```bash
+   nano /etc/kibana/kibana.yml
    ```
+
+   Change the server host to:
+   ```yaml
    server.host: "0.0.0.0"
    ```
 
-## Secure the Elastic stack
+4. Secure Kibana: 
+   Ensure Kibana uses SSL to encrypt communications by adding SSL certificates in the `kibana.yml` file:
+   ```yaml
+   server.ssl.enabled: true
+   server.ssl.certificate: /etc/kibana/certs/kibana.crt
+   server.ssl.key: /etc/kibana/certs/kibana.key
+   elasticsearch.ssl.certificate: /etc/kibana/certs/kibana.crt
+   elasticsearch.ssl.key: /etc/kibana/certs/kibana.key
+   ```
 
-It is important to secure your ELK Stack, especially if it is exposed to the public internet. You can complete your setup using the following additional resources:
+## Install and configure Filebeat
 
-- [Use a firewal](/tutorials/installation-uncomplicated-firewall/) like `ufw` or `iptables` to restrict access to your Instance.
-- [Secure Elasticsearch](https://www.elastic.co/guide/en/elasticsearch/reference/current/security-minimal-setup.html) using its built-in security features or with plugins.
-- Consider setting up an [HTTPS reverse proxy](/tutorials/nginx-reverse-proxy/) using a third-party web server like Nginx or Apache to access Kibana securely.
+1. Install Filebeat:
+   ```bash
+   apt install filebeat
+   ```
+
+2. Configure Filebeat to ship logs to Elasticsearch:
+   Edit the Filebeat configuration file to point to your Elasticsearch instance:
+   ```bash
+   nano /etc/filebeat/filebeat.yml
+   ```
+
+   Set the output to Elasticsearch:
+   ```yaml
+   output.elasticsearch:
+     hosts: ["http://localhost:9200"]
+   ```
+
+   Alternatively, configure Filebeat to send logs to Logstash:
+   ```yaml
+   output.logstash:
+     hosts: ["localhost:5044"]
+   ```
+
+3. Start and enable the Filebeat service:
+   ```bash
+   systemctl enable filebeat
+   systemctl start filebeat
+   ```
+
+## Secure the Elastic Stack
+
+Securing your Elastic Stack is essential, especially if exposed to the internet. Following are some recommendations:
+
+- Enable built-in security features (as shown above in Elasticsearch and Kibana setup).
+
+- Use a firewall:
+   You can use `ufw` or `iptables` to restrict access to only the necessary IPs:
+   ```bash
+   ufw allow from <your_ip> to any port 9200
+   ufw allow from <your_ip> to any port 5601
+   ```
+
+- Set up an HTTPS reverse proxy:
+   You can secure Kibana by setting up an HTTPS reverse proxy with Nginx:
+   [Set up an HTTPS reverse proxy with Nginx](https://www.scaleway.com/docs/tutorials/nginx-reverse-proxy/).
+
+- Set up TLS/SSL for Elasticsearch and Kibana: Ensure communications are encrypted between components using SSL/TLS as shown above.
+
 
 ## Test the installation
 
-Make sure everything is working:
+After completing the setup, you can verify if everything is working:
 
-- Elasticsearch Run the following command to test your Elasticsearch installation: `curl -X GET "localhost:9200/"`
-- Kibana: Navigate to `http://your_server_ip:5601` in your web browser.
+- Elasticsearch:
+   Run the following command to check Elasticsearch health:
+   ```bash
+   curl -X GET "localhost:9200/_cluster/health?pretty"
+   ```
+
+- Kibana:
+   Navigate to `http://your_server_ip:5601` in your web browser.
+
+- Filebeat:
+   Ensure logs are being shipped by checking the status:
+   ```bash
+   curl -X GET "localhost:5601/api/status"
+   ```
 
 Now, you should have a basic Elastic stack up and running! Adjust configurations as needed for your specific use case and further secure and optimize your setup for production use.
 Refer to the [official Elastic documentation](https://www.elastic.co/guide/index.html) for the most accurate and up-to-date instructions and advanced configuration information.

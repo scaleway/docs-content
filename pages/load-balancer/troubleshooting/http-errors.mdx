@@ -1,0 +1,139 @@
+---
+meta:
+  title: I am experiencing HTTP errors with my Load Balancer
+  description: Troubleshoot HTTP errors that you may experience when accessing applications served via your Load Balancer. Learn how to resolve common problems and get your application back up and running.
+content:
+  h1: I am experiencing HTTP errors with my Load Balancer
+  paragraph: Troubleshoot HTTP errors that you may experience when accessing applications served via your Load Balancer. Learn how to resolve common problems and get your application back up and running.
+tags: load-balancer http-errors bad-request
+dates:
+  validation: 2025-03-06
+  posted: 2025-03-06
+categories:
+  - network
+---
+
+You may experience HTTP errors when attempting to connect to an application served via your Load Balancer. 
+
+This page helps you find solutions to some of these most common errors.
+
+### I'm experiencing a 400 Bad Request error when accessing my application through my Load Balancer
+
+Check if [Proxy Protocol](load-balancer/reference-content/configuring-backends/#proxy-protocol) is enabled on your Load Balancer. If your backend server is not configured to handle Proxy Protocol headers correctly, it may reject the requests. 
+
+Try [disabling Proxy Protocol](/load-balancer/how-to/manage-frontends-and-backends/#how-to-edit-backends-and-health-checks) on your Load Balancer to see if it resolves the issue. 
+
+If the issue is resolved when Proxy Protocol is disabled, [ensure your backend server is correctly configured for Proxy Protocol](/tutorials/proxy-protocol-v2-load-balancer/) before re-enabling.
+
+---
+
+### I'm experiencing a 503 Service Unavailable error when trying to access my application through my Load Balancer (OR GENERALLY UNABLE TO CONNECT TO APP)
+
+- Check the health of backend servers
+- Check Load Balancer is not overloaded and exceeding its bandwidth (Cockpit)
+- Port and protocol configuration (check Load Balancer is forwarding to the right backend port and protocol)
+- Check backend application logs for errors like crashes, timeouts or rate limiting
+- Scaling limits: ensure the backend has enough instances/resources to handle incoming requests
+
+## I'm experiencing SSL protocol or secure connection errors
+
+ERR_SSL_PROTOCOL_ERROR" (Chrome)
+"SSL_ERROR_PROTOCOL_VERSION_ALERT" (Firefox)
+"This site can't provide a secure connection" (Edge)
+OpenSSL/3.0.14: error:0A00010B:SSL routines::wrong version number
+
+Ensure that you have correctly configured a certificate (link to doc)
+Link to SSL offloading/passthrough etc.
+Don't confused proxy protocol and SSL passthrough
+
+## I'm getting HTTP 404: IP not owned by Scaleway
+
+About how you need to use SCW backend servers, or else Multicloud
+
+HTTP Error 400: The Port 80 Frontend Must be Associated to an HTTP Backend  
+
+If you're experiencing issues with your load balancer and receiving the error "HTTP error 400: The port 80 frontend must be associated to an HTTP backend" when trying to obtain an SSL certificate, this troubleshooting guide may help. Common symptoms include errors when trying to access the load balancer or when attempting to obtain an SSL certificate. 
+
+Suggested Solutions:  
+
+    Verify that your backend is configured to use the HTTP protocol. Ensure that the backend is set up to accept HTTP connections from the frontend.
+    Check the frontend configuration: When creating or editing your frontend, make sure it is linked to the correct backend that is configured for HTTP.
+    Create or update the backend: If the backend is not already configured for HTTP, modify or create a new one. When creating a new backend, ensure that the protocol is set to HTTP.
+    Verify the ports: Ensure that the frontend is configured to listen on port 80 and that the backend is configured to use the correct port for your service.
+    Consult the load balancer's documentation for specific instructions on configuring frontends and backends, as well as obtaining SSL certificates.
+
+
+## I'm experiencing a 413 Request Entity Too Large error when sending upload requests through my Load Balancer
+
+If you have a Kubernetes Load Balancer with an Nginx Ingress Controller, you may need to edit the `proxy-body-size`. Replace the value `50m` with teh correct desired value for your use-case.
+
+```
+kubectl edit cm ingress-nginx-controller -n ingress-nginx
+proxy-body-size: "50m"
+```
+
+## I'm experiencing a 503 Service Unavailable error when accessing my application through my Load Balancer, even though the backend server passes health checks 
+
+This issue can occur for several reasons, including:
+
+- **Application does not accept traffic on the expected domain or path**: Health checks generally target a specific endpoint e.g. `/health`, but your application may be rejecting requests on other paths. Test direct access to your backend using the expected request path e.g. with a curl. If your application expects a specific `Host` header, ensure the Load Balancer is configured to 
+
+Issue
+You receive a 503 Service Unavailable error when accessing your application through the Load Balancer, even though the backend server passes health checks.
+
+Possible Causes and Solutions
+1. Application does not accept traffic on the expected domain or path
+Health checks usually target a specific endpoint (e.g., /health), but your application may reject requests to other paths.
+If the application enforces host-based routing, requests from the Load Balancer may not be handled correctly.
+✅ Solution:
+
+Test direct access to your backend using the expected request path:
+sh
+curl -I http://<backend-server-ip>:<backend-port>/<expected-path>
+
+If this request returns 503, check application logs to see why it is rejecting real requests.
+If your application expects a specific Host header, configure the Load Balancer to send it:
+
+sh
+curl -I -H "Host: yourapp.example.com" http://<backend-server-ip>:<backend-port>
+
+2. Rate limiting or connection exhaustion
+The backend may have rate limits, thread limits, or connection pool limits that allow health check requests but block real client traffic.
+Health checks are typically lightweight, so they may not trigger these limits.
+✅ Solution:
+
+Check backend logs for rate-limiting errors (e.g., 429 Too Many Requests or resource exhaustion warnings).
+Increase rate limits or connection limits in your application.
+If using a database, ensure it allows enough connections to handle real traffic.
+3. Protocol mismatch between Load Balancer and backend server
+If the Load Balancer sends HTTP requests but the backend expects HTTPS, it may reject requests while still responding to health checks.
+Similarly, if the backend uses HTTP/2 or WebSockets, ensure the Load Balancer supports it.
+✅ Solution:
+
+Verify the protocol used by the Load Balancer. If the backend requires HTTPS, update the Load Balancer to send HTTPS requests.
+If the backend requires WebSockets or HTTP/2, confirm that the Load Balancer is configured to allow them.
+4. Backend server returns a 503 for real requests
+The health check endpoint may be returning a cached success response while real requests trigger an application failure.
+✅ Solution:
+
+Compare health check behavior with real requests:
+sh
+Copy
+Edit
+curl -I http://<backend-server-ip>:<backend-port>/<expected-path>
+If health checks succeed but real requests fail, investigate backend logs for service errors.
+Check for dependency failures (e.g., database timeouts or API failures).
+5. Load Balancer is overloaded or misconfigured
+The Load Balancer may run out of available connections or use a backend selection policy that allows a server to pass health checks but not receive traffic.
+If connection draining is enabled, some backend instances may be marked as "healthy" but not receiving traffic.
+✅ Solution:
+
+Check if your Load Balancer logs show failed request routing or connection timeouts.
+Ensure that instances in the backend pool are not in a draining state.
+If sticky sessions are enabled, verify that they are routing clients correctly.
+Next Steps
+Enable debug logging on the backend to capture rejected requests.
+Test with a different backend instance to rule out instance-specific issues.
+Check Load Balancer logs for patterns of failed requests.
+
+----

@@ -1,243 +1,209 @@
----
+```yaml
 meta:
-  title: Installing and Configuring Graphite on Ubuntu 20.04
-  description: This tutorial explains how to install and configure Graphite on Ubuntu 20.04
+  title: Installing and Configuring Graphite on Ubuntu 22.04
+  description: This tutorial explains how to install and configure Graphite on Ubuntu 22.04
 content:
-  h1: Installing and Configuring Graphite on Ubuntu 20.04
-  paragraph: This tutorial explains how to install and configure Graphite on Ubuntu 20.04
+  h1: Installing and Configuring Graphite on Ubuntu 22.04
+  paragraph: This tutorial explains how to install and configure Graphite on Ubuntu 22.04
 tags: Graphite Ubuntu
   - kubernetes
   - instances
   - elastic-metal
 dates:
-  validation: 2024-08-27
+  validation: 2025-03-06
   posted: 2018-08-06
----
+```
 
-In this tutorial, you will find a comprehensive guide to understanding and using Graphite, a widely-used monitoring tool. Graphite serves two primary functions:
+Graphite is a popular tool for monitoring and visualizing time-series data. It performs two main functions:
 
-1. **Efficient Time-Series Data Storage:** Graphite excels in storing time-related data efficiently, ensuring minimal resource consumption while retaining data integrity.
-2. **Flexible Visualization and Data Manipulation:** It provides a robust interface for visualizing stored data and offers the flexibility to perform mathematical operations such as summation, grouping, and scaling in real time.
+1. **Efficient Time-Series Data Storage**: Graphite stores time-related data with minimal resource usage and ensures data integrity.
+2. **Flexible Visualization and Data Manipulation**: It allows you to visualize the stored data and perform mathematical operations (like sum, scaling, or grouping) in real-time.
 
-Throughout this tutorial, we will dive into the technical aspects of Graphite, allowing you to discover its capabilities effectively for your monitoring needs.
+This tutorial provides the steps needed to install and configure Graphite on **Ubuntu 22.04** and get started with monitoring and visualizing your metrics.
 
 <Macro id="requirements" />
 
-- A Scaleway account logged into the [console](https://console.scaleway.com)
-- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- An [SSH key](/organizations-and-projects/how-to/create-ssh-key/)
-- An [Instance](/instances/how-to/create-an-instance/) running Ubuntu 20.04 LTS
-- A valid [API key](/iam/how-to/create-api-keys/)
-- `sudo` privileges or access to the root user
+- A **Scaleway account** logged into the [console](https://console.scaleway.com)
+- **Owner** status or **IAM permissions** that allow performing actions in the intended Organization
+- An **SSH key** for server access
+- An **Ubuntu 22.04 LTS** instance up and running
+- **API key** for interacting with Scaleway’s services
+- **`sudo` privileges** or root user access to the system
 
 ## Installing Graphite
 
-1. Graphite and the required tools can be installed easily via apt. Update the apt cache and upgrade the packages already installed on the system:
+1. Update the system to make sure all packages are up to date:
+    ```bash
+    sudo apt update && sudo apt upgrade -y
     ```
-    apt-get update && apt-get upgrade -y
-    ```
-2. Install Graphite:
-    ```
-    apt-get install graphite-web graphite-carbon
+
+2. Install the required packages for Graphite:
+    ```bash
+    sudo apt install -y graphite-web graphite-carbon
     ```
 
 ## Configuring the Graphite web application
 
-1. Open the configuration file in which you have to make the modifications explained afterward:
+1. **Edit the configuration file** for the web interface:
+    ```bash
+    sudo nano /etc/graphite/local_settings.py
     ```
-    nano /etc/graphite/local_settings.py
+
+2. Set a `SECRET_KEY` to secure Graphite (you can generate a secure key online or use `openssl`):
+    ```python
+    SECRET_KEY = 'your_generated_secure_key'
     ```
-2. Set a `SECRET_KEY` that will be used as a salt when creating hashes. Uncomment the line and set it to secure key:
-    ```
-    SECRET_KEY = 'a_salty_string'
-    ```
-3. Uncomment the `TIME_ZONE` parameter and configure it to your local [time-zone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones):
-    ```
+
+3. Set the correct `TIME_ZONE` (adjust to your local timezone, e.g. `Europe/Paris`):
+    ```python
     TIME_ZONE = 'Europe/Paris'
     ```
+
 4. Save the file and quit the editor.
-5. Synchronize the database to create the required database layout:
-    ```
-    graphite-manage migrate
+
+5. Migrate the database to set up the initial database schema:
+    ```bash
+    sudo graphite-manage migrate
     ```
 
-## Configuring Carbon
+## Configuring Carbon (storage backend)
 
-As the database is ready now, continue with the configuration of Carbon, the storage backend of Graphite.
+1. Edit the Carbon configuration to ensure it starts on boot:
+    ```bash
+    sudo nano /etc/default/graphite-carbon
+    ```
 
-1. Open the service configuration file with a text editor:
-    ```
-    nano /etc/default/graphite-carbon
-    ```
-2. There is only one configuration parameter in the file, to make sure Carbon starts at boot, change the value to `true`.
-    ```
+2. Change the `CARBON_CACHE_ENABLED` option to `true`:
+    ```bash
     CARBON_CACHE_ENABLED=true
     ```
-3. Save the file and quit the Editor once you have changed the value.
-4. Open the Carbon configuration file:
+
+3. Save and quit the editor.
+
+4. Configure Carbon settings for data retention:
+    ```bash
+    sudo nano /etc/carbon/carbon.conf
     ```
-    nano /etc/carbon/carbon.conf
-    ```
-5. Enable log rotation by setting the following value to true:
-    ```
+
+5. Set **log rotation** to `True` for better system management:
+    ```bash
     ENABLE_LOGROTATION = True
     ```
-6. Save the file and quit the Editor once you have changed the value.
 
-## Configuring Storage Schemas
+6. Save and quit.
 
-1. Open the storage schemas file. It contains information about how long and how detailed values should be stored:
-    ```
-    nano /etc/carbon/storage-schemas.conf
-    ```
-2. The content of the file will look like this example:
-    ```
-    [carbon]
-    pattern = ^carbon\.
-    retentions = 60:90d
+## Configuring storage schemas
 
-    [default_1min_for_1day]
-    pattern = .*
-    retentions = 60s:1d
+1. Open the storage schemas file to adjust retention policies:
+    ```bash
+    sudo nano /etc/carbon/storage-schemas.conf
     ```
 
-    By default two sections are defined in the file:
-
-      - The first one is to decide what to do with data coming from Carbon itself, as it is configured by default to store some of its own performance metrics.
-      - The second one is a catch-all section that applies to any data that hasn't been matched by any other section. It has to remain always the last section of the file.
-
-    Each section is defined by section headers, namely the words in the brackets.
-    Below each section header, a pattern definition and retention policy are defined.
-
-    The pattern definition is a regular expression, used to match any information sent to Carbon. All information sent to Carbon includes a metric name, which is checked by the pattern definition. In the first section, all metrics in question start with the string "carbon.".
-
-    The retention policy is defined by sets of numbers, consisting of a metric interval (defining how often a metric is recorded), followed by a colon and the storage duration of these values. It is possible to define multiple sets of retention policies, separated by commas.
-3. Define a new retention policy that is triggered by a "test." pattern and will be used later:
-    ```
+2. Update the file to include your custom retention settings. Here’s an example:
+    ```bash
     [test]
     pattern = ^test\.
     retentions = 10s:10m,1m:1h,10m:1d
     ```
 
-    <Message type="note">
-      Remember to place the policy **before** the catch-all block in the configuration file.
-    </Message>
+    This configuration stores the data with varying levels of detail, from 10-second intervals to 10-minute intervals, depending on the data's age.
 
-    This section will store the data it collects three times with different levels of detail. The first collection `10s:10m` will create a data point every ten seconds and data is stored for only 10 minutes.
-
-    The second collection `1m:1h` will create a data point every minute by gathering all the data from the past minute from the first collection. The information in the data point is aggregated by averaging the points (six points, as the first collection creates a point every 10 seconds). Data will be stored in this collection within one hour.
-
-    The last collection `10m:1d` will make a data point every 10 minutes by aggregating the information gathered from the second collection in the same way. Data will be stored in this collection for one day.
-
-    Graphite returns the data from the most detailed collection that measures the requested time frame when asking for information. This means:
-      - If metrics for the past 5 minutes will be requested, Graphite will return information from the first collection.
-      - If metrics for the past 50 minutes will be requested, Graphite will return information from the second collection.
-4. Save and close the file when you have finished editing it.
+3. Save and close the file.
 
 ## Defining storage aggregation methods
 
-To gather accurate metrics, it is essential to understand the way Carbon decides when it crunches detailed information into a generalized number.
-This happens whenever Graphite converts more detailed metrics into less detailed ones, like in the second and third collections in the test schema above.
+To accurately aggregate your data, you can modify how Graphite aggregates metrics:
 
-The default behavior is to get the average value when aggregating. This means unlike the most detailed information in the first collection, information is less accurate in the second and third collections.
+1. Copy the example configuration to the correct directory:
+    ```bash
+    sudo cp /usr/share/doc/graphite-carbon/examples/storage-aggregation.conf.example /etc/carbon/storage-aggregation.conf
+    ```
 
-This may not always be useful though. For example, to count up the total number of times an event occurred over different periods of time it is not useful to average them but to count each event.
+2. Edit the aggregation file:
+    ```bash
+    sudo nano /etc/carbon/storage-aggregation.conf
+    ```
 
-It is possible to define the way Graphite aggregates metrics with a file called `storage-aggregation.conf`.
-
-1. Copy the file from the examples directory to the actual configuration directory:
-    ```
-    cp /usr/share/doc/graphite-carbon/examples/storage-aggregation.conf.example /etc/carbon/storage-aggregation.conf
-    ```
-2. Open the file in a text editor:
-    ```
-    nano /etc/carbon/storage-aggregation.conf
-    ```
-3. You will see a file similar to this content:
-    ```
+3. Adjust the `aggregationMethod` to suit your data collection needs (e.g., `sum` for event counts, `average` for metrics like temperature):
+    ```bash
     [min]
     pattern = \.min$
     xFilesFactor = 0.1
     aggregationMethod = min
     ```
 
-    It looks similar to the previous file, and the section name and pattern are exactly the same as in the storage-schemas file.
+4. Save and close the file.
 
-    The `xFilesFactor` is what we will take a closer look at. It allows specifying the minimum percentage of values that Carbon must have to create an aggregated data-point. For example, if the value is set to 0.5, it requires that 50% of the more detailed data points be available to create an aggregated point.
-
-    This can be useful to avoid creating data-points misrepresenting the actual situation.
-
-    `aggregationMethod` defines the way data is recorded. Possible values are `average`, `sum`, `last`, `max`, and `min`. It is important to choose the correct value to avoid that your data will be recorded inaccurately. The correct selection depends on the kind of metrics that you are tracking.
-4. Once you have edited the file to your needs, save and close the file.
-5. Start Carbon by typing:
-    ```
-    service carbon-cache start
+5. Start the Carbon service to begin storing and aggregating data:
+    ```bash
+    sudo service carbon-cache start
     ```
 
 ## Installing and configuring Apache
 
-To use the web interface of Graphite, a web server is required. The software comes with a pre-defined configuration for Apache, making configuration pretty easy.
+To access the Graphite web interface, you need a web server. Here, we'll use **Apache**.
 
-1. Install the Apache web server and the required module:
+1. Install Apache and the required modules for Python 3:
+    ```bash
+    sudo apt install -y apache2 libapache2-mod-wsgi-py3
     ```
-    apt-get install apache2 libapache2-mod-wsgi-py3
+
+2. Disable the default site to prevent conflicts:
+    ```bash
+    sudo a2dissite 000-default
     ```
-2. Disable the default site of Apache, as it won't be needed:
+
+3. Copy the Graphite Apache configuration:
+    ```bash
+    sudo cp /usr/share/graphite-web/apache2-graphite.conf /etc/apache2/sites-available/
     ```
-    a2dissite 000-default
+
+4.Enable the Graphite site:
+    ```bash
+    sudo a2ensite apache2-graphite
     ```
-3. Copy the Apache configuration file of Graphite into the available sites directory of Apache:
+
+5. Reload Apache to apply changes:
+    ```bash
+    sudo service apache2 reload
     ```
-    cp /usr/share/graphite-web/apache2-graphite.conf /etc/apache2/sites-available
-    ```
-4. Enable the Graphite site:
-    ```
-    a2ensite apache2-graphite
-    ```
-5. Reload the configuration of Apache:
-    ```
-    service apache2 reload
-    ```
-6. Check if the web interface is working by pointing your browser to `http://YOUR_SERVERS_IP`. The following interface will be visible:
-    <Lightbox src="scaleway-graphite-interface.webp" alt="" />
+
+6. Verify the web interface by opening your browser and navigating to `http://YOUR_SERVER_IP`.
 
 ## Discovering the web interface
 
-1. Login by clicking on the **Login-Button** on the top of the page. Enter the username and password that you have set when you have synchronized the database. In case you do not remember these credentials or if you want to add another superuser, run the following command to create a new user:
-    ```
-    graphite-manage createsuperuser
-    ```
-2. You will notice a menu on the left of the Screen. Click **carbon** to see the metrics that are collected by Graphite. Currently, you will only see the data the application is gathering about its performance:
-    <Lightbox src="scaleway-graphite-metrics.webp" alt="" />
-3. It is also possible to create dashboards from the data Graphite collects to have an overview of the different metrics:
-    <Lightbox src="scaleway-graphite-dashboard.webp" alt="" />
-
-## Feeding data to graphite
-
-Graphite is very flexible when it comes to the origin of data. There are three main methods for sending data to Graphite: [Plaintext](https://graphite.readthedocs.io/en/latest/feeding-carbon.html#the-plaintext-protocol), [Pickle](https://graphite.readthedocs.io/en/latest/feeding-carbon.html#the-pickle-protocol), and [AMQP](https://graphite.readthedocs.io/en/latest/feeding-carbon.html#using-amqp).
-
-1. Previously a `test` block has been created in the storage-schemas file. It will be used now to send some data to Graphite from a terminal.
-2. Type the following command in a terminal. You can replace the value `42` with some different numbers to see what it does:
-    ```
-    echo "test.count 42 `date +%s`" | nc -q0 localhost 2003
+1. Log into Graphite using the credentials you set during migration, or create a new superuser if needed:
+    ```bash
+    sudo graphite-manage createsuperuser
     ```
 
-    Metric messages need to contain a metric name, a value, and a timestamp.
+2. Access your **carbon metrics** from the menu on the left to view data collected by Graphite.
 
-    The example feeds the storage schema `test` with the metric `count` and the value `42`. To get the timestamp, the `date` command is used.
-3. Go back to the Graphite Web Interface and reload it. The new storage scheme **test** will appear in the menu.
-4. Set the time range to a few minutes, by clicking on the _clock-icon_:
-    <Lightbox src="scaleway-graphite-timerange.webp" alt="" />
-5. The values that you have sent will appear in the graph:
-    <Lightbox src="scaleway-graphite-testcount.webp" alt="" />
-6. Wait for 15 minutes and refresh the graph by setting the time frame to the past 15 minutes. The graph will look different:
-    <Lightbox src="scaleway-graphite-testcount2.webp" alt="" />
+3. Create **dashboards** to monitor various metrics and visualize your data.
 
-This is because our first collection does not store data for 15 minutes and Graphite will look into the second collection for rendering the graph.
+## Feeding data to Graphite
 
-As the data was sent with a _count_ metric, Graphite adds up the values in the larger intervals instead of averaging them. It is therefore essential to choose the right metric for each use case.
+Now that Graphite is set up, you can send data to it. For simplicity, use the **Plaintext protocol** to send data directly from the terminal:
 
-<Message type = "note">
-  - Pushing Content from a terminal is not the usual way to send data to Graphite. Instead, you will use a tool to automatize the collection of data.
-  - A complete list of tools that work with Graphite is available in the [official documentation](https://graphite.readthedocs.io/en/latest/tools.html).
-</Message>
+1. Send test data using the following command:
+    ```bash
+    echo "test.count 42 $(date +%s)" | nc -q0 localhost 2003
+    ```
+
+    This sends a metric named `test.count` with the value `42`.
+
+2. Refresh the Graphite interface and see your new data displayed under the `test` schema.
+
+3. Adjust the time range in Graphite to see how the data appears over different periods.
+
+## Conclusion
+
+You have now successfully installed and configured Graphite on **Ubuntu 22.04**. You've learned how to:
+
+- Set up the Graphite web application and configure the backend with Carbon.
+- Set data retention policies and aggregation methods.
+- Feed test data into Graphite and visualize it through the web interface.
+
+For production environments, consider using tools to automate data collection, as sending metrics via the terminal is not recommended for long-term use.
+
+For more details, refer to the [official Graphite documentation](https://graphite.readthedocs.io/en/latest/).

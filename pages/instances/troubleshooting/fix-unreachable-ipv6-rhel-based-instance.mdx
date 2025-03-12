@@ -7,78 +7,84 @@ content:
   paragraph: This page helps recover or avoid unreachable IPv6 Instances after transitioning to routed IP
 tags: centos-stream rockylinux almalinux network-manager ipv6 routed ip
 dates:
-  validation: 2024-09-02
+  validation: 2025-03-11
   posted: 2023-11-16
 categories:
   - compute
 ---
 
-RHEL-based Instances created before November 15 2023 require a NetworkManager configuration that enables correct IPv6 configuration, after a transition to routed IP is performed. If your Instance is configured only with an IPv6 address, it will become unreachable after the migration. It is important to add the NetworkManager configuration so IPv6 configuration remains correct.<br />
+## Problem
+
+RHEL-based Instances created before November 15 2023 require a NetworkManager configuration that enables correct IPv6 configuration, after a transition to routed IP is performed. If your Instance is configured only with an IPv6 address, it will become unreachable after the migration. It is important to add the NetworkManager configuration so IPv6 configuration remains correct. 
 
 The affected O/S distributions are:
 
 - CentOS Stream versions 8 and 9
 - RockyLinux versions 8 and 9
 - AlmaLinux versions 8 and 9
-- Fedora versions 37 and 38
+- Fedora versions 37 and 38.
 
 <Message type="note">
-  CentOS 7.9 is not concerned by this issue as it does not support routed IP.
+  CentOS 7.9 is not concerned by this issue, as it does not support routed IP.
 </Message>
 
-<Message type="note">
-  This guide addresses specific issues related to RHEL-based Instances after transitioning to routed IP. For general information on routed IPs and migration procedures, refer to our [main migration guide](/instances/how-to/migrate-routed-ips/) and the [related FAQ](/faq/instances/#are-there-any-limitations-on-ip-autoconfiguration-with-the-routed-ip-feature).
-</Message>
+This guide addresses specific issues related to RHEL-based Instances after transitioning to routed IP.
+For general information on routed IPs and migration procedures, refer to our [main migration guide](/instances/how-to/migrate-routed-ips/) and the [related FAQ](/faq/instances/#are-there-any-limitations-on-ip-autoconfiguration-with-the-routed-ip-feature).
 
-## Your Instance has not been migrated to routed IP yet
+## Cause
+
+This issue is caused by a missing NetworkManager configuration for IPv6 address generation mode (`ipv6.addr-gen-mode=0`) on RHEL-based Instances.
+
+## Possible solution
+
+There are two scenarios to consider, depending on whether your Instance has been migrated to routed IP or not.
+
+### Your Instance has not been migrated to routed IP yet
 
 Connect to your Instance and execute the following command as `root` user to add the required NetworkManager option:
-```
+```bash
 cat << EOF > /etc/NetworkManager/conf.d/00-scaleway.conf
 [connection]
 # The value 0 stands for eui64 -- see nm-settings-nmcli(5)
 ipv6.addr-gen-mode=0
 EOF
 ```
+### Your Instance has been moved to routed IP
 
-## Your Instance has been moved to routed IP
+If your Instance has been moved to routed IP and you have IPv4 connectivity, add the NetworkManager configuration as outlined in the previous section. After the next reboot, you will recover IPv6 connectivity while IPv4 configuration will remain untouched.  
 
-If your Instance has been moved to routed IP and you have IPv4 connectivity, add the NetworkManager configuration as outlined in the previous section. After the next reboot, you will recover IPv6 connectivity while IPv4 configuration will remain untouched
+#### You only have IPv6 configured so you cannot connect to the Instance anymore
 
-### You only have IPv6 configured so you cannot connect to the Instance anymore
+Two reboots of your Instance will be required in order to recover IPv6 connectivity. If you are in this situation, you need to temporarily add an IPv4 address to connect to your Instance in order to add the NetworkManager configuration.
 
-  <Message type="important">
-    Two reboots of your Instance will be required in order to recover IPv6 connectivity.
-  </Message>
-
-If you are in this situation, you need to temporarily add an IPv4 address to connect to your Instance in order to add the NetworkManager configuration.
-
-```
+```bash
 scw instance server list
 ID            NAME    TYPE    STATE     ZONE      PUBLIC IP           PRIVATE IP  TAGS  IMAGE NAME          ROUTED
 {Instance_ID} rocky8  DEV1-S  running   fr-par-2  2001:bc8:1210:26a:dc00:ff:fe23:ab83  - [] RockyLinux 8     true
-
 scw instance ip create type=routed_ipv4 server={Instance_ID}
 scw instance server reboot {Instance_ID}
-
 ```
 Once the reboot is completed, list your IP addresses and identify the IPv4 address attached to your Instance:
-```
+
+```bash
 $ scw instance ip list
 ID                 ADDRESS         PREFIX                  TYPE         REVERSE  PROJECT       SERVER ID     SERVER NAME  TAGS  ZONE
 {IPv6_address_ID}  -               2001:bc8:1210:26a::/64  routed_ipv6  -        {project id}  {project id}  rocky8       []    fr-par-2
 {IPv4_address_ID}  51.159.143.128  -                       routed_ipv4  -        {project id}  {project id}  rocky8       []    fr-par-2
 ```
 You can now connect to your Instance with the IPv4 address to make the NetworkManager configuration change:
-```
+
+```bash
 ssh root@51.159.143.128
 cat << EOF > /etc/NetworkManager/conf.d/00-scaleway.conf
 [connection]
 ipv6.addr-gen-mode=0
 EOF
 ```
+
 Once modified, reset your Instance to its prior configuration. It is necessary to first detach the IPv4 address before attaching the IPv6 address.
-```
+
+```bash
 scw instance server standby {Instance_ID}
 scw instance server update {Instance_ID} ip=none
 scw instance server update {Instance_ID} ip={IPv6_address_ID}
@@ -87,11 +93,18 @@ scw instance ip delete {IPv4_address_ID}
 ```
 
 You can now connect using your IPv6 address:
-```
+
+```bash
 ssh root@2001:bc8:1210:26a:dc00:ff:fe23:ab83
 Warning: Permanently added '2001:bc8:1210:26a:dc00:ff:fe23:ab83' (ED25519) to the list of known hosts.
 Activate the web console with: systemctl enable --now cockpit.socket
-
  Last login: Wed Nov 15 16:53:09 2023 from 51.159.46.153
  [root@rocky8 ~]#
 ```
+
+## Going further
+For general information on routed IPs and migration procedures, refer to our [main migration guide](/instances/how-to/migrate-routed-ips/) and the [related FAQ](/faq/instances/#are-there-any-limitations-on-ip-autoconfiguration-with-the-routed-ip-feature). If you still encounter issues, please provide the following information when creating a support ticket:
+- Instance ID
+- Operating System version
+- Current IP configuration
+- Steps taken to resolve the issue

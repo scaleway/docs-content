@@ -1,0 +1,193 @@
+---
+meta:
+  title: Build and deploy an MkDocs static website with GitHub Actions CI/CD
+  description: Learn how to build and deploy an MkDocs site using GitHub Actions for CI/CD automation. Streamline your workflow with this step-by-step guide.
+content:
+  h1: Build and deploy an MkDocs static website with GitHub Actions CI/CD
+  paragraph: Learn how to build and deploy an MkDocs site using GitHub Actions for CI/CD automation. Streamline your workflow with this step-by-step guide.
+categories:
+  - object-storage
+tags: mkdocs-deployment deploy-mkdocs-site mkdocs-automation static-site mkdocs-ci-cd github-workflow-mkdocs
+dates:
+  validation: 2025-03-13
+  posted: 2025-03-13
+---
+
+This tutorial is the second in a series on building and deploying websites using the Scaleway ecosystem. In the [first tutorial](/tutorials/using-bucket-website-with-mkdocs/), we covered how to configure your website. Now, we will walk you through the process of building and deploying it using GitHub Actions CI/CD, the [Object Storage bucket website](/object-storage/concepts/#bucket-website) feature, and MkDocs.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Created a bucket](/object-storage/how-to/create-a-bucket/) and [enabled the bucket website feature](/object-storage/how-to/use-bucket-website/)
+- [Created a GitHub repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/creating-a-new-repository) containing Markdown files that will be used to generate documentation
+- Admin rights on the GitHub repository to create secrets for storing API keys and other variables
+- [Installed Python](https://www.python.org/downloads/)
+- [Installed pip](https://pip.pypa.io/en/stable/installation/)
+- [Installed MkDocs](https://www.mkdocs.org/user-guide/installation/#installing-mkdocs) locally
+- Followed [our MkDocs tutorial](/tutorials/using-bucket-website-with-mkdocs/) or created an MkDocs project
+
+## Setting up your MkDocs project
+
+1. Access the repository of your MkDocs project and make sure that the folder containing your Markdown files is named `docs`.
+2. In your `mkdocs.yml` file, add the following content. Make sure you replace `your-website-url` with your website's URL, `your-repository` with the name of your GitHub repository, and `username/your-repository/` with your GitHub username and repository.
+        ```
+        site_url: https://your-website-url.s3-website.fr-par.scw.cloud
+        repo_url: https://github.com/your-repository/
+        repo_name: username/your-repository/
+        ```
+3. [Preview your MkDocs project](/tutorials/using-bucket-website-with-mkdocs/#preview-your-website) locally. Make sure your website's content displays as expected and that there are no broken links.
+4. Run `mkdocs build` to generate your project's static pages. This will create a folder named `site` in your repository.
+5. [Deploy](/tutorials/using-bucket-website-with-mkdocs/#deploy-your-website) your website.
+
+## Configuring an IAM application and policy
+
+1. [Create an IAM application](/iam/how-to/create-application/). For the purpose of this documentation, we are naming our application `doc website GitHub Actions`. This application will allow GitHub Actions to interact with your Object Storage bucket.
+2. [Create an IAM policy](/iam/how-to/create-policy/) and select **Application** in the **Select a principal** drop-down.
+3. Select your application (`doc website GitHub Actions`) in the **Select or type an application drop-down**, then click **Add rules**.
+4. Select the **Access to resources** [scope](/iam/concepts/#scope), select the Scaleway Project containing your bucket in the drop-down, then click **Validate**. You are prompted to add permission sets.
+5. Click **Storage** under the **Products** section, select the `ObjectStorageFullAccess` permission set, and click **Validate**.
+6. Click **Create policy**.
+
+## Adding statements to your bucket policy
+
+Statements allow you to define who can perform what actions on your bucket. In this section, we will add a statement to allow your IAM application to push content to your bucket, and
+another one that grants public read access to your website's content.
+
+1. From the Scaleway console side-menu, click **Storage**, then click **Object Storage**.
+2. Click your bucket, then click the **Bucket settings** tab.
+3. Click **View policy details** in the **Bucket policy** section. You are redirected to the **Bucket policy information** page.
+4. Click **Edit policy**. For the purpose of this documentation, we are choosing the **policy generator** method to add [statements](/object-storage/api-cli/bucket-policy/#statement).
+5. Tick the **Maintain access to bucket** checkbox.
+6. Click **+ Add statement**. We are defining the statement to allow your IAM application to push content to your bucket:
+
+    - Enter a unique statement ID describing the purpose of the statement. For example `Allow IAM app to push content`.
+    - Select `Applications` in the **Principals** drop-down.
+    - Select your IAM application (`doc website GitHub Actions`) in the **Applications** drop-down.
+    - Select `s3:PutObject` in the **Actions** drop-down.
+    - Enter `*` in the the **Resource** field.
+
+7. Click **+ Add statement** again. We are defining the statement that grants public read access to your website's content:
+
+    - Enter a unique statement ID describing the purpose of the statement. For example `Grant public read access to website`.
+    - Select `All principals (*)` in the **Principals** drop-down.
+    - Select `s3:GetObject` in the **Actions** drop-down.
+    - Enter `*` in the the **Resource** field. This allows anyone to read objects from your bucket.
+8. Click **Save changes**.
+
+## Setting up your GitHub repository
+
+In this section, we will configure a GitHub Actions workflow to automatically build and deploy your documentation.
+
+1. Access your GitHub repository and create a folder named `.github`.
+2. Create a folder named `workflows` inside `.github`.
+3. Create a file named `deploy-docs.yml` inside `workflows`.
+          The architecture of your repository should look like the following:
+          ```
+            documentation-website-repository/
+            └─ .github/
+            └─ workflows/
+                └─ deploy-docs.yml
+          ```
+4. Paste the following template into `deploy-docs.yml` and save and merge your changes.
+
+```bash
+name: Build and push website documentation
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - main
+      - master
+permissions:
+  contents: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: actions
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Pull Material for MKdocs image and build doc
+        run: |
+          docker pull squidfunk/mkdocs-material
+          docker run --rm -i -v ${PWD}:/docs squidfunk/mkdocs-material build
+      - name: Download and set up AWS CLI
+        run: |
+          sudo apt update
+          sudo apt install curl unzip -y
+          curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64-2.22.20.zip" -o "awscliv2.zip"
+          unzip awscliv2.zip
+          sudo ./aws/install --update
+      - name: Set up AWS credentials
+        env:
+          DOC_ACCESS_KEY: ${{ secrets.DOC_ACCESS_KEY }}
+          DOC_SECRET_KEY: ${{ secrets.DOC_SECRET_KEY }}
+        run: |
+          aws configure set aws_access_key_id $DOC_ACCESS_KEY
+          aws configure set aws_secret_access_key $DOC_SECRET_KEY
+          aws configure set region fr-par
+      - name: Upload file to Scaleway Object Storage
+        env:
+          DOC_BUCKET_NAME: ${{ secrets.DOC_BUCKET_NAME }}
+          DOC_S3_ENDPOINT: ${{ secrets.DOC_S3_ENDPOINT }}
+        run: |
+          aws s3 cp --recursive ./site/ s3://$DOC_BUCKET_NAME --endpoint-url $DOC_S3_ENDPOINT
+```
+
+## Adding your secrets in GitHub
+
+In this section we will be adding the following values (secrets) in our GitHub repository. This will alloy the GitHub Actions workflow to access your bucket using the information in the `deploy-docs.yml` file.
+
+- `DOC_ACCESS_KEY`: Your Scaleway API access key.
+- `DOC_SECRET_KEY`: Your Scaleway API secret key.
+- `DOC_BUCKET_NAME`: The name of your Scaleway bucket.
+- `DOC_S3_ENDPOINT`: The Scaleway endpoint of your bucket's region. For example, if your bucket is located in `FR-PAR`, the endpoint is `https://s3.fr-par.scw.cloud/`.
+
+1. Access your GitHub repository.
+2. Click the **Settings** tab.
+3. Click the **Secrets and varaibles** section, then click **Actions**. You are redirected to the **Secrets** tab.
+4. Click **New repository secret**.
+5. Enter a name and a secret for each of the values listed above. For example, enter `DOC_ACCESS_KEY` in the **Name** field, and `SCWXXXXXXXXXXXXXXXXX` in the **Secret** field.
+6. Click **Add secret** and repeat the operation for the other 3 secrets.
+
+
+## Deploying your documentation
+
+1. Make sure that the **only action** in the statement to grant read access to your bucket is `s3:GetObject`. Your statement should look like the following:
+    ```
+    {
+      "Sid": "Grant read access to website",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:GetObject",
+      "Resource": "name-of-your-bucket/*"
+    },
+    ```
+2. Access your GitHub repository
+3. Click the **Actions** tab. The name of your workflow (`Build and push website documentation to S3`) should display under **All workflows**.
+4. Click the name of your workflow, then click the **Run workflow** drop-down. You are prompted to select a branch from which to run the workflow.
+
+    | **Run workflow from `main` if**                                     | **Run workflow from other branches if** |
+    |---------------------------------------------------------------------|-------------------------------------------|
+    | You want to deploy an official documentation to production.         | You need to test documentation changes before merging. |
+    | The documentation update is final and reviewed.                     | You are working on a feature, fix, or draft documentation update. |
+    | The main branch is the source of truth for published documentation. | You want to generate a preview or staging deployment. |
+    | The workflow is configured to push updates to a live website        | The workflow includes validation checks like linting, broken link detection, or build testing. |
+    | The changes need to be immediately available to users.              | You are collaborating on documentation changes that require review before merging. |
+
+5. Click **Run workflow**.
+
+GitHub Actions will:
+
+- build your MkDocs website,
+- push the content to your Scaleway Object Storage bucket, and
+- make your documentation accessible via the configured bucket URL.
+
+## Going further
+
+If you expect high traffic, consider using our [Edge Services](/edge-services/quickstart/) solution for caching.
+
+If you have a custom domain, you can link it to your documentation website in your `mkdocs.yml` file.

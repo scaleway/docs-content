@@ -1,0 +1,140 @@
+---
+meta:
+  title: Understanding policy conditions
+  description: Detailed information on policy conditions within Scaleway IAM.
+content:
+  h1: Understanding policy conditions
+  paragraph: Learn how to use policy conditions to fine-tune access control within Scaleway IAM.
+tags: iam
+dates:
+  validation: 2025-03-03
+categories:
+  - iam
+  - console
+---
+
+A condition is an additional layer of restrictions for your rule. You can configure conditions in IAM policies to allow access to specific user agents, IP addresses and on a given date or time.
+
+At Scaleway, IAM conditions are defined using Common Expression Language (CEL) expressions.
+
+<Message type="tip">
+  Refer to the [How to create a policy](/iam/how-to/create-policy/) and [How to manage policies](/iam/how-to/create-policy/) documentation pages to learn where and how to specify a condition.
+</Message>
+
+## Condition expressions
+
+An expression can be compared to a conditional statement in programming. It is a logical statement that evaluates to either true or false. The result determines whether the permission set defined in the rule is applied or not.
+
+Condition expressions are composed of one or several statements that declare a rule based on attributes. Attributes are like characteristics or properties of a request, resource or a user. For example, an attribute might be a given date or time, or an IP address.
+
+<Message type="note">
+  Currently only request-based conditions are available with Scaleway IAM.
+</Message>
+
+Expressions at Scaleway are defined in CEL, which provides a human-readable and flexible method of creating conditions.
+
+## Common Expression Language
+
+Common Expression Language is used to specify a IAM condition expression.
+
+Expressions consist of one or more statements that declare an attribute-based control rule, and determine whether a permission applies.
+
+IAM conditions use the following CEL features:
+    - Variables
+    - Operators and Logical Operators
+    - Functions
+
+### Variables
+
+Conditions use variables to express attributes. Variables are populated with values based on the context at runtime.
+
+| Name | Type         | Description |
+| ------------ | ------------------- | ------ |
+| `request.ip` | String | The IP address of the request.   |
+| `request.time` | `google.protobuf.Timestamp` | The time of the request. Represented as a Protobuf object, allowing usage with [associated functions](https://github.com/google/cel-spec/blob/master/doc/langdef.md#datetime-functions).|
+| `request.user_agent`    | String        | The user-agent of the request. Truncated at 255 characters max.|
+
+### Operators
+
+Every data type, such as `timestamp` or `string`, supports a set of operators that can be used to create a logic expression.
+
+Most commonly, operators are used to compare the value contained in a variable with a literal value.
+
+For example, `==` is the operator in the following statement:
+
+```
+request.time == "2025-03-03T14:30:00.000Z"
+```
+
+Refer to the official [CEL syntax specification](https://github.com/google/cel-spec/blob/master/doc/langdef.md#syntax) for list of supported operators.
+
+#### Logical operators
+
+Conditions support three logical operators that can be used to build complex logic expressions from basic expression statements:
+
+| Logical operator | Description | Example |
+| -- | ------------------- | ------ |
+| `&&` (AND) | Evaluates to true if both expressions are true. | `request.time.getFullYear() < 2020 && request.ip == '10.154.3.1'` |
+| `\|\|` (OR) | Evaluates to true if either expression is true. If the first expression is true, the second expression may not be evaluated. |  `request.time.getFullYear() < 2020  \|\| request.ip == '10.154.3.1'` |
+| `!` (NOT) | Evaluates to true if the expression is false, and false if the expression is true. | `!(request.time.getFullYear() < 2020)` |
+
+
+### Functions
+
+A function is a compound operator for data types, that supports more complex operations. In condition expressions, predefined functions can be used with a given data type.
+
+All standard CEL functions are supported, as well as the following custom Scaleway IAM function(s):
+
+| Function | Description | Parameters |
+| ------------ | ------------------- | ------ |
+| `inIpRange(IP: string, Subnet: string)` | Checks if the IP address is included in the IP subnet. | **IP**: (String) The IP address to check. |
+|  | | **Subnet**: (String) The IP subnet to check against. |
+
+
+## Important considerations
+
+### Multiple policies
+If multiple policies with different conditions apply to the same principal, the presence of a single policy with met conditions (or no conditions) will override any denying rules from other policies, allowing the action to be taken.
+
+For example, if you set up a policy that grants access to a resource only on Monday while another policy grants access only on Tuesday, the action will still be allowed on Monday. The access will be granted on both days. 
+
+### Timezones
+
+We recommend that you specify timezones when creating time-based conditions.
+
+Refer to the official [CEL specification](https://github.com/google/cel-spec/blob/master/doc/langdef.md#timezones) for the correct syntax to express timezones in conditions.
+
+### Timestamps
+
+Conditions based on timestamps might take up to a minute to be applied.
+
+For example, if a user has permission to perform an action until 11am, they may be able to perform it until 11:01am.
+
+### IAM condition limitations
+
+Currently it is only possible to edit conditions in the console using the **Advanced** expression editor.
+
+When creating a policy, you can define a simple condition expression with the help of the console form. When editing, you must define the changes by writing them in CEL in the Advanced editor.
+
+## Expression examples
+
+### User-agent conditions
+
+In the example below we check if the user-agent contains the term "Terraform":
+```
+request.user_agent.contains("terraform/")
+```
+
+### Time conditions
+
+To only allow actions within a specific timeslot you can use the following expression. In this example, use weekdays from 9am to 5pm as a timestamp.
+```
+request.time.getDayOfWeek() != 0 && request.time.getDayOfWeek() != 6
+&& request.time.getHours("Europe/Paris") < 17
+&& request.time.getHours("Europe/Paris") > 8
+```
+
+To only allow requests that were performed over the weekend, you can use the expression below:
+```
+request.time.getDayOfWeek() != 0 && request.time.getDayOfWeek() != 6
+```

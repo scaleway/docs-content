@@ -10,7 +10,7 @@ categories:
   - load-balancer
 tags: kubernetes load-balancer proxy-protocol istio
 dates:
-  validation: 2025-02-18
+  validation: 2025-03-13
   posted: 2025-02-18
 ---
 
@@ -33,77 +33,243 @@ This tutorial describes the steps required to deploy Istio on a Scaleway Kuberne
     helm repo add istio https://istio-release.storage.googleapis.com/charts
     helm repo update
     ```
-
-2. Install the Istio control plane:
-
+2. Create a Kubernetes namespace for Istio:
     ```
-    helm install istiod istio/istiod -n istio-system --create-namespace
+    kubectl create namespace istio-system
     ```
 
-3. Install the Istio ingress Gateway:
+3. Install the Istio base and control plane into the previously created namesapce:
 
     ```
-    helm install istio-ingressgateway istio/gateway -n istio-system
+    helm install istio-base istio/base -n istio-system
+    helm install istiod istio/istiod -n istio-system --wait
     ```
 
-## Verify the ingress Gateway Service
-
-An ingress gateway service acts as an entry point for external traffic into the cluster. It is exposed via a Kubernetes LoadBalancer Service, which, in our case, uses a Scaleway Load Balancer. The Load Balancer forwards external traffic to the ingress Gateway Pod.
-
-1. Run the following command to retrieve the service configuration
+4. Install the Istio ingress Gateway:
 
     ```
-    kubectl get svc istio-ingressgateway -n istio-system -o yaml
+    helm install istio-ingressgateway istio/gateway -n istio-system --wait
     ```
 
-2. Verify that the service is of type `LoadBalancer`, and that a Scaleway Load Balancer is associated with it.
+## Install a test application  (httpbin)
 
-## Add annotations for Proxy Protocol
+Deploy a simple application to test how Istio works with a Load Balancer.
+In this tutorial we use `httpbin` as test application.
 
-Add the necessary annotations for Proxy Protocol:
-
+1. Create and label a new namespace for the test application:
     ```
-    kubectl annotate -n istio-system svc istio-ingressgateway "service.beta.kubernetes.io/scw-load-balancer-proxy-protocol-v2=false" --overwrite      
-    kubectl patch svc istio-ingressgateway -n istio-system -p '{"spec": {"externalTrafficPolicy": "Local"}}'
+    kubectl create namespace test-app
+    kubectl label namespace test-app istio-injection=enabled
     ```
 
-## Configure Envoy to support Proxy Protocol
-
-Envoy is a proxy server used by Istio to manage and control the flow of traffic between services in the Kubernetes cluster. It is responsible for routing the traffic between services.
-
-1. Create an EnvoyFilter to enable Proxy Protocol support:
+2. Apply the following configuration using `kubectl`:
 
     ```yaml
+    kubectl apply -n test-app -f - <<EOF
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: httpbin
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: httpbin
+      template:
+        metadata:
+          labels:
+            app: httpbin
+        spec:
+          containers:
+          - name: httpbin
+            image: kennethreitz/httpbin
+            ports:
+            - containerPort: 80
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: httpbin
+    spec:
+      selector:
+        app: httpbin
+      ports:
+      - name: http
+        port: 80
+        targetPort: 80
+    EOF
+    ```
+
+## Creating an Istio Gateway and a VirtualService
+Define a Gateway and a VirtualService to expose the application via the Istio IngressGateway.
+
+1. Run the following command to apply the configuration using `kubectl`:
+
+```yaml
+kubectl apply -n test-app -f - <<EOF
+apiVersion: networking.istio.io/v1beta1
+kind: Gateway
+metadata:
+  name: httpbin-gateway
+  namespace: test-app
+spec:
+  selector:
+    istio: ingressgateway
+  servers:
+  - port:
+      number: 80
+      name: http
+      protocol: HTTP
+   hosts:
+   - "*"
+---
+# virtualservice.yaml
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: httpbin
+  namespace: test-app
+spec:
+  hosts:
+  - "*"
+  gateways:
+  - httpbin-gateway
+  http:
+  - route:
+    - destination:
+        host: httpbin
+        port:
+          number: 80
+EOF
+```
+
+2. Run the following command to retrieve the IP of your Load Balancer and save it in the `$LB_IP` variable:
+    ```bash
+    export LB_IP=$(kubectl get svc -n istio-system istio-ingressgateway -o
+    jsonpath='{.status.loadBalancer.ingress[0].ip}')
+    echo $LB_IP
+    ```
+
+2. Run the following command to do a test before proxy forward is configured:
+    ```bash
+    curl -v http://$LB_IP/get
+    ```
+    You will get an output similar to the following example:
+    ```bash
+    curl -v
+    http://$LB_IP/get
+    * Trying 51.159.112.157:80...
+    * Connected to 51.159.112.157 (51.159.112.157) port 80
+    > GET /get HTTP/1.1
+    > Host: 51.159.112.157
+    > User-Agent: curl/8.7.1
+    > Accept: */*
+    >
+    * Request completely sent off
+    < HTTP/1.1 200 OK
+    < server: istio-envoy
+    < date: Mon, 24 Feb 2025 09:06:45 GMT
+    < content-type: application/json
+    < content-length: 491
+    < access-control-allow-origin: *
+    < access-control-allow-credentials: true
+    < x-envoy-upstream-service-time: 19
+    <
+    {
+      "args": {},
+      "headers": {
+        "Accept": "*/*",
+        "Host": "51.159.112.157",
+        "User-Agent": "curl/8.7.1",
+        "X-Envoy-Attempt-Count": "1",
+        "X-Envoy-Internal": "true",
+        "X-Forwarded-Client-Cert": "By=spiffe://cluster.local/ns/testapp/sa/default;Hash=ddf3ba6fee32a74f9a83efd752df7960c9f3139fa1fe979370becddad3def062;Subject=\"\";URI=spiffe://cluster.local/ns/istiosystem/sa/istio-ingressgateway"
+      },
+      "origin": "172.16.16.5",
+      "url": "http://51.159.112.157/get"
+    }
+    * Connection #0 to host 51.159.112.157 left intact
+    ```
+
+## Configuring the Scaleway Load Balancer
+When you deploy a LoadBalancer service in Kubernetes, Scaleway automatically creates a Load Balancer and associates it with your service. You now need to activate `Proxy Protocol V2` for this Load Balancer.
+
+Modify the `istio-ingressgateway` service to add the necessary annotations:
+```bash
+kubectl annotate -n istio-system services istio-ingressgateway \
+ service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2=true
+kubectl annotate -n istio-system services istio-ingressgateway \
+ service.beta.kubernetes.io/scw-loadbalancer-use-hostname=true
+```
+
+## Configure Proxy protocol and the X-Forwarded-For header to retrieve the source IP
+
+1. Create an `EnvoyFilter` to enable Proxy Protocol support:
+    ```yaml
+    kubectl apply -f - <<EOF
     apiVersion: networking.istio.io/v1alpha3
     kind: EnvoyFilter
     metadata:
-    name: proxy-protocol
-    namespace: istio-system
+      name: proxy-protocol
+      namespace: istio-system
     spec:
-    workloadSelector:
-        labels:
-        istio: ingressgateway
-    configPatches:
-    - applyTo: LISTENER
+      workloadSelector:
+          labels:
+            istio: ingressgateway
+      configPatches:
+      - applyTo: LISTENER
         patch:
-        operation: MERGE
-        value:
+          operation: MERGE
+          value:
             listener_filters:
             - name: envoy.filters.listener.proxy_protocol
+              typed_config:
+                '@type': type.googleapis.com/envoy.extensions.filters.listener.proxy_protocol.v3.ProxyProtocol
             - name: envoy.filters.listener.tls_inspector
+              typed_config:
+                '@type': type.googleapis.com/envoy.extensions.filters.listener.tls_inspector.v3.TlsInspector
+    EOF
     ```
 
-2. Apply the configuration:
-
+2. Run the `curl -v http://$LB_IP/get` command again and watch the output. You will get an output similar to the following example:
+    ```bash
+    curl -v http://$LB_IP/get
+    * Trying 51.159.112.157:80...
+    * Connected to 51.159.112.157 (51.159.112.157) port 80
+    > GET /get HTTP/1.1
+    > Host: 51.159.112.157
+    > User-Agent: curl/8.7.1
+    > Accept: */*
+    >
+    * Request completely sent off
+    < HTTP/1.1 200 OK
+    < server: istio-envoy
+    < date: Mon, 24 Feb 2025 09:11:46 GMT
+    < content-type: application/json
+    < content-length: 510
+    < access-control-allow-origin: *
+    < access-control-allow-credentials: true
+    < x-envoy-upstream-service-time: 4
+    <
+    {
+      "args": {},
+      "headers": {
+        "Accept": "*/*",
+        "Host": "51.159.112.157",
+        "User-Agent": "curl/8.7.1",
+        "X-Envoy-Attempt-Count": "1",
+        "X-Envoy-External-Address": "62.210.16.37",
+        "X-Forwarded-Client-Cert": "By=spiffe://cluster.local/ns/test-app/sa/default;Hash=ddf3ba6fee32a74f9a83efd752df7960c9f3139fa1fe979370becddad3def062;Subject=\"\";URI=spiffe://cluster.local/ns/istio-system/sa/istio-ingressgateway"
+      },
+      "origin": "62.210.16.37",
+      "url": "http://51.159.112.157/get"
+    }
+    * Connection #0 to host 51.159.112.157 left intact
     ```
-    kubectl apply -f proxy-protocol.yaml
-    ```
 
-## Enable X-Forwarded-For
-
-1. Create a file named `ingressgateway-settings.yaml` with the following content:
-
-    ```yaml
+3. Configure Istio using `kubectl` to ensure that the source IP is correctly transmitted via the `X-Forwarded-For` header.
+    ```bash
+    kubectl apply -f - <<EOF
     apiVersion: networking.istio.io/v1alpha3
     kind: EnvoyFilter
     metadata:
@@ -116,54 +282,57 @@ Envoy is a proxy server used by Istio to manage and control the flow of traffic 
           listener:
             filterChain:
               filter:
-                name: envoy.http_connection_manager
-        patch:
-          operation: MERGE
-          value:
-            name: envoy.http_connection_manager
-            typed_config: 
-              "@type": "type.googleapis.com/envoy.config.filter.network.http_connection_manager.v2.HttpConnectionManager"
-              skip_xff_append: false
-              use_remote_address: true
-              xff_num_trusted_hops: 1
+                name: envoy.filters.network.http_connection_manager
+          patch:
+            operation: MERGE
+            value:
+              name: envoy.filters.network.http_connection_manager
+              typed_config:
+                "@type": type.googleapis.com/envoy.extensions.filters.network.http_connection_manager.v3.HttpConnectionManager
+                skip_xff_append: false
+                use_remote_address: true
+                xff_num_trusted_hops: 1
+    EOF
     ```
-
-2. Apply the configuration:
-
+    You will get an output similar to the following one, after you have configured proxy forward and `X-Forward-For`
+    ```bash
+    curl -v http://$LB_IP/get
+    * Trying 51.159.112.157:80...
+    * Connected to 51.159.112.157 (51.159.112.157) port 80
+    > GET /get HTTP/1.1
+    > Host: 51.159.112.157
+    > User-Agent: curl/8.7.1
+    > Accept: */*
+    >
+    * Request completely sent off
+    < HTTP/1.1 200 OK
+    < server: istio-envoy
+    < date: Mon, 24 Feb 2025 09:14:32 GMT
+    < content-type: application/json
+    < content-length: 522
+    < access-control-allow-origin: *
+    < access-control-allow-credentials: true
+    < x-envoy-upstream-service-time: 2
+    <
+    {
+      "args": {},
+      "headers": {
+        "Accept": "*/*",
+        "Host": "51.159.112.157",
+        "User-Agent": "curl/8.7.1",
+        "X-Envoy-Attempt-Count": "1",
+        "X-Envoy-External-Address": "62.210.16.37",
+        "X-Forwarded-Client-Cert": "By=spiffe://cluster.local/ns/test-app/sa/default;Hash=7e20594ba5421aa9df88b0d025498a5c51d02b0224daa3faea319c13a106d8b6;Subject=\"\";URI=spiffe://cluster.local/ns/istio-system/sa/istio-ingressgateway"
+      },
+      "origin": "62.210.16.37,100.64.2.46",
+      "url": "http://51.159.112.157/get"
+    }
+    * Connection #0 to host 51.159.112.157 left intact
     ```
-    kubectl apply -f ingressgateway-settings.yaml
-    ```
+### It may be necessary to restart the Istio IngressGateway Pods
+Once you have added the configurations, you may need to restart the IngressGateway pods so that the changes to take effect.
 
-3. Update the ingress Gateway service to use the new configuration:
-
-    ```
-    kubectl annotate -n istio-system svc istio-ingressgateway "service.beta.kubernetes.io/scw-load-balancer-proxy-protocol-v2=false" --overwrite
-    kubectl patch svc istio-ingressgateway -n istio-system -p '{"spec": {"externalTrafficPolicy": "Local"}}'
-    ```
-
-## Restart the Istio ingress gateway pod
-
-Restart the pod to apply the changes:
-
-    ```
-    kubectl delete pod -l istio=ingressgateway -n istio-system
-    ```      
-     
-## Verify the configuration  
-
-1. Retrieve the public IP address of the Load Balancer:
-
-    ```
-    kubectl get svc istio-ingressgateway -n istio-system
-    ```
-         
-2. Test access using curl:
-    ```
-    curl -v http://<LOAD_BALANCER_IP>/get
-    ```
-         
-    If the configuration is correct, the response should include the `X-Forwarded-For` and `X-Envoy-External-Address` headers.
-
-
-For further support with Istio, read their [dedicated documentation](https://istio.io/latest/docs/).
-     
+Run the following command to delete the existing pods using `kubectl`. Kubernetes will spin up new ones automatically after you launch the command:
+```bash
+kubectl delete pod -n istio-system -l istio=ingressgateway
+```

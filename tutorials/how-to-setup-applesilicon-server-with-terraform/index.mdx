@@ -115,9 +115,9 @@ terraform apply
 
 This will apply the new settings, ensuring that the server is launched within the specified VPC and connected to the Private Network.
 
-## How to read server info using Terraform
+## Retrieve Server Information
 
-To read server information after creation, you can use the terraform output command, assuming you have defined output variables in your `resources.tf`. For example:
+You can retrieve server information after the creation by using the terraform output command. To do so, you need to define output variables in your resources.tf. For example:
 
 ```terraform
 #resources.tf
@@ -132,60 +132,73 @@ After applying the configuration, run:
 terraform output server_ip
 ```
 
-## Delve into Terraform with local-exec, remote-exec and null_resource
+## Delving into Terraform Provisioners: local-exec, remote-exec, and null_resource
 
-In Terraform, provisioners like local-exec, remote-exec, and null_resource can be used to automate the execution of scripts and manage resource configuration. Here’s how you can use them:
+Provisioners in Terraform help automate the execution of tasks. You can use local-exec, remote-exec, and null_resource to trigger actions in your environment. Here’s an overview of how they work:
 
-[null_resource](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) is a special Terraform resource that doesn’t manage infrastructure directly. It serves as a placeholder for running provisioners and triggers actions without creating any infrastructure.
-[remote-exec](https://developer.hashicorp.com/terraform/language/resources/provisioners/remote-exec) provisioner allows you to execute scripts on remote resources after they’ve been created. It is useful for configuring remote servers or performing post-creation actions.
-[local-exec](https://developer.hashicorp.com/terraform/language/resources/provisioners/local-exec) provisioner enables you to run scripts on your local machine. This is helpful when you need to execute commands in your local environment based on the resources created by Terraform.
+[null_resource](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) This placeholder allows you to run provisioners without managing infrastructure directly. It triggers actions based on dependencies but doesn’t create or modify resources.
+[remote-exec](https://developer.hashicorp.com/terraform/language/resources/provisioners/remote-exec) This provisioner executes scripts on remote servers, making it ideal for configuring your infrastructure or performing post-creation tasks.
+[local-exec](https://developer.hashicorp.com/terraform/language/resources/provisioners/local-exec) This provisioner allows you to execute commands locally, on your local machine, after creating resources in Terraform.
 
-1. We want to connect to our server, so we are going to retrieve all the connection information
+### Storing the SSH Key Locally
+
+You can use the local-exec provisioner to store the SSH key of the server on your local machine, preventing future verification prompts:
 
 ``` terraform
 #resource.tf
 
-resource "null_resource" "store_ssh_key" {
+resource "null_resource" "store_server_ssh_key" {
+  depends_on = [scaleway_apple_silicon_server.server]
+
   provisioner "local-exec" {
     command = <<-EOT
-      mkdir -p ~/.ssh
-      echo "${file("~/.ssh/id_rsa")}" > ~/.ssh/id_rsa
-      chmod 600 ~/.ssh/id_rsa
-      echo 'SSH key stored at ~/.ssh/id_rsa'
+      ssh-keyscan -H ${scaleway_apple_silicon_server.server.ip} >> ~/.ssh/known_hosts
+      echo "Stored SSH public key for ${scaleway_apple_silicon_server.server.ip}"
     EOT
   }
 }
 ```
+### Installing Homebrew and Dependencies
 
-2. To install dependancies which can be usefull
+Next, we can use remote-exec to install Homebrew and other essential dependencies on the server:
+
+```terraform
+resource "null_resource" "install_homebrew_and_dependencies" {
+  depends_on = [scaleway_apple_silicon_server.server]
+
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Installing Homebrew on the server...'",
+      "which brew || /bin/bash -c '$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)'",
+      "echo 'Adding Homebrew to the PATH...'",
+      "echo 'export PATH=/opt/homebrew/bin:$PATH' >> ~/.zshrc",
+      "source ~/.zshrc",
+      "echo 'Installing essential dependencies...'",
+      "brew install git wget curl",
+      "echo 'Homebrew and dependencies installed.'",
+    ]
+
+    connection {
+      type     = "ssh"
+      user     = scaleway_apple_silicon_server.server.username
+      host     = scaleway_apple_silicon_server.server.ip
+      password = scaleway_apple_silicon_server.server.password
+      timeout  = "5m"
+    }
+  }
+}
+
+```
 
 
 
 ## Conclusion
 
-In this tutorial, we have explored how to automate the creation and management of Apple silicon servers on Scaleway using two powerful tools: Terraform and Ansible. While both tools offer significant automation benefits, they each operate in distinct ways, which makes them suitable for different use cases.
+In this tutorial, we have explored how to automate the creation and management of Apple Silicon servers on Scaleway using Terraform. By leveraging Terraform’s infrastructure as code (IaC) capabilities, we streamlined server creation, network configuration, and the installation of essential dependencies. However, it’s important to note that while Terraform excels at managing infrastructure and automating deployments, it has limitations when it comes to handling more complex dependencies and configurations that may evolve over time.
 
-### Keys differences
+For more intricate use cases, especially when managing complex configurations or handling dependencies between various resources, Ansible is a better fit. Ansible offers a more flexible, agentless approach to configuration management, where it excels in defining and automating tasks like installing software, configuring system settings, and managing service dependencies. It is ideal for handling the post-provisioning setup or when orchestrating multiple servers across your infrastructure.
 
-#### Terraform's state management
-
-Terraform maintains a state file that tracks the current status of your infrastructure. This state file acts as the source of truth for the resources created and managed by Terraform, providing you with visibility and control over any changes. This allows Terraform to efficiently handle infrastructure updates and deletions while ensuring consistency across environments.
-
-#### Ansible’s idempotency
-
-Ansible, on the other hand, does not have a built-in state management system. Instead, it focuses on idempotency, meaning that Ansible playbooks can be executed multiple times without causing unwanted side effects. Each run checks whether the desired state is already achieved, and if not, it makes the necessary changes. However, Ansible does not retain a record of resource states, so it might be less efficient for large-scale infrastructure management compared to Terraform.
-
-### Which to choose?
-
-Terraform is an excellent choice for infrastructure provisioning where you need to keep track of your resources and manage dependencies between them. It is especially useful for handling lifecycle management (creation, modification, and deletion) of your infrastructure.
-
-Ansible shines in configuration management, automation, and orchestrating tasks across your infrastructure. It’s ideal for deploying applications, configuring services, and ensuring your systems are in the desired state after provisioning.
-
-You can also combine both tools for optimal results! Use Terraform for provisioning the infrastructure and Ansible for configuring the servers and deploying applications on top of it. This hybrid approach allows you to leverage the best of both worlds.
-
-By following this guide, you now have a solid understanding of how to automate the creation and management of Apple silicon servers on Scaleway, whether you're using Terraform or Ansible. Both tools can greatly streamline your workflow, reduce manual effort, and help you maintain consistency across your infrastructure.
-
-For more advanced topics, consider exploring Terraform’s state management and Ansible’s playbook design to enhance your automation skills further. Happy automating!
+In an upcoming tutorial, we will dive deeper into how Ansible can be integrated into your workflow for managing dependencies and handling more advanced server configurations, enhancing the automation process beyond simple infrastructure provisioning.
 
 
 

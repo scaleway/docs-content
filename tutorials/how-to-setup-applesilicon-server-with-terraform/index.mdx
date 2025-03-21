@@ -1,0 +1,204 @@
+---
+meta:
+    title: Automating Apple Silicon Server Creation: A Step-by-Step Guide Using Terraform
+    description: Explore Two Powerful Approaches to Automating Apple Silicon Server Deployment with Terraform
+content:
+    h1: Automating Apple Silicon Server Creation: A Step-by-Step Guide Using Terraform
+    description: Explore Two Powerful Approaches to Automating Apple Silicon Server Deployment with Terraform
+categories:
+    - apple-silicon
+    - terraform
+tags: apple-silicon ansible
+---
+
+In this tutorial, we will guide you through automating the setup and management of Apple Silicon servers using a powerful tool: [Terraform](https://www.terraform.io/). By leveraging these tools, you can streamline infrastructure management, reduce manual configuration, and ensure consistent environments.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/identity-and-access-management/iam/concepts/#owner) status or [IAM permissions](/identity-and-access-management/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/identity-and-access-management/iam/how-to/create-api-keys/)
+
+## Understanding the tool
+
+### HashiCorp Terraform & OpenTofu
+
+[Terraform](https://www.terraform.io/) is an open-source Infrastructure as Code (IaC) tool that allows you to define and manage infrastructure using declarative configuration files. Terraform enables you to create reproducible and scalable environments while automating the deployment of resources.
+
+A fork of this project, [OpenTofu](https://opentofu.org/), is an open-source alternative that aims to be fully compatible with Terraform, while offering an independent, community-driven approach. OpenTofu provides the same functionality as Terraform, allowing users to define infrastructure with HCL (HashiCorp Configuration Language) and automate resource management. Its goal is to offer a transparent and open solution, with an emphasis on inclusivity and community contributions.
+
+Both Terraform and OpenTofu offer the same core functionality for provisioning and managing infrastructure. If you are familiar with Terraform, you can easily switch to OpenTofu without needing to change your configuration files.
+
+## How to create an Apple silicon server
+
+1. Download and install [Terraform](https://developer.hashicorp.com/terraform/install).
+
+2. Create a Directory: First, create a directory for your Terraform project. Open your terminal and run:
+
+```shell
+mkdir apple_silicon_server_terraform
+cd apple_silicon_server_terraform
+```
+
+3. Create a Terraform configuration file: Inside this directory, create a file named `resources.tf`:
+
+    ```shell
+    touch resources.tf
+    ```
+
+4. Define the required providers: Open the `resources.tf` file and add the following configuration to define the Scaleway provider and set the required Terraform version:
+
+```shell
+terraform {
+  required_providers {
+    scaleway = {
+      source = "scaleway/scaleway"
+    }
+  }
+  required_version = ">=0.13"
+}
+
+```
+
+5. Define the Apple silicon server: Add the following code to define your Apple silicon server (M2-M type) in the same `resources.tf` file:
+
+```terraform
+#resources.tf
+resource "scaleway_apple_silicon_server" "server" {
+    name = "MyAwesomeServer"
+    type = "M2-M"
+    zone = "fr-par-1"
+}
+```
+
+6. Apply the configuration: To apply this configuration, run the following commands in your terminal:
+
+```shell
+#Initialize Terraform
+terraform init
+#Plan the deployment
+terraform plan
+#Create the server
+terraform apply
+```
+
+When prompted, type **yes** to confirm the creation of the resources.
+
+7. Enable Virtual Private Cloud (VPC) and a Private Network: To enhance the network setup, you can update the configuration to enable VPC option and attach a Private Network to your Apple silicon server. Update your `resources.tf` file with the following:
+
+```terraform
+#resources.tf
+resource "scaleway_vpc" "vpc01" {
+    name = "MyAwesomeVPC"
+}
+
+resource "scaleway_vpc_private_network" "pn01" {
+    name = "MyAwesomePN"
+    vpc_id = scaleway_vpc.vpc01.id
+}
+
+resource "scaleway_apple_silicon_server" "server" {
+    name = "MyAwesomeServer"
+    type = "M2-M"
+    zone = "fr-par-1"
+    enable_vpc = true
+    private_network {
+          id = scaleway_vpc_private_network.pn01.id
+    }
+}
+```
+8. Apply the configuration update: Run the following command to apply the changes and update the server configuration
+
+```shell
+terraform apply
+```
+
+This will apply the new settings, ensuring that the server is launched within the specified VPC and connected to the Private Network.
+
+## Retrieve Server Information
+
+You can retrieve server information after the creation by using the terraform output command. To do so, you need to define output variables in your resources.tf. For example:
+
+```terraform
+#resources.tf
+output "server_ip" {
+  value = scaleway_apple_silicon_server.server.ip
+}
+```
+
+After applying the configuration, run:
+
+```shell
+terraform output server_ip
+```
+
+## Delving into Terraform Provisioners: local-exec, remote-exec, and null_resource
+
+Provisioners in Terraform help automate the execution of tasks. You can use local-exec, remote-exec, and null_resource to trigger actions in your environment. Here’s an overview of how they work:
+
+[null_resource](https://registry.terraform.io/providers/hashicorp/null/latest/docs/resources/resource) This placeholder allows you to run provisioners without managing infrastructure directly. It triggers actions based on dependencies but doesn’t create or modify resources.
+[remote-exec](https://developer.hashicorp.com/terraform/language/resources/provisioners/remote-exec) This provisioner executes scripts on remote servers, making it ideal for configuring your infrastructure or performing post-creation tasks.
+[local-exec](https://developer.hashicorp.com/terraform/language/resources/provisioners/local-exec) This provisioner allows you to execute commands locally, on your local machine, after creating resources in Terraform.
+
+### Storing the SSH Key Locally
+
+You can use the local-exec provisioner to store the SSH key of the server on your local machine, preventing future verification prompts:
+
+``` terraform
+#resource.tf
+
+resource "null_resource" "store_server_ssh_key" {
+  depends_on = [scaleway_apple_silicon_server.server]
+
+  provisioner "local-exec" {
+    command = <<-EOT
+      ssh-keyscan -H ${scaleway_apple_silicon_server.server.ip} >> ~/.ssh/known_hosts
+      echo "Stored SSH public key for ${scaleway_apple_silicon_server.server.ip}"
+    EOT
+  }
+}
+```
+### Installing Homebrew and Dependencies
+
+Next, we can use remote-exec to install Homebrew and other essential dependencies on the server:
+
+```terraform
+resource "null_resource" "install_homebrew_and_dependencies" {
+  depends_on = [scaleway_apple_silicon_server.server]
+
+  provisioner "remote-exec" {
+    inline = [
+      "echo 'Installing Homebrew on the server...'",
+      "which brew || /bin/bash -c '$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)'",
+      "echo 'Adding Homebrew to the PATH...'",
+      "echo 'export PATH=/opt/homebrew/bin:$PATH' >> ~/.zshrc",
+      "source ~/.zshrc",
+      "echo 'Installing essential dependencies...'",
+      "brew install git wget curl",
+      "echo 'Homebrew and dependencies installed.'",
+    ]
+
+    connection {
+      type     = "ssh"
+      user     = scaleway_apple_silicon_server.server.username
+      host     = scaleway_apple_silicon_server.server.ip
+      password = scaleway_apple_silicon_server.server.password
+      timeout  = "5m"
+    }
+  }
+}
+
+```
+
+
+
+## Conclusion
+
+In this tutorial, we have explored how to automate the creation and management of Apple Silicon servers on Scaleway using Terraform. By leveraging Terraform’s infrastructure as code (IaC) capabilities, we streamlined server creation, network configuration, and the installation of essential dependencies. However, it’s important to note that while Terraform excels at managing infrastructure and automating deployments, it has limitations when it comes to handling more complex dependencies and configurations that may evolve over time.
+
+For more intricate use cases, especially when managing complex configurations or handling dependencies between various resources, Ansible is a better fit. Ansible offers a more flexible, agentless approach to configuration management, where it excels in defining and automating tasks like installing software, configuring system settings, and managing service dependencies. It is ideal for handling the post-provisioning setup or when orchestrating multiple servers across your infrastructure.
+
+In an upcoming tutorial, we will dive deeper into how Ansible can be integrated into your workflow for managing dependencies and handling more advanced server configurations, enhancing the automation process beyond simple infrastructure provisioning.
+
+
+

@@ -148,36 +148,146 @@ Install Terraform and ensure the Scaleway Terraform provider is set up with `ter
 ### Setting-up Terraform files
 
 1. Create a new directory and set up your files:
-
     ```
     mkdir scaleway-kube-db
     cd scaleway-kube-db
     ```
 
 2. Create a `providers.tf` file:
-
     ```
-    ADD CONTENT FROM PROVIDERS.TF FILE
+    terraform {
+    required_providers {
+        scaleway = {
+        source  = "scaleway/scaleway"
+        version = "~> 2.40"
+        }
+    }
+    }
+
+    provider "scaleway" {
+    access_key      = var.scaleway_access_key
+    secret_key      = var.scaleway_secret_key
+    project_id      = var.project_id
+    region          = var.region
+    zone            = var.zone
+    }
     ```
 
 3. Create a `variables.tf` file:
-
     ```
-    ADD CONTENT FROM VARIABLES.TF FILE
+    variable "scaleway_access_key" {
+    description = "Scaleway Access Key"
+    type        = string
+    sensitive   = true
+    }
+
+    variable "scaleway_secret_key" {
+    description = "Scaleway Secret Key"
+    type        = string
+    sensitive   = true
+    }
+
+    variable "project_id" {
+    description = "Scaleway Project ID"
+    type        = string
+    }
+
+    variable "region" {
+    description = "Scaleway region (e.g., fr-par)"
+    type        = string
+    default     = "fr-par"
+    }
+
+    variable "zone" {
+    description = "Scaleway zone (e.g., fr-par-1)"
+    type        = string
+    default     = "fr-par-1"
+    }
+
+    variable "db_password" {
+    description = "Password for database user"
+    type        = string
+    sensitive   = true
+    }
+
+    variable "db_user" {
+    description = "Database username"
+    type        = string
+    default     = "admin"
+    }
     ```
 
 4. Create a `main.tf` file for the infrastructure:
-
     ```
-    ADD CONTENT FROM MAIN.TF FILE
-    ```
+    # Create Private Network
+    resource "scaleway_vpc_private_network" "private_net" {
+    name   = "kube-db-network"
+    region = var.region
+    }
 
+    # Create Managed PostgreSQL Database
+    resource "scaleway_rdb_instance" "database" {
+    name               = "my-kube-database"
+    node_type          = "db-dev-s"
+    engine             = "PostgreSQL-15"
+    is_ha_cluster      = true
+    user_name          = var.db_user
+    password           = var.db_password
+    private_network {
+        pn_id = scaleway_vpc_private_network.private_net.id
+    }
+    }
+
+    # Kubernetes Cluster (Kapsule)
+    resource "scaleway_k8s_cluster" "kapsule" {
+    name    = "my-kube-cluster"
+    version = "1.28.2"
+    cni     = "cilium"
+    private_network_id = scaleway_vpc_private_network.private_net.id
+
+    autoscaler_config {
+        disable_scale_down = false
+        scale_down_delay_after_add    = "10m"
+        scale_down_unneeded_time      = "10m"
+        estimator                     = "binpacking"
+        expander                      = "random"
+        ignore_daemonsets_utilization = true
+    }
+
+    pool {
+        name            = "default-pool"
+        node_type       = "DEV1-M"
+        size            = 2
+        autoscaling     = true
+        min_size        = 2
+        max_size        = 5
+        autohealing     = true
+        container_runtime = "containerd"
+    }
+    }
+
+    # Output Database Connection Information
+    output "db_host" {
+    value = scaleway_rdb_instance.database.private_network[0].ip
+    }
+
+    output "db_port" {
+    value = scaleway_rdb_instance.database.endpoint[0].port
+    }
+
+    output "kubeconfig" {
+    value     = scaleway_k8s_cluster.kapsule.kubeconfig
+    sensitive = true
+    }
+    ```
 ### Creating a terraform.tfvars file
 
-Create a file to store your variables securely:
-
+Create a `terraform.tfvars` file to store your variables securely:
     ```
-    ADD CONTENT FROM TERRAFORM.TFVARS FILE
+    scaleway_access_key = "<your-scaleway-access-key>"
+    scaleway_secret_key = "<your-scaleway-secret-key>"
+    project_id          = "<your-scaleway-project-id>"
+    db_password         = "<your-strong-db-password>"
     ```
 
 ### Applying the Terraform configuration
@@ -197,10 +307,136 @@ Now let's deploy a more realistic application that uses the database. Here's a s
 
 ### Creating a Dockerfile for the application
 
+The Dockerfile is used to create a Docker image for your application. Here's a simple example:
+
+    ```dockerfile
+    # Use the official Node.js 14 image.
+    # https://hub.docker.com/_/node
+    FROM node:14
+
+    # Create and change to the app directory.
+    WORKDIR /usr/src/app
+
+    # Copy application dependency manifests to the container image.
+    # A wildcard is used to ensure both package.json AND package-lock.json are copied.
+    # Copying this separately prevents re-running npm install on every code change.
+    COPY package*.json ./
+
+    # Install production dependencies.
+    RUN npm install --only=production
+
+    # Copy local code to the container image.
+    COPY . .
+
+    # Run the web service on container startup.
+    CMD [ "node", "app.js" ]
+
+    # Expose the port the app runs on
+    EXPOSE 8080
+    ```
+
 ### Creating the application files
+
+You need to create the necessary files for your Node.js application. Here’s a simple `app.js` and a `package.json` file as an example:
+
+    **`app.js`**:
+    ```javascript
+    const express = require('express');
+    const { Pool } = require('pg');
+    const app = express();
+
+    const pool = new Pool({
+    user: 'postgres',
+    host: 'node-postgres-db', // This matches the service name in Kubernetes
+    database: 'postgres',
+    password: 'password', // Ensure this matches the password set in the Kubernetes secret
+    port: 5432,
+    });
+
+    app.get('/', async (req, res) => {
+    try {
+        const result = await pool.query('SELECT NOW() as now');
+        res.send(result.rows);
+    } catch (err) {
+        console.error(err);
+        res.status(500).send(err.toString());
+    }
+    });
+
+    const PORT = process.env.PORT || 8080;
+    app.listen(PORT, () => {
+    console.log(`Server running on port ${PORT}`);
+    });
+    ```
+
+    **`package.json`**:
+    ```json
+    {
+    "name": "node-postgres-app",
+    "version": "1.0.0",
+    "main": "app.js",
+    "dependencies": {
+        "express": "^4.17.1",
+        "pg": "^8.6.0"
+    }
+    }
+    ```
 
 ### Creating Kubernetes manifests for the application
 
+You need to create two main Kubernetes manifests: one for the deployment and one for the service.
+
+    **`deployment.yaml`**:
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+    name: node-postgres-app
+    spec:
+    replicas: 1
+    selector:
+        matchLabels:
+        app: node-postgres-app
+    template:
+        metadata:
+        labels:
+            app: node-postgres-app
+        spec:
+        containers:
+        - name: node-postgres-app
+            image: ${YOUR_DOCKER_REGISTRY}/node-postgres-app:latest
+            ports:
+            - containerPort: 8080
+            env:
+            - name: POSTGRES_PASSWORD
+            valueFrom:
+                secretKeyRef:
+                name: postgres-secret
+                key: password
+    ---
+    apiVersion: v1
+    kind: Secret
+    metadata:
+    name: postgres-secret
+    type: Opaque
+    data:
+    password: cGFzc3dvcmQ= # base64 encoded password, 'password' in this case
+    ```
+
+    **`service.yaml`**:
+    ```yaml
+    apiVersion: v1
+    kind: Service
+    metadata:
+    name: node-postgres-app
+    spec:
+    type: LoadBalancer
+    ports:
+    - port: 80
+        targetPort: 8080
+    selector:
+        app: node-postgres-app
+    ```
 ### Building and pushing the Docker image
 
     <Message type="note">
@@ -227,7 +463,7 @@ Now let's deploy a more realistic application that uses the database. Here's a s
     kubectl get service node-postgres-app
     ```
 
-3. Visit the application at the external IP to see it in action.
+3. Visit the application at the external IP to see it in action. If everything is set up correctly, you should see the current PostgreSQL time displayed when you access the application URL.
 
 ## Security best practices
 

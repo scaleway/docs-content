@@ -1,0 +1,258 @@
+---
+meta:
+  title: Connecting Scaleway Managed Databases to Kubernetes Kapsule clusters
+  description: This page explains how to connect Scaleway Managed Databases to Kubernetes Kapsule clusters
+content:
+  h1: Connecting Scaleway Managed Databases to Kubernetes Kapsule clusters
+  paragraph: This page explains how to connect Scaleway Managed Databases to Kubernetes Kapsule clusters
+tags: managed database kubernetes cluster kapsule k8s
+dates:
+  validation: 2025-03-26
+  posted: 2025-03-26
+---
+
+This guide explains how to set up and connect a Scaleway Managed Database for PostgreSQL or MySQL with a Scaleway Kubernetes Kapsule cluster.
+
+We will walk you through the entire process using both the Scaleway CLI and Terraform approaches.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/iam/how-to/create-api-keys/)
+- [Scaleway CLI](https://github.com/scaleway/scaleway-cli) installed and configured
+- [kubectl](https://kubernetes.io/docs/tasks/tools/install-kubectl/) installed
+- [Terraform](https://www.terraform.io/downloads.html) or [OpenTofu](https://opentofu.org/) installed (for Terraform approach)
+
+## Method 1 - Using the Scaleway CLI
+
+First, [install the Scaleway CLI](/scaleway-cli/quickstart/#how-to-install-the-scaleway-cli-locally), and use `scw init` to set your API key and `scw config set region par1` to set the default region (e.g. Paris).
+
+### Creating a Private Network
+
+Create a Private Network that both your Kubernetes cluster and database will use:
+
+    ```
+    scw vpc private-network create name=kube-db-network
+    ```
+
+    <Message type="note">
+      Note the Private Network ID from the output for later use.
+    </Message>
+
+### Creating a Managed Database Instance
+
+1. Run the following command to create a Managed PostgreSQL (or MySQL) Database Instance:
+
+    ```
+    scw rdb instance create \
+    name=my-kube-database \
+    node-type=db-dev-s \
+    engine=PostgreSQL-15 \
+    is-ha-cluster=true \
+    user-name=admin \
+    password=StrongP@ssw0rd123 \
+    private-network-id=<private-network-id>
+    ```
+
+    This creates a high-availability PostgreSQL 15 database attached to the Private Network. The database is only accessible within the Private Network.
+
+2. **Optional** If you prefer a public endpoint as well:
+
+    ```
+    scw rdb instance create \
+    name=my-kube-database \
+    node-type=db-dev-s \
+    engine=PostgreSQL-15 \
+    is-ha-cluster=true \
+    user-name=admin \
+    password=StrongP@ssw0rd123
+    ```
+    <Message type="important">
+      Adding a public endpoint is less secure, but can be useful for management purposes in some cases.  
+      **Ensure to choose a strong password for your database user.**
+    </Message>
+
+3. Add the Private Network endpoint to the database:
+
+    ```
+    scw rdb endpoint create \
+    instance-id=<database-instance-id> \
+    private-network-id=<private-network-id>
+    ```
+
+### Creating a Kubernetes Kapsule Cluster
+
+1. Run the following Scaleway CLI command to create a Kubernetes Kapsule cluster attached to the same Private Network:
+
+    ```
+    scw k8s cluster create \
+    name=my-kube-cluster \
+    type=kapsule \
+    version=1.28.2 \
+    cni=cilium \
+    pools.0.name=default \
+    pools.0.node-type=DEV1-M \
+    pools.0.size=2 \
+    pools.0.autoscaling=true \
+    pools.0.min-size=2 \
+    pools.0.max-size=5 \
+    private-network-id=<private-network-id>
+    ```
+
+2. Wait for the cluster to be ready, then get the `kubeconfig`:
+
+    ```
+    scw k8s kubeconfig install \
+    cluster-id=<cluster-id>
+    ```
+
+### Creating a Kubernetes secret for database credentials
+
+Use `kubectl` to create a Kubernetes secret to store the database credentials:
+
+    ```
+    kubectl create secret generic db-credentials \
+    --from-literal=DB_HOST=<private-network-db-hostname> \
+    --from-literal=DB_PORT=5432 \
+    --from-literal=DB_NAME=rdb \
+    --from-literal=DB_USER=admin \
+    --from-literal=DB_PASSWORD=StrongP@ssw0rd123
+    ```
+
+### Deploying a sample application
+
+1. Create a Kubernetes deployment that will connect to the database. Save this as `db-app.yaml`:
+
+    ```
+    ADD DB APP YAML FILE
+    ```
+
+2. Apply it to your cluster:
+
+    ```
+    kubectl apply -f db-app.yaml
+    ```
+
+3. Check that your application can connect to the database:
+
+    ```
+    kubectl logs -f deployment/postgres-client
+    ```
+
+## Method 2 - Using Terraform
+
+For a more infrastructure-as-code approach, you can use Terraform or OpenTofu (open-source Terraform fork) to set up the same resources.
+Install Terraform and ensure the Scaleway Terraform provider is set up with `terraform init -provider=scaleway/scaleway`.
+
+### Setting-up Terraform files
+
+1. Create a new directory and set up your files:
+
+    ```
+    mkdir scaleway-kube-db
+    cd scaleway-kube-db
+    ```
+
+2. Create a `providers.tf` file:
+
+    ```
+    ADD CONTENT FROM PROVIDERS.TF FILE
+    ```
+
+3. Create a `variables.tf` file:
+
+    ```
+    ADD CONTENT FROM VARIABLES.TF FILE
+    ```
+
+4. Create a `main.tf` file for the infrastructure:
+
+    ```
+    ADD CONTENT FROM MAIN.TF FILE
+    ```
+
+### Creating a `terraform.tfvars` file
+
+Create a file to store your variables securely:
+
+    ```
+    ADD CONTENT FROM TERRAFORM.TFVARS FILE
+    ```
+
+### Applying the Terraform configuration
+
+Initialize and apply the Terraform configuration:
+
+    ```
+    terraform init
+    terraform apply
+    ```
+
+    After confirming the plan, Terraform will create all the resources and output the database endpoint.
+
+## Connecting a real application
+
+Now let's deploy a more realistic application that uses the database. Here's a simple Node.js application with Express and pg (PostgreSQL client):
+
+### Creating a Dockerfile for the application
+
+### Creating the application files
+
+### Creating Kubernetes manifests for the application
+
+### Building and pushing the Docker image
+
+    <Message type="note">
+        Replace `${YOUR_DOCKER_REGISTRY}` with your Docker registry (e.g., Docker Hub username).
+    </Message>
+
+    ```
+    docker build -t ${YOUR_DOCKER_REGISTRY}/node-postgres-app:latest .
+    docker push ${YOUR_DOCKER_REGISTRY}/node-postgres-app:latest
+    ```
+
+### Deploying the application to Kubernetes
+
+1. Apply the Kubernetes manifests:
+
+    ```
+    kubectl apply -f deployment.yaml
+    kubectl apply -f service.yaml
+    ```
+
+2. Check the service to get the external IP:
+
+    ```
+    kubectl get service node-postgres-app
+    ```
+
+3. Visit the application at the external IP to see it in action.
+
+## Security best practices
+
+### Use Private Networks
+
+Always use Private Networks when connecting a Kubernetes cluster to a database. This ensures that database traffic never traverses the public internet, reducing the attack surface significantly.
+
+### Implement proper TLS
+
+If you need to use a public endpoint, ensure you're using TLS with certificate verification:
+
+For PostgreSQL, add this to your connection string:
+
+    ```
+    sslmode=verify-full sslrootcert=/path/to/scaleway-ca.pem
+    ```
+
+### Restrict database access with network policies
+
+Implement Kubernetes Network Policies to control which pods can access the database:
+
+### Use secrets management
+
+Consider using a secrets management solution like HashiCorp Vault or Kubernetes External Secrets to manage database credentials instead of storing them directly in Kubernetes Secrets.
+
+### Regularly rotate credentials
+
+Implement a process to regularly rotate database credentials. This can be automated using tools like Vault or custom operators.

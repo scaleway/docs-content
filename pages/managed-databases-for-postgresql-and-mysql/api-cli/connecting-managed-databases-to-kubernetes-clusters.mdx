@@ -52,33 +52,32 @@ Create a Private Network that both your Kubernetes cluster and database will use
     is-ha-cluster=true \
     user-name=admin \
     password=StrongP@ssw0rd123 \
-    private-network-id=<private-network-id>
+    region=fr-par
     ```
 
-    This creates a high-availability PostgreSQL 15 database attached to the Private Network. The database is only accessible within the Private Network.
+    This creates a high-availability PostgreSQL 15 database with a public Endpoint.
 
-2. **Optional** If you prefer a public endpoint as well:
-
-    ```
-    scw rdb instance create \
-    name=my-kube-database \
-    node-type=db-dev-s \
-    engine=PostgreSQL-15 \
-    is-ha-cluster=true \
-    user-name=admin \
-    password=StrongP@ssw0rd123
-    ```
     <Message type="important">
-      Adding a public endpoint is less secure, but can be useful for management purposes in some cases.  
-      **Ensure to choose a strong password for your database user.**
+      At this point the database is exposed to the Internet.
     </Message>
 
 3. Add the Private Network endpoint to the database:
 
     ```
     scw rdb endpoint create \
-    instance-id=<database-instance-id> \
-    private-network-id=<private-network-id>
+    <database-instance-id> \
+    private-network.private-network-id=<private-network-id> \
+    private-network.enable-ipam=true region-fr-par
+    ```
+
+4. Get the Insance details and look for the public endpoint ID under the "Endpoints" section.
+    ```
+    scw rdb instance get <database-instance-id>
+    ```
+
+4. Remove the public endpoint to ensure the database is only reachable from the Private Network and no longer exposed to the public Ineternet.
+    ```
+    scw rdb endpoint delete instance-id=<database-instance-id> <public-endpoint-id>
     ```
 
 ### Creating a Kubernetes Kapsule cluster
@@ -103,8 +102,7 @@ Create a Private Network that both your Kubernetes cluster and database will use
 2. Wait for the cluster to be ready, then get the `kubeconfig`:
 
     ```
-    scw k8s kubeconfig install \
-    cluster-id=<cluster-id>
+    scw k8s kubeconfig install <k8s-cluster-id> region=fr-par
     ```
 
 ### Creating a Kubernetes secret for database credentials
@@ -125,9 +123,51 @@ Use `kubectl` to create a Kubernetes secret to store the database credentials:
 1. Create a Kubernetes deployment that will connect to the database. Save this as `db-app.yaml`:
 
     ```
-    ADD DB APP YAML FILE
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+    name: postgres-client
+    spec:
+    replicas: 1
+    selector:
+        matchLabels:
+        app: postgres-client
+    template:
+        metadata:
+        labels:
+            app: postgres-client
+        spec:
+        containers:
+        - name: postgres-client
+            image: postgres:latest
+            command: ["sleep", "infinity"]
+            env:
+            - name: DB_HOST
+            valueFrom:
+                secretKeyRef:
+                name: db-credentials
+                key: DB_HOST
+            - name: DB_PORT
+            valueFrom:
+                secretKeyRef:
+                name: db-credentials
+                key: DB_PORT
+            - name: DB_NAME
+            valueFrom:
+                secretKeyRef:
+                name: db-credentials
+                key: DB_NAME
+            - name: DB_USER
+            valueFrom:
+                secretKeyRef:
+                name: db-credentials
+                key: DB_USER
+            - name: DB_PASSWORD
+            valueFrom:
+                secretKeyRef:
+                name: db-credentials
+                key: DB_PASSWORD
     ```
-
 2. Apply it to your cluster:
 
     ```
@@ -227,43 +267,44 @@ Install Terraform and ensure the Scaleway Terraform provider is set up with `ter
 
     # Create Managed PostgreSQL Database
     resource "scaleway_rdb_instance" "database" {
-    name               = "my-kube-database"
-    node_type          = "db-dev-s"
-    engine             = "PostgreSQL-15"
-    is_ha_cluster      = true
-    user_name          = var.db_user
-    password           = var.db_password
+    name          = "my-kube-database"
+    node_type     = "db-dev-s"
+    engine        = "PostgreSQL-15"
+    is_ha_cluster = true
+    user_name     = var.db_user
+    password      = var.db_password
+
     private_network {
-        pn_id = scaleway_vpc_private_network.private_net.id
+        pn_id       = scaleway_vpc_private_network.private_net.id
+        enable_ipam = true
     }
     }
 
     # Kubernetes Cluster (Kapsule)
     resource "scaleway_k8s_cluster" "kapsule" {
-    name    = "my-kube-cluster"
-    version = "1.28.2"
-    cni     = "cilium"
-    private_network_id = scaleway_vpc_private_network.private_net.id
-
-    autoscaler_config {
-        disable_scale_down = false
-        scale_down_delay_after_add    = "10m"
-        scale_down_unneeded_time      = "10m"
-        estimator                     = "binpacking"
-        expander                      = "random"
-        ignore_daemonsets_utilization = true
+    name                     = "my-kube-cluster-${random_id.suffix.hex}" # Make the name unique
+    version                  = "1.28.2"
+    cni                      = "cilium"
+    private_network_id       = scaleway_vpc_private_network.private_net.id
+    delete_additional_resources = true
     }
 
-    pool {
-        name            = "default-pool"
-        node_type       = "DEV1-M"
-        size            = 2
-        autoscaling     = true
-        min_size        = 2
-        max_size        = 5
-        autohealing     = true
-        container_runtime = "containerd"
+    # Kubernetes Node Pool
+    resource "scaleway_k8s_pool" "default_pool" {
+    cluster_id       = scaleway_k8s_cluster.kapsule.id
+    name            = "default-pool"
+    node_type       = "DEV1-M"
+    size            = 2
+    autoscaling     = true
+    min_size        = 2
+    max_size        = 5
+    autohealing     = true
+    container_runtime = "containerd"
     }
+
+    # Generate a random suffix for uniqueness
+    resource "random_id" "suffix" {
+    byte_length = 4
     }
 
     # Output Database Connection Information
@@ -272,7 +313,7 @@ Install Terraform and ensure the Scaleway Terraform provider is set up with `ter
     }
 
     output "db_port" {
-    value = scaleway_rdb_instance.database.endpoint[0].port
+    value = scaleway_rdb_instance.database.db_host_port
     }
 
     output "kubeconfig" {
@@ -345,12 +386,13 @@ You need to create the necessary files for your Node.js application. Here’s a 
     const { Pool } = require('pg');
     const app = express();
 
+    // Get DB credentials from environment variables
     const pool = new Pool({
-    user: 'postgres',
-    host: 'node-postgres-db', // This matches the service name in Kubernetes
-    database: 'postgres',
-    password: 'password', // Ensure this matches the password set in the Kubernetes secret
-    port: 5432,
+    user: process.env.DB_USER, // 'admin'
+    host: process.env.DB_HOST, // '<private-network-db-hostname>'
+    database: process.env.DB_NAME, // 'rdb'
+    password: process.env.DB_PASSWORD, 
+    port: process.env.DB_PORT, // '5432'
     });
 
     app.get('/', async (req, res) => {
@@ -384,7 +426,28 @@ You need to create the necessary files for your Node.js application. Here’s a 
 
 ### Creating Kubernetes manifests for the application
 
-You need to create two main Kubernetes manifests: one for the deployment and one for the service.
+1. Ensure the previously created secret is cleared:
+```
+kubectl delete secret db-credentials
+```
+
+2. Recreate the Secret Using `kubectl create secret`. Run the following command without any base64 encoding:
+    ```
+    kubectl create secret generic db-credentials \
+    --from-literal=DB_HOST=<private-network-db-hostname> \
+    --from-literal=DB_PORT=5432 \
+    --from-literal=DB_NAME=rdb \
+    --from-literal=DB_USER=admin \
+    --from-literal=DB_PASSWORD=StrongP@ssw0rd123
+    ```
+    Kubernetes will automatically handle the base64 encoding for you.
+
+3. Get the secret details:
+    ```
+    kubectl get secret db-credentials -o yaml
+    ```
+
+4. Create two main Kubernetes manifests: one for the deployment and one for the service.
 
     **`deployment.yaml`**:
     ```yaml
@@ -403,24 +466,48 @@ You need to create two main Kubernetes manifests: one for the deployment and one
             app: node-postgres-app
         spec:
         containers:
-        - name: node-postgres-app
+            - name: node-postgres-app
             image: ${YOUR_DOCKER_REGISTRY}/node-postgres-app:latest
             ports:
-            - containerPort: 8080
+                - containerPort: 8080
             env:
-            - name: POSTGRES_PASSWORD
-            valueFrom:
-                secretKeyRef:
-                name: postgres-secret
-                key: password
+                - name: DB_HOST
+                valueFrom:
+                    secretKeyRef:
+                    name: db-credentials
+                    key: DB_HOST
+                - name: DB_PORT
+                valueFrom:
+                    secretKeyRef:
+                    name: db-credentials
+                    key: DB_PORT
+                - name: DB_NAME
+                valueFrom:
+                    secretKeyRef:
+                    name: db-credentials
+                    key: DB_NAME
+                - name: DB_USER
+                valueFrom:
+                    secretKeyRef:
+                    name: db-credentials
+                    key: DB_USER
+                - name: DB_PASSWORD
+                valueFrom:
+                    secretKeyRef:
+                    name: db-credentials
+                    key: DB_PASSWORD
     ---
     apiVersion: v1
     kind: Secret
     metadata:
-    name: postgres-secret
+    name: db-credentials
     type: Opaque
     data:
-    password: cGFzc3dvcmQ= # base64 encoded password, 'password' in this case
+    DB_HOST: <base64-encoded-db-host>
+    DB_PORT: <base64-encoded-db-port>
+    DB_NAME: <base64-encoded-db-name>
+    DB_USER: <base64-encoded-db-user>
+    DB_PASSWORD: <base64-encoded-db-password>
     ```
 
     **`service.yaml`**:

@@ -1,0 +1,112 @@
+---
+meta:
+  title: Deploying Hubble as an add-on to Scaleway Kubernetes clusters
+  description: Learn how to deploy Hubble, a network observability and security monitoring tool for Cilium, to your Scaleway Kubernetes cluster using the Scaleway console or the CLI with Helm.
+content:
+  h1: Deploying Hubble as an add-on to Scaleway Kubernetes clusters
+  paragraph: Learn how to deploy Hubble, a network observability and security monitoring tool for Cilium, to your Scaleway Kubernetes cluster using the Scaleway Console or the CLI with Helm.
+tags: hubble kubernetes k8s
+categories:
+  - kubernetes
+dates:
+  validation: 2025-03-05
+  posted: 2025-03-05
+---
+
+Hubble is a network observability and security monitoring tool for Cilium. This guide covers two methods to deploy Hubble on a Scaleway Kubernetes cluster:
+
+- [Using the Scaleway Console (Easy Deploy)](#deploying-via-scaleway-console-easy-deploy)
+- [Using the Scaleway CLI with Helm](#deploying-via-cli-with-helm)
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A [Scaleway Kubernetes cluster](/kubernetes/) (v1.31.0 or higher) with **Cilium CNI enabled**.
+- `kubectl` and `helm` installed and configured on your local machine to interact with your Scaleway Kubernetes cluster.
+
+## Deploying via Scaleway console (Easy Deploy)
+
+You can deploy Hubble using Scaleway's Easy Deploy feature directly from the [console](https://console.scaleway.com), which simplifies the deployment process.
+
+1. Navigate to the [Scaleway Console](https://console.scaleway.com) and go to: **Containers \> Kubernetes \> Your Cluster \> Applications**.
+2. Click **Create** and select **Application Library**.
+3. Search for **Cilium Hubble** and select it.
+4. Review the default configuration and modify it if needed (see configuration options below).
+5. Enter an **application name** and **namespace** (use `kube-system` as required).
+6. Click **Deploy Application** to start the deployment.
+7. Once deployed, restart Cilium agents and check roll out status as follows:
+    ```
+    kubectl -n kube-system rollout restart daemonset cilium
+    ```
+    Then,
+    ```
+    kubectl -n kube-system rollout status daemonset cilium
+    ```
+
+### Accessing Hubble UI
+
+1. Once deployed, forward the Hubble UI service to your local machine:
+    ```
+    kubectl -n kube-system port-forward svc/hubble-ui 12000:80
+    ```
+
+2. Open a browser and go to:
+    ```
+    http://localhost:12000
+    ```
+
+## Deploying via CLI with Helm
+
+Alternatively, you can deploy Hubble using the CLI with Helm, which offers a more customizable and fine-grained deployment experience.
+This method is ideal for users who require advanced configuration options and control over the deployment process.
+
+1. Add the Scaleway Helm repository and update it:
+    ```
+    helm repo add scaleway https://helm.scw.cloud/
+    helm repo update
+    ```
+2. Deploy Hubble in the `kube-system` namespace:
+    ```
+    helm -n kube-system upgrade --install scaleway-cilium-hubble scaleway/scaleway-cilium-hubble
+    ```
+3. Restart Cilium agents to apply the configuration:
+    ```
+    kubectl -n kube-system rollout restart daemonset cilium
+    ```
+4. Check rollout status:
+    ```
+    kubectl -n kube-system rollout status daemonset cilium
+    ```
+
+### Accessing Hubble UI
+
+1. Forward the Hubble UI service to your local machine once the application is deployed:
+    ```
+    kubectl -n kube-system port-forward svc/hubble-ui 12000:80
+    ```
+2. Open a browser and navigate to:
+    ```
+    http://localhost:12000
+    ```
+
+## Configuration options
+
+Hubble can be customized using Helm values. Example key parameters:
+
+| Parameter | Description | Default Value |
+| ----- | ----- | ----- |
+| `nodeConfig.hubble-event-buffer-capacity` | Capacity of the buffer to store recent events.  | `32767` |
+| `nodeConfig.hubble-metrics` | A space-separated list of metrics to enable.  | see `values.yaml` for the default list |
+| `nodeConfig.hubble-metrics-server` | Address to expose Hubble metrics | `:9965` |
+| `nodeConfig.enable-hubble-open-metrics` | Enable OpenMetrics | `false` |
+| `nodeConfig.enable-hubble` | Enable Hubble gRPC service | `true` |
+| `nodeConfig.hubble-socket-path` | UNIX domain socket for Hubble server | `/var/run/cilium/hubble.sock` |
+
+For additional options, refer to the [Helm charts documentation](https://github.com/scaleway/helm-charts/tree/master/charts/scaleway-cilium-hubble).
+
+<Message type="note">
+    * Hubble **must** be deployed in the `kube-system` namespace.
+    * Do **not** enable `operator/envoy/agent` as it may break the managed Cilium.
+    * Costs may arise based on usage.
+</Message>

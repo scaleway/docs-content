@@ -89,8 +89,6 @@ def get_doc_cat_name(filepath, prod_cat_ref):
 
     if filepath_list[0] == "tutorials":
         category_product = "Tutorials"
-    elif filepath_list[0] == "faq":
-        category_product = "FAQ"
     else:
         # catches everything in pages
         category = prod_cat_ref.get(filepath_list[1], ["Unknown", "Unknown"])[0]

@@ -22,28 +22,55 @@ This page explains how to create a simple Dockerfile to containerize your applic
 
 2. Add the following content to your Dockerfile, adjusting the base image and commands according to your application:
 
+<Tabs id="dockerfile-examples">
+<TabsTab label="Go">
 ```dockerfile
-# Use an official base image
-FROM python:3.9-slim
+# Use the official Golang image to create a build artifact.
+FROM golang:1.24-alpine AS builder
 
-# Set the working directory in the container
-WORKDIR /app
+# Create the main.go file with the Go source code
+RUN echo 'package main
 
-# Copy the current directory contents into the container at /app
-COPY . /app
+import "fmt"
 
-# Install any needed packages specified in requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+func main() {
+    fmt.Println("Hello from Scaleway Serverless Jobs!")
+}' > main.go
 
-# Make port 80 available to the world outside this container
-EXPOSE 80
+# Build the Go app
+RUN go build -o main .
 
-# Define environment variable
-ENV NAME World
+# Start a new stage from scratch
+FROM alpine:latest
 
-# Run app.py when the container launches
-CMD ["python", "app.py"]
+# Copy the Pre-built binary file from the previous stage
+COPY --from=builder /app/main .
+
+# Command to run the executable
+CMD ["./main"]
 ```
+</TabsTab>
+<TabsTab label="Python">
+```dockerfile
+FROM python:3.13-slim
+
+# Single-line Python script as entrypoint
+CMD ["python", "-c", "print('Hello from Scaleway Serverless Jobs!')"]
+```
+</TabsTab>
+<TabsTab label="Rust">
+```dockerfile
+FROM rust:1.86-slim
+
+# Pre-compile a Rust binary during build
+RUN echo 'fn main() { println!("Hello from Scaleway Serverless Jobs!"); }' > main.rs && \
+    rustc main.rs
+
+# Run the pre-compiled binary
+CMD ["./main"]
+```
+</TabsTab>
+</Tabs>
 
 ## How to build and push your image from your dockerfile
 
@@ -51,26 +78,26 @@ CMD ["python", "app.py"]
 
 2. Run the following command to build your Docker image:
 
-```bash
-docker build -t my-application .
-```
+    ```bash
+    docker build -t my-application .
+    ```
 
-3. Log in to your Scaleway account in the terminal:
+3. Run the command below to log in to your Scaleway account in the terminal. Do not forget to replace the placeholder with your Container Registry namespace endpoint:
 
-```
-docker login -u <your-email> --password-stdin 
-```
+    ```
+    docker login rg.fr-par.scw.cloud/your-container-registry-namespace -u nologin --password-stdin <<< "$SCW_SECRET_KEY"
+    ```
 
 4. Tag your Docker image so it matches your Scaleway registry's format:
 
-```
-docker tag my-application 
-```
+    ```
+    docker tag my-application:latest rg.fr-par.scw.cloud/your-container-registry-namespace/my-application:latest
+    ```
 
 5. Push the Docker image to the Scaleway Container Registry:
 
-```
-docker push
-```
+    ```
+    docker push rg.fr-par.scw.cloud/your-container-registry-namespace/my-application:latest
+    ```
 
-You can now access your container image from the [Scaleway Container Registry](https://console.scaleway.com/)
+You can now access your container image from the [Scaleway Container Registry](https://console.scaleway.com/registry/namespaces), and [deploy a Serverless Job](/serverless-jobs/reference-content/deploy-job/) from this image.

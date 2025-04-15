@@ -1,0 +1,423 @@
+---
+meta:
+  title: Using Go, Python or Node.js with Topics and Events
+  description: This page explains how to use Go, Python or Node.js with Topics and Events and provides code samples
+content:
+  h1: Using Go, Python or Node.js with Topics and Events
+  paragraph: This page explains how to use Go, Python or Node.js with Topics and Events and provides code samples
+tags: messaging boto3 python nodejs sns go topics-events
+categories:
+  - serverless
+  - topics-and-events
+dates:
+  validation: 2024-10-18
+  posted: 2023-01-04
+---
+
+AWS provides a number of **S**oftware **D**evelopment **K**its (SDKs) which provide language-specific APIs for AWS services, including [SNS](/topics-and-events/concepts/#sns), which is the protocol that Scaleway Topics and Events is based on.
+
+- AWS provides a dedicated [SDK for Go](https://aws.amazon.com/sdk-for-go/).
+- The [AWS SDK for Python](https://aws.amazon.com/sdk-for-python/) is Boto3.
+- For Node.js, use the [AWS SDK for JavaScript](https://aws.amazon.com/sdk-for-javascript/), which can be [installed from NPM](https://github.com/aws/aws-sdk-js-v3#getting-started).
+
+This page provides code samples to show you how to get started using these SDKs with Scaleway Topics and Events.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Valid [credentials](/topics-and-events/how-to/create-credentials/) for Topics and Events
+- Installed the relevant AWS SDK [for Go](https://aws.amazon.com/sdk-for-go/), [Python](https://aws.amazon.com/sdk-for-python/) and/or [JavaScript](https://aws.amazon.com/sdk-for-javascript/)
+
+## Go
+
+### Connect to Topics and Events (Go)
+
+The following code shows you how to connect to Scaleway Topics and Events:
+
+```go
+import (
+  "github.com/aws/aws-sdk-go/aws"
+  "github.com/aws/aws-sdk-go/aws/credentials"
+  "github.com/aws/aws-sdk-go/aws/session"
+  "github.com/aws/aws-sdk-go/service/sns"
+)
+
+func main() {
+  awsSession := session.Must(session.NewSession(&aws.Config{
+    Region:   aws.String("fr-par"),
+    Endpoint: aws.String("http://sns.mnq.fr-par.scaleway.com"),
+    Credentials: credentials.NewStaticCredentials(AwsAccessKey, AwsSecretKey, ""),
+  }))
+
+  awsSns := sns.New(awsSession)
+
+  [...]
+}
+```
+
+<Message type="note">
+
+  The `Endpoint` for Scaleway Topics and Events is `https://sns.mnq.fr-par.scaleway.com`. The values for the access and secret keys should be the credentials you [generated](/topics-and-events/how-to/create-credentials/) for Topics and Events.
+
+</Message>
+
+Once connected, you can use any of the SDK's available functions. Be aware though that some functions are not [supported by Scaleway Topics and Events](/topics-and-events/reference-content/topics-and-events-support/), so make sure to check the link for more details on these. See the [official SDK documentation](https://pkg.go.dev/github.com/aws/aws-sdk-go/service/sns) for more information on getting started with the SDK, or keep reading for some code examples.
+
+### Create a topic (Go)
+
+```go
+createTopicResponse, _ := awsSNS.CreateTopic(&sns.CreateTopicInput{
+  Name: aws.String("my-test-topic"),
+})
+fmt.Println(*createTopicResponse.TopicArn)
+```
+
+### Publish messages to this topic (Go)
+
+Be careful: messages sent to topics with no subscriptions are automatically deleted.
+
+```go
+for i := 0; i < 10; i++ {
+  _, _ = awsSNS.Publish(&sns.PublishInput{
+    Message:  aws.String(fmt.Sprintf("Hello World: %d", i)),
+    TopicArn: createTopicResponse.TopicArn,
+  })
+}
+```
+
+### Create subscriptions to this topic (Go)
+
+#### Subscribe to a public Scaleway function
+
+This code triggers the function each time a message is published to the topic.
+
+You can find the value for `[Function URL]` in the [Scaleway console](https://console.scaleway.com) in the **Endpoints** tab of your function's **Overview** page. 
+
+```go
+_, _ = awsSns.Subscribe(&sns.SubscribeInput{
+  Endpoint: aws.String(FunctionUrl),
+  Protocol: aws.String("lambda"),
+  TopicArn: createTopicResponse.TopicArn,
+})
+
+#### Subscribe to an HTTP/S endpoint
+
+```go
+_, _ = awsSns.Subscribe(&sns.SubscribeInput{
+  Endpoint: aws.String(Url),
+  Protocol: aws.String("http"), // or https
+  TopicArn: createTopicResponse.TopicArn,
+})
+```
+
+The HTTP server should receive an HTTP request with a body in json matching the following format:
+
+```json
+{
+"Type": "SubscriptionConfirmation",
+"Token": "<REDACTED-CONFIRMATION-TOKEN>",
+"MessageId": "<REDACTED-MESSAGE-ID>",
+"TopicArn": "arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic",
+"Message": "You have chosen to subscribe to the topic arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic.\nTo confirm the subscription, visit the SubscribeURL included in this message.",
+"Timestamp": "2022-06-29T10:03:34Z",
+"SignatureVersion": "1",
+"Signature": "<REDACTED-SIGNATURE>",
+"SigningCertURL": "https://messaging.s3.fr-par.scw.cloud/fr-par/sns/sns_certificate_[certSerialNumber].crt",
+"SubscribeURL": "<THE-CONFIRMATION-LINK>" // Get the confirmation link located here
+}
+```
+
+The signing certificate of the message is in the JSON of the `SigningCertURL`. This certificate is also signed by the [trust chain certificate](https://messaging.s3.fr-par.scw.cloud/fr-par/sns/sns-trust-chain.pem) (common name `sns.mnq.srr.scw.cloud`). For more information about verifying the authenticity of the message, refer to the official [AWS documentation](https://docs.aws.amazon.com/sns/latest/dg/sns-verify-signature-of-message.html).
+
+To confirm the subscription, make a request to the `SubscribeURL` using your browser or curl.
+
+### Delete all subscriptions (Go)
+
+```go
+listSubscriptions, _ := awsSns.ListSubscriptionsByTopic(&sns.ListSubscriptionsByTopicInput{
+  TopicArn: createTopicResponse.TopicArn,
+})
+for _, sub := range listSubscriptions.Subscriptions {
+  awsSns.Unsubscribe(&sns.UnsubscribeInput{
+    SubscriptionArn: sub.SubscriptionArn,
+  })
+}
+```
+
+## Python
+
+### Connect to Topics and Events (Python)
+
+The following code shows you how to connect to Topics and Events using Boto3's `resource()`. You could also use `client()`, but we favor `resource()` as it is more pythonesque:
+
+```python
+sns = boto3.resource('sns',
+  endpoint_url=[],
+  aws_access_key_id=[],
+  aws_secret_access_key=[],
+  region_name='fr-par')
+```
+
+<Message type="note">
+  The `endpoint_url` for Scaleway Topics and Events (based on SNS) is `https://sns.mnq.fr-par.scaleway.com`. The values for the access and secret keys should be the credentials you [generated](/topics-and-events/how-to/create-credentials/) for Topics and Events.
+</Message>
+
+Once connected, you can use any of the SDK's available functions. However, some functions are not [supported by Scaleway Topics and Events](/topics-and-events/reference-content/sns-support/), so do check the link to make sure. See the [official SDK documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html) for more information, or keep reading for some code examples.
+
+### Create a topic (Python)
+
+```python
+# Create a topic. This returns an SNS.Topic instance
+topic = sns.create_topic(Name='test')  # You can now access identifiers and attributes
+print(topic.arn)
+print(topic.attributes)
+```
+
+### Publish messages to this topic (Python)
+
+Be careful: messages sent to topics with no subscriptions are automatically deleted.
+
+```python
+for i in range (0,10):
+  topic.publish(Message="Hello World: "+str(i))
+```
+
+### Create subscriptions to this topic (Python)
+
+#### Subscribe to a public Scaleway function
+
+This code triggers the function each time a message is published to the topic.
+
+You can find the value for `[Function URL]` in the [Scaleway console](https://console.scaleway.com) in the **Endpoints** tab of your function's **Overview** page. 
+
+```python
+subscription_functions = topic.subscribe(
+    Protocol='lambda',
+    Endpoint=[Function URL],
+    ReturnSubscriptionArn=True
+)
+```
+
+```python
+subscription_functions = topic.subscribe(
+    Protocol='lambda',
+    Endpoint=[Function URL],
+    ReturnSubscriptionArn=True,
+    Attributes={
+      'RedrivePolicy': '{"deadLetterTargetArn": "[Queue ARN]"}'
+    }
+)
+```
+
+#### Subscribe to an HTTP/S endpoint
+
+```python
+subscription = topic.subscribe(
+    Protocol='http', //or https
+    Endpoint=url,
+    ReturnSubscriptionArn=True
+)
+```
+
+The HTTP server should receive an HTTP request with a body in json matching the following format:
+
+```json
+{
+"Type": "SubscriptionConfirmation",
+"Token": "<REDACTED-CONFIRMATION-TOKEN>",
+"MessageId": "<REDACTED-MESSAGE-ID>",
+"TopicArn": "arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic",
+"Message": "You have chosen to subscribe to the topic arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic.\nTo confirm the subscription, visit the SubscribeURL included in this message.",
+"Timestamp": "2022-06-29T10:03:34Z",
+"SignatureVersion": "1",
+"Signature": "<REDACTED-SIGNATURE>",
+"SigningCertURL": "http://<REDACTED-URL>/SNStest.crt",
+"SubscribeURL": "<THE-CONFIRMATION-LINK>" // Get the confirmation link located here
+}
+```
+
+To confirm the subscription, make a request to the `SubscribeURL` using your browser or curl.
+
+### Delete all subscriptions (Python)
+
+```python
+for subs in topic.subscriptions.all():
+    subs.delete()
+```
+
+## Node.js
+
+### Connect to Topics and Events (NodeJS)
+
+The following code sample shows how to connect to Topics and Events:
+
+```javascript
+import { 
+    CreateTopicCommand,
+    DeleteTopicCommand,
+    ListSubscriptionsByTopicCommand,
+    ListTopicsCommand,
+    PublishCommand,
+    SNSClient,
+    SubscribeCommand,
+    UnsubscribeCommand,
+ } from "@aws-sdk/client-sns";
+
+var snsClient = new SNSClient({
+    credentials : {
+        accessKeyId : "",
+        secretAccessKey: ""
+    },
+    region: "par",
+    endpoint: "https://sns.mnq.fr-par.scaleway.com",
+    
+})
+
+```
+
+<Message type="note">
+  The `endpoint_url` for Scaleway Topics and Events is `https://sns.mnq.fr-par.scaleway.com`. For the access and secret key values, use the credentials you [generated](/topics-and-events/how-to/create-credentials/) for Topics and Events.
+</Message>
+
+Once connected, you can use any of the SDK's available functions. However, some functions are not [supported by Scaleway Topics and Events](/topics-and-events/reference-content/sns-support), so do check the link to make sure. See the [official SDK documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-sns/) for more information, or keep reading for some code examples.
+
+### Create a topic (NodeJS)
+
+You can find all available parameters for `createTopic` in the [AWS documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-sns/classes/createtopiccommand.html).
+
+```javascript
+var paramsTopic = {
+    Name: 'MyTopic'
+  };
+const commandCreateTopic = new CreateTopicCommand(paramsTopic);
+const restCreateTopic = await snsClient.send(commandCreateTopic);
+const topicARN= restCreateTopic.TopicArn;
+console.log(topicARN);
+```
+
+### Publish messages to this topic (NodeJS)
+
+Be careful: messages sent to topics with no subscriptions are automatically deleted.
+
+This code sample demonstrates how to send a message with `MessageAttributes`. For more information on MessageAttributes, refer to [the official documentation](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-sns/classes/publishcommand.html).
+
+```javascript
+var paramsSend = {
+    Message: 'MyMessage', 
+    Subject: 'MySubject',
+    TopicArn: topicARN,
+  };
+const commandPublishCommand = new PublishCommand(paramsSend);
+const restPublishCommand = await snsClient.send(commandPublishCommand);
+console.log(restPublishCommand.MessageId);
+```
+
+### Subscribe to a topic (NodeJS)
+
+You can find all available parameters for the subscribe operation in the [AWS documentation] (https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-sns/classes/subscribecommand.html)
+
+#### Subscribe to a public Scaleway function
+
+This code triggers the function each time a message is published to the topic.
+
+You can find the value for `[Function URL]` in the [Scaleway console](https://console.scaleway.com) in the **Endpoints** tab of your function's **Overview** page. 
+
+```javascript
+var params = {
+    Protocol: 'lambda', 
+    TopicArn: topicARN, 
+    Endpoint: 'YOUR FUNCTION ENDPOINT',
+    ReturnSubscriptionArn: true 
+  };
+const command = new SubscribeCommand(params);
+const rest = await snsClient.send(command);
+console.log(rest.SubscriptionArn);
+```
+
+#### Subscribe to an HTTP/S endpoint
+
+```javascript
+var paramsHttpsSubscription = {
+    Protocol: 'https', 
+    TopicArn: topicARN, 
+    Endpoint: 'YOUR SERVER ENDPOINT',
+    ReturnSubscriptionArn: true 
+  };
+const commandHttpsSubscription = new SubscribeCommand(paramsHttpsSubscription);
+const restHttpsSubscription = await snsClient.send(commandHttpsSubscription);
+console.log(restHttpsSubscription.SubscriptionArn);
+
+```
+The HTTP server receives an HTTP request with a `json` body matching the following format:
+
+```json
+{
+"Type": "SubscriptionConfirmation",
+"Token": "<REDACTED-CONFIRMATION-TOKEN>",
+"MessageId": "<REDACTED-MESSAGE-ID>",
+"TopicArn": "arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic",
+"Message": "You have chosen to subscribe to the topic arn:scw:sns:fr-par:<REDACTED-ID>:MyTopic.\nTo confirm the subscription, visit the SubscribeURL included in this message.",
+"Timestamp": "2022-06-29T10:03:34Z",
+"SignatureVersion": "1",
+"Signature": "<REDACTED-SIGNATURE>",
+"SigningCertURL": "http://<REDACTED-URL>/SNStest.crt",
+"SubscribeURL": "<THE-CONFIRMATION-LINK>" // Get the confirmation link located here
+}
+```
+
+To confirm the subscription, make a request to the `SubscribeURL` using your browser or curl.
+
+### Delete all subscriptions (NodeJS)
+
+The following code sample deletes all subscriptions to a topic.
+
+```javascript
+var paramsListSubs = {
+    TopicArn: topicARN, 
+  };
+const commandListSubs = new ListSubscriptionsByTopicCommand(paramsListSubs);
+const restListSubs = await snsClient.send(commandListSubs);
+const subscriptionsList = restListSubs.Subscriptions;
+subscriptionsList.forEach(async function (element) {
+try {
+    var params = {
+        SubscriptionArn: element.SubscriptionArn 
+      };
+      const command = new UnsubscribeCommand(params)
+      const rest = await snsClient.send(command)
+      console.log("Unsubscribing : ",rest.$metadata.httpStatusCode)
+
+} catch (e) {
+  throw new Error(e.message)
+}
+});
+
+```
+
+### Delete all topics (NodeJS)
+
+The following code sample deletes all your topics.
+
+```javascript
+// First List Topics
+const commandList = new ListTopicsCommand({});
+const restTopicList = await snsClient.send(commandList);
+const TopicList = restTopicList.Topics
+
+// For Each Topic in the list, apply the Delete Topic Command
+TopicList.forEach(async function (element) {
+    try {
+        var params = {
+            TopicArn: element.TopicArn 
+          };
+          const command = new DeleteTopicCommand(params)
+          const rest = await snsClient.send(command)
+          console.log("Deleting : ",rest.$metadata.httpStatusCode)
+    
+    } catch (e) {
+      throw new Error(e.message)
+    }
+    });
+
+```

@@ -12,6 +12,13 @@ categories:
 tags: instance type production production-optimized range POP2 ENT1
 ---
 
+Migrating virtual machines from one platform to another can be a complex process, especially when moving from a proprietary environment like VMware to a cloud-based infrastructure like Scaleway.
+However, with the right tools and a step-by-step approach, you can successfully migrate your VMware virtual machines to Scaleway Instances, taking advantage of the scalability, flexibility, and cost-effectiveness of the cloud.
+
+This guide will walk you through the process of migrating your VMware virtual machines to Scaleway Instances, covering everything from preparing your Scaleway Instance to managing the migration, converting VMDK files to QCOW2,
+uploading the QCOW2 image to Scaleway Object Storage, and finally, creating an image from the imported volume and booting an instance with the image.
+By following these steps, you'll be able to seamlessly migrate your VMware virtual machines to Scaleway Instances, ensuring minimal downtime and optimal performance.
+
 ## Validating the inventory of machines to migrate
 
 Identify the virtual machines (VMs) to migrate on your VMware plattform:
@@ -23,7 +30,7 @@ Identify the virtual machines (VMs) to migrate on your VMware plattform:
 
 ## Preparing a Scaleway Instance to manage the migration
 
-1. [Create a new instance](/instances/how-to/create-an-instance/) and log into it [using SSH](/instances/how-to/connect-to-instance/).
+1. [Create a new Instance](/instances/how-to/create-an-instance/) to handle the migration and log into it [using SSH](/instances/how-to/connect-to-instance/).
 2. Install the following CLI tools, required for the migration of your virtual machine:
    - `qemu-img` — for converting VMDK to QCOW2
       ```sh
@@ -47,14 +54,20 @@ Identify the virtual machines (VMs) to migrate on your VMware plattform:
 3. Configure credentials for the tools:
    - For Scaleway: `scw init`
    - For AWS/S3: Refer to [Using Object Storage with the AWS-CLI](https://www.scaleway.com/en/docs/object-storage/api-cli/object-storage-aws-cli/)
-   - For vCenter: credentials and VPN (if needed)
+   - For vCenter: credentials and VPN (if needed):
+      ```
+      export GOVC_PASSWORD=<VMware password>
+      export GOVC_USERNAME=root
+      export GOVC_INSECURE=1
+      export GOVC_URL=<VMware host>
+      ```
 
 ## Downloading VMDK files using govmomi
 
 Download the VMDK file from vCenter:
 
 ```bash
-govc export.ovf -vm <vm_name>
+govc export.ovf -vm <vm_name> /path/to/image
 ```
 
 <Message type="note">
@@ -73,15 +86,16 @@ qemu-img convert -O qcow2 <vm_name>.vmdk <vm_name>.qcow2
 
 1. Mount the QCOW2 image on your Instance:
   ```bash
-  sudo modprobe nbd
-  sudo qemu-nbd -c /dev/nbd0 <vm_name>.qcow2
+  modprobe nbd
+  qemu-nbd -c /dev/nbd0 <vm_name>.qcow2
   ```
   Make any changes (e.g., install cloud-init, remove VMware tools).
+
 
 2. Unmount the file:
 
 ```bash
-sudo qemu-nbd -d /dev/nbd0
+qemu-nbd -d /dev/nbd0
 ```
 
 ## Uploading the QCOW2 image to Scaleway Object Storage
@@ -92,44 +106,20 @@ Upload the converted disk:
 aws s3 cp <vm_name>.qcow2 s3://<bucket_name>/
 ```
 
-## Importing the QCOW2 image from Object Storage into Scaleway as a volume
+## Importing the QCOW2 image from Object Storage into Scaleway as a SBS snaphot
 
-Import into a new volume:
-
-```bash
-scw instance volume import qcow2-from-s3 \
-  s3-url=s3://<bucket_name>/<vm_name>.qcow2 \
-  name=<volume_name> \
-  project-id=<project_id> \
-  zone=<zone>
-```
-
-> You can retrieve project ID and zone using `scw project list` and `scw zone list`.
-
----
-
-### **Step 8: Create an image from the imported volume**
+Import into a new snapshot:
 
 ```bash
-scw instance image create-from-volume \
-  volume-id=<volume_id> \
-  name=<image_name> \
-  zone=<zone>
+scw instance snapshot create zone=fr-par-1 name=<my-imported-snapshot> volume-type=b_ssd bucket=<my-bucket> key=<my-qcow2-file-name.qcow2>
 ```
 
----
 
-### **Step 9: Create Private Networks if needed**
+## (Optional) Create Private Networks if needed
 
-```bash
-scw vpc private-network create \
-  name=<pn_name> \
-  ipam-configs.0.cidr=<subnet_cidr>
-```
 
----
 
-### **Step 10: Boot an instance with the image and attach PN**
+## Booting an instance with the image and attaching the PN
 
 Create a new server:
 
@@ -138,8 +128,7 @@ scw instance server create \
   name=<instance_name> \
   image-id=<image_id> \
   commercial-type=<type> \
-  zone=<zone> \
-  private-nics.0.private-network-id=<pn_id>
+  zone=<zone>
 ```
 
 Start the server:
@@ -147,11 +136,3 @@ Start the server:
 ```bash
 scw instance server start server-id=<server_id> zone=<zone>
 ```
-
----
-
-## ✅ Final Notes
-
-- Run `scw --help` or `scw instance server create --help` for more guidance.
-- Double-check your Scaleway **region/zone compatibility** (e.g., `fr-par-1`, `nl-ams-1`, etc.).
-- Ensure the image is cloud-ready: ideally includes `cloud-init`.

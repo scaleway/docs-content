@@ -5,11 +5,11 @@ meta:
   h1: Migrating VMware virtual machines to Scaleway Instances
   paragraph:  Find out how to migrate virtual VMware machines to Scaleway Instances.
 dates:
-  validation: 2025-03-03
-  posted: 2023-02-22
+  validation: 2025-04-29
+  posted: 2024-04-29
 categories:
   - compute
-tags: instance type production production-optimized range POP2 ENT1
+tags: instance type production vmware esxi migratio
 ---
 
 Migrating virtual machines from one platform to another can be a complex process, especially when moving from a proprietary environment like VMware to a cloud-based infrastructure like Scaleway.
@@ -74,7 +74,7 @@ govc export.ovf -vm <vm_name> /path/to/image
   Adjust this based on your `govmomi`/`govc` setup and environment.
 </Message>
 
-## Converting the VMDK file to QCOW2**
+## Converting the VMDK file to QCOW2
 
 Convert the downloaded VMDK file to QCOW2 using `qemu-img`:
 
@@ -90,7 +90,6 @@ qemu-img convert -O qcow2 <vm_name>.vmdk <vm_name>.qcow2
   qemu-nbd -c /dev/nbd0 <vm_name>.qcow2
   ```
   Make any changes (e.g., install cloud-init, remove VMware tools).
-
 
 2. Unmount the file:
 
@@ -108,31 +107,18 @@ aws s3 cp <vm_name>.qcow2 s3://<bucket_name>/
 
 ## Importing the QCOW2 image from Object Storage into Scaleway as a SBS snaphot
 
-Import into a new snapshot:
+1. Import the image into a new snapshot:
 
 ```bash
-scw instance snapshot create zone=fr-par-1 name=<my-imported-snapshot> volume-type=b_ssd bucket=<my-bucket> key=<my-qcow2-file-name.qcow2>
+scw block snapshot import-from-object-storage bucket=<my_bucket> key=<my-qcow2-file-name.qcow2> name=<my-imported-snapshot> size=<size-in-GB>
 ```
-
-
-## (Optional) Create Private Networks if needed
-
-
-
-## Booting an instance with the image and attaching the PN
-
-Create a new server:
+2 . Create a volume from the snapshot:
 
 ```bash
-scw instance server create \
-  name=<instance_name> \
-  image-id=<image_id> \
-  commercial-type=<type> \
-  zone=<zone>
+scw instance image create snapshot-id=<snapshot-id> arch=x86_64
 ```
 
-Start the server:
+3. Create the server from the image:
 
 ```bash
-scw instance server start server-id=<server_id> zone=<zone>
-```
+scw instance server create image=<image-id> type=<commercial-type>

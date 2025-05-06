@@ -103,7 +103,7 @@ If you create a custom route with a destination of `0.0.0.0/0`, this custom rout
 
 Previously, Public Gateways could only advertise their default routes to the Private Networks to which they were directly attached. Resources on other Private Networks within the VPC could not access the public internet via these remote Public Gateways.
 
-With new routing behavior, this standard behavior remains unchanged. Default routes' scope is still, by default, limited to their directly attached Private Networks.
+With new routing behavior, this standard behavior remains unchanged. Default routes' scope is still, as standard, limited to their directly attached Private Networks.
 
 However, you now have an additional option to enable each Private Network to receive advertisements of **all** default routes throughout the entire VPC. This includes routes towards all Public Gateways advertising a default route, as well as any custom-created default routes. This allows resources on other Private Networks to find access to the public internet, even if they do not have their own attached gateway.
 
@@ -129,23 +129,34 @@ Your existing setup may be impacted by the new behavior if you want your custom 
 
 ### Example use of NACLs to mitigate impact
 
-Imagine the following scenario:
+TODO CHECK THIS EXAMPLE
 
-Your VPN has three Private Networks using the following CIDR blocks: 
+#### Scenario 
+
+<Lightbox src="scaleway-vpc-new-routing-ex.webp" alt="A diagram shows the infrastructure described before" />
+
+Your VPC has three Private Networks using the following CIDR blocks: 
   - `backend-net`: `10.0.0.0/24`
   - `frontend-net` `10.0.1.0/24`
   - `monitoring-net`: `10.0.2.0/24`
 
 There is a custom route configured in your VPC, that routes all source traffic destined for `192.168.100.0/24` to the Instance `vpn-gateway-host` as next hop. This Instance hosts a VPN gateway, and is attached only to Private Network `monitoring-net`, with the private IP address `10.0.2.42/32`.
 
+#### Problem
+
 You want to prevent resources attached to `backend-net` and `frontend-net` from sending traffic to this VPN gateway, under new routing behavior where custom routes are advertised throughout the VPC. You want only resources attached to `monitoring-net` to be able to send traffic to the VPN gateway.
+
+#### Solution 1: NACL allow
 
 You could create two NACL rules to **Deny** traffic first from `10.0.0.0/24` (`backend-net`) and then from `10.0.0.1/24` (`frontend-net`) towards destination `10.0.2.42/32` (`vpn-gateway-host`). When combined with a default NACL rule to **Allow** all other traffic, this would effectively block resources on `backend-net`.
 
-Alternatively, and aligned with best practice, when the default NACL rule **Denies** all traffic not matched to a specifc rule, `backend-net` and `frontend-net` will already be blocked from sending traffic to `vpn-gateway-host` on `monitoring-net`. Since NACLs do not filter traffic between resources attached to the same Private Network, other resources on `monitoring-net` would still be able to successfully route traffic to `vpn-gateway-host`. 
+#### Solution 2: NACL deny
 
-TODO CHECK THIS example
--Would it be better to modify the custom route?
+Alternatively, and aligned with best practice, when the default NACL rule **Denies** all traffic not matched to a specific rule, `backend-net` and `frontend-net` will already be blocked from sending traffic to `vpn-gateway-host` on `monitoring-net`. Since NACLs do not filter traffic between resources attached to the same Private Network, other resources on `monitoring-net` would still be able to successfully route traffic to `vpn-gateway-host`. 
+
+#### Solution 3: Modify custom route
+
+Another alternative is to modify the custom route so that instead of applying to **all** source traffic, it applies only to traffic from within Private Network `monitoring-net`. Change the source IP range to `10.0.2.0/24` in the custom rule.
 
 ## Limitations
 

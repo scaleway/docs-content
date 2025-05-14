@@ -1,0 +1,131 @@
+h1: Encrypting and decrypting data with an asymmetric key
+paragraph: Learn how to encrypt and decrypt data with an asymmetric key using Key Manager with Scaleway Go SDK.
+tags: key sensitive-data encrypt decrypt asymmetric digest
+dates:
+validation: 2025-02-06
+posted: 2025-02-06
+---
+
+Scaleway's Key Manager provides a secure way to manage asymmetric keys, allowing you to offload sensitive cryptographic
+operations to a managed service. In this guide, you'll learn how to integrate the Scaleway Go SDK to encrypt and decrypt
+data using an rsa_oaep_3072_sha256 key directly through the Key Manager API.
+
+
+<Message type="warning">
+    Please note that we do not recommend using asymmetric encryption for anything other than key encryption.
+    For all other purposes (eg. encrypting large data or files), we recommend using Tink with Scaleway's Key Manager as explained [here.](/key-manager/api-cli/encrypt-decrypt-data-with-km-dek/)
+</Message>
+
+## Configuring your environment variables
+
+Configuring your environment variables allows the Go application to authenticate and use Scaleway's API and Key Manager.
+
+Open a terminal and paste the following commands to export your environment variables. Make sure that you add your **own variables**. You can also use a Scaleway configuration file.
+
+  ```bash
+  export SCW_ACCESS_KEY="<API-ACCESS-KEY>"
+  export SCW_SECRET_KEY="<API-SECRET-KEY>"
+  export SCW_DEFAULT_ORGANIZATION_ID="<Scaleway-Organization-ID>"
+  export SCW_DEFAULT_REGION="<region>"
+  export SCW_API_URL="<api-URL>"
+  ```
+
+## Encrypt data
+
+This operation takes place locally, ensuring the plaintext message never leaves your environment unprotected.
+The public key can be fetched using the Key Manager API, parsed, and used to encrypt data with RSA-OAEP and SHA-256 padding.
+
+```golang
+// encryptAsymmetric encrypts data on your local machine using an 'rsa_oaep_3072_sha256' key retrieved from Scaleway KMS.
+//
+// Parameters:
+//   - keyID: The unique identifier of the asymmetric key stored in Scaleway KMS.
+//   - message: The plaintext message that needs to be encrypted.
+//
+// Returns:
+//   - error: An error if the encryption process fails, otherwise nil.
+func encryptAsymmetric(keyID string, message string) error {
+	// Initialize the Scaleway client
+	client, err := scw.NewClient(scw.WithEnv())
+	if err != nil {
+		panic(err)
+	}
+	kmsApi := key_manager.NewAPI(client)
+
+	// Retrieve the public key from Scaleway KMS.
+	response, err := kmsApi.GetPublicKey(&key_manager.GetPublicKeyRequest{
+		KeyID: keyID,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to get public key: %w", err)
+	}
+
+	// Parse the public key. Note, this example assumes the public key is in the
+	// RSA format.
+	block, _ := pem.Decode([]byte(response.Pem))
+	publicKey, err := x509.ParsePKCS1PublicKey(block.Bytes)
+	if err != nil {
+		return fmt.Errorf("failed to parse public key: %w", err)
+	}
+
+	// Convert the message into bytes. Cryptographic plaintexts and
+	// ciphertexts are always byte arrays.
+	plaintext := []byte(message)
+
+	// Encrypt data using the RSA public key.
+	ciphertext, err := rsa.EncryptOAEP(sha256.New(), rand.Reader, publicKey, plaintext, nil)
+	if err != nil {
+		return fmt.Errorf("rsa.EncryptOAEP: %w", err)
+	}
+
+	fmt.Printf("Encrypted ciphertext: %s\n", ciphertext)
+	return nil
+}
+```
+
+<Message type="note">
+    Please note that :
+    - Encryption can also be performed using the Scaleway's Key Manager Encrypt method.
+    - In the case of asymmetric encryption, the maximum payload size allowed depends on the key algo (190 bytes for `RSA_OAEP_2048_SHA256`, 318 bytes for `RSA_OAEP_3072_SHA256` and 446 bytes for `RSA_OAEP_4096_SHA256`).
+</Message>
+
+## Decrypt data
+
+To retrieve the original message, you must send the encrypted ciphertext to Scaleway Key Manager,
+which uses the private portion of the asymmetric key to decrypt it. This ensures your private key remains secure within
+Scaleway’s infrastructure.
+
+```golang
+
+// decryptAsymmetric attempts to decrypt a given ciphertext using an 'rsa_oaep_3072_sha256' key from Scaleway KMS.
+//
+// Parameters:
+//   - keyID: The unique identifier of the asymmetric key stored in Scaleway KMS.
+//   - ciphertext: The encrypted data that needs to be decrypted.
+//
+// Returns:
+//   - error: An error if the decryption process fails, otherwise nil.
+func decryptAsymmetric(keyID string, ciphertext []byte) error {
+	// Initialize the Scaleway client
+	client, err := scw.NewClient(scw.WithEnv())
+	if err != nil {
+		panic(err)
+	}
+	kmsApi := key_manager.NewAPI(client)
+
+	// Build the request.
+	req := &key_manager.DecryptRequest{
+		KeyID:      keyID,
+		Ciphertext: ciphertext,
+	}
+
+	// Call the API.
+	result, err := kmsApi.Decrypt(req)
+	if err != nil {
+		return fmt.Errorf("failed to decrypt ciphertext: %w", err)
+	}
+
+	fmt.Printf("Decrypted plaintext: %s", result.Plaintext)
+	return nil
+}
+```

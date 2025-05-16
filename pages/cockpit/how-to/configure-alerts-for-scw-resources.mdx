@@ -8,11 +8,14 @@ content:
 categories:
   - observability cockpit
 dates:
-  validation: 2025-04-08
+  validation: 2025-05-12
   posted: 2023-11-06
 ---
 
-This page shows you how to configure alerts for Scaleway resources in Grafana using the `Scaleway Metrics` data source.
+
+Cockpit does not support Grafana-managed alerting. It integrates with Grafana to visualize metrics, but alerts are managed through the Scaleway alert manager. You should use Grafana only to define alert rules, not to evaluate or receive alert notifications. Once the conditions of your alert rule are met, the Scaleway alert manager evaluates the rule and sends a notification to the contact points you have configured in the Scaleway console or in Grafana.
+
+This page shows you how to create alert rules in Grafana for monitoring Scaleway resources integrated with Cockpit, such as Instances, Object Storage, and Kubernetes. These alerts rely on Scaleway-provided metrics, which are preconfigured and available in the **Metrics browser** drop-down when using the **Scaleway Metrics data source** in the Grafana interface. This page explains how to use the `Scaleway Metrics` data source, interpret metrics, set alert conditions, and activate alerts.
 
 <Macro id="requirements" />
 
@@ -20,35 +23,149 @@ This page shows you how to configure alerts for Scaleway resources in Grafana us
   - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
   - Scaleway resources you can monitor
   - [Created Grafana credentials](/cockpit/how-to/retrieve-grafana-credentials/) with the **Editor** role
-  - [Enabled](/cockpit/how-to/enable-alert-manager/) the alert manager, and [activated preconfigured alerts](/cockpit/how-to/activate-managed-alerts/)
-  - [Created](/cockpit/how-to/add-contact-points/) at least one contact point
-  - Selected the **Scaleway Alerting** alert manager in Grafana
+  - [Enabled](/cockpit/how-to/enable-alert-manager/) the Scaleway alert manager
+  - [Created](/cockpit/how-to/add-contact-points/) a contact point in the Scaleway console or in Grafana (with the `Scaleway Alerting` alert manager of the same region as your `Scaleway Metrics` data source), otherwise alerts will not be delivered
+
+## Switch to data source managed alert rules
+
+Data source managed alert rules allow you to configure alerts managed by the data source of your choice, instead of using Grafana's managed alerting system which is not supported by Cockpit.
 
 1. [Log in to Grafana](/cockpit/how-to/access-grafana-and-managed-dashboards/) using your credentials.
 2. Click the **Toggle menu** then click **Alerting**.
 3. Click **Alert rules** and **+ New alert rule**.
-4. Scroll down to the **Define query and alert condition** section and click **Switch to data source-managed alert rule**.
-    <Message type="important">
-     This allows you to configure alert rules managed by the data source of your choice, instead of using Grafana's managed alert rules.
-    </Message>
-5. Type in a name for your alert.
-6. Select the data source you want to configure alerts for. For the sake of this documentation, we are choosing the **Scaleway Metrics** data source.
-7. In the **Metrics browser** drop-down, select the metric you want to configure an alert for. For the sake of this documentation, we are choosing the `instance_server_cpu_seconds_total` metric.
-8. Select labels that apply to the metric you have selected in the previous step, to target your desired resources and fine-tune your alert.
-9. Select one or more values for your labels.
-10. Click **Use query** to generate your alert based on the conditions you have defined. For example, the alert below will be triggered whenever **the rate of our Instance's total CPU usage per second exceeds 10%**.
-    <Lightbox src="scaleway-instance-grafana-alert.webp" alt="" />
-11. In the **Set alert evaluation behavior** field, configure the amount of time during which the alert can be in breach of the condition(s) you have defined until it fires.
-    <Message type="note">
-     For example, if you wish to be alerted after your alert has been in breach of the condition for 2 minutes without interruption, type `2` and select `minutes` in the drop-down.
-    </Message>
-12. Enter a namespace for your alert in the **Namespace** field and click **Enter**.
-13. Enter a name for your alert's group in the **Group** field and click **Enter**.
-14. Optionally, add a summary and a description.
-15. Click **Save rule** at the top right corner of your screen to save your alert. Once your alert meets the requirements you have configured, you will receive an email to inform you that your alert is firing.
+4. In the **Define query and alert condition** section, scroll to the **Grafana-managed alert rule** information banner and click **Switch to data source-managed alert rule**. This step is **mandatory** because Cockpit does not support Grafana’s built-in alerting system, but only alerts configured and evaluated by the data source itself. You are redirected to the alert creation process.
+    <Lightbox src="scaleway-switch-to-managed-alerts-button.webp" alt="" />
+
+## Define your metric and alert conditions
+
+Switch between the tabs below to create alerts for a Scaleway Instance, an Object Storage bucket, a Kubernetes cluster pod, or Cockpit logs.
+
+<Tabs id="install">
+  <TabsTab label="Scaleway Instance">
+    The steps below explain how to create the metric selection and configure an alert condition that triggers when **your Instance consumes more than 10% of a single CPU core over the past 5 minutes.**
+
+    1. Type a name for your alert. For example, `alert-for-high-cpu-usage`.
+    2. Select the **Scaleway Metrics** data source.
+    3. Click the **Metrics browser** drop-down.
+        <Lightbox src="scaleway-metrics-browser.webp" alt="" />
+        <Lightbox src="scaleway-metrics-displayed.webp" alt="" />
+    4. Select the metric you want to configure an alert for. For example, `instance_server_cpu_seconds_total`.
+        <Message type="tip">
+         The `instance_server_cpu_seconds_total` metric records how many seconds of CPU time your Instance has used in total. It is helpful to detect unexpected CPU usage spikes.
+        </Message>
+    5. Select the appropriate labels to filter your metric and target specific resources.
+    6. Choose values for your selected labels. The **Resulting selector** field displays your final query selector.
+        <Lightbox src="scaleway-metric-selection.webp" alt="" />
+    7. Click **Use query** to validate your metric selection.
+    8. In the query field next to the **Metrics browser** button, paste the following query. Make sure that the values for the labels you have selected (for example, `resource_id` and `resource_name`) correspond to those of the target resource.
+        ```bash
+        rate(instance_server_cpu_seconds_total{resource_id="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx",resource_name="name-of-your-resource"}[5m]) > 0.1
+        ```
+    9. In the **Set alert evaluation behavior** field, specify how long the condition must be true before triggering the alert.
+    10. Enter a name in the **Namespace** and **Group** fields to categorize and manage your alert, and optionally, add annotations.
+    11. Enter a label in the **Labels** field and a name in the **Value** field. You can skip this step if you want your alerts to be sent to the contact points you may already have created in the Scaleway console.
+        <Message type="note">
+         In Grafana, notifications are sent by matching alerts to notification policies based on labels. This step is about deciding how alerts will reach you or your team (Slack, email, etc.) based on labels you attach to them. Then, you can set up rules that define who receives notifications in the **Notification policies** page.
+         For example, if an alert has the label `team = instances-team`, you are telling Grafana to send a notification to the Instances team when your alert `alert-for-high-cpu-usage` gets triggered. Find out how to [configure notification policies in Grafana](/tutorials/configure-slack-alerting/#configuring-a-notification-policy).
+        </Message>
+    12. Click **Save rule** in the top right corner of your screen to save and activate your alert.
+    13. Optionally, check that your configuration works by temporarily lowering the threshold. This will trigger the alert and notify your [contact point](/cockpit/concepts/#contact-points).
+  </TabsTab>
+  <TabsTab label="Object Storage bucket">
+    The steps below explain how to create the metric selection and configure an alert condition that triggers when **the object count in your bucket exceeds a specific threshold**.
+
+    1. Type a name for your alert.
+    2. Select the **Scaleway Metrics** data source.
+    3. Click the **Metrics browser** drop-down.
+        <Lightbox src="scaleway-metrics-browser.webp" alt="" />
+        <Lightbox src="scaleway-metrics-displayed.webp" alt="" />
+    4. Select the metric you want to configure an alert for. For example, `object_storage_bucket_objects_total`.
+        <Message type="tip">
+         The `object_storage_bucket_objects_total` metric indicates the total number of objects stored in a given Object Storage bucket. It is useful to monitor and control object growth in your bucket and avoid hitting thresholds.
+        </Message>
+    5. Select the appropriate labels to filter your metric and target specific resources.
+    6. Choose values for your selected labels. The **Resulting selector** field displays your final query selector.
+    7. Click **Use query** to validate your metric selection. Your selection displays in the query field next to the **Metrics browser** button. This prepares it for use in the alert condition, which we will define in the next steps.
+    8. In the query field, paste the following query. Make sure that the values for the labels you have selected (for example, `resource_id` and `region`) correspond to those of the target resource.
+        ```bash
+        object_storage_bucket_objects_total{region="fr-par", resource_id="my-bucket"} > 2000
+        ```
+    9. In the **Set alert evaluation behavior** field, specify how long the condition must be true before triggering the alert.
+    10. Enter a name in the **Namespace** and **Group** fields to categorize and manage your alert, and optionally, add annotations.
+    11. Enter a label in the **Labels** field and a name in the **Value** field. You can skip this step if you want your alerts to be sent to the contact points you may already have created in the Scaleway console.
+        <Message type="note">
+         In Grafana, notifications are sent by matching alerts to notification policies based on labels. This step is about deciding how alerts will reach you or your team (Slack, email, etc.) based on labels you attach to them. Then, you can set up rules that define who receives notifications in the **Notification policies** page.
+         For example, if an alert has the label `team = object-storage-team`, you are telling Grafana to send a notification to the Object Storage team when your alert is firing. Find out how to [configure notification policies in Grafana](/tutorials/configure-slack-alerting/#configuring-a-notification-policy).
+        </Message>
+    12. Click **Save rule** in the top right corner of your screen to save and activate your alert.
+    13. Optionally, check that your configuration works by temporarily lowering the threshold. This will trigger the alert and notify your [contact point](/cockpit/concepts/#contact-points).
+  </TabsTab>
+  <TabsTab label="Kubernetes pod">
+    The steps below explain how to create the metric selection and configure an alert condition that triggers when **no new pod activity occurs, which could mean your cluster is stuck or unresponsive.**
+
+    1. Type a name for your alert.
+    2. Select the **Scaleway Metrics** data source.
+    3. Click the **Metrics browser** drop-down.
+        <Lightbox src="scaleway-metrics-browser.webp" alt="" />
+        <Lightbox src="scaleway-metrics-displayed.webp" alt="" />
+    4. Select the metric you want to configure an alert for. For example, `kubernetes_cluster_k8s_shoot_nodes_pods_usage_total`.
+        <Message type="tip">
+         The `kubernetes_cluster_k8s_shoot_nodes_pods_usage_total` metric represents the total number of pods currently running across all nodes in your Kubernetes cluster. It is helpful to monitor current pod consumption per node pool or cluster, and help track resource saturation or unexpected workload spikes.
+        </Message>
+    5. Select the appropriate labels to filter your metric and target specific resources.
+    6. Choose values for your selected labels. The **Resulting selector** field displays your final query selector.
+    7. Click **Use query** to validate your metric selection. Your selection displays in the query field next to the **Metrics browser** button. This prepares it for use in the alert condition, which we will define in the next steps.
+    8. In the query field, paste the following query. Make sure that the values for the labels you have selected (for example, `resource_name`) correspond to those of the target resource.
+        ```bash
+        rate(kubernetes_cluster_k8s_shoot_nodes_pods_usage_total{resource_name="k8s-par-quizzical-chatelet"}[15m]) == 0
+        ```
+    9. In the **Set alert evaluation behavior** field, specify how long the condition must be true before triggering the alert.
+    10. Enter a name in the **Namespace** and **Group** fields to categorize and manage your alert, and optionally, add annotations.
+    11. Enter a label in the **Labels** field and a name in the **Value** field. You can skip this step if you want your alerts to be sent to the contact points you may already have created in the Scaleway console.
+        <Message type="note">
+         In Grafana, notifications are sent by matching alerts to notification policies based on labels. This step is about deciding how alerts will reach you or your team (Slack, email, etc.) based on labels you attach to them. Then, you can set up rules that define who receives notifications in the **Notification policies** page.
+         For example, if an alert has the label `team = kubernetes-team`, you are telling Grafana to send a notification to the Kubernetes team when your alert is firing. Find out how to [configure notification policies in Grafana](/tutorials/configure-slack-alerting/#configuring-a-notification-policy).
+        </Message>
+    12. Click **Save rule** in the top right corner of your screen to save and activate your alert.
+    13. Optionally, check that your configuration works by temporarily lowering the threshold. This will trigger the alert and notify your [contact point](/cockpit/concepts/#contact-points).
+  </TabsTab>
+  <TabsTab label="Cockpit logs">
+    The steps below explain how to create the metric selection and configure an alert condition that triggers when **no logs are stored for 5 minutes, which may indicate your app or system is broken**.
+
+    1. Type a name for your alert.
+    2. Select the **Scaleway Metrics** data source.
+    3. Click the **Metrics browser** drop-down.
+        <Lightbox src="scaleway-metrics-browser.webp" alt="" />
+        <Lightbox src="scaleway-metrics-displayed.webp" alt="" />
+    4. Select the metric you want to configure an alert for. For example, `observability_cockpit_loki_chunk_store_stored_chunks_total:increase5m`.
+        <Message type="tip">
+         The `observability_cockpit_loki_chunk_store_stored_chunks_total:increase5m` metric represents the number of chunks (log storage blocks) that have been written over the last 5 minutes for a specific resource. It is useful to monitor log ingestion activity and detect issues such as a crash of the logging agent, or your application not producing logs.
+        </Message>
+    5. Select the appropriate labels to filter your metric and target specific resources.
+    6. Choose values for your selected labels. The **Resulting selector** field displays your final query selector.
+    7. Click **Use query** to validate your metric selection. Your selection displays in the query field next to the **Metrics browser** button. This prepares it for use in the alert condition, which we will define in the next steps.
+    8. In the query field, paste the following query. Make sure that the values for the labels you have selected (for example, `resource_name`) correspond to those of the target resource.
+        ```bash
+        observability_cockpit_loki_chunk_store_stored_chunks_total:increase5m{resource_id="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"} == 0
+        ```
+    9. In the **Set alert evaluation behavior** field, specify how long the condition must be true before triggering the alert.
+    10. Enter a name in the **Namespace** and **Group** fields to categorize and manage your alert, and optionally, add annotations.
+    11. Enter a label in the **Labels** field and a name in the **Value** field. You can skip this step if you want your alerts to be sent to the contact points you may already have created in the Scaleway console.
+        <Message type="note">
+         In Grafana, notifications are sent by matching alerts to notification policies based on labels. This step is about deciding how alerts will reach you or your team (Slack, email, etc.) based on labels you attach to them. Then, you can set up rules that define who receives notifications in the **Notification policies** page.
+         For example, if an alert has the label `team = cockpit-team`, you are telling Grafana to send a notification to the Cockpit team when your alert is firing. Find out how to [configure notification policies in Grafana](/tutorials/configure-slack-alerting/#configuring-a-notification-policy).
+        </Message>
+    12. Click **Save rule** in the top right corner of your screen to save and activate your alert.
+    13. Optionally, check that your configuration works by temporarily lowering the threshold. This will trigger the alert and notify your [contact point](/cockpit/concepts/#contact-points).
+  </TabsTab>
+</Tabs>
+
+You can view your firing alerts in the **Alert rules** section of your Grafana (**Home** > **Alerting** > **Alert rules**).
+
+<Lightbox src="scaleway-alerts-firing.webp" alt="" />
 
 <Message type="important">
- You can configure up to a maximum of 10 alerts for the `Scaleway Metrics` data source.
+ You can configure up to a **maximum of 10 alerts** for the `Scaleway Metrics` data source.
 </Message>
 
 <Message type="tip">

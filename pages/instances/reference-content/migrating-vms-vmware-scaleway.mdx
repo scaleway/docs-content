@@ -1,0 +1,151 @@
+---
+meta:
+  title: Migrating VMware virtual machines to Scaleway Instances
+  description:  Find out how to migrate virtual VMware machines to Scaleway Instances.
+content:
+  h1: Migrating VMware virtual machines to Scaleway Instances
+  paragraph:  Find out how to migrate virtual VMware machines to Scaleway Instances.
+dates:
+  validation: 2025-05-14
+  posted: 2025-05-14
+categories:
+  - compute
+tags: instance type production vmware esxi migration
+---
+
+Migrating virtual machines from one platform to another can be a complex process, especially when moving from a proprietary environment like VMware to a cloud-based infrastructure like Scaleway.
+However, with the right tools and a step-by-step approach, you can successfully migrate your VMware virtual machines to Scaleway Instances, taking advantage of the scalability, flexibility, and cost-effectiveness of the cloud.
+
+This guide will walk you through the process of migrating your VMware virtual machines to Scaleway Instances, covering everything from preparing your Scaleway Instance to managing the migration, converting VMDK files to QCOW2,
+uploading the QCOW2 image to Scaleway Object Storage, and finally, creating an image from the imported volume and booting an instance with the image.
+By following these steps, you'll be able to seamlessly migrate your VMware virtual machines to Scaleway Instances, ensuring minimal downtime and optimal performance.
+
+## Validating the inventory of machines to migrate
+
+Identify the virtual machines (VMs) to migrate on your VMware platform:
+
+- Disk configuration (number, size, type)
+  <Message type="tip">
+    If multiple disks are present, follow the same steps to create individual snapshots and then combine them into a single Scaleway image.
+    For more detailed instructions on creating an image from multiple volumes, refer to documentation on [how to create an image from a snapshot](/instances/how-to/create-image-from-snapshot/).
+  </Message>
+- Network configuration (number of NICs, type)
+  <Message type="tip">
+    If multiple NICs are needed, several Private Networks can be added to the Instance later.
+  </Message>
+- Boot type (BIOS or UEFI)
+  <Message type="important">
+    Only UEFI boot is compatible with Scaleway Instances
+  </Message>
+
+<Message type="impotant">
+  If your virtual machine is running Windows, make sure to install the [virtiofs drivers](https://virtio-fs.gitlab.io/howto-windows.html) before exporting the VM.
+</Message>
+
+## Preparing a Scaleway Instance to manage the migration
+
+1. [Create a new Instance](/instances/how-to/create-an-instance/) (running Ubuntu 24.04 or Debian 12) to handle the migration and log into it [using SSH](/instances/how-to/connect-to-instance/).
+2. Install the following CLI tools, required for the migration of your virtual machine:
+   - `qemu-img` — for converting VMDK to QCOW2
+      ```sh
+      apt install qemu-utils
+      ```
+   - `scw` — for Scaleway operations
+      ```sh
+      curl -s https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh
+      ```
+   - `aws` — for uploading to S3
+      ```
+      curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+      unzip awscliv2.zip
+      sudo ./aws/install
+      ```
+   - `govmomi` — for interacting with vCenter
+     ```
+     curl -L -o - "https://github.com/vmware/govmomi/releases/latest/download/govc_$(uname -s)_$(uname -m).tar.gz" | tar -C /usr/local/bin -xvzf - govc
+     ```
+
+3. Configure credentials for the tools:
+   - For Scaleway: `scw init`
+   - For AWS/S3: Refer to [Using Object Storage with the AWS-CLI](https://www.scaleway.com/en/docs/object-storage/api-cli/object-storage-aws-cli/)
+   - For vCenter: credentials and VPN (if needed):
+      ```
+      export GOVC_PASSWORD=<VMware password>
+      export GOVC_USERNAME=root
+      export GOVC_INSECURE=1
+      export GOVC_URL=<VMware host>
+      ```
+
+## Downloading VMDK files using govmomi
+
+Download the VMDK file from vCenter:
+
+```bash
+govc export.ovf -vm <vm_name> /path/to/image
+```
+
+<Message type="note">
+  Adjust this based on your `govmomi`/`govc` setup and environment.
+</Message>
+
+## Converting the VMDK file to QCOW2
+
+Convert the downloaded VMDK file to QCOW2 using `qemu-img`:
+
+```bash
+qemu-img convert -O qcow2 <vm_name>.vmdk <vm_name>.qcow2
+```
+
+### (Optional): Mounting the QCOW2 file and system configuration
+
+1. Mount the QCOW2 image on your Instance:
+  ```bash
+  modprobe nbd
+  qemu-nbd -c /dev/nbd0 <vm_name>.qcow2
+  ```
+  Make any changes (e.g., install `cloud-init`, `scaleway-ecosystem`, add VirtIO drivers, remove VMware tools).
+  <Message type="important">
+    - The `cloud-init` package is required for the Instance to work correctly in the Scaleway environment.
+    - Installing the [scaleway-ecosystem](https://github.com/scaleway/scaleway-packages/releases) package is also highly recommended.
+  </Message>
+2. Unmount the file:
+  ```bash
+  qemu-nbd -d /dev/nbd0
+  ```
+
+## Uploading the QCOW2 image to Scaleway Object Storage
+
+Upload the converted disk:
+  ```bash
+  aws s3 cp <vm_name>.qcow2 s3://<bucket_name>/
+  ```
+
+## Importing the QCOW2 image from Object Storage into Scaleway as a SBS snaphot
+
+1. Import the image into a new snapshot:
+  ```bash
+  scw block snapshot import-from-object-storage bucket=<my_bucket> key=<my-qcow2-file-name.qcow2> name=<my-imported-snapshot> size=<size-in-GB>
+  ```
+2 . Create a Scaleway image from the snapshot:
+  ```bash
+  scw instance image create snapshot-id=<snapshot-uuid> arch=x86_64
+  ```
+  <Message type="note">
+    If your image consists of multiple snapshots, ensure you [specify them](/instances/how-to/create-image-from-snapshot/#creating-an-image-via-the-scaleway-cli) when creating the image:
+    ```bash
+    scw instance image create snapshot-id="$SCW_VOLUME_ID_1" additional-volumes.0.id="$SCW_VOLUME_ID_2" arch="x86_64"
+    ```
+    Refer to the [CLI documentation](https://cli.scaleway.com/instance/#create-an-instance-image) for further information.
+  </Message>
+
+3. Create the server from the image:
+  ```bash
+  scw instance server create image=<image-uuid> type=<commercial-type>
+  ```
+
+### Adding private NICs to the Instance (otional)
+
+Create a private NIC for the Instance, allowing it to connect to an [existing Private Network](/vpc/quickstart/#how-to-create-a-private-network)
+  ```bash
+  scw instance private-nic create server-id=<server-uuid> private-network-id=<private-network-uuid> ipam-ip-ids.{0}=<ipam-ip-uuid>
+  ```

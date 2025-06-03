@@ -1,16 +1,16 @@
 ---
 meta:
-  title: Configuring a Nagios Monitoring System on Scaleway
-  description: How to deploy Nagios Monitoring on Scaleway.
+  title: Configuring a Nagios monitoring system on Scaleway
+  description: How to deploy Nagios monitoring on Scaleway.
 content:
-  h1: Configuring a Nagios Monitoring System on Scaleway
-  paragraph: How to deploy Nagios Monitoring on Scaleway.
+  h1: Configuring a Nagios monitoring system on Scaleway
+  paragraph: How to deploy Nagios monitoring on Scaleway.
 tags: Nagios monitoring Apache
 categories:
   - instances
   - elastic-metal
 dates:
-  validation: 2024-09-16
+  validation: 2025-04-01
   posted: 2018-06-19
 ---
 
@@ -25,288 +25,202 @@ It is an open-source monitoring system that can automatically alert you in case 
 - An [SSH key](/organizations-and-projects/how-to/create-ssh-key/)
 - At least 2 [Instances](/instances/how-to/create-an-instance/) or 2 [Elastic Metal servers](/elastic-metal/how-to/create-server/)
 
-## Installing Nagios
+<Message type="note">
+  The commands in this guide are intended for a Debian-based system. Adjust package manager commands accordingly if you're using a different Linux distribution.
+</Message>
 
-In this tutorial, we will install and configure Nagios from its source to make sure that we have the latest version of the tool.
+## Installing Nagios Core
 
-1. Update the system and install the required packages:
-    ```
-    apt update && apt upgrade
-    apt install wget build-essential apache2 php apache2-mod-php7.0 php-gd libgd-dev sendmail unzip
-    ```
-2. Create a user to run Nagios:
-    ```
-    useradd nagios
-    groupadd nagcmd
-    usermod -a -G nagcmd nagios
-    usermod -a -G nagios,nagcmd www-data
-    ```
-3. Download the sources of Nagios, unpack the downloaded file and enter the directory:
-    ```
-    wget https://assets.nagios.com/downloads/nagioscore/releases/nagios-4.4.10.tar.gz
-    tar -xzf nagios*.tar.gz
-    cd nagios-*
-    ```
-4. Before compiling the software, define the user and group to use:
-    ```
-    ./configure --with-nagios-group=nagios --with-command-group=nagcmd
-    ```
-5. Compile the software:
-    ```
-    make all
-    ```
-6. Once it has been compiled, run the following `make` commands to install the application, init scripts and configuration files:
-    ```
-    make install
-    make install-commandmode
-    make install-init
-    make install-config
-    ```
+1. Update the system and install required packages:
+   ```bash
+   sudo apt update && sudo apt upgrade -y
+   sudo apt install -y wget build-essential apache2 php libapache2-mod-php php-gd libgd-dev unzip
+   ```
 
-## Installing Apache
+2. Create a user and group for Nagios:
+   ```bash
+   sudo useradd nagios
+   sudo groupadd nagcmd
+   sudo usermod -a -G nagcmd nagios
+   sudo usermod -a -G nagcmd www-data
+   ```
 
-In this tutorial, we use **Apache** as a web server for the Nagios interface.
-Nagios provides a sample configuration file, that we will use.
+3. Download and extract Nagios Core:
+   ```bash
+   cd /tmp
+   wget https://assets.nagios.com/downloads/nagioscore/releases/nagios-4.5.9.tar.gz
+   tar -xzf nagios-4.5.9.tar.gz
+   cd nagios-4.5.9
+   ```
 
-1. Copy the configuration file to the Apache directory:
-    ```
-    /usr/bin/install -c -m 644 sample-config/httpd.conf /etc/apache2/sites-available/nagios.conf
-    ```
-2. Install the [Nagios Plugins](https://nagios-plugins.org/) to have a set of tools to monitor your different services:
-    ```
-    apt install build-essential libssl-dev gcc
-    wget https://github.com/nagios-plugins/nagios-plugins/releases/download/release-2.4.3/nagios-plugins-2.4.3.tar.gz
-    tar -xzf nagios-plugins*.tar.gz
-    cd nagios-plugins*
-    ```
-3. Configure, compile, and install them with the following commands:
-    ```
-    ./configure --with-nagios-user=nagios --with-nagios-group=nagios --with-openssl
-    make
-    make install
-    ```
+4. Compile and install Nagios Core:
+   ```bash
+   ./configure --with-nagios-group=nagios --with-command-group=nagcmd
+   make all
+   sudo make install
+   sudo make install-commandmode
+   sudo make install-init
+   sudo make install-config
+   ```
 
-Nagios and the required plugins are installed.
+## Installing Nagios plugins
+
+Nagios plugins are essential for monitoring various services.
+
+1. Install dependencies:
+   ```bash
+   sudo apt install -y libssl-dev
+   ```
+
+2. Download and extract Nagios plugins:
+   ```bash
+   cd /tmp
+   wget https://nagios-plugins.org/download/nagios-plugins-2.4.11.tar.gz
+   tar -xzf nagios-plugins-2.4.11.tar.gz
+   cd nagios-plugins-2.4.11
+   ```
+
+
+3. Compile and install the plugins:
+   ```bash
+   ./configure --with-nagios-user=nagios --with-nagios-group=nagios
+   make
+   sudo make install
+   ```
 
 ## Configuring Nagios
 
-To monitor servers, we have to configure Nagios by editing the file **/usr/local/nagios/etc/nagios.cfg**.
+1. Configure the Nagios web interface:
+   ```bash
+   sudo make install-webconf
+   sudo a2enmod rewrite
+   sudo a2enmod cgi
+   ```
 
-1. Uncomment the line `cfg_dir=/usr/local/nagios/etc/servers` and save the file.
-2. Create the folder to store configurations:
-    ```
-    mkdir -p /usr/local/nagios/etc/servers
-    ```
-3. Configure the contact email address in the file `/usr/local/nagios/etc/objects/contacts.cfg`:
-    ```
-    define contact{
-    contact_name nagiosadmin ; Short name of user
-    use generic-contact ; Inherit default values from generic-contact template (defined above)
-    alias Nagios Admin ; Full name of user
-    email nagios@localhost ; <<**\*** CHANGE THIS TO YOUR EMAIL ADDRESS **\*\***
-    }
-    ```
+2. Create an administrative user for the web interface:
+   ```bash
+   sudo htpasswd -c /usr/local/nagios/etc/htpasswd.users nagiosadmin
+   ```
 
-## Configuring Apache
+   You will be prompted to set a password for the `nagiosadmin` user.
 
-We are using the Apache web server as an application to serve the Nagios web interface.
+3. Restart Apache to apply changes:
+   ```bash
+   sudo systemctl restart apache2
+   ```
 
-1. Start by enabling the required Apache modules:
-    ```
-    a2enmod rewrite
-    a2enmod cgi
-    ```
-2. Create a **nagiosadmin** user for the web interface with the `htpasswd` command:
-    ```
-    htpasswd -c /usr/local/nagios/etc/htpasswd.users nagiosadmin
-    ```
-3. Enable the Apache vHost:
-    ```
-    ln -s /etc/apache2/sites-available/nagios.conf /etc/apache2/sites-enabled/
-    ```
+4. Verify the Nagios configuration:
+   ```bash
+   sudo /usr/local/nagios/bin/nagios -v /usr/local/nagios/etc/nagios.cfg
+   ```
 
-## Configuring the systemd script
+   Ensure there are no errors before proceeding.
 
-By default, Nagios does not provide a **systemd** configuration file, so we have to create one by ourselves.
+5. Enable and start Nagios service:
+   ```bash
+   sudo systemctl enable nagios
+   sudo systemctl start nagios
+   ```
 
-This file contains the information where **systemd** can find the Nagios executable and configuration files and when to start it.
 
-1. Create the file:
-    ```
-    nano /etc/systemd/system/nagios.service
-    ```
-2. Put the following content in the file:
-    ```
-    [Unit]
-    Description=Nagios
-    BindTo=network.target
+## Accessing the Nagios web interface
 
-    [Install]
-    WantedBy=multi-user.target
+You can now access the Nagios web interface by navigating to `http://your.server.ip.address/nagios` in your web browser. Log in with the `nagiosadmin` user and the password you set earlier.
 
-    [Service]
-    Type=simple
-    User=nagios
-    Group=nagios
-    ExecStart=/usr/local/nagios/bin/nagios /usr/local/nagios/etc/nagios.cfg
-    ```
-3. Save the file and enable the service:
-    ```
-    systemctl daemon-reload
-    systemctl enable nagios.service
-    ```
-4. Start the applications:
-    ```
-    systemctl restart apache2.service
-    systemctl start nagios.service
-    ```
+## Monitoring remote servers with NCPA
 
-    Your Nagios server is ready, and you can access the interface at `http://your.server.ip.address/nagios`.
+The Nagios Cross-Platform Agent (NCPA) is a versatile agent that allows you to monitor remote systems. It's a modern alternative to NRPE and supports various platforms.
 
-    We use the **nagiosadmin** user and the password that you have created previously to log in.
-5. Once you are connected, click **Hosts** on the left to see what Nagios is monitoring. By default, it will only monitor the local host.
+On the remote server:
 
-## Monitoring a Server with the NPRE service
+1. Download and install NCPA:
+   ```bash
+   cd /tmp
+   wget https://assets.nagios.com/downloads/ncpa3/ncpa-latest-1.amd64.deb
+   sudo dpkg -i ncpa-latest-1.amd64.deb
+   ```
 
-<Message type="important">
-    NPRE is deprecated. Use this feature at your own risk.
-</Message>
+   Adjust the download link and installation command based on your operating system. Refer to the [NCPA documentation](https://www.nagios.org/ncpa/getting-started.php) for details.
 
-The [NPRE service](https://github.com/NagiosEnterprises/nrpe) (Nagios Remote Plugin Executor) is an add-on that allows you to execute Nagios commands on remote Linux servers. It is used to gather "local" information (like disk usage, RAM usage, CPU usage) of a remote machine.
-As this information is not broadcasted on the Internet, an agent has to run on the server which reports to the Nagios server.
+2. Edit the NCPA configuration file (typically located at `/usr/local/ncpa/etc/ncpa.cfg`) to set the `api_token` and configure allowed hosts.
 
-<Message type = "note">
-  These steps have to be done on the remote server.
-</Message>
+3. Start and enable NCPA service:
+   ```bash
+   sudo systemctl enable ncpa_listener
+   sudo systemctl start ncpa_listener
+   ```
 
-1. Install the software on the remote server:
-    ```
-    apt install autoconf gcc libc6 libmcrypt-dev make libssl-dev wget bc gawk dc build-essential snmp libnet-snmp-perl gettext
-    ```
-2. Download and unpack NRPE:
-    ```
-    cd /tmp
-    wget --no-check-certificate -O nrpe.tar.gz https://github.com/NagiosEnterprises/nrpe/archive/master.tar.gz
-    tar xzf nrpe.tar.gz
-    ```
-3. Compile it with the following commands:
-    ```
-    cd /tmp/nrpe-master/
-    ./configure --enable-command-args
-    make all
-    ```
-4. Create users and groups:
-    ```
-    make install-groups-users
-    ```
-5. Install the configuration files:
-    ```
-    make install-config
-    ```
-6. Install NRPE:
-    ```
-    make install
-    ```
-7. Install the service, so NPRE can be managed by systemd:
-    ```
-    make install-init
-    systemctl enable nrpe.service
-    ```
-8. Edit the file **/usr/local/nagios/etc/nrpe.cfg**. Replace `IP_of_your_Nagios_Server` with the IP address of your Nagios host:
-    ```
-    allowed_hosts=127.0.0.1,IP_of_your_Nagios_Server
-    ```
-9. Restart the service:
-    ```
-    systemctl start nrpe.service
-    ```
-10. Download and install the Nagios plugins:
-    ```
-    wget http://www.nagios-plugins.org/download/nagios-plugins-2.4.0.tar.gz
-    tar xfz nagios-plugins-2.2.1.tar.gz
-    cd nagios-plugins-2.2.1/
-    ./configure
-    make all
-    make install
-    ```
 
-    <Message type="note">
-      The following steps have to be done on the Nagios server
-    </Message>
-11. On the Nagios server, create a configuration file in the directory **/usr/local/nagios/etc/servers/** for each remote host that we want to monitor:
-    ```
-    nano /usr/local/nagios/etc/servers/remote_host.cfg
-    ```
-12. Replace **remote_host** with the name of the remote server and put the following content in the file:
-    ```
-    # Remote Host configuration file
+### On the Nagios server
 
-    define host {
-    use linux-server
-    host_name remote_host
-    alias Remote Host
-    address 163.172.168.167
-    register 1
-    }
+1. Download and install the NCPA plugin:
+   ```bash
+   cd /tmp
+   wget https://github.com/NagiosEnterprises/ncpa/archive/v3.1.3
 
-    define service {
-    host_name remote_host
-    service_description PING
-    check_command check_ping!100.0,20%!500.0,60%
-    max_check_attempts 2
-    check_interval 2
-    retry_interval 2
-    check_period 24x7
-    check_freshness 1
-    contact_groups admins
-    notification_interval 2
-    notification_period 24x7
-    notifications_enabled 1
-    register 1
-    }
+2. Extract the plugin and move it to the plugins directory:
+   ```bash
+   tar -xzf v3.1.3.tar.gz
+   cd ncpa-3.1.3/plugins
+   sudo cp check_ncpa.py /usr/local/nagios/libexec/
 
-    define service {
-    host_name remote_host
-    service_description Disk Usage
-    check_command check_local_disk!20%!10%!/
-    max_check_attempts 2
-    check_interval 2
-    retry_interval 2
-    check_period 24x7
-    check_freshness 1
-    contact_groups admins
-    notification_interval 2
-    notification_period 24x7
-    notifications_enabled 1
-    register 1
-    }
+3. Modify permissions:
+   ```bash
+   sudo chmod +x /usr/local/nagios/libexec/check_ncpa.py
+   ```
 
-    define service {
-    host_name remote_host
-    service_description SSH Service
-    check_command check_ssh
-    max_check_attempts 2
-    check_interval 2
-    retry_interval 2
-    check_period 24x7
-    check_freshness 1
-    contact_groups admins
-    notification_interval 2
-    notification_period 24x7
-    notifications_enabled 1
-    register 1
-    }
-    ```
+4. Define a new command in Nagios to use the NCPA plugin.
+   Open the Nagios command configuration file:
+   ```bash
+   sudo nano /usr/local/nagios/etc/objects/commands.cfg
+   ```
+   Add the following definition:
+   ```bash
+   define command {
+       command_name    check_ncpa
+       command_line    $USER1$/check_ncpa.py -H $HOSTADDRESS$ -t '<API_TOKEN>' -M $ARG1$
+   }
+   ```
+   Replace `<API_TOKEN>` with the actual API token configured in the NCPA agent on the remote server.
 
-    This file will monitor if the remote host replies on `ping`, the disk usage of the host, and if the `SSH` service is up.
-    You can find more configuration examples in the file **/usr/local/nagios/etc/objects/commands.cfg**. Nagios allows you to monitor a wide range of services.
-13. Save the file and restart the application:
-    ```
-    systemctl restart nagios.service
-    ```
+5. Create a host definition for the remote server.
+   Open the Nagios host configuration file:
+   ```bash
+   sudo nano /usr/local/nagios/etc/servers/remote_host.cfg
+   ```
+   Add the following:
+   ```bash
+   define host {
+       use         linux-server
+       host_name   remote_host
+       alias       Remote Host
+       address     <REMOTE_SERVER_IP>
+       max_check_attempts 5
+       check_period 24x7
+       notification_interval 30
+       notification_period 24x7
+   }
+   ```
+   Replace `<REMOTE_SERVER_IP>` with the actual IP address of the remote server.
 
-    The remote server will appear in your Nagios interface and you can see the status of the monitored services:
+6. Define a service to monitor CPU usage on the remote server using NCPA.
+   In the same `remote_host.cfg` file, add:
+   ```bash
+   define service {
+       use                 generic-service
+       host_name           remote_host
+       service_description CPU Usage
+       check_command       check_ncpa!cpu/percent
+   }
+   ```
+   You can add more services like memory usage (`memory/virtual`), disk usage (`disk/logical/|/percent`), etc.
 
-    <Lightbox src="scaleway-nagios.webp" alt="" />
+7. Restart Nagios to apply the changes
+   ```bash
+   sudo systemctl restart nagios
+   ```
 
-Nagios is widely used because of its flexibility and versatility. Do not hesitate to refer to the official [documentation](https://assets.nagios.com/downloads/nagioscore/docs/nagioscore/4/en/index.html) of the software to find more out about further configuration options.
+### Verify the setup
+- Go to the Nagios web interface (`http://your.server.ip.address/nagios`)
+- Check under Hosts to see if the remote server is listed.
+- Check under Services to verify if CPU usage monitoring is working.

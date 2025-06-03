@@ -1,20 +1,20 @@
 ---
 meta:
-  title: Setting up a load balanced WordPress
-  description: This page shows you how to set up a load balanced WordPress for increased availability
+  title: Setting up a load-balanced WordPress
+  description: Set up a Scaleway Load Balancer for WordPress to improve performance, ensure high availability, and handle traffic efficiently.
 content:
-  h1: Setting up a load balanced WordPress
-  paragraph: This page shows you how to set up a load balanced WordPress for increased availability
+  h1: Setting up a load-balanced WordPress
+  paragraph: Set up a Scaleway Load Balancer for WordPress to improve performance, ensure high availability, and handle traffic efficiently.
 categories:
   - load-balancer
   - instances
 tags: WordPress Load-Balancer
 dates:
-  validation: 2024-11-18
+  validation: 2025-05-27
   posted: 2019-04-08
 ---
 
-The capacity of a single server is limited. Once a website gains more and more attraction the instance serving the site comes to a point where it can not handle any more users. The website starts to slow down or even become unavailable as the server goes down from the traffic.
+The capacity of a single server is limited. Once a website gains more and more attraction the Instance serving the site comes to a point where it can not handle any more users. The website starts to slow down or even become unavailable as the server goes down from the traffic.
 
 This is the point where a Load Balancer enters the game. It allows spreading the "load" that all those visitors and their requests create to be "balanced" over a series of different Instances.
 
@@ -40,122 +40,30 @@ In this tutorial, you learn how to set up a Scaleway-managed Load Balancer with 
 - `51.51.51.51` for the Load Balancer front-end IP
 Load Balancer supports private IPs of Scaleway Instances for backend servers, allowing you to deploy Instances without public IPv4.
 
-1. Follow [this tutorial](/tutorials/wordpress-lemp-stack/) to start an Ubuntu Instances and to install WordPress with LEMP on both of them.
-2. Set up a third instance with a MariaDB database as explained in [this tutorial](/tutorials/mariadb-ubuntu-bionic/).
+1. Follow [this tutorial](/tutorials/wordpress-lemp-stack/) to start two Ubuntu Instances and install WordPress with LEMP on both of them.
+2. Set up a third Instance with a MariaDB database as explained in [this tutorial](/tutorials/mariadb-ubuntu-bionic/).
 
 ## Configuring a Load Balancer
 
-1. Click **Load Balancer** in the menu on the left, to enter the Load Balancer section, then click **+ Create a Load Balancer**:
-    <Lightbox src="scaleway-lb-console.webp" alt="" />
-2. Enter the **Name** of the Load Balancer, optionally you can enter a description and tags to simplify the management of them. Choose the **Region** for the Load Balancer (it should be the same region as the geographical region of your Instances), and a new IP address is allocated automatically.1. Click **Load Balancer** in the menu on the left, to enter the Load Balancer section, then click **+ Create a Load Balancer**:
-    <Lightbox src="scaleway-lb-console.webp" alt="" />
-2. Enter the **Name** of the Load Balancer, optionally you can enter a description and tags to simplify the management of them. Choose the **Region** for the Load Balancer (it should be the same region as the geographical region of your Instances), and a new IP address is allocated automatically.
-4. Configure a backend rule, this rule defines the backend infrastructure that will be load balanced.
+1. Follow the instructions for [creating a Load Balancer](/load-balancer/how-to/create-load-balancer/#how-to-create-a-load-balancer), with the following settings:
+    - The same Availability Zone as your Instances
+    - A frontend listening on port 80
+    - A backend using HTTP protocol, listening on port 80
+        <Message type="tip">
+        It is also possible to use [SSL to encrypt backend connections](/tutorials/nginx-reverse-proxy/), in this case, set the port to 443.|
+        </Message>
+    - TLS encryption activated on the backend
+    - Proxy protocol deactivated on the backend
+    - The two WordPress Instances (`10.45.2.3` and `10.45.2.3`) as backend server IPs
+    - HTTP health check
 
-    The following parameters should be configured in the backend rule:
-
-    |Parameter|Description|
-    |----------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------|
-    |**Backend Name**|A name for the backend rule (e.g. `wordpress-backend-rule`)|
-    |**Protocol**|The protocol to use. Set this value to `HTTP`, to have access to HTTP-specific features of the Load Balancer|
-    |**Port**|The port on which the backend application listens, with a standard configuration is **port 80** for a web application. It is also possible to use [SSL to encrypt backend connections](/tutorials/nginx-reverse-proxy/), in this case set the port to 443.|
-    |**Proxy**|This enables or disables PROXY protocol version 2 (must be supported by backend servers). It is not required for this tutorial, keep it off.|
-    |**TLS encryption**|Enable Transport Layer Security (TLS) to encrypt connections between the Load Balancer and the backend server(s).|
-    |**Health Check Type**|The health check type to use. To check the health of a web application, set this to `HTTP`.|
-    |**Server IPs**|Add the two WordPress Instances (`10.45.2.3` and `10.45.2.3`) to the list of backend servers|
-
-    The final backend rule should look similar to the following example:
-
-    <Lightbox src="scaleway-lb-backend-rule.webp" alt="" />
-5. Click **Create a Load Balancer** to deploy the Load Balancer.
-
-## Checking if the Load Balancer works
-
-It is possible to check the status of the Load Balancer with an API call.
-It will provide you with information about the status of the Load Balancer and if the health check was successful.
-
-<Message type="important">
-  Retrieve your organization ID and generate [API key](/iam/how-to/create-api-keys/) from your [management console](https://console.scaleway.com/project/credentials) before you continue.
-</Message>
-
-1. Set the required variables to make the API call easier:
-    ```bash
-    LB_ID="<LOAD_BALANCER_ID>"
-    TOKEN="<API_SECRET_KEY>"
-    REGION="<REGION>" # (can be either fr-par or nl-ams, depending on the load balancers region)
-    ```
-2. When the Load Balancer is configured and running, type the following command to request its status. Make sure that [jsonpp](https://jmhodges.github.io/jsonpp/) is installed on the machine running the above command to get an easily readable JSON output:
-    ```bash
-    curl -X GET "https://api.scaleway.com/lb/v1/regions/$REGION/lbs/$LB_ID/stats" -H "X-Auth-Token: $SECRET_KEY" | json_pp
-    ```
-3. The API will provide a [JSON formatted](https://en.wikipedia.org/wiki/JSON) response like the following example:
-    ```json
-    {
-      "backend_servers_stats": [
-        {
-          "ip": "10.45.2.3",
-          "backend_id": "cd64b4e0-2c23-484a-80b9-602bf934245e",
-          "instance_id": "4d2294bf-4e6d-499c-922a-ca08f58ed66d",
-          "server_state_changed_at": "2019-04-10T13:01:27Z",
-          "server_state": "stopped",
-          "last_health_check_status": "failed"
-        },
-        {
-          "server_state": "stopped",
-          "server_state_changed_at": "2019-04-10T13:01:27Z",
-          "instance_id": "4d2294bf-4e6d-499c-922a-ca08f58ed66d",
-          "ip": "10.45.2.4",
-          "backend_id": "cd64b4e0-2c23-484a-80b9-602bf934245e",
-          "last_health_check_status": "unknown"
-        },
-        {
-          "instance_id": "bd4b6e5f-2cfb-40da-afd8-933e7afbbd61",
-          "server_state_changed_at": "2019-04-10T13:01:27Z",
-          "server_state": "running",
-          "backend_id": "cd64b4e0-2c23-484a-80b9-602bf934245e",
-          "ip": "10.45.2.3",
-          "last_health_check_status": "passed"
-        },
-        {
-          "ip": "10.45.2.4",
-          "backend_id": "cd64b4e0-2c23-484a-80b9-602bf934245e",
-          "instance_id": "bd4b6e5f-2cfb-40da-afd8-933e7afbbd61",
-          "server_state_changed_at": "2019-04-10T13:01:27Z",
-          "server_state": "running",
-          "last_health_check_status": "passed"
-        }
-      ]
-    }
-    ```
-
-    As two Instances are configured in the backend, the JSON list contains four entries. This is due to the high availability feature of the Load Balancer. Should the master instance experience a failure, it switches automatically to the backup one.
-
-    In the status of the `running` instance, the health check status (`last_health_check_status`) has `passed`. This means that the backend instance replied well to the request sent to it in the health check. Requests to WordPress are load balanced between the two Instances.
-4. Connect to the first WordPress instance (`10.45.2.3`) and stop the web server application running on it:
-    ```bash
-    systemctl stop nginx.service
-    ```
-5. Re-run the command from Step 3.
-6. In the JSON list, the `last_health_check_status` changed to `failed`, as the web server no longer replies to requests:
-    ```json
-    {
-      "last_health_check_status": "failed",
-      "server_state": "stopped",
-      "instance_id": "bd4b6e5f-2cfb-40da-afd8-933e7afbbd61",
-      "ip": "10.45.2.3",
-      "server_state_changed_at": "2019-04-10T13:32:18Z",
-      "backend_id": "cd64b4e0-2c23-484a-80b9-602bf934245e"
-    }
-    ```
-
-    When you navigate to the load balanced IP (`http://51.51.51.51`) in your browser, your WordPress displays. The Load Balancer has automatically detected that the Nginx server on the first instance (`10.45.2.3`) is not running anymore and redirects all traffic to the second instance (`10.45.2.3`).
-7. Restart the web server application and re-run the command mentioned in step 3. The `last_health_check_status` will change again into `passed` and requests are load balanced again between the two Instances.
+2. Check the status of your Load Balancer's backend servers in the Scaleway console, by navigating to the Load Balancer's dashboard, then **Backends** > **Backend name** > **Server list**, where you can see the status of each server depending on its health check result.
 
 ## Configuring WordPress
 
-Update the configuration of each instance now, so they will use the database on the dedicated MariaDB instance instead of using a local database.
+Update the configuration of each Instance now, so they will use the database on the dedicated MariaDB Instance instead of using a local database.
 
-1. Connect to the instance via SSH as `root`
+1. Connect to the Instance via SSH as `root`.
 2. Open the file `/var/www/wp-config.php` in a text editor and edit the database section as follows:
     ```bash
     // ** MySQL settings - You can get this info from your web host ** //
@@ -180,14 +88,14 @@ Update the configuration of each instance now, so they will use the database on 
 
     Once edited, save the file and exit the text editor.
 
-    When connecting to the instance from a web browser, the content is taken from the database on the MariaDB server.
-4. Log into the WordPress Admin interface and click **Settings** to configure WordPress.
+    When connecting to the Instance from a web browser, the content is taken from the database on the MariaDB server.
+3. Log into the WordPress Admin interface and click **Settings** to configure WordPress.
     - Enter the IP of one of your WordPress Instances (`10.45.2.3`) in the field **WordPress Address (URL)**
-    - Enter the **Load Balanced IP** (`51.51.51.51`) or your domain name in the field **Site Address (URL)**
+    - Enter the **Load Balancer's public (flexible) IP address** (`51.51.51.51`) or your domain name in the field **Site Address (URL)**
 
     Save the form.
-5. Redo this step on the second instance.
-6. Type the **Load Balanced IP** or your domain name in your browser, and WordPress will appear on the load balanced IP:
+4. Redo this step on the second instance.
+5. Type the **Load Balancer's public (flexible) IP address** or your domain name in your browser, and WordPress will appear :
     <Lightbox src="scaleway-lb-wp-lbip.webp" alt="" />
 
-The Load Balancer is now automatically distributing the load between your Instances. To increase the computing power of the Load Balancer, simply snapshot an instance and spin up a new one.
+The Load Balancer is now automatically distributing the load between your Instances. To increase the computing power of the Load Balancer, simply [snapshot](/instances/concepts/#snapshot) an Instance and spin up a new one.

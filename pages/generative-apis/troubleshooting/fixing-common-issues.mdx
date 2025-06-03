@@ -13,6 +13,32 @@ dates:
 
 Below are common issues that you may encounter when using Generative APIs, their causes, and recommended solutions.
 
+## 400: Bad Request - You exceeded maximum context window for this model
+
+### Cause
+- You provided an input exceeding the maximum context window (also known as context length) for the model you are using.
+- You provided a long input and requested a long input (in `max_completion_tokens` field), which added together, exceeds the maximum context window of the model you are using.
+
+### Solution
+- Reduce your input size below what is [supported by the model](/generative-apis/reference-content/supported-models/).
+- Use a model supporting longer context window values.
+- Use [Managed Inference](/managed-inference/), where the context window can be increased for [several configurations with additional GPU vRAM](/managed-inference/reference-content/supported-models/). For instance, `llama-3.3-70b-instruct` model in `fp8` quantization can be served with:
+  - `15k` tokens context window on `H100` Instances
+  - `128k` tokens context window on `H100-2` Instances
+
+## 400: Bad Request - Invalid JSON body
+
+### Cause
+- You provided a JSON body that does not follow the [standard JSON structure](https://datatracker.ietf.org/doc/html/rfc8259), therefore your request cannot be analyzed.
+
+### Solution
+- Verify the JSON body you send is valid:
+  - You can store your content in a file with the `.json` extension (eg. named `file.json`), and open it with an IDE such as VSCode or Zed. Syntax errors should display if there are any.
+  - You can copy your content in a JSON formatter tool or linter available online, that will identify errors.
+  - Usually, most common errors include: 
+    - Missing or unecessary quotes `"`, `'` or commas `,`  on properties name and string values.
+    - Special characters that are not escaped, such as line break `\n` or backslash `\\`
+
 ## 403: Forbidden - Insufficient permissions to access the resource
 
 ### Cause
@@ -27,17 +53,55 @@ Below are common issues that you may encounter when using Generative APIs, their
   - The URL format is: `https://api.scaleway.ai/{project_id}/v1"`
   - If no `project_id` is specified in the URL (`https://api.scaleway.ai/v1"`), your `default` Project will be used.
 
+## 416: Range Not Satisfiable - max_completion_tokens is limited for this model
+
+### Cause
+- You provided a value for `max_completion_tokens` that is too high and not supported by the model you are using.
+
+### Solution
+- Remove `max_completion_tokens` field from your request or client library, or reduce its value below what is [supported by the model](https://www.scaleway.com/en/docs/generative-apis/reference-content/supported-models/).
+  - As an example, when using the [init_chat_model from Langchain](https://python.langchain.com/api_reference/_modules/langchain/chat_models/base.html#init_chat_model), you should edit the `max_tokens` value in the following configuration:
+    ```python
+    llm = init_chat_model("llama-3.3-70b-instruct", max_tokens="8000", model_provider="openai", base_url="https://api.scaleway.ai/v1", temperature=0.7)
+    ```
+- Use a model supporting higher `max_completion_tokens` value.
+- Use [Managed Inference](/managed-inference/), where these limits on completion tokens do not apply (your completion tokens amount will still be limited by the maximum context window supported by the model).
+
+## 416: Range Not Satisfiable - max_completion_tokens is limited for this model
+
+### Cause
+- You provided `max_completion_tokens` value too high, which is not supported by the model you are using.
+
+### Solution
+- Remove the `max_completion_tokens` field from your request or client library, or reduce its value below what is [supported by the model](https://www.scaleway.com/en/docs/generative-apis/reference-content/supported-models/).
+  - As an example, when using the [init_chat_model from Langchain](https://python.langchain.com/api_reference/_modules/langchain/chat_models/base.html#init_chat_model), you should edit the `max_tokens` value in the following configuration:
+    ```python
+    llm = init_chat_model("llama-3.3-70b-instruct", max_tokens="8000", model_provider="openai", base_url="https://api.scaleway.ai/v1", temperature=0.7)
+    ```
+- Use a model supporting a higher `max_completion_tokens` value.
+- Use [Managed Inference](/managed-inference/), where these limits on completion tokens do not apply (your completion tokens amount will still be limited by the maximum context window supported by the model).
+
 ## 429: Too Many Requests - You exceeded your current quota of requests/tokens per minute
 
 ### Cause
 - You performed too many API requests over a given minute
-- You consumed too many tokens (input and output) with your API requests over a given minute 
+- You consumed too many tokens (input and output) with your API requests over a given minute
 
 ### Solution
-- [Ask our support](https://console.scaleway.com/support/tickets/create) to raise your quota
-- Smooth out your API requests rate by limiting the number of API requests you perform in parallel
-- Reduce the size of the input or output tokens processed by your API requests
-- Use [Managed Inference](/managed-inference/), where these quota do not apply (your throughput will be only limited by the amount of Inference Deployment your provision)
+- Smooth out your API requests rate by limiting the number of API requests you perform over a given minute so that you remain below your [Organization quotas for Generative APIs](/organizations-and-projects/additional-content/organization-quotas/#generative-apis).
+- [Add a payment method](/billing/how-to/add-payment-method/#how-to-add-a-credit-card) and [validate your identity](/account/how-to/verify-identity/) to increase automatically your quotas [based on standard limits](/organizations-and-projects/additional-content/organization-quotas/#generative-apis).
+- [Ask our support](https://console.scaleway.com/support/tickets/create) to raise your quota.
+- Reduce the size of the input or output tokens processed by your API requests.
+- Use [Managed Inference](/managed-inference/), where these quotas do not apply (your throughput will be only limited by the amount of Inference Deployment your provision)
+
+## 429: Too Many Requests - You exceeded your current threshold of concurrent requests
+
+### Cause
+- You kept too many API requests opened at the same time (number of HTTP sessions opened in parallel)
+
+### Solution
+- Smooth out your API requests rate by limiting the number of API requests you perform at the same time (eg. requests which did not receive a complete response and are still opened) so that you remain below your [Organization quotas for Generative APIs](/organizations-and-projects/additional-content/organization-quotas/#generative-apis).
+- Use [Managed Inference](/managed-inference/), where concurrent request limit do not apply. Note that exceeding the number of concurrent requests your Inference Deployment can handle may impact performance metrics.
 
 
 ## 504: Gateway Timeout
@@ -53,13 +117,24 @@ Below are common issues that you may encounter when using Generative APIs, their
 
 ## Structured output (e.g., JSON) is not working correctly
 
-### Cause
+### Description
+- Structured output response contains invalid JSON
+- Structured output response is valid JSON but content is less relevant
+
+### Causes
 - Incorrect field naming in the request, such as using `"format"` instead of the correct `"response_format"` field.
 - Lack of a JSON schema, which can lead to ambiguity in the output structure.
+- Maximum tokens is lower than what the model response needs to be complete.
+- Temperature is not set or set too high.
+
 
 ### Solution
 - Ensure the proper field `"response_format"` is used in the query.
 - Provide a JSON schema in the request to guide the model's structured output.
+- Ensure the `max_tokens` value is higher than the response `completion_tokens` value. If this is not the case, the model answer may be stripped down before it can finish the proper JSON structure (and lack closing JSON brackets `}` for example). Note that if the `max_tokens` value is not set in the query, [default values apply for each model](/generative-apis/reference-content/supported-models/).
+- Ensure the `temperature` value is set with a lower range value for the model. If this is not the case, the model answer may output invalid JSON characters. Note that if the `temperature` value is not set in the query, [default values apply for each model](/generative-apis/reference-content/supported-models/). As examples:
+  - for `llama-3.3-70b-instruct`, `temperature` should be set lower than `0.6`
+  - for `mistral-nemo-instruct-2407	`, `temperature` should be set lower than `0.3`
 - Refer to the [documentation on structured outputs](/generative-apis/how-to/use-structured-outputs/) for examples and additional guidance.
 
 
@@ -87,7 +162,7 @@ Below are common issues that you may encounter when using Generative APIs, their
 
 ### Causes
 - Cockpit is isolated by `project_id` and only displays token consumption related to one Project.
-- Cockpit `Tokens Processed` graphs along time can take up to an hour to update (to provide more accurate average consumptions over time). The overall `Tokens Processed` counter is updated in real time.
+- Cockpit `Tokens Processed` graphs along time can take up to an hour to update (to provide more accurate average consumptions over time). The overall `Tokens Processed` counter is updated in real-time.
 
 ### Solution
 - Ensure you are connecting to the Cockpit corresponding to your Project. Cockpits are currently isolated by `project_id`, which you can see in their URL: `https://PROJECT_ID.dashboard.obs.fr-par.scw.cloud/`. This Project should correspond to the one used in the URL you used to perform Generative APIs requests, such as `https://api.scaleway.ai/{PROJECT_ID}/v1/chat/completions`. You can list your projects and their IDs in your [Organization dashboard](https://console.scaleway.com/organization/projects).
@@ -99,7 +174,65 @@ Below are common issues that you may encounter when using Generative APIs, their
 - When displaying the Cockpit of a specific Project, but waiting for average token consumption to display:
   - Counter for **Tokens Processed** or **API Requests** should display a correct value (different from 0)
   - Graph across time should be empty
+
+## Embeddings vectors cannot be stored in a database or used with a third-party library
+
+### Cause
+The embedding model you are using generates vector representations with a fixed dimension number, which is too high for your database or third-party library.
+  - For example, the embedding model `bge-multilingual-gemma2` generates vector representations with `3584` dimensions. However, when storing vectors using PostgreSQL `pgvector` extensions, indexes (in `hnsw` or `ivvflat` formats) only support up to `2000` dimensions.
+
+### Solution
+- Use a vector store supporting higher dimensions numbers, such as [Qdrant](https://www.scaleway.com/en/docs/tutorials/deploying-qdrant-vectordb-kubernetes/).
+- Do not use indexes for vectors or disable them from your third-party library. This may limit performance in vector similarity search for significant volumes.
+  - When using [Langchain PGVector method](https://python.langchain.com/docs/integrations/vectorstores/pgvector/), this method does not create an index by default and should not raise errors.
+  - When using the [Mastra](https://mastra.ai/) library with `vectorStoreName: "pgvector"`,  specify indexConfig type as `flat` to avoid creating any index on vector dimensions.
+  ```typescript
+  await vectorStore.createIndex({
+    indexName: 'papers',
+    dimension: 3584,
+    indexConfig: {"type":"flat"},
+  });
+  ```
+- Use a model with a lower number of dimensions. Using [Managed Inference](https://console.scaleway.com/inference/deployments), you can deploy for instance the`sentence-t5-xxl` model, which represents vectors with `768` dimensions.
+
+## Previous messages are not taken into account by the model
+
+### Causes
+- Previous messages are not sent to the model
+- The content sent exceeds the maximum context window for this model
+
+### Solution
+- LLM models are completely "stateless" and thus do not store previous messages or conversations. For example, when building a chatbot application, each time a new message is sent by the user, all preceding messages in the conversation need to be sent through the API payload. Example payload for multi-turn conversation:
+```python
+from openai import OpenAI
+
+client = OpenAI(
+    base_url="https://api.scaleway.ai/v1",
+    api_key=os.getenv("SCW_SECRET_KEY")
+)
+
+response = client.chat.completions.create(
+    model="llama-3.1-8b-instruct",
+    messages=[
+      {
+        "role": "user",
+        "content": "What is the solution to 1+1= ?"
+      },
+      {
+        "role": "assistant",
+        "content": "2"
+      },
+      {
+        "role": "user",
+        "content": "Double this number"
+      }
+    ]
+)
+
+print(response.choices[0].message.content)
 ```
+This snippet will output the model response, which is `4`.
+- When exceeding the maximum context window, you should receive a `400 - BadRequestError` detailing the context length value you exceeded. In this case, you should reduce the size of the content you send to the API.
 
 ## Best practices for optimizing model performance
 
@@ -115,5 +248,3 @@ Below are common issues that you may encounter when using Generative APIs, their
 - For cases where no explicit error is returned:
   - Verify all fields in the API request are correctly named and formatted.
   - Test the request with smaller and simpler inputs to isolate potential issues.
-
-

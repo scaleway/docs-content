@@ -9,7 +9,7 @@ tags:  duplicity backup gpg s3
 categories:
   - object-storage
 dates:
-  validation: 2024-10-15
+  validation: 2025-04-24
   posted: 2018-10-13
 ---
 
@@ -52,13 +52,8 @@ In this step, we install the various software needed. As well as installing Dupl
 Run the following command to update the APT package manager, upgrade the software already installed on the server and download and install Duplicity and the other required software:
 
 ```bash
-    apt update && apt upgrade
-    apt install -y python3-boto python3-pip haveged gettext librsync-dev
-    wget https://gitlab.com/duplicity/duplicity/-/archive/rel.2.1.2/duplicity-rel.2.1.2.tar.gz
-    tar xaf duplicity-rel.2.1.2.tar.gz
-    cd duplicity-rel.2.1.2/
-    pip3 install -r requirements.txt
-    python3 setup.py install
+sudo apt update && sudo apt upgrade -y
+sudo apt install -y python3-pip gnupg2 haveged duplicity
 ```
 
 ## Creating a GPG key
@@ -164,29 +159,21 @@ As everything is installed and ready, we will now configure and script our inter
         mkdir -p /var/log/duplicity
         touch /var/log/duplicity/logfile{.log,-recent.log}
     ```
-2. Add the following lines to `.scw-configrc`. Make sure you replace the necessary values with the details of your Scaleway API key, Object Storage bucket, and GPG key. You also need to enter a path to the desired backup folder:
+2. Create a config file `~/.scw-backup.env`. Make sure you replace the necessary values with the details of your Scaleway API key, Object Storage bucket, and GPG key. You also need to enter a path to the folder you want to back up:
     ```bash
     # Scaleway credentials keys
     export AWS_ACCESS_KEY_ID="<SCALEWAY ACCESS KEY>"
-    export AWS_SECRET_ACCESS_KEY="<SCALEWAY SECRET ACCESS KEY>"
+    export AWS_SECRET_ACCESS_KEY="<SCALEWAY SECRET KEY>"
 
-    export SCW_REGION="<REGION OF YOUR BUCKET>"
+    export SCW_REGION="<REGION OF YOUR BUCKET>s"
     export SCW_ENDPOINT_URL="https://s3.${SCW_REGION}.scw.cloud"
-
-    # set SCW_BUCKET as follows for duplicity < 0.8.23
-    # for higher versions, see below
-    # export SCW_BUCKET="s3://s3.${SCW_REGION}.scw.cloud/<NAME OF YOUR BUCKET>"
-
-    # set the next two variables for duplicity >= 0.8.23
-    # it uses the boto3 library, which uses a different naming scheme for bucket names
-    export SCW_BUCKET="s3://<NAME OF YOUR BUCKET>"
-
+    export SCW_BUCKET="s3://<YOUR BUCKET NAME>"
     # GPG Key information
-    export PASSPHRASE="<YOUR GPG KEY PASSPHRASE>"
     export GPG_FINGERPRINT="<YOUR GPG KEY FINGERPRINT>"
+    export PASSPHRASE="<YOUR GPG KEY PASSPHRASE>"
 
     # Folder to backup
-    export SOURCE="<PATH TO FOLDER TO BACKUP>"
+    export SOURCE="/path/to/backup"
 
     # Will keep backup up to 1 month
     export KEEP_BACKUP_TIME="1M"
@@ -197,13 +184,6 @@ As everything is installed and ready, we will now configure and script our inter
     # Log files
     export LOGFILE_RECENT="/var/log/duplicity/logfile-recent.log"
     export LOGFILE="/var/log/duplicity/logfile.log"
-
-    log () {
-      date=`date +%Y-%m-%d`
-      hour=`date +%H:%M:%S`
-      echo "$date $hour $*" >> ${LOGFILE_RECENT}
-    }
-    export -f log
     ```
 
 The backup policy described here makes a full backup every 10 days and removes all backups older than one month.
@@ -214,41 +194,39 @@ Using the configuration and Duplicity, we automatize the backup process with the
 
 1. Copy the following script to `scw-backups.sh`:
     ```bash
-        #!/bin/bash
-        source <FULL PATH TO>/.scw-configrc
+    #!/bin/bash
+    source ~/.scw-backup.env
 
-        currently_backuping=$(ps -ef | grep duplicity  | grep python | wc -l)
+    mkdir -p /var/log/duplicity
+    touch "$LOGFILE_RECENT" "$LOGFILE"
 
-        if [ $currently_backuping -eq 0 ]; then
-          # Clear the recent log file
-          cat /dev/null > ${LOGFILE_RECENT}
+    currently_backuping=$(pgrep -f duplicity | wc -l)
 
-          log ">>> removing old backups"
-          duplicity remove-older-than \
-            --s3-endpoint-url ${SCW_ENDPOINT_URL} \
-            --s3-region-name ${SCW_REGION} \
-            ${KEEP_BACKUP_TIME} ${SCW_BUCKET} >> ${LOGFILE_RECENT} 2>&1
+    if [ "$currently_backuping" -eq 0 ]; then
+      echo "$(date '+%F %T') >>> Removing old backups" >> "$LOGFILE_RECENT"
+      duplicity remove-older-than "$KEEP_BACKUP_TIME" "$SCW_BUCKET" \
+        --s3-endpoint-url "$SCW_ENDPOINT_URL" \
+        --s3-region-name "$SCW_REGION" >> "$LOGFILE_RECENT" 2>&1
 
-          # duplicity >= 0.8.23
-          # determine S3_ENDPOINT_URL for scaleway
-          S3_ENDPOINT_URL="https://s3.${S3_REGION_NAME}.scw.cloud"
+      echo "$(date '+%F %T') >>> Running backup" >> "$LOGFILE_RECENT"
+      duplicity \
+        incr --full-if-older-than "$FULL_BACKUP_TIME" \
+        --asynchronous-upload \
+        --encrypt-key="$GPG_FINGERPRINT" \
+        --sign-key="$GPG_FINGERPRINT" \
+        --s3-endpoint-url "$SCW_ENDPOINT_URL" \
+        --s3-region-name "$SCW_REGION" \
+        "$SOURCE" "$SCW_BUCKET" >> "$LOGFILE_RECENT" 2>&1
 
-          log ">>> creating and uploading backup to Scaleway Glacier"
-          duplicity \
-          incr --full-if-older-than ${FULL_BACKUP_TIME} \
-          --asynchronous-upload \
-          --s3-use-glacier \
-          --s3-endpoint-url ${SCW_ENDPOINT_URL} \
-          --s3-region-name ${SCW_REGION} \
-          --encrypt-key=${GPG_FINGERPRINT} \
-          --sign-key=${GPG_FINGERPRINT} \
-          ${SOURCE} ${SCW_BUCKET} >> ${LOGFILE_RECENT} 2>&1
-
-          cat ${LOGFILE_RECENT} >> ${LOGFILE}
-        fi
+      cat "$LOGFILE_RECENT" >> "$LOGFILE"
+    fi
     ```
 
-2. Run the script `./scw-backups.sh` to make sure the configuration is correctly set. Check the Object Storage bucket on the [Scaleway console](https://console.scaleway.com) to see the backup files, or examine the logs with the following command:
+2. Make the script executable:
+    ```bash
+    chmod +x ~/scw-backup.sh
+    ```
+3. Run the script `./scw-backups.sh` to make sure the configuration is correctly set. Check the Object Storage bucket on the [Scaleway console](https://console.scaleway.com) to see the backup files, or examine the logs with the following command:
     ```bash
     cat /var/log/duplicity/logfile-recent.log
     ```
@@ -260,39 +238,31 @@ Duplicity also allows you to recover a backup. We will create a script to make t
 1. Add the following script to `scw-restore.sh`:
     ```bash
     #!/bin/bash
-    source <FULL PATH TO>/.scw-configrc
+    source ~/.scw-backup.env
 
-      if [ $# -lt 2 ]; then
-        echo -e "Usage $0 <time or delta> [file to restore] <restore to>
-    Exemple:
-    \t$ $0 2018-7-21 recovery/  ## recovers * from closest backup to date
-      \t$ $0 0D secret data/  ## recovers most recent file nammed 'secret'";
-      exit; fi
+    if [ $# -lt 2 ]; then
+      echo "Usage: $0 <time or delta> [file to restore] <restore dir>"
+      exit 1
+    fi
 
-      if [ $# -eq 2 ]; then
-        duplicity \
-          --s3-endpoint-url ${SCW_ENDPOINT_URL} \
-          --s3-region-name ${SCW_REGION} \
-          --time $1 \
-          ${SCW_BUCKET} $2
-      fi
-
-      if [ $# -eq 3 ]; then
-        duplicity \
-          --s3-endpoint-url ${SCW_ENDPOINT_URL} \
-          --s3-region-name ${SCW_REGION} \
-          --time $1 \
-          --file-to-restore $2 \
-          ${SCW_BUCKET} $3
-      fi
-      ```
-2. Recover the data you uploaded in the previous section with the following command:
-    ```bash
-        ./scw-restore.sh 0D /tmp/backup-recovery-test/
+    if [ $# -eq 2 ]; then
+      duplicity \
+        --s3-endpoint-url "$SCW_ENDPOINT_URL" \
+        --s3-region-name "$SCW_REGION" \
+        --time "$1" \
+        "$SCW_BUCKET" "$2"
+    elif [ $# -eq 3 ]; then
+      duplicity \
+        --s3-endpoint-url "$SCW_ENDPOINT_URL" \
+        --s3-region-name "$SCW_REGION" \
+        --time "$1" \
+        --file-to-restore "$2" \
+        "$SCW_BUCKET" "$3"
+    fi
     ```
-3. Alternatively, recover one specific file with the following format from a backup 5 days ago with:
+2. Make the script executable:
     ```bash
-        ./scw-restore.sh 5D <file> /tmp/backup-recovery-test/
+    chmod +x ~/scw-restore.sh
     ```
 
 ### Automation of the backups

@@ -1,0 +1,114 @@
+---
+meta:
+  title: How to build and push a container image
+  description: How to build and push a container image based on a Dockerfile for deploying containerized applications with Scaleway Serverless Containers.
+content:
+  h1: How to build and push a container image
+  paragraph: How to build and push a container image based on a Dockerfile for deploying containerized applications with Scaleway Serverless Containers.
+tags: create dockerfile containerize application deployment scaleway
+dates:
+  validation: 2025-04-02
+  posted: 2021-04-02
+categories:
+  - serverless
+  - containers
+---
+
+This page explains how to create a simple Dockerfile to containerize your applications for deployment using Scaleway Serverless Containers.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Installed [Docker engine](https://docs.docker.com/engine/install/) or the Docker daemon locally
+- Created a [Scaleway Registry namespace](/container-registry/how-to/create-namespace/)
+- A valid [API key](/iam/how-to/create-api-keys/)
+
+## How to create a Dockerfile
+
+1. In a new folder, create a file named `Dockerfile`.
+
+2. Add the following content to your Dockerfile, adjusting the base image and commands according to your application:
+
+<Tabs id="dockerfile-examples">
+<TabsTab label="Nginx">
+```dockerfile
+# Use the official Nginx image
+FROM nginx:alpine
+
+# Create simple HTML content directly in the Dockerfile
+RUN echo "<!DOCTYPE html><html><head><title>Demo</title></head><body><h1>Hello Scaleway Serverless Containers!</h1><p>Served by Nginx</p></body></html>" > /usr/share/nginx/html/index.html
+
+# For documentation purposes
+EXPOSE 8080
+
+# Modify Nginx configuration to listen on 8080
+RUN sed -i 's/listen\(.*\)80;/listen 8080;/' /etc/nginx/conf.d/default.conf
+
+# Start Nginx
+CMD ["nginx", "-g", "daemon off;"]
+```
+</TabsTab>
+<TabsTab label="NodeJS">
+```dockerfile
+# Use the official Node.js slim image
+FROM node:22-slim
+
+# Create app directory
+WORKDIR /usr/src/app
+
+# Create package.json and simple Express app directly in Dockerfile
+RUN echo '{"name":"scaleway-serverless","version":"1.0.0","description":"","main":"server.js","scripts":{"start":"node server.js"},"dependencies":{"express":"^5"}}' > package.json && \
+    npm install && \
+    echo "const express = require('express');\nconst app = express();\nconst port = process.env.PORT || 8080;\n\napp.get('/', (req, res) => {\n  res.send('<!DOCTYPE html><html><body><h1>Hello from Scaleway Serverless!</h1></body></html>');\n});\n\napp.listen(port, () => {\n  console.log(`Server running on port \${port}`);\n});" > server.js
+
+# Start the application
+CMD ["npm", "start"]
+```
+</TabsTab>
+<TabsTab label="Python Flask">
+```dockerfile
+# Use the official Python slim image
+FROM python:3.13-slim
+
+# Install Flask
+RUN pip install flask gunicorn
+
+# Create a simple Flask app directly in the Dockerfile
+RUN echo "from flask import Flask\napp = Flask(__name__)\n\n@app.route('/')\ndef hello():\n    return '<!DOCTYPE html><html><body><h1>Hello from Flask on Scaleway Serverless!</h1></body></html>'\n\nif __name__ == '__main__':\n    app.run(host='0.0.0.0', port=8080)" > app.py
+
+# Run the app with Gunicorn
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 app:app
+```
+</TabsTab>
+</Tabs>
+
+## How to build and push your image from your Dockerfile
+
+1. Open a terminal and navigate to the directory containing your Dockerfile.
+
+2. Run the following command to build your Docker image:
+
+    ```bash
+    docker build -t my-application .
+    ```
+
+3. Run the command below to log in to your Scaleway account in the terminal. Make sure that you replace the placeholder values with your own:
+
+    ```
+    docker login rg.fr-par.scw.cloud/your-container-registry-namespace -u nologin --password-stdin <<< "$SCW_SECRET_KEY"
+    ```
+
+4. Tag your Docker image so it matches your Scaleway registry's format:
+
+    ```
+    docker tag my-application:latest rg.fr-par.scw.cloud/your-container-registry-namespace/my-application:latest
+    ```
+
+5. Push the Docker image to the Scaleway Container Registry:
+
+    ```
+    docker push rg.fr-par.scw.cloud/your-container-registry-namespace/my-application:latest
+    ```
+
+You can now access your container image from the [Scaleway Container Registry](https://console.scaleway.com/registry/namespaces), and [deploy a Serverless Container](/serverless-containers/how-to/deploy-container/#deploy-from-an-external-container-registry) from this image.

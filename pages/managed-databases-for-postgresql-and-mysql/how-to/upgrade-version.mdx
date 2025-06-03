@@ -17,7 +17,7 @@ categories:
 If your database engine is outdated, you can upgrade the version to the latest one anytime via the Scaleway console.
 
 <Message type="note">
-You must upgrade your engine version if your Database Instance uses an End of Life engine version that is no longer maintained.
+  You must upgrade your engine version if your Database Instance uses an End of Life engine version that is no longer maintained.
 </Message>
 
 <Message type="important">
@@ -32,7 +32,33 @@ The version upgrade is only available for:
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - A [PostgreSQL Database Instance](/managed-databases-for-postgresql-and-mysql/how-to/create-a-database/) running on an outdated engine version
 
-1. Click **PostgreSQL and MySQL** under **Managed Databases** on the side menu. A list of your Database Instances displays.
+## How to remove incompatible data types
+
+Before upgrading to a newer major PostgreSQL version, you must remove any data types incompatible with the `pg_upgrade` tool.
+
+The `reg*` data type, for example, cannot be persisted by `pg_upgrade`.
+
+Run the following command in your Database Instance to identify all instances of the `reg*` data type:
+
+```sql
+SELECT count(*) FROM pg_catalog.pg_class c, pg_catalog.pg_namespace n, pg_catalog.pg_attribute a
+  WHERE c.oid = a.attrelid
+      AND NOT a.attisdropped
+      AND a.atttypid IN ('pg_catalog.regproc'::pg_catalog.regtype,
+                          'pg_catalog.regprocedure'::pg_catalog.regtype,
+                          'pg_catalog.regoper'::pg_catalog.regtype,
+                          'pg_catalog.regoperator'::pg_catalog.regtype,
+                          'pg_catalog.regconfig'::pg_catalog.regtype,
+                          'pg_catalog.regdictionary'::pg_catalog.regtype)
+      AND c.relnamespace = n.oid
+      AND n.nspname NOT IN ('pg_catalog', 'information_schema'); 
+```
+
+We recommend you remove the identified instances before continuing.
+
+## How to upgrade the engine version
+
+1. Click **PostgreSQL and MySQL** under **Databases** on the side menu. A list of your Database Instances displays.
 2. Click the name of the database whose engine you want to upgrade. The Database Instance information page appears.
 3. Click **Upgrade** under **Database engine**. A pop-up appears.
     <Lightbox src="scaleway-engine-version-upgrade-pop-up.webp" alt="The pop-up says - This will upgrade your Database Instance rdb-peaceful-dijkstra. The upgrade will create a clone of your current Database Instance with an up-to-date engine version. Both the original and the new Database Instances will be billed. There is a drop-down to select a new engine version and they type of upgrade - 'Upgrade Only' or 'Upgrade and switch incoming traffic'. In the image 'Upgrade only is selected', and an information box says: 'No impact to your original Database Instance. Your Database Instance will remain available with its original endpoints. If you update your endpoints manually, you can revert to the old ones anytime." />
@@ -40,23 +66,22 @@ The version upgrade is only available for:
     - **Upgrade only**: This method has no impact on your original Database Instance. Your Database Instance will remain available with its original endpoint and will continue to be billed.
     - **Upgrade and switch incoming traffic**: With this method, your endpoint is migrated to the new Database Instance automatically. This option will create a clone of your Database Instance, and will automatically migrate the endpoint to the new Instance. The original Database Instance remains available and will continue to be billed. The endpoint will be deleted from the original Database Instance.
 
-
     <Message type="important">
-      When you upgrade to a new version, there is no synchronization between the source and target Database Instances. To avoid data loss, we recommend you stop any write operations running on your applications during the upgrade. If you let them run during the process, the data will be stored only in the source Database Instance.
+      When you upgrade to a new version:
+        - There is no synchronization between the source and target Database Instances. To avoid data loss, we recommend you stop any write operations running on your applications during the upgrade. If you let them run during the process, the data will be stored only in the source Database Instance.
+        - Your Database Instances in [High Availability (HA)](/managed-databases-for-postgresql-and-mysql/concepts/#high-availability) mode will migrate to a standalone Instance. To maintain your HA mode, you must manually [enable HA](/managed-databases-for-postgresql-and-mysql/how-to/enable-high-availability) after the upgrade is complete. The same applies when upgrading [Read Replicas](/managed-databases-for-postgresql-and-mysql/how-to/create-read-replica).
+        - Database Instance [advanced settings](/managed-databases-for-postgresql-and-mysql/how-to/configure-advanced-settings) are synced as long as they are still available on the new database engine version.
     </Message>
 
-    <Message type="important">
-      When you upgrade to a new version, Database Instance advanced settings are synced as far as they are still available on the new database engine version.
-    </Message>
-
-    <Message type="note">
-      Follow the [migrating endpoints via the CLI](/managed-databases-for-postgresql-and-mysql/api-cli/migrating-endpoints/) procedure to quickly migrate your endpoints. You can use this procedure to revert the migration anytime. <br /><br />
-      Keep in mind that reverting the endpoint will not affect the data stored on the databases. This means that if some entries were added to the upgraded database, they will not be added back to the old version when you change the endpoints.
+    <Message type="tip">
+      Before performing an engine upgrade migration, we recommend testing the process in a "dry-run". This allows you to estimate the migration time and verify its success without affecting your source instance. To do so:
+        - Run the migration without checking the "migration endpoint" flag. If the test is successful, you can then proceed with the actual migration. Follow the [migrating endpoints via the CLI](/managed-databases-for-postgresql-and-mysql/api-cli/migrating-endpoints/) procedure to migrate your endpoints after the upgrade. You can use the same CLI command to revert the endpoint migration anytime.
+        - Keep in mind that reverting the endpoint will not affect the data stored on the databases. This means that if some entries were added to the upgraded database, they will not be added back to the old version when you change the endpoints.
     </Message>
 4. Click **Upgrade version**. A new Database Instance is created.
 
     <Message type="important">
-      On PostgreSQL, engine extensions are handled and upgraded automatically during the upgrade process.
+      - In PostgreSQL major upgrades, the `pgaudit` and `pg_stat_statements` [engine extensions](/managed-databases-for-postgresql-and-mysql/reference-content/postgresql-extensions) will be removed. You must reinstall these extensions on each database they are installed once the upgrade is complete.
+      - If you are upgrading to PG16, we recommend you [reset your user passwords](/managed-databases-for-postgresql-and-mysql/how-to/add-users) from the console or using `psql`, [PostrgreSQL's CLI](https://www.postgresql.org/docs/current/app-psql.html#APP-PSQL-META-COMMAND-PASSWORD). PG16 uses the **SCRAM-SHA-256** format to store passwords. The previous versions' password format is no longer supported in PG16. You can re-save your passwords after the upgrade and they will be stored in the correct format automatically.
     </Message>
-
 

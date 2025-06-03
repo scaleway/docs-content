@@ -1,11 +1,11 @@
 ---
 meta:
-  title: Create snapshots of an Instance with Serverless Jobs
-  description: This step-by-step tutorial will help you automate the creation of snapshots of your Instance using Serverless Jobs
+  title: Create snapshots of an Instance with Serverless Jobs and the Scaleway CLI
+  description: This step-by-step tutorial will help you automate the creation of snapshots of your Instance using Serverless Jobs and the Scaleway CLI
 content:
-  h1: Create snapshots of an Instance with Serverless Jobs
-  paragraph: This step-by-step tutorial will help you automate the creation of snapshots of your Instance using Serverless Jobs
-tags: serverless jobs instance snapshot backup image disk storage
+  h1: Create snapshots of an Instance with Serverless Jobs and the Scaleway CLI
+  paragraph: This step-by-step tutorial will help you automate the creation of snapshots of your Instance using Serverless Jobs and the Scaleway CLI
+tags: serverless jobs instance snapshot backup image disk storage cli
 categories:
   - instances
   - jobs
@@ -13,222 +13,62 @@ dates:
   validation: 2025-12-03
   posted: 2024-06-19
 ---
-
 [Scaleway Serverless Jobs](/serverless-jobs/quickstart/) allows you to create and automate recurring tasks. This tutorial will guide you through the process of creating snapshots of a [Scaleway Instance](/instances/quickstart/) on a recurring schedule using a Serverless Job.
 
-Serverless Jobs are perfectly adapted for these autonomous tasks, as we do not need autoscaling or exposure via a web server. Refer to the [differences between jobs, containers and functions](/serverless-jobs/reference-content/difference-jobs-functions-containers/) for more information.
+Serverless Jobs are perfectly adapted for these autonomous tasks, as we do not need autoscaling or exposure via a web server. Refer to the [documentation on differences between jobs, containers, and functions](/serverless-jobs/reference-content/difference-jobs-functions-containers/) for more information.
 
 <Macro id="requirements" />
 
-- A Scaleway account logged into the [console](https://console.scaleway.com)
-- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- Created a [Container Registry namespace](/container-registry/how-to/create-namespace/).
-- Created an [Instance](/instances/how-to/create-an-instance/)
-- Installed and started the [Docker daemon](https://docs.docker.com/engine/install/) to build the image.
+- A Scaleway account logged into the [console](https://console.scaleway.com).
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization.
+- Created an [Instance](/instances/how-to/create-an-instance/).
 
-## Creating the snapshot generator files
-
-<Message type="note">
-You can also download the work files by cloning our [Scaleway Serverless examples repository](https://github.com/scaleway/serverless-examples/tree/main/jobs/instances-snapshot).
-</Message>
-
-1. Create a file named `main.go`, and add the code below to it:
-
-    ```go
-    package main
-
-    import (
-      "fmt"
-      "os"
-      "time"
-
-      "github.com/scaleway/scaleway-sdk-go/api/instance/v1"
-      "github.com/scaleway/scaleway-sdk-go/scw"
-    )
-
-    const (
-      envOrgID        = "SCW_DEFAULT_ORGANIZATION_ID"
-      envAccessKey    = "SCW_ACCESS_KEY"
-      envSecretKey    = "SCW_SECRET_KEY"
-      envInstanceID   = "INSTANCE_ID"
-      envInstanceZone = "INSTANCE_ZONE"
-    )
-
-    func main() {
-      fmt.Println("creating snapshot of instance...")
-
-      // Create a Scaleway client with credentials from environment variables.
-      client, err := scw.NewClient(
-        // Get your organization ID at https://console.scaleway.com/organization/settings
-        scw.WithDefaultOrganizationID(os.Getenv(envOrgID)),
-
-        // Get your credentials at https://console.scaleway.com/iam/api-keys
-        scw.WithAuth(os.Getenv(envAccessKey), os.Getenv(envSecretKey)),
-
-        // Get more about our availability
-        // zones at https://www.scaleway.com/en/docs/account/reference-content/products-availability/
-        scw.WithDefaultRegion(scw.RegionFrPar),
-      )
-      if err != nil {
-        panic(err)
-      }
-
-      // Create SDK objects for Scaleway Instance product
-      instanceAPI := instance.NewAPI(client)
-
-      if err := createSnapshots(instanceAPI); err != nil {
-        panic(err)
-      }
-    }
-
-    func createSnapshots(instanceAPI *instance.API) error {
-      gotInstance, err := instanceAPI.GetServer(&instance.GetServerRequest{
-        ServerID: os.Getenv("INSTANCE_ID"),
-        Zone:     scw.Zone(os.Getenv("INSTANCE_ZONE")),
-      })
-      if err != nil {
-        return fmt.Errorf("error while getting instance %w", err)
-      }
-
-      now := time.Now().Format(time.DateOnly)
-
-      for _, volume := range gotInstance.Server.Volumes {
-        snapshotName := fmt.Sprintf("snap-vol-%s-%s-%s",
-          volume.VolumeType.String(),
-          now,
-          os.Getenv(envInstanceZone))
-
-        snapshotResp, err := instanceAPI.CreateSnapshot(&instance.CreateSnapshotRequest{
-          Name:       snapshotName,
-          VolumeID:   &volume.ID,
-          VolumeType: instance.SnapshotVolumeType(volume.VolumeType),
-          Zone:       scw.Zone(os.Getenv(envInstanceZone)),
-        })
-        if err != nil {
-          return fmt.Errorf("error while creating snapshot %w", err)
-        }
-
-        fmt.Println("created snapshot ", snapshotResp.Snapshot.ID)
-      }
-
-      return nil
-    }
-
-    func init() {
-      mandatoryVariables := [...]string{envOrgID, envAccessKey, envSecretKey, envInstanceID, envInstanceZone}
-
-      for idx := range mandatoryVariables {
-        if os.Getenv(mandatoryVariables[idx]) == "" {
-          panic("missing environment variable " + mandatoryVariables[idx])
-        }
-      }
-    }
-
-    ```
-
-2. Create a file called `go.mod`, and add the code below to it:
-
-    ```go
-    module github.com/scaleway/serverless-examples/jobs/instances-snapshot
-
-    go 1.23
-
-    require github.com/scaleway/scaleway-sdk-go v1.0.0-beta.30
-
-    require gopkg.in/yaml.v2 v2.4.0 // indirect
-    ```
-
-3. Run the follwing command to download the required dependencies:
-
-    ```go
-    go get
-    ```
-
-## Building and pushing the image to Container Registry
-
-Serverless Jobs rely on containers to run in the cloud, and therefore require a [container image](/serverless-jobs/concepts/#container-image) hosted in the cloud using [Scaleway Container Registry](/container-registry/).
-
-1. Create a `Dockerfile`, and add the following code to it:
-
-    ```dockerfile
-    # Using apline/golang image
-    FROM golang:1.23-alpine
-
-    # Set destination for COPY
-    WORKDIR /app
-
-    # Copy required files
-    COPY go.mod ./
-    COPY go.sum ./
-    COPY *.go ./
-
-    # Build the executable
-    RUN go build -o /jobs-snapshot
-
-    # Run the executable
-    CMD [ "/jobs-snapshot" ]
-    ```
-
-2. Run the following command in a terminal to connect to your Container Registry namespace. Do not forget to edit the command with your namespace name.
-
-    ```shell
-    docker login rg.fr-par.scw.cloud/your-namespace-name -u nologin --password-stdin <<< "$SCW_SECRET_KEY"
-    ```
-
-3. Run the following command to build the container image locally:
-
-    ```sh
-    docker build -t rg.fr-par.scw.cloud/your-namespace-name/jobs-snapshot:v1 .
-
-    ## TIP: for Apple Silicon or other ARM processors, please use the following command as Serverless Jobs supports amd64 architecture
-    # docker buildx build --platform linux/amd64 -t rg.fr-par.scw.cloud/jobs-snapshot/jobs-snapshot:v1 .
-    ```
-
-4. Run the following command to push the container image to the registry:
-
-    ```sh
-    docker push rg.fr-par.scw.cloud/your-namespace-name/jobs-snapshot:v1
-    ```
-
-Your image and its tag now appear in the [Container Registry in the Scaleway console](https://console.scaleway.com/registry/namespaces).
-
-## Creating the Job Definition
+## Creating the job definition
 
 1. In the [Scaleway console](https://console.scaleway.com), click **Jobs** in the **Serverless** section of the side menu. The jobs page displays.
 
 2. Click **Create job**. The job creation wizard displays.
 
-3. Select the **Scaleway** Container Registry, then select your Container Registry namespace from the drop-down list, and the container image and tag.
+3. For **Container Image**, select **External**, and in **Image URL**, set: `scaleway/cli:latest`.
 
 4. Enter a name or use the automatically generated one.
 
 5. Select the region in which your job will be created.
 
-6. Keep the default **resources** values, as this job requires little compute capabilities.
+6. Keep the default **resources** values, as this job requires little compute capability.
 
-7. Set the **cron schedule** to `0 2 * * *` and select the relevant time zone to run the job every day at 2:00 a.m. Refer to the [cron schedules documentation](/serverless-jobs/reference-content/cron-schedules/) for more information.
+7. Set **cron schedule** to `0 2 * * *` and select the relevant time zone to run the job every day at 2:00 a.m. Refer to the [cron schedules documentation](/serverless-jobs/reference-content/cron-schedules/) for more information.
 
 8. Define the following environment variables:
-    - `INSTANCE_ID`: the ID of the instance you want to snapshot
-    - `INSTANCE_ZONE`: the [Availabilitiy Zone](/instances/concepts/#availability-zone) of your Instance (e.g. `fr-par-2`)
-    - `SCW_ACCESS_KEY`: your API access key
-    - `SCW_SECRET_KEY`: your API secret key
-    - `SCW_DEFAULT_ORGANIZATION_ID`: your Oganization ID
+    - `SCW_ACCESS_KEY`: your API access key.
+    - `SCW_SECRET_KEY`: your API secret key.
+    - `SCW_DEFAULT_PROJECT_ID`: your Project ID.
+    - `SCW_DEFAULT_ORGANIZATION_ID`: your Organization ID.
+    - `SCW_DEFAULT_REGION`: concerned region.
 
-9. Click **Create job**.
+<Message type="note">
+    We recommend using Secret Manager to store the `SCW_ACCESS_KEY` and `SCW_SECRET_KEY`.
+</Message>
+
+For more details about variables used by `cli`, refer to the [CLI config documentation](https://github.com/scaleway/scaleway-cli/blob/master/docs/commands/config.md).
+
+9. In the **Execution** tab, define the desired command: `/scw block snapshot create volume-id=11111111-1111-1111-1111-111111111111` (replace the ID with your desired volume ID).
+
+10. Click **Create job**.
 
 ## Running the job
 
-From the **Overview** tab of the Serverless job you just created, click, **Actions**, then select **Run job** from the contextual menu.
+From the **Overview** tab of the Serverless job you just created, click **Actions**, then select **Run job** from the contextual menu.
 
-The execution appears in the **Job runs** section. You can access the logs of your job by clicking <Icon name="more" /> next to the job run ID, and selecting **See on cockpit**.
+The execution appears in the **Job runs** section. You can access the logs of your job by clicking <Icon name="more" /> next to the job run ID, and selecting **See on Cockpit**.
 
 ## Possible improvements
 
 This tutorial is a lightweight example of how to create recurring snapshots of an Instance. You can go further by:
-- Using it to manage all your Instances snapshots
-- Create backups of your storage disks
-- Set up an alerting system in case of unexpected behavior
+- Using it to manage all your Instances' snapshots
+- Creating backups of your storage disks
+- Setting up an alerting system in case of unexpected behavior
+- Explore [scaleway/serverless-examples repository](https://github.com/scaleway/serverless-examples) for advanced automation examples
 
 ## Additional resources
 

@@ -1,0 +1,133 @@
+---
+meta:
+  title: Deploying Vaultwarden on a Serverless infrastructure
+  description: This tutorial shows how to configure and deploy a Vaultwarden server using Scaleway Serverless products.
+content:
+  h1: Deploying Vaultwarden on a Serverless infrastructure
+  paragraph: This tutorial shows how to configure and deploy a Vaultwarden server using Scaleway Serverless products.
+tags: vaultwarden password-safe serverless containers sql-database
+categories:
+  - containers
+  - sql-databases
+dates:
+  validation: 2025-04-03
+  posted: 2025-04-03
+---
+
+Vaultwarden is an open-source password manager that helps you securely store and manage your passwords. It is a community-maintained fork of the popular Bitwarden project, offering the same features with flexibility and privacy in mind.
+
+Scaleway Serverless Containers and Serverless SQL Databases allow you to quickly deploy a Vaultwarden server that:
+- benefits from autoscaling according to your workloads
+- can scale down to zero to save costs
+- requires little-to-no maintenance
+- has built-in resiliency
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+
+## Creating a new Project
+
+For the sake of this tutorial, we recommend you create all the required resources in a dedicated new Project. Using dedicated Projects serves several purposes: 
+
+- It allows you to separate different applications, environments, or teams, keeping their resources isolated and organized.
+
+- You can set up specific permissions and access controls for each Project, ensuring that only authorized users can access and manage the resources within that Project.
+
+- It simplifies the process of monitoring and tracking usage, as you can view the resources and usage associated with each Project separately.
+
+- You can also use Projects to create a logical separation between different parts of your infrastructure, making it easier to scale, maintain, and optimize your resources.
+     
+## Creating a serverless SQL Database
+
+Vaultwarden relies on a database to store all password data securely. The database stores encrypted passwords, associated metadata, and user data. Serverless SQL Databases adapt to your workloads automatically thanks to autoscaling, and can scale down to zero to reduce costs.
+
+1. Follow [this procedure](/serverless-sql-databases/how-to/create-a-database/) to create a Serverless SQL Database.
+
+2. On the **Overview** page of the database you created, click **Connect application**.
+
+3. To connect to the database you can either: 
+    - use an existing API secret key, by copying the **Connection string** and replacing the placeholder with your secret key.
+    - create a new API key, by clicking **Generate new secret key**, and by copying the newly created **Connection string**.
+
+    Your connection string should look like the following:
+    ```
+    postgresql://example-f3e2-4e5d-8e51-0fd3299d5d70:example-9ee1-43da-9231-0a351bf06139@example-8324-4d44-b03d-b6115096d2c7.pg.sdb.fr-par.scw.cloud:5432/serverless-sqldb-example-database?sslmode=require
+    ```
+    <Message type="note">
+    Store your connection string securely, as it will be needed in the next steps.
+    </Message>
+
+## Creating a Serverless Container
+
+1. [Create a Serverless Containers namespace](/serverless-containers/how-to/create-manage-delete-containers-namespace/#creating-a-serverless-containers-namespace), then click **Create namespace and add container** to directly open the Serverless Containers creation menu.
+
+2. Set the following parameters for the **image** of your container:
+
+    | Parameter    | Value                                                                                               |
+    |--------------|-----------------------------------------------------------------------------------------------------|
+    | Image origin | External registry                                                                                   |
+    | Image URL    | `vaultwarden/server:latest`                                                                         |
+    | CPU          | 1 000 mVCPU                                                                                         |
+    | RAM          | 2 048 MB                                                                                            |
+    | Min scale    | `0` ((set a value of 1 or more to avoid [cold starts](/serverless-containers/concepts/#cold-start)) |
+    | Max scale    | `1` or more, according to your workload                                                             |
+
+3. Set the following **environment variables**:
+
+    | Key                     | Value  |
+    |-------------------------|--------|
+    | `DATA_FOLDER`           | `/tmp` |
+    | `ORG_ATTACHMENT_LIMIT`  | `0`    |
+    | `SIGNUPS_ALLOWED`       | `true` |
+    | `USER_ATTACHMENT_LIMIT` | `0`    |
+
+4. Set the following ¨¨**secrets**:
+    | Key            | Value                                                                                                                             |
+    |----------------|-----------------------------------------------------------------------------------------------------------------------------------|
+    | `DATABASE_URL` | connection string retrieved during the [previous step](#creating-a-serverless-sql-database)                                       |
+    | `ADMIN_TOKEN`  | authentication token retrieved by following [This procedure](https://github.com/dani-garcia/vaultwarden/wiki/Enabling-admin-page) |
+5. Click **Deploy container**. The container **Overview** tab displays.
+
+## Finalizing the container configuration
+
+Once your container is deployed, you need to make a few adjustments before being able to fully use your Vaultwarden server.
+
+1. Access the **Settings** tab of your container.
+
+2. In the **Data** tab of the **Advanced options** section, add or update the following environment variables:
+    - `SIGNUPS_ALLOWED` =	`false` (optional, to prevent unwanted signups)
+    - `DOMAIN` = endpoint or custom domain of your container
+
+3. Click **Save settings and deploy container** to apply your changes.
+
+Once your container's **status** switches to `ready`, your Vaultwarden server is ready to be used.
+
+<Message type="important">
+Vaultwarden is designed to store passwords, and other sensitive data. This tutorial only covers the basic set up of the server, and does not guarantee its security.
+
+Refer to the official [Vaultwarden Wiki](https://github.com/dani-garcia/vaultwarden/wiki) for detailed instructions on how to secure your deployment.
+</Message>
+
+## Going Further
+
+- Refer to the official [Vaultwarden Wiki](https://github.com/dani-garcia/vaultwarden/wiki) for detailed instructions on how to secure your deployment.
+
+- Refer to the [dedicated documentation](/domains-and-dns/how-to/register-internal-domain/) to get your own custom domain.
+
+- Configure  e-mails by adding the appropriate variables. Refer to the official [Vaultwarden repository](https://github.com/dani-garcia/vaultwarden/blob/main/.env.template) for a comprehensive list of variables.
+    ```
+    # SMTP_HOST=smtp.domain.tld
+
+    # SMTP_FROM=vaultwarden@domain.tld
+
+    # SMTP_FROM_NAME=Vaultwarden
+
+    # SMTP_USERNAME=username
+
+    # SMTP_PASSWORD=password
+
+    # SMTP_TIMEOUT=15
+    ```
+

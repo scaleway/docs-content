@@ -1,0 +1,86 @@
+---
+meta:
+  title: Understanding the Port parameter
+  description: Learn about the Port parameter and the PORT environment variable in Scaleway Serverless Containers.
+content:
+  h1: Understanding the Port parameter
+  paragraph: Learn about the Port parameter and the PORT environment variable in Scaleway Serverless Containers.
+tags: port variable environment containers serverless
+dates:
+  validation: 2025-04-02
+  posted: 2025-04-02
+categories:
+  - serverless
+  - containers
+  - environment-variables
+---
+
+## Port parameter
+
+The port of a containerized application refers to the network port that the application inside the container listens on for incoming requests.
+
+When you deploy a container, you must map this internal port to a port on the host machine by specifying its value at [container creation](/serverless-containers/how-to/deploy-container/) via the **Port** parameter. The value defined in this parameter will then be passed to your container during the deployment inside the `PORT` environment variable.
+
+<Message type="note">
+- Only one port can be exposed per Serverless Container.
+- Your container is accessible from the internet via ports 80 and 443, regardless of the specified port. The value you set determines how the Scaleway infrastructure accesses your container.
+</Message>
+
+## PORT environment variable
+
+To allow you application to be reachable, the port declared as a parameter when [creating your Container](/serverless-containers/how-to/deploy-container/) must be the same as the port exposed by your containerized application.
+
+We therefore recommend you use the `$PORT` variable in your application, as it will contain the port parameter value, as shown in the examples below.
+
+### nginx example
+
+```dockerfile
+FROM nginx:alpine
+
+# Create a minimal nginx config that will be modified at runtime
+RUN echo 'worker_processes 1; \
+    events { worker_connections 1024; } \
+    http { \
+    server { \
+    listen REPLACE_PORT default_server; \
+    location / { return 200 "Hello from Nginx on Scaleway Serverless Containers!\n"; } \
+    } \
+    }' > /etc/nginx/nginx.conf
+
+# Simple startup script that replaces the port
+CMD ["/bin/sh", "-c", "sed -i s/REPLACE_PORT/$PORT/g /etc/nginx/nginx.conf && exec nginx -g 'daemon off;'"]
+```
+
+### NodeJS example
+
+```dockerfile
+# Use the official Node.js slim image
+FROM node:22-slim
+
+# Create app directory
+WORKDIR /usr/src/app
+
+# Create package.json and simple Express app directly in Dockerfile
+RUN echo '{"name":"scaleway-serverless","version":"1.0.0","description":"","main":"server.js","scripts":{"start":"node server.js"},"dependencies":{"express":"^5"}}' > package.json && \
+    npm install && \
+    echo "const express = require('express');\nconst app = express();\nconst port = process.env.PORT || 8080;\n\napp.get('/', (req, res) => {\n  res.send('<!DOCTYPE html><html><body><h1>Hello from Scaleway Serverless!</h1></body></html>');\n});\n\napp.listen(port, () => {\n  console.log(`Server running on port \${port}`);\n});" > server.js
+
+# Start the application
+CMD ["npm", "start"]
+```
+
+### Python Flask example
+
+```Dockerfile
+# Use the official Python slim image
+FROM python:3.13-slim
+
+# Install Flask
+RUN pip install flask gunicorn
+
+# Create a simple Flask app directly in the Dockerfile
+RUN echo "from flask import Flask\napp = Flask(__name__)\n\n@app.route('/')\ndef hello():\n    return '<!DOCTYPE html><html><body><h1>Hello from Flask on Scaleway Serverless!</h1></body></html>'\n\nif __name__ == '__main__':\n    app.run(host='0.0.0.0', port=8080)" > app.py
+
+# Run the app with Gunicorn
+CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 app:app
+```

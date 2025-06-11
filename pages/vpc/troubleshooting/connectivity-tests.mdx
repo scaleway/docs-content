@@ -34,7 +34,7 @@ It is particularly useful to carry out these steps before opening a support tick
 3. Carry out the same test for both IPv4 and IPv6, ie `ping -4 instance-name` and `ping -6 instance-name`.
     
     - If these tests fail, there may be a DNS issue meaning the Instance's hostname cannot be resolved, see step 4 directly below.
-    - Otherwise, if the tests succeed, continue to the section [Verify ARP table](#step-2-verify-artp-table)
+    - Otherwise, if the tests succeed, continue to the section [Check ARP](#step-2-check-arp)
     
 4. Consider checking DNS records via the Scaleway Domains and DNS CLI as documented [here](/vpc/reference-content/dns/#troubleshooting), to see if the private DNS zone is correctly configured and the Instance's DNS records are up-to-date. 
 
@@ -54,7 +54,11 @@ A server's **A**ddress **R**esolution **P**rotocol (ARP) table maps IP addresses
     172.16.8.2 dev ens5 lladdr 02:00:00:1c:0d:9b REACHABLE
     ```
 
-2. Find the line beginning with the non-communicating Instance's private IP address, and containing also its MAC address (you can check both via the Scaleway console in the Private Network's **Attached resources** tab). 
+2. Find the line beginning with the non-communicating Instance's private IP address, and containing also its MAC address. You can check both via the Scaleway console in the Private Network's **Attached resources** tab. You can use the following command to identify the line, replacing `<MAC_ADDRESS>` with the Instance's MAC address:
+
+    ```
+    ip neigh | grep --ignore-case <MAC_ADDRESS>
+    ```
 
     The line ends with the state of the probe for that Instance's MAC address.
 
@@ -68,13 +72,39 @@ If the Instance could not be reached via the resolution of its MAC address, next
 
 The LLA is calculated from the Instance's MAC address.
 
-1. Use an online tool or guide to carry out the standardized process of calculating the Instance's IPv6 LLA address from its MAC address. Remember that you can view its MAC address from the Scaleway console, in the Private Network's **Attached Resources** tab.
+1. Use an online tool or guide to carry out the standardized process of calculating the Instance's LLA from its MAC address. Remember that you can view its MAC address from the Scaleway console, in the Private Network's **Attached Resources** tab.
 
-2. Ping the LLA. Ensure that you specify which interface to ping over (the Private Network) by adding the `%interface` zone index (usually `%ens5` for a Scaleway Private Network) to the end of the ping command. For example, for a LLA of `fe80::0:0ff:fe1c:d9b`, use the following command:
+    <Message type="tip">
+    You can use the following code snippet to calculate the LLA:
 
     ```
-    ping6 fe80::0:0ff:fe1c:d9b%ens5
+    bash-5.2$ mac_to_ipv6_ll() {
+    IFS=':'; set $1; unset IFS
+    echo "fe80::$(printf %02x $((0x$1 ^ 2)))$2:${3}ff:fe$4:$5$6"
+    }
     ```
+    <br/>
+    Example usage and output for a MAC address of `02:00:00:23:e4:01`:
+
+    ```
+    bash-5.2$ mac_to_ipv6_ll 02:00:00:23:e4:01
+    fe80::0000:00ff:fe23:e401
+    ```
+    </Message>
+
+2. Ping the LLA. Ensure that you specify which interface to ping over (the Private Network) by adding the `%interface` zone index to the end of the ping command. For example, for a LLA of `fe80::0:0ff:fe1c:d9b` and a Private Network interface name of `ens5`, use the following command:
+
+    ```
+    ping -6 fe80::0:0ff:fe1c:d9b%ens5
+    ```
+
+    <Message type="tip">
+    The interface name depends on the Instance type and OS. You can use the following command to get a compact summary of all network interfaces on your Instance:
+
+    ```
+    ip -brief -color addr show
+    ```
+    </Message>
 
     A successful ping will show results similar to the following:
 

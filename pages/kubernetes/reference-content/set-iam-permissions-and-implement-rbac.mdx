@@ -1,0 +1,349 @@
+---
+meta:
+  title: Setting IAM permissions and implementing RBAC on a cluster
+  description: This page explains how to set IAM permissions and implement RBAC on a Scaleway Kubernetes cluster
+content:
+  h1: Setting IAM permissions and implementing RBAC on a cluster
+  paragraph: This page explains how to set IAM permissions and implement RBAC on a Scaleway Kubernetes cluster
+tags: kubernetes kapsule-cluser
+dates:
+  validation: 2025-06-02
+  posted: 2025-06-02
+categories:
+  - kubernetes
+---
+
+Role-based access control (RBAC) is a native feature of Kubernetes and a method of regulating access to compute or network resources based on the roles of individual users within your Organization.
+The feature is activated on Scaleway Kubernetes Kapsule and Kosmos by default and is compatible with Scaleway's Identity and Access Management (IAM) service.
+IAM and RBAC work together by integrating Scaleway’s IAM with Kubernetes' native RBAC system. This integration ensures that access permissions are consistent across both the cloud infrastructure and the Kubernetes cluster, providing a secure access control mechanism.
+It allows you to assign roles to users, groups or `ServicesAccount` via `RoleBindings` and `ClusterRoleBindings`.
+
+Key components of RBAC in Kubernetes include:
+
+- **Roles and ClusterRoles:**
+   - `Roles`: These are specific to a namespace, and define a set of permissions for resources within that namespace (e.g., pods, services).
+   - `ClusterRoles`: These are similar to roles but apply cluster-wide, spanning all namespaces.
+- **RoleBindings and ClusterRoleBindings:**
+   - `RoleBindings`: These associate a set of permissions defined in a role with a user, group, or service account within a specific namespace.
+   - `ClusterRoleBindings`: These associate a set of permissions defined in a ClusterRole with a user, group, or service account across the entire cluster.
+- **Subjects:**  A subject in RBAC can be a user, a group, or a service account to which roles or cluster roles are bound.
+- **Rules:** Rules are sets of permissions associated with roles or cluster roles. They specify what actions are allowed or denied on specific resources.
+
+RBAC works seamlessly with Scaleway's IAM (Identity and Access Management) system. [Identity and Access Management (IAM)](/iam/concepts/#iam) provides control over resource access. IAM policies enable the configuration of permissions for Kubernetes Kapsule clusters at the Project level.
+
+An [IAM policy](/iam/concepts/#policy) defines the permissions for users, groups, and applications within an Organization. It consists of a [principal](/iam/concepts/#principal) (the user, group, or application to which it applies) and IAM rules that specify permission sets and their scope.
+
+The combination of IAM and Kubernetes RBAC allows you to define fine-grained access levels for cluster users.
+
+
+### Mapping IAM permission sets to Kubernetes groups
+
+The following IAM permission sets are mapped to Kubernetes groups:
+
+| IAM permission set             | Kubernetes group            | Notes                    |
+|----------------------------------|-----------------------------|--------------------------|
+| `KubernetesFullAccess`           | `scaleway:cluster-write`      |                          |
+|                                  | `scaleway:cluster-read`       |                          |
+| `KubernetesReadOnly`             | `scaleway:cluster-read`       |                          |
+| `KubernetesSystemMastersGroupAccess` | `system:masters`            | Super-user access to perform any action on any Kubernetes resource, ignoring all RBAC rules                 |
+
+### Default ClusterRoleBindings
+
+Default `ClusterRoleBinding` and `ClusterRole` configurations have been set up:
+
+| Group                          | ClusterRoleBinding          | ClusterRole              |
+|----------------------------------|-----------------------------|--------------------------|
+| `scaleway:cluster-write`         | `scaleway:cluster-write`      | `scaleway:cluster-write`   |
+| `scaleway:cluster-read`          | `scaleway:cluster-read`       | `scaleway:cluster-read`    |
+
+These groups can be edited and will not be reconciled by Kapsule/Kosmos. If these roles are misconfigured and cut off access to the cluster, the IAM permission set `KubernetesSystemMastersGroupAccess` should be assigned to the application or user. This permission set allows bypassing the entire RBAC layer.
+
+Users or applications can be added to zero, one, or more IAM groups. IAM groups are mapped to Kubernetes groups in the format `scaleway:groups:GROUPID`.
+
+**Example:**
+
+```bash
+$ kubectl auth whoami
+ATTRIBUTE   VALUE
+Username    scaleway:bearer:de60e2b8-d590-4770-94bc-93b639382fb5
+UID         de60e2b8-d590-4770-94bc-93b639382fb5
+Groups      [scaleway:group:55eb7ac5-9afe-4e40-8d54-4fbb232cac21 scaleway:cluster-read system:authenticated]
+```
+
+## Creating a developers group with write access to dev and staging namespaces
+
+1. Create an [IAM group](/iam/how-to/create-group/) called `developers`:
+   - Assign the `KubernetesReadOnly` permission set to this group.
+   - Note the group ID, as it will be needed later.
+
+2. Create namespaces and roles:
+   As a user or application with `KubernetesFullAccess` or `KubernetesSystemMastersGroupAccess`, create the following manifests:
+
+    Namespace creation:
+
+    ```yaml
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: dev
+    ---
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: staging
+    ```
+
+    Role creation for dev namespace:
+
+    ```yaml
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: developers
+      namespace: dev
+    rules:
+    - apiGroups: ["*"]
+      resources: ["*"]
+      verbs: ["*"]
+    - nonResourceURLs: ["*"]
+      verbs: ["*"]
+    ```
+
+    RoleBinding Creation for dev namespace:
+
+    ```yaml
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: developers
+      namespace: dev
+    subjects:
+    - kind: Group
+      name: scaleway:groups:<GROUP_ID>
+    roleRef:
+      kind: Role
+      name: developers
+      apiGroup: rbac.authorization.k8s.io
+    ```
+
+    Repeat the same operation for the staging namespace.
+
+3. Apply the manifests:
+    ```bash
+    kubectl apply -f filename.yaml
+    ```
+
+After these steps, members of the IAM group will have read access to the cluster and write access to the `dev` and `staging` namespaces. Permissions can be refined by modifying the `Role`.
+
+## Assigning permissions to a specific user without using a group
+
+1. Assign the `KubernetesReadOnly` permission set to the user.
+2. Retrieve the **IAM user ID** and note it.
+3. Create the following manifests:
+
+    Namespace creation:
+
+    ```yaml
+    apiVersion: v1
+    kind: Namespace
+    metadata:
+      name: demo-sandbox
+    ```
+
+    Role creation for an example namespace:
+
+    ```yaml
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: Role
+    metadata:
+      name: example
+      namespace: example-sandbox
+    rules:
+    - apiGroups: ["*"]
+      resources: ["*"]
+      verbs: ["*"]
+    - nonResourceURLs: ["*"]
+      verbs: ["*"]
+    ```
+
+    RoleBinding creation for the example namespace:
+
+    ```yaml
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: RoleBinding
+    metadata:
+      name: example
+      namespace: example-sandbox
+    subjects:
+    - kind: User
+      name: scaleway:bearer:<USER_ID>
+    roleRef:
+      kind: Role
+      name: demo
+      apiGroup: rbac.authorization.k8s.io
+    ```
+
+4. Apply the manifests:
+
+    ```bash
+    kubectl apply -f filename.yaml
+    ```
+
+    The user "demo" now has full rights in the `example-sandbox` namespace.
+
+## Limiting cluster-read access
+
+To modify the `scaleway:cluster-read` permissions, use the following command:
+
+```bash
+kubectl edit clusterrole scaleway:cluster-read
+```
+
+Default content:
+
+```yaml
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+ name: scaleway:cluster-read
+rules:
+ - verbs:
+     - get
+     - list
+     - watch
+   apiGroups:
+     - ''
+   resources:
+     - bindings
+     - configmaps
+     - endpoints
+     - events
+     - limitranges
+     - namespaces
+     - namespaces/status
+     - nodes
+     - persistentvolumeclaims
+     - persistentvolumeclaims/status
+     - pods
+     - pods/log
+     - pods/status
+     - replicationcontrollers
+     - replicationcontrollers/scale
+     - replicationcontrollers/status
+     - resourcequotas
+     - resourcequotas/status
+     - serviceaccounts
+     - services
+     - services/status
+
+
+ - verbs:
+     - get
+     - list
+     - watch
+   apiGroups:
+     - metrics.k8s.io
+   resources:
+     - pods
+     - nodes
+
+
+ - verbs:
+     - get
+     - list
+     - watch
+   apiGroups:
+     - apps
+   resources:
+     - controllerrevisions
+     - daemonsets
+     - daemonsets/status
+     - deployments
+     - deployments/scale
+     - deployments/status
+     - replicasets
+     - replicasets/scale
+     - replicasets/status
+     - statefulsets
+     - statefulsets/scale
+     - statefulsets/status
+
+
+ - verbs:
+     - get
+     - list
+     - watch
+   apiGroups:
+     - autoscaling
+   resources:
+     - horizontalpodautoscalers
+     - horizontalpodautoscalers/status
+
+
+ - verbs:
+     - get
+     - list
+     - watch
+   apiGroups:
+     - batch
+   resources:
+     - cronjobs
+     - cronjobs/status
+     - jobs
+     - jobs/status
+
+
+ - verbs:
+     - get
+     - list
+     - watch
+   apiGroups:
+     - extensions
+   resources:
+     - daemonsets
+     - daemonsets/status
+     - deployments
+     - deployments/scale
+     - deployments/status
+     - ingresses
+     - ingresses/status
+     - networkpolicies
+     - replicasets
+     - replicasets/scale
+     - replicasets/status
+     - replicationcontrollers/scale
+
+
+ - verbs:
+     - get
+     - list
+     - watch
+   apiGroups:
+     - policy
+   resources:
+     - poddisruptionbudgets
+     - poddisruptionbudgets/status
+
+
+ - verbs:
+     - get
+     - list
+     - watch
+   apiGroups:
+     - networking.k8s.io
+   resources:
+     - ingresses
+     - ingresses/status
+     - networkpolicies
+
+
+ - verbs:
+     - get
+     - list
+     - watch
+   apiGroups:
+     - rbac.authorization.k8s.io
+   resources:
+     - rolebindings
+     - roles
+```

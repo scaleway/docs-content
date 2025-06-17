@@ -1,22 +1,25 @@
 ---
 meta:
-  title: Exposing a Kubernetes Kapsule ingress controller service with a Load Balancer
+  title: Deploying an NGINX ingress controller on Scaleway Kubernetes Kapsule with a LoadBalancer
   description: This page explains how to expose an application via an ingress object, and using a Load Balancer to make the IP persistent.
 content:
   h1: Exposing a Kubernetes Kapsule ingress controller service with a Load Balancer
   paragraph: This page explains how to expose an application via an ingress object, and using a Load Balancer to make the IP persistent.
 categories:
-  - network
   - kubernetes
-  - storage
   - load-balancer
 tags: compute kapsule kubernetes ingress-controller k8s Load-balancer wildcard
 dates:
-  validation: 2025-04-22
-  posted: 2020-05-05
+  validation: 2025-06-17
+  posted: 2025-06-17
 ---
 
-This document will guide you through deploying a test application on a Kubernetes cluster, exposing it via an ingress object, and using a Scaleway Load Balancer to ensure persistent IP addressing.
+This guide walks you through the process of deploying an NGINX ingress controller on Scaleway's Kubernetes Kapsule service.
+We will configure a Load Balancer that uses a persistent IP address, which is essential for maintaining consistent routing. Additionally, we will enable the PROXY protocol to preserve client information such as the original IP address and port, which is recommended for applications that need to log or act on this data.
+
+The guide also delves into the differences between ephemeral and persistent IP addresses, helping you understand when and why to use each type. To complete the guide, we will deploy a demo application that illustrates the entire setup.
+
+By the end of this guide, you should have a robust and well-configured NGINX ingress controller running on Scaleway's Kubernetes platform.
 
 <Macro id="requirements" />
 
@@ -24,99 +27,195 @@ This document will guide you through deploying a test application on a Kubernete
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - Set up a [Kubernetes Kapsule cluster](/kubernetes/how-to/create-cluster/), deploying a TRAEFIK2 ingress controller via the application library using the [Easy Deploy function](/kubernetes/how-to/enable-easy-deploy/)
 - Obtained the [kubeconfig](/kubernetes/how-to/edit-cluster/) file for the cluster
-- Installed [kubectl](/kubernetes/how-to/connect-cluster-kubectl/) on your local machine
+- Helm installed on your local machine
+- Installed [kubectl](/kubernetes/how-to/connect-cluster-kubectl/) and the Scaleway CLI on your local machine
 
-## Exposing the ingress controller using a Scaleway Load Balancer
+## Overview of key concepts
 
-By default, ingress controllers on Kapsule are deployed using a [hostPort](https://kubernetes.io/docs/concepts/services-networking/service/). This ensures accessibility on all cluster nodes via ports 80 and 443. However, for production readiness, you might prefer using a Load Balancer to expose your services to the internet.
+### Ingress controller
+An ingress controller manages external HTTP/HTTPS traffic to services within a Kubernetes cluster. The NGINX ingress controller routes traffic based on ingress resource rules.
 
-<Message type="important">
-By default, a new security group that blocks all incoming traffic on the nodes for security purposes is created during cluster configuration. To allow incoming HTTP/80 and HTTPS/443 traffic, you need to modify the security group.
+### LoadBalancer Service
+On Scaleway Kapsule, the LoadBalancer service provisions a Scaleway Load Balancer with an external IP, exposing the ingress controller via the Scaleway Cloud Controller Manager (CCM).
 
-1. In the [Scaleway console](https://console.scaleway.com/instance/security-groups), navigate to the **Compute** > **Security groups** section and find the security group named `kubernetes <cluster-id>`.
-2. Modify the security group rules to allow incoming traffic on ports 80 (HTTP) and 443 (HTTPS).
-   - Allow TCP traffic on port 80 from all sources (0.0.0.0/0) for HTTP.
-   - Allow TCP traffic on port 443 from all sources (0.0.0.0/0) for HTTPS.
-</Message>
+### Ephemeral vs. Persistent IPs
+- Ephemeral IP: Dynamically assigned by Scaleway when a LoadBalancer service is created. It may change if the service is deleted and recreated, requiring DNS updates.
+- Persistent IP: A flexible IP reserved via the Scaleway API, CLI or console, ensuring consistency across service recreations. This is recommended for production to maintain stable DNS records.
 
-### Deploying a test application
+### PROXY Protocol
+The PROXY protocol allows the LoadBalancer to forward the client's original IP address to the ingress controller, preserving source information for logging and security.
 
-1. Deploy the `cafe-ingress` test application:
+## Deploying the ingress controller
 
-    ```bash
-    kubectl create -f https://raw.githubusercontent.com/nginxinc/kubernetes-ingress/main/examples/ingress-resources/basic-auth/cafe.yaml
-    ```
+## Installation prework
+Kapsule clusters use a default security group (`kubernetes-<cluster-id>`) that blocks incoming traffic. To allow HTTP/HTTPS connections to the cluster:
+1. Go to the Scaleway console and navigate to **Compute > CPU & GPU Instances > Security Groups**.
+2. Locate the security group `kubernetes-<cluster-id>`.
+3. Add rules to allow:
+   - TCP port 80 (HTTP) from `0.0.0.0/0`.
+   - TCP port 443 (HTTPS) from `0.0.0.0/0`.
 
-2. Create the ingress object (`coffee-ingress.yaml`) using the DNS wildcard provided by Scaleway:
-
-    ```yaml
-    apiVersion: networking.k8s.io/v1
-    kind: Ingress
-    metadata:
-      name: coffee-ingress
-    spec:
-      rules:
-        - host: YOUR_SCALEWAY_DNS_WILDCARD
-          http:
-            paths:
-              - path: /tea
-                pathType: Prefix
-                backend:
-                  service:
-                    name: tea-svc
-                    port:
-                      number: 80
-              - path: /coffee
-                pathType: Prefix
-                backend:
-                  service:
-                    name: coffee-svc
-                    port:
-                      number: 80
-    ```
-
-    <Message type="note">
-      Your DNS wildcard is composed of your cluster ID (e.g., `68362d3b-57c8-4bea-905a-aeb7f9ab95dc`) followed by `.nodes.k8s.<SCW_REGION>.scw.cloud`. For a cluster located in the Paris region, your DNS wildcard could be, for example: `hotdrinks.68362d3b-57c8-4bea-905a-aeb7f9ab95dc.nodes.k8s.fr-par.scw.cloud`.
-    </Message>
-
-3. Apply the configuration:
-
-    ```bash
-    kubectl create -f coffee-ingress.yaml
-    ```
-
-4. Test the ingress:
-
-    ```bash
-    curl http://YOUR_SCALEWAY_DNS_WILDCARD/coffee
-    ```
-
-## Using a reserved IP with a Load Balancer
-
-Reserve a flexible Load Balancer IP address [through the Scaleway API](/kubernetes/reference-content/managing-load-balancer-ips/#reserve-a-load-balancer-flexible-ip-address-via-the-api). Take note of the IP address, referred to as `RESERVED_IP` from now on.
-
-### Using the reserved IP in Kubernetes
-
-1. Patch `tea-svc` to use the reserved IP with a `LoadBalancer` service:
-
+## Reserve a flexible IP
+To use a persistent IP with the ingress controller:
+1. Create a flexible IP using the Scaleway CLI:
    ```bash
-   kubectl patch svc tea-svc --type merge --patch '{"spec":{"loadBalancerIP": "RESERVED_IP","type":"LoadBalancer"}}'
+   scw lb ip create
    ```
+2. Note the IP address (e.g., `195.154.72.226`) and IP ID for use in the LoadBalancer service.
 
-2. Delete `tea-svc`:
+## Installing the NGINX ingress controller
 
-   ```bash
-   kubectl delete svc tea-svc
-   ```
+Use Helm to deploy the NGINX ingress controller with Scaleway-specific configurations.
 
-3. Patch `coffee-svc` to use the reserved IP:
+1. Add the NGINX ingress Helm repository
 
-   ```bash
-   kubectl patch svc coffee-svc --type merge --patch '{"spec":{"loadBalancerIP": "RESERVED_IP","type":"LoadBalancer"}}'
-   ```
+```bash
+helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+helm repo update
+```
 
-## Related tutorials
+2. Create a file named `ingress-values.yaml` with and  edit the `loadBalancerIP` to your flexible IP:
 
-- [Loki monitoring on Kubernetes](/tutorials/manage-k8s-logging-loki/)
-- [Monitoring a Kubernetes Kapsule cluster](/tutorials/monitor-k8s-grafana/)
-- [Deploy an image from a private registry](/kubernetes/how-to/deploy-image-from-container-registry/)
+  ```yaml
+  controller:
+    service:
+      type: LoadBalancer
+      # Specify reserved flexible IP
+      loadBalancerIP: "195.154.72.226"
+      annotations:
+        # Enable PROXY protocol v2
+        service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2: "true"
+        # Use hostname for cert-manager compatibility
+        service.beta.kubernetes.io/scw-loadbalancer-use-hostname: "true"
+    config:
+      # Enable PROXY protocol in NGINX
+      use-proxy-protocol: "true"
+      use-forwarded-headers: "true"
+      compute-full-forwarded-for: "true"
+  ```
+  <Message type="note">
+  - Replace `195.154.72.226` with your reserved flexible IP. Omitting `loadBalancerIP` results in an ephemeral IP.
+  - The `service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2` annotation enables PROXY protocol v2.
+  - The `service.beta.kubernetes.io/scw-loadbalancer-use-hostname` annotation supports cert-manager HTTP01 challenges.
+  </Message>
+
+3. Deploy the ingress controller:
+
+  ```bash
+  helm install ingress-nginx ingress-nginx/ingress-nginx -f ingress-values.yaml --namespace ingress-nginx --create-namespace
+  ```
+
+4. Verify the LoadBalancer IP using `kubectl`:
+  ```bash
+  kubectl get svc -n ingress-nginx ingress-nginx-controller
+  ```
+
+  You will see an output similar to the following example: 
+  ```
+  NAME                       TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)                      AGE
+  ingress-nginx-controller   LoadBalancer   10.100.0.1      195.154.72.226   80/TCP,443/TCP               5m
+  ```
+  <Message type="note">
+  - The `EXTERNAL-IP` should match your reserved flexible IP (e.g., `195.154.72.226`).
+  - If an ephemeral IP appears, verify that the `loadBalancerIP` field is correctly set and matches a valid flexible IP attached to your Scaleway project.
+  - Confirm the LoadBalancer in the Scaleway console under **Network > Load Balancers**.
+  </Message>
+
+5. Configure DNS by setting the A-Record of your domain (e.g., `demo.example.com`) to the flexible IP via Scaleway's Domains & DNS product or your DNS provider. Persistent IPs ensure stability and will not change as long as they are reserved.
+
+### Deploying a Demo Application
+Deploy a simple web application to test the ingress controller.
+
+1. Create a file named `demo-app.yaml` and copy the following content into it:
+
+  ```yaml
+  apiVersion: apps/v1
+  kind: Deployment
+  metadata:
+    name: demo-app
+    namespace: default
+  spec:
+    replicas: 2
+    selector:
+      matchLabels:
+        app: demo-app
+    template:
+      metadata:
+        labels:
+          app: demo-app
+      spec:
+        containers:
+        - name: demo-app
+          image: nginx:1.21
+          ports:
+          - containerPort: 80
+  ---
+  apiVersion: v1
+  kind: Service
+  metadata:
+    name: demo-app
+    namespace: default
+  spec:
+    selector:
+      app: demo-app
+    ports:
+      - protocol: TCP
+        port: 80
+        targetPort: 80
+  ---
+  apiVersion: networking.k8s.io/v1
+  kind: Ingress
+  metadata:
+    name: demo-app-ingress
+    namespace: default
+    annotations:
+      nginx.ingress.kubernetes.io/rewrite-target: /
+  spec:
+    ingressClassName: nginx
+    rules:
+    - host: demo.example.com
+      http:
+        paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: demo-app
+              port:
+                number: 80
+  ```
+
+  <Message type="note">
+  - Replace `demo.example.com` with your domain name.
+  </Message>
+
+2. Apply the configuration:
+  ```bash
+  kubectl apply -f demo-app.yaml
+  ```
+
+## Test the Setup
+1. Access the demo application:
+  ```bash
+  curl http://demo.example.com
+  # or
+  curl http://195.154.72.226/
+  ```
+
+2. You should see the NGINX welcome page. Verify the PROXY protocol by checking logs for the client's real IP:
+  ```bash
+  kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx
+  ```
+
+## Cleanup (optional)
+Once fininshed you can remove the demo application and ingress controller from your cluster:
+```bash
+kubectl delete -f demo-app.yaml
+helm uninstall ingress-nginx -n ingress-nginx
+kubectl delete namespace ingress-nginx
+```
+
+To release the flexible IP:
+```bash
+scw lb ip delete <IP-ID>
+```

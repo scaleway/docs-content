@@ -68,144 +68,140 @@ To use a persistent IP with the ingress controller:
 Use Helm to deploy the NGINX ingress controller with Scaleway-specific configurations.
 
 1. Add the NGINX ingress Helm repository
-
-```bash
-helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-helm repo update
-```
+    ```bash
+    helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+    helm repo update
+    ```
 
 2. Create a file named `ingress-values.yaml` with and  edit the `loadBalancerIP` to your flexible IP:
-
-  ```yaml
-  controller:
-    service:
-      type: LoadBalancer
-      # Specify reserved flexible IP
-      loadBalancerIP: "195.154.72.226"
-      annotations:
-        # Enable PROXY protocol v2
-        service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2: "true"
-        # Use hostname for cert-manager compatibility
-        service.beta.kubernetes.io/scw-loadbalancer-use-hostname: "true"
-    config:
-      # Enable PROXY protocol in NGINX
-      use-proxy-protocol: "true"
-      use-forwarded-headers: "true"
-      compute-full-forwarded-for: "true"
-  ```
-  <Message type="note">
-  - Replace `195.154.72.226` with your reserved flexible IP. Omitting `loadBalancerIP` results in an ephemeral IP.
-  - The `service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2` annotation enables PROXY protocol v2.
-  - The `service.beta.kubernetes.io/scw-loadbalancer-use-hostname` annotation supports cert-manager HTTP01 challenges.
-  </Message>
+    ```yaml
+    controller:
+      service:
+        type: LoadBalancer
+        # Specify reserved flexible IP
+        loadBalancerIP: "195.154.72.226"
+        annotations:
+          # Enable PROXY protocol v2
+          service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2: "true"
+          # Use hostname for cert-manager compatibility
+          service.beta.kubernetes.io/scw-loadbalancer-use-hostname: "true"
+      config:
+        # Enable PROXY protocol in NGINX
+        use-proxy-protocol: "true"
+        use-forwarded-headers: "true"
+        compute-full-forwarded-for: "true"
+    ```
+    <Message type="note">
+    - Replace `195.154.72.226` with your reserved flexible IP. Omitting `loadBalancerIP` results in an ephemeral IP.
+    - The `service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2` annotation enables PROXY protocol v2.
+    - The `service.beta.kubernetes.io/scw-loadbalancer-use-hostname` annotation supports cert-manager HTTP01 challenges.
+    </Message>
 
 3. Deploy the ingress controller:
-
-  ```bash
-  helm install ingress-nginx ingress-nginx/ingress-nginx -f ingress-values.yaml --namespace ingress-nginx --create-namespace
-  ```
+    ```bash
+    helm install ingress-nginx ingress-nginx/ingress-nginx -f ingress-values.yaml --namespace ingress-nginx --create-namespace
+    ```
 
 4. Verify the LoadBalancer IP using `kubectl`:
-  ```bash
-  kubectl get svc -n ingress-nginx ingress-nginx-controller
-  ```
+    ```bash
+    kubectl get svc -n ingress-nginx ingress-nginx-controller
+    ```
 
-  You will see an output similar to the following example: 
-  ```
-  NAME                       TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)                      AGE
-  ingress-nginx-controller   LoadBalancer   10.100.0.1      195.154.72.226   80/TCP,443/TCP               5m
-  ```
-  <Message type="note">
-  - The `EXTERNAL-IP` should match your reserved flexible IP (e.g., `195.154.72.226`).
-  - If an ephemeral IP appears, verify that the `loadBalancerIP` field is correctly set and matches a valid flexible IP attached to your Scaleway project.
-  - Confirm the LoadBalancer in the Scaleway console under **Network > Load Balancers**.
-  </Message>
+    You will see an output similar to the following example: 
+    ```
+    NAME                       TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)                      AGE
+    ingress-nginx-controller   LoadBalancer   10.100.0.1      195.154.72.226   80/TCP,443/TCP               5m
+    ```
+    <Message type="note">
+    - The `EXTERNAL-IP` should match your reserved flexible IP (e.g., `195.154.72.226`).
+    - If an ephemeral IP appears, verify that the `loadBalancerIP` field is correctly set and matches a valid flexible IP attached to your Scaleway project.
+    - Confirm the LoadBalancer in the Scaleway console under **Network > Load Balancers**.
+    </Message>
 
 5. Configure DNS by setting the A-Record of your domain (e.g., `demo.example.com`) to the flexible IP via Scaleway's Domains & DNS product or your DNS provider. Persistent IPs ensure stability and will not change as long as they are reserved.
 
 ### Deploying a Demo Application
-Deploy a simple web application to test the ingress controller.
 
-1. Create a file named `demo-app.yaml` and copy the following content into it:
+1. Create a file named `demo-app.yaml` and copy the following content into it to deploy a simple web application to test the ingress controller:
 
-  ```yaml
-  apiVersion: apps/v1
-  kind: Deployment
-  metadata:
-    name: demo-app
-    namespace: default
-  spec:
-    replicas: 2
-    selector:
-      matchLabels:
-        app: demo-app
-    template:
-      metadata:
-        labels:
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: demo-app
+      namespace: default
+    spec:
+      replicas: 2
+      selector:
+        matchLabels:
           app: demo-app
-      spec:
-        containers:
-        - name: demo-app
-          image: nginx:1.21
-          ports:
-          - containerPort: 80
-  ---
-  apiVersion: v1
-  kind: Service
-  metadata:
-    name: demo-app
-    namespace: default
-  spec:
-    selector:
-      app: demo-app
-    ports:
-      - protocol: TCP
-        port: 80
-        targetPort: 80
-  ---
-  apiVersion: networking.k8s.io/v1
-  kind: Ingress
-  metadata:
-    name: demo-app-ingress
-    namespace: default
-    annotations:
-      nginx.ingress.kubernetes.io/rewrite-target: /
-  spec:
-    ingressClassName: nginx
-    rules:
-    - host: demo.example.com
-      http:
-        paths:
-        - path: /
-          pathType: Prefix
-          backend:
-            service:
-              name: demo-app
-              port:
-                number: 80
-  ```
+      template:
+        metadata:
+          labels:
+            app: demo-app
+        spec:
+          containers:
+          - name: demo-app
+            image: nginx:1.21
+            ports:
+            - containerPort: 80
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: demo-app
+      namespace: default
+    spec:
+      selector:
+        app: demo-app
+      ports:
+        - protocol: TCP
+          port: 80
+          targetPort: 80
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: demo-app-ingress
+      namespace: default
+      annotations:
+        nginx.ingress.kubernetes.io/rewrite-target: /
+    spec:
+      ingressClassName: nginx
+      rules:
+      - host: demo.example.com
+        http:
+          paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-app
+                port:
+                  number: 80
+    ```
 
-  <Message type="note">
-  - Replace `demo.example.com` with your domain name.
-  </Message>
+    <Message type="note">
+    - Replace `demo.example.com` with your domain name.
+    </Message>
 
 2. Apply the configuration:
-  ```bash
-  kubectl apply -f demo-app.yaml
-  ```
+    ```bash
+    kubectl apply -f demo-app.yaml
+    ```
 
 ## Test the Setup
 1. Access the demo application:
-  ```bash
-  curl http://demo.example.com
-  # or
-  curl http://195.154.72.226/
-  ```
+    ```bash
+    curl http://demo.example.com
+    # or
+    curl http://195.154.72.226/
+    ```
 
 2. You should see the NGINX welcome page. Verify the PROXY protocol by checking logs for the client's real IP:
-  ```bash
-  kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx
-  ```
+    ```bash
+    kubectl logs -n ingress-nginx -l app.kubernetes.io/name=ingress-nginx
+    ```
 
 ## Cleanup (optional)
 Once fininshed you can remove the demo application and ingress controller from your cluster:

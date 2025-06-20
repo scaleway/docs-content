@@ -1,0 +1,236 @@
+---
+meta:
+  title: Data Warehouse for ClickHouse® - Quickstart
+  description: This page shows you how to get started with Scaleway's Data Warehouse for ClickHouse®.
+content:
+  h1: Data Warehouse for ClickHouse® - Quickstart
+  paragraph: This page shows you how to get started with Scaleway's Data Warehouse for ClickHouse®.
+tags: data warehouse quickstart clickhouse example guide step guide
+dates:
+  validation: 2025-06-03
+  posted: 2025-06-03
+categories:
+  - data-warehouse
+---
+
+Data Warehouse for ClickHouse® is a centralized repository to store large sets of structured data, to streamline analysis and reporting for data science and business intelligence.
+
+<Macro id="requirements" />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Signed up to the private beta](https://www.scaleway.com/fr/betas/) and received a confirmation email.
+
+## How to create a Data Warehouse for ClickHouse® deployment
+
+1. Click **ClickHouse®** under **Data & Analytics** on the side menu. The Data Warehouse for ClickHouse® page displays.
+
+2. Click **+ Create deployment**. The Data Warehouse deployment creation wizard displays.
+
+3. Select the **region** in which to create your deployment.
+
+4. Select the **For basic developments** preset.
+
+5. Enter a name for your deployment, or keep the automatically generated one.
+
+6. Configure the administrator credentials for your deployment by entering a password or generating a random one.
+    <Message type="note">
+    The username cannot be modified.
+    </Message>
+
+7. Review the estimated cost, then click **Create deployment** to confirm. A list of your Data Warehouse for ClickHouse® deployments displays, showing the newly created resources.
+
+## How to connect to your deployment
+
+### Connecting using the ClickHouse® HTTP console
+
+1. From the Data Warehouse for ClickHouse® deployments page, click the name of the deployment you want to want to connect to. The **Overview** tab displays.
+
+2. Click the **ClickHouse® HTTP console** button. A new tab containing the console displays.
+
+3. In the top corner of the ClickHouse® HTTP console, replace the `default` login with `scwadmin`.
+
+4. Enter the password you set up during the creation of your deployment.
+
+5. Run the command below to display the current version of ClickHouse® and make sure you are connected to your deployment.
+
+  ```sql
+  SELECT version();
+  ```
+
+You can now execute SQL commands.
+
+### Connecting using the ClickHouse® CLI
+
+1. From the Data Warehouse for ClickHouse® deployments page, click the name of the deployment you want to want to connect to. The **Overview** tab displays.
+
+2. Click the **Connect** button next to **Frameworks** in the **Connect to your deployment** section. The connection wizard displays. 
+
+    <Message type="note">
+    To connect your deployment with BI tools, refer to the [dedicated documentation](/data-warehouse/how-to/connect-bi-tools/).
+    </Message>
+
+3. Copy the ClickHouse® CLI command, and execute it in a terminal to connect to your deployment. Make sure to replace the placeholders beforehand.
+
+    ```sh
+    clickhouse client \
+    --host <YOUR_DEPLOYMENT_ID>.dtwh.<REGION>.scw.cloud \
+    --port 9440 \
+    --secure \
+    --user scwadmin \
+    --password '<YOUR_PASSWORD>' \
+    ```
+
+You are now connected to your Data Warehouse for ClickHouse® deployment and can perform SQL queries.
+
+## How to import and query an example data set
+
+<Message type="note">
+This example is based on the **Environmental Sensors Data** from the [Official ClickHouse® documentation](https://clickhouse.com/docs/getting-started/example-datasets/environmental-sensors).
+</Message>
+
+### Creating a database and ingesting data
+
+1. Run the command below to create a new table in the default database:
+    ```sql
+    CREATE TABLE sensors
+    (
+        sensor_id UInt16,
+        sensor_type Enum('BME280', 'BMP180', 'BMP280', 'DHT22', 'DS18B20', 'HPM', 'HTU21D', 'PMS1003', 'PMS3003', 'PMS5003', 'PMS6003', 'PMS7003', 'PPD42NS', 'SDS011'),
+        location UInt32,
+        lat Float32,
+        lon Float32,
+        timestamp DateTime,
+        P1 Float32,
+        P2 Float32,
+        P0 Float32,
+        durP1 Float32,
+        ratioP1 Float32,
+        durP2 Float32,
+        ratioP2 Float32,
+        pressure Float32,
+        altitude Float32,
+        pressure_sealevel Float32,
+        temperature Float32,
+        humidity Float32,
+        date Date MATERIALIZED toDate(timestamp)
+    )
+    ENGINE = MergeTree
+    ORDER BY (timestamp, sensor_id);
+
+    ```
+
+2. Insert data in the table you just created:
+    ```sql
+    INSERT INTO sensors
+        SELECT *
+        FROM s3Cluster(
+            'default',
+            'https://datawarehouse-samples.s3.fr-par.scw.cloud/2019-06_bmp180.csv.zst',
+            'CSVWithNames',
+            $$ sensor_id UInt16,
+            sensor_type String,
+            location UInt32,
+            lat Float32,
+            lon Float32,
+            timestamp DateTime,
+            P1 Float32,
+            P2 Float32,
+            P0 Float32,
+            durP1 Float32,
+            ratioP1 Float32,
+            durP2 Float32,
+            ratioP2 Float32,
+            pressure Float32,
+            altitude Float32,
+            pressure_sealevel Float32,
+            temperature Float32,
+            humidity Float32 $$
+        )
+    SETTINGS
+        format_csv_delimiter = ';',
+        input_format_allow_errors_ratio = '0.5',
+        input_format_allow_errors_num = 10000,
+        input_format_parallel_parsing = 0,
+        date_time_input_format = 'best_effort',
+        max_insert_threads = 32,
+        parallel_distributed_insert_select = 1;
+
+    ```
+
+### Querying the database
+
+1. Run the command below to count the rows you inserted in the table:
+    ```sql
+    SELECT count()
+    FROM sensors;
+    ```
+
+2. Run the command below to list the 10 first rows of your table:
+    ```sql
+    SELECT *
+    FROM sensors
+    LIMIT 10;
+    ```
+
+3. Run the command below to display the storage used by the `sensors` table:
+    ```sql
+    SELECT
+        disk_name,
+        formatReadableSize(sum(data_compressed_bytes) AS size) AS compressed,
+        formatReadableSize(sum(data_uncompressed_bytes) AS usize) AS uncompressed,
+        round(usize / size, 2) AS compr_rate,
+        sum(rows) AS rows,
+        count() AS part_count
+    FROM system.parts
+    WHERE (active = 1) AND (table = 'sensors')
+    GROUP BY
+        disk_name
+    ORDER BY size DESC;
+    ```
+
+To perform more in-depth tests with larger data sets, refer to our [dedicated documentation](/data-warehouse/reference-content/example-datasets/).
+
+## How to manage your deployment
+
+1. From the Data Warehouse for ClickHouse® deployments page, click the name of the deployment you want to manage. The overview tab of the deployment displays. From this view, you can:
+
+  - See the configuration of your deployment
+  - Access the ClickHouse® HTTP console
+  - Connect to your deployment using frameworks
+  - Connect your deployment to your preferred BI tools
+
+2. Click the **Settings** tab. From this view, you can:
+
+  - [Edit the autoscaling configuration](/data-warehouse/how-to/edit-autoscaling/) of your deployment
+  - Add tags to your deployment for organization purposes.
+  - [Delete your Data Warehouse deployment](/data-warehouse/how-to/manage-delete-deployment/#how-to-delete-a-data-warehouse).
+
+3. Click the **Databases** tab. From this view you can:
+
+    - View the databases you created in your deployment.
+
+4. Click the **Users** tab. From this view, you can:
+
+    - View the users in your deployment.
+    - Modify the password of a user.
+
+## How to delete your deployment
+
+<Message type="important">
+  This action is irreversible and will permanently delete this Data Warehouse deployment and all its associated data.
+</Message>
+
+1. Click **ClickHouse®** under **Data & Analytics** on the side menu. The Data Warehouse deployment page displays.
+
+2. Click the name of the Data Warehouse deployment you want to delete. The **Overview** tab of the deployment displays.
+
+3. Click the **Settings** tab, then select **Delete deployment**.
+
+4. Enter **DELETE** in the confirmation pop-up to confirm your action.
+
+5. Click **Delete Data Warehouse deployment**.
+
+<Message type="note">
+  You can also delete a Data Warehouse deployment by clicking <Icon name="more" /> next to its name, then **Delete**.
+</Message>

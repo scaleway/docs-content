@@ -1,0 +1,85 @@
+---
+meta:
+  title: How to federate Scaleway metrics with your own Prometheus
+  description: Learn how to retrieve the Scaleway product metrics with federation to re-use them within your own Prometheus
+content:
+  h1: How to federate Scaleway metrics with your own Prometheus
+  paragraph: Learn how to retrieve the Scaleway product metrics with federation to re-use them within your own Prometheus using Scaleway's comprehensive guide. This tutorial covers retrieving your Scaleway product metrics by federation of your Cockpit datasources and retrieving those metrics within Prometheus.
+tags: federation cockpit metrics observability monitoring prometheus
+categories:
+  - observability
+dates:
+  validation: TBD
+  posted: TBD
+---
+
+In this page, we will show you how to federate your Scaleway product metrics using the `/federate` endpoint of your Scaleway datasources with a [Prometheus](https://prometheus.io) configuration.
+
+<Macro id="requirements" />
+
+ - A Scaleway account logged into the [console](https://console.scaleway.com)
+ - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+ - [Created](/cockpit/how-to/create-token/) a Cockpit token with read access in the same region as the metrics data source
+ - [Created](/iam/how-to/create-api-keys/) an API key and retrieved your API secret key
+ - A running [Prometheus](https://prometheus.io) instance
+
+<Message type="info">
+  The `/federate` endpoint will not be charged during beta phase but please note that after the beta
+</Message>
+
+<Message type="important">
+  - Federating Scaleway product metrics is a billable feature. Refer to the [product pricing](https://www.scaleway.com/en/pricing/?tags=available,managedservices-observability-cockpit) page for more information.
+</Message>
+
+## Configure your Prometheus
+
+Create a `prometheus.yml` file to configure your Prometheus instance, using the example below.
+Make sure to replace `$SCW_DATASOURCE_URL` with the URL of your data source (you can find it under the "API URL" section in the [Data sources tab](https://console.scaleway.com/cockpit/dataSource) of the Scaleway console) and to replace `$SCW_READ_TOKEN` with your Cockpit token with read permissions.
+
+```yaml
+global:
+  scrape_interval: 60s
+
+scrape_configs:
+  - job_name: 'federate-scaleway-metrics'
+    honor_labels: true
+    metrics_path: '/federate'
+    http_headers:
+      X-Token:
+        values:
+          - '$SCW_READ_TOKEN'
+    params:
+      'match[]':
+        - '{__name__="my-scaleway-metrics"}'
+        - '{job="my-wanted-job"}'
+    static_configs:
+      - targets:
+        - '$SCW_DATASOURCE_URL'
+```
+
+<Message type="info">
+  Please note that you should not include `https://` in the `SCW_DATASOURCE_URL`
+</Message>
+
+Modify the different `match[]` parameters according to the metrics you want to retrive, in this example you will federate:
+  - All metrics called `my-scaleway-metrics`
+  - All metrics with the label `job` with the value `my-wanted-job`
+
+## Run your Prometheus instance
+
+Once you have configured your `prometheus.yml` file, you can use docker-compose to run your Prometheus instance with the configuration, and start federating Scaleway product metrics.
+
+1. Create a `docker-compose.yml` file with :
+    ```yaml
+    services:
+    prometheus:
+    image: prom/prometheus:latest
+    container_name: prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports:
+      - 9090:9090
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+    ```
+2. Go to http://localhost:9090/targets and you should see your newly created target, federating your Scaleway product metrics

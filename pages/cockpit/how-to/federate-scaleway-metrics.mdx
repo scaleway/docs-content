@@ -1,0 +1,103 @@
+---
+meta:
+  title: How to federate Scaleway metrics with your own Prometheus
+  description: Learn how to retrieve your Scaleway metrics with federation and reuse them within your own Prometheus with this step-by-step guide.
+content:
+  h1: How to federate Scaleway metrics with your own Prometheus
+  paragraph: Learn how to retrieve your Scaleway metrics with federation and reuse them within your own Prometheus with this step-by-step guide.
+tags: federation cockpit metrics monitoring prometheus
+categories:
+  - observability
+dates:
+  validation: 2025-07-04
+  posted: 2025-07-04
+---
+
+In this page, we will show you how to federate your Scaleway metrics using the `/federate` endpoint of your Scaleway data sources with a [Prometheus](https://prometheus.io) configuration. Metrics federation cnsists of collecting metrics from multiple sources or systems into a central place so you can visualize everything at once.
+
+<Macro id="requirements" />
+
+ - A Scaleway account logged into the [console](https://console.scaleway.com)
+ - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+ - [Created](/cockpit/how-to/create-token/) a Cockpit token with the `query` permission in the same region as the metrics data source
+ - A running [Prometheus](https://prometheus.io) instance
+
+<Message type="note">
+  The `/federate` endpoint will not be billed during the beta phase. After the beta, the endpoint will incur additional costs.
+</Message>
+
+Prometheus federation can be used to gather all your metrics in a unique Prometheus instance, or to downsample different metrics to reduce storage costs in the long run.
+Since you have full control over your Prometheus instance, you can also use federation to increase metrics retention.
+
+## Configure your Prometheus
+
+Create a `prometheus.yml` file to configure your Prometheus instance, using the example below.
+Make sure you replace `$SCW_DATASOURCE_URL` with the URL of your data source. The URL can be found under the **API URL** section of the [Data sources tab](https://console.scaleway.com/cockpit/dataSource) in the Scaleway console. Replace `$SCW_COCKPIT_TOKEN` with your Cockpit token with the `query` permission.
+
+```yaml
+global:
+  scrape_interval: 3m
+
+scrape_configs:
+  - job_name: 'federate-scaleway-metrics'
+    honor_labels: true
+    metrics_path: '/federate'
+    http_headers:
+      X-Token:
+        values:
+          - '$SCW_COCKPIT_TOKEN'
+    params:
+      'match[]':
+        - '{__name__="instance_.*"}'
+        - '{region="fr-par"}'
+    static_configs:
+      - targets:
+        - '$SCW_DATASOURCE_URL'
+```
+
+<Message type="important">
+  Remove `https://` from the `SCW_DATASOURCE_URL`. Your URL should look like the following: `bc380fc1-9a64-4d51-a560-39c8754207de.metrics.cockpit.fr-par.scw.cloud`.
+</Message>
+
+Modify the different `match[]` parameters according to the metrics you want to retrieve. In this example, you will federate:
+  - All metrics with a name that starts with `instance_`
+  - All metrics with the label `region` with the value `fr-par`
+
+You can also set `honor_labels` to `false` if you do not want to override the different labels set by your Prometheus that conflict with Scaleway metrics label.
+For example, with `honor_labels` set to `false`, the Scaleway label `job` will be relabelled as `exported_job` to avoid collision.
+
+## Run your Prometheus instance
+
+Once you have configured your `prometheus.yml` file, you can use docker-compose to run your Prometheus instance with your configuration and start federating Scaleway metrics.
+
+Create a `docker-compose.yml` file and paste the following template into it:
+    ```yaml
+    services:
+      prometheus:
+        image: prom/prometheus:latest
+        container_name: prometheus
+        volumes:
+          - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+        ports:
+          - 9090:9090
+        command:
+          - '--config.file=/etc/prometheus/prometheus.yml'
+    ```
+
+[Access your localhost](http://localhost:9090/targets) to see your newly created target federating your Scaleway metrics.
+
+## Monitor your federation volumes
+
+You can monitor the amount of samples federated with the `/federate` endpoint by looking at the `observability_cockpit_federate_exported_sample_total:increase5m` in your Cockpit.
+This metric indicates the total volume of exported samples through the federation endpoint over a 5 minutes interval.
+
+1. Click **Cockpit** in the **Monitoring** section of the [console](https://console.scaleway.com/) side menu. The **Cockpit** overview page displays.
+2. Click **Open dashboards** to access your Cockpit Grafana.
+3. Click the **Toggle menu** icon in the top left corner of your screen, then click **Explore**.
+4. In the **Metric** drop-down, select the `observability_cockpit_federate_exported_sample_total:increase5m` metrics and if necessary, update the time range in the top right corner of your screen.
+
+Your metrics should display in the graph.
+
+<Message type="note">
+  You can also federate this metrics data source to monitor your volume of federated metrics directly in your Prometheus instance.
+</Message>

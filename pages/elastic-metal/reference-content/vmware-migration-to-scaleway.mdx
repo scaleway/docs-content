@@ -1,0 +1,325 @@
+---
+meta:
+  title: Migration from VMware on-premise to Scaleway public cloud
+  description: Learn about the shared responsibility model for Scaleway Bare Metal services, outlining the roles of Scaleway and users in managing server security, backups, and compliance.
+content:
+  h1: Migration from VMware on-premise to Scaleway public cloud
+  paragraph: Learn about the shared responsibility model for Scaleway Bare Metal services, outlining the roles of Scaleway and users in managing server security, backups, and compliance.
+tags: bare metal shared responsibility
+dates:
+  validation: 2025-01-20
+  posted: 2024-07-18
+categories:
+  - bare-metal
+---
+
+# Migration tools
+* [Migration tools](#migration-tools)
+  * [Migration from VMware](#migration-from-vmware)
+    * [Glossary & general tips](#glossary--general-tips)
+    * [From VMware to Proxmox](#from-vmware-to-proxmox)
+    * [From VMware to Instances](#from-vmware-to-Instances)
+      * [Identify the virtual machines (VMs) to migrate](#identify-the-virtual-machines-vms-to-migrate)
+      * [Windows VM migration](#windows-vm-migration)
+        * [Preparing a Scaleway Instance to manage the migration](#preparing-a-scaleway-Instance-to-manage-the-migration)
+        * [Windows VM preparation (containing only 1 volume) under VMware](#windows-vm-preparation-containing-only-1-volume-under-vmware)
+          * [Optional - Serial console output configuration (for Windows VM)](#optional---serial-console-output-configuration-for-windows-vm)
+          * [Compulsory Windows VM modifications under VMware](#compulsory-windows-vm-modifications-under-vmware)
+        * [Compulsory Windows VM modifications under the migration Instance (converter)](#compulsory-windows-vm-modifications-under-the-migration-Instance-converter)
+        * [Snapshot, block volume, and server creation](#snapshot-block-volume-and-server-creation)
+        * [Private network configuration (optional)](#private-network-configuration-optional)
+      * [Red Hat Enterprise Linux 9 VM migration (containing only 1 volume)](#red-hat-enterprise-linux-9-vm-migration-containing-only-1-volume)
+        * [Preparing a Scaleway Instance to manage the migration](#preparing-a-scaleway-Instance-to-manage-the-migration-1)
+        * [VM modifications under the migration Instance (converter)](#vm-modifications-under-the-migration-Instance-converter)
+        * [Snapshot, block volume, and server creation](#snapshot-block-volume-and-server-creation-1)
+      * [Migration of the networks](#migration-of-the-networks)
+  * [Various tips](#various-tips)
+  * [TODO](#todo)
+
+## Migration from VMware
+### Glossary & general tips
+VMware file types:
+- `.ova` & `.ovf`: virtual machine image
+- `.vmdk`: virtual disk image
+- `.vmx`: file containing the characteristics of the VM: volumes, network interfaces, CPU, RAM...
+
+<Message type="tip">
+  The easiest way to migrate out of VMware is to migrate to Proxmox hypervisor on Elastic Metal servers (one server or a cluster of several servers).
+  Proxmox offers a [wizard](https://pve.proxmox.com/wiki/Migrate_to_Proxmox_VE) to connect to the VMware cluster, transfer the virtual machines, and convert them into Proxmox.
+
+  Proxmox installation on Elastic Metal is automated by Scaleway, but the user needs to do configuration (e.g., set up a cluster of several servers), maintenance, and supervision of the hypervisor.
+</Message>
+
+### From VMware to Instances
+Instances are virtual machines managed by Scaleway. This means Scaleway manages the hypervisor, image booting, and all the underlying infrastructure.
+It comes with very useful features: snapshots replicated 3 times, custom images/snapshots import/export, change the size of the VM, automatic connection to private networks...
+Migration of a virtual machine to Instances is less automated than with Proxmox wizard.
+Scaleway built some tooling which requires some commands to be typed.
+Today, we made tools to migrate VMs running these operating systems:
+- Microsoft Windows 2019 and 2022: [ADD LINK TO GITHUB]()
+- Red Hat Enterprise Linux 8 and 9: [ADD LINK TO GITHUB]()
+**To migrate a VMware VM to an Instance, we use an intermediate Instance as a converter.**
+
+
+This Instance is different depending on the OS of the VM you want to migrate:
+* A Ubuntu Instance is used to migrate Windows VMs
+* A CentOS Instance is used to migrate RHEL VMs
+This Instance converter uses `virt-v2v` as the main component:
+It is a tool made by the Libguestfs team, used to convert virtual machines (VMs) from one hypervisor to another.
+* It converts virtual disks from VMDK format (used by VMware) to QCOW2 format (used by KVM, which is the hypervisor used by Scaleway)
+* Installation of the virtio-win drivers: a tool allowing the guest operating system (the OS of the VM) to access physical devices on the host system. It enables access to block storage volumes (storage over the network, located on another physical machine than the hypervisor of the VM)
+* Installation of the qemu-guest-agent
+* Removal of the VMware tools
+
+<Message type="note">
+  For unknown reasons, during the course of our tests, those scripts may not complete or fail to run. As noted later, it is essential to verify that the QEMU guest agent has been correctly installed. If not, install them manually as outlined.
+</Message>
+
+#### Identify the virtual machines (VMs) to migrate
+##### Validating the inventory of machines to migrate
+
+Identify the virtual machines (VMs) to migrate on your VMware platform:
+- Disk configuration (number, size, type)
+  <Message type="tip">
+    If multiple disks are present, follow the same steps to create individual snapshots and then combine them into a single Scaleway image.
+    For more detailed instructions on creating an image from multiple volumes, refer to documentation on [how to create an image from a snapshot](/Instances/how-to/create-image-from-snapshot/).
+  </Message>
+- Network configuration (number of NICs, type)
+  <Message type="tip">
+    If multiple NICs are needed, several Private Networks can be added to the Instance later.
+  </Message>
+- Boot type (BIOS or UEFI)
+  <Message type="important">
+    Only UEFI boot is compatible with Scaleway Instances
+  </Message>
+<Message type="important">
+  If your virtual machine is running Windows, make sure to install the [virtiofs drivers](https://virtio-fs.gitlab.io/howto-windows.html) before exporting the VM.
+</Message>
+<Message type="important">
+    You **must find** a matching model of Instance in the Scaleway catalog.
+    For Windows, you must use a POP2-WIN Instance.
+    Your VM must boot with UEFI, not with Legacy BIOS
+</Message>
+
+#### Windows VM migration
+##### Preparing a Scaleway Instance to manage the migration
+
+<Message type="tip">
+  It is an Instance containing the migration tools. It acts as a converter. It is not the target Instance where you want to migrate the VMware virtual machine
+</Message>
+
+1. Create an Instance with:
+    * Block storage: At least twice the amount of storage of the VM you want to migrate
+    * Image: Scaleway's Ubuntu 24.04 Noble Bat image
+    * SSH key: your SSH key
+
+2. Connect to the Instance via SSH
+
+3. Install the following CLI tools, required for the migration of your virtual machine:
+    ```shell
+    apt update
+    apt -y install python3-pip virt-v2v libguestfs-tools unzip
+    # Virtio drivers:
+    wget https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso
+    mkdir -p /usr/share/virtio-win
+    mount virtio-win.iso /usr/share/virtio-win
+    # You will have the message: mount: /usr/share/virtio-win: WARNING: source write-protected, mounted read-only.
+    curl -L -o - "https://github.com/vmware/govmomi/releases/latest/download/govc_$(uname -s)_$(uname -m).tar.gz" | tar -C /usr/local/bin -xvzf - govc
+    # Tool used to convert rpm packages:
+    apt install -y rpm2cpio
+    # Tool to run applications as Windows service
+    wget -nd -O srvany.rpm https://kojipkgs.fedoraproject.org//packages/mingw-srvany/1.1/4.fc38/noarch/mingw32-srvany-1.1-4.fc38.noarch.rpm
+    rpm2cpio srvany.rpm | cpio -idmv \
+    && mkdir /usr/share/virt-tools \
+    && mv ./usr/i686-w64-mingw32/sys-root/mingw/bin/*exe /usr/share/virt-tools/
+    # Scaleway CLI:
+    curl -s https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh
+    # AWS CLI for uploading to S3:
+    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+    unzip awscliv2.zip
+    sudo ./aws/install
+    rm -rf aws awscliv2.zip
+    ```
+
+3. Configure credentials for the tools:
+    * For Scaleway: `scw init`
+    * For AWS/S3: Refer to [Using Object Storage with the AWS-CLI](https://www.scaleway.com/en/docs/object-storage/api-cli/object-storage-aws-cli/)
+    * To send big files with the `aws s3 cp` command, like VM images of several GB to Object Storage, you must change the default value of the parameter `multipart_chunksize` in `.aws/config`
+
+<Message type="tip">
+    If you want to download images directly from VMware (ESXI or vCenter), you can install a client: `govmomi`, and set it up:
+        <Message type="note">
+        `virt-v2v` can also download files directly from VMware.
+        </Message>
+
+    ```shell
+    curl -L -o - "https://github.com/vmware/govmomi/releases/latest/download/govc_$(uname -s)_$(uname -m).tar.gz" | tar -C /usr/local/bin -xvzf - govc
+    export GOVC_PASSWORD=<VMware password>
+    export GOVC_USERNAME=root
+    export GOVC_INSECURE=1
+    export GOVC_URL=<VMware host>
+    ```
+    Example:
+    ```shell
+    export GOVC_PASSWORD=Scaleway00!
+    export GOVC_USERNAME=root
+    export GOVC_INSECURE=1
+    export GOVC_URL=195.154.91.156 # Ex: IP OF ESXI server
+    ```
+</Message>
+
+4. Create an Object storage bucket. We will use it to upload the converted images.
+
+##### Windows VM preparation (containing only 1 volume) under VMware
+
+<Message type="important">
+    Windows virtual machines must be migrated to POP2-WIN Instances. Otherwise, their licensing, configuration, and monitoring will not work correctly.
+</Message>
+
+###### Optional - Serial console output configuration (for Windows VM)
+
+If you want to see the boot sequence in the Scaleway Instance Serial console, [some configuration](https://learn.microsoft.com/en-us/troubleshoot/azure/virtual-machines/windows/serial-console-windows) can be done on the Windows VM:
+```shell
+# These commands must be typed in PowerShell
+bcdedit /ems '{current}' on
+bcdedit /emssettings EMSPORT:1 EMSBAUDRATE:115200
+# These commands must be typed in cmd (administrative command prompt), not PowerShell
+bcdedit /set {bootmgr} displaybootmenu yes
+bcdedit /set {bootmgr} timeout 10
+bcdedit /set {bootmgr} bootems yes
+shutdown -r -t 0 # REBOOT
+```
+
+###### Compulsory Windows VM modifications under VMware
+
+<Message type="tip">
+   If it is not possible to modify the VM with VMware, we can do this setup at a later stage of the procedure.
+</Message>
+
+1. Run the following commands in PowerShell:
+```shell
+Install-Module -Force powershell-yaml
+schtasks /create /SC ONSTART /RU System /RP "" /TN set_static_ip /TR "powershell c:\Scaleway\set_if.ps1"
+Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+Register-PSRepository -Name NuGet -SourceLocation https://api.nuget.org/v3/index.json -PublishLocation https://api.nuget.org/v3/index.json -InstallationPolicy Trusted
+Register-PSRepository -Name NuGetv2 -SourceLocation https://www.nuget.org/api/v2 -PublishLocation https://www.nuget.org/api/v2 -InstallationPolicy Trusted
+Install-Module -Force ScalewayEcosystem
+```
+
+2. Run `C:\Scaleway\set_if.ps1`
+    The [set_if.ps1 ADD LINK](set_if.ps1) script is responsible for the static configuration of the public IP address. This is required to work around a limitation of the DHCP client on Windows that refuses to configure a network adapter if the address is in a /32 subnet. If the script fails to run, the Instance will be unreachable using RDP, hence will be useless.
+
+##### Compulsory Windows VM modifications under the migration Instance (converter)
+
+1. Export the image from VMware:
+    ```shell
+    govc export.ovf -vm <Your VM NAME> .
+    ```
+    <Message type="tip">
+        Alternatively, manually import the virtual machine image file (`.ova`) or the virtual disk file (.vmdk) on the Instance (for example with `scp`)
+    </Message>
+2. Install virtio driver & remove VMware tools:
+    * If you obtain a `.ova` virtual machine file, extract it to obtain a `.vdmk` disk image file:
+    ```shell
+    mkdir vmware-to-migrate
+    cd vmware-to-migrate
+    tar xf POV_WS2022_SCALEWAY.ova
+    mv POV_WS2022_SCALEWAY-disk1.vmdk vmware-to-migrate-1.vmdk
+    cd ..
+    ```
+    * Once you have a VMware `.vmdk` disk image file, convert it to a `.qcow2` file compatible with Scaleway ecosystem:
+    ```shell
+    qemu-img convert -p -Oqcow2 vmware-to-migrate/vmware-to-migrate-1.vmdk vmware-to-migrate/vmware-to-migrate.qcow2
+    mkdir out
+    virt-v2v -i disk vmware-to-migrate/vmware-to-migrate.qcow2 -block-driver virtio-scsi -o qemu -os ./out
+    ```
+
+3. Upload this file to the Instance: [set_if.ps1](set_if.ps1). Ex: you can use scp to upload it from your computer:
+    ```shell
+    scp set_if.ps1 root@<PUBLIC IP OF THE CONVERTER INSTANCE>:/root/
+    ```
+
+4. Adapt the qcow2 image to Scaleway's environment:
+    Copy the static IP configuration script onto the image to complete the customization:
+    ```shell
+    cd ..
+    guestfish -a out/vmware-to-migrate-sda -i << EOF
+    mkdir /Scaleway
+    upload set_if.ps1 /Scaleway/set_if.ps1
+    EOF
+    ```
+    <Message type="important">
+      Guestfish allows writing files inside the VM while you are outside the VM (in the Instance), and the VM is not booted.
+    </Message>
+
+5. Create this file
+    ```shell
+    vi script-init.ps1
+    ```
+
+6. Copy this code into it:
+    ```shell
+    Install-Module -Force powershell-yaml
+    Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
+    Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
+    Register-PSRepository -Name NuGet -SourceLocation https://api.nuget.org/v3/index.json -PublishLocation https://api.nuget.org/v3/index.json -InstallationPolicy Trusted
+    register-psrepository -name NugetV2 -sourcelocation https://www.nuget.org/api/v2 -PublishLocation https://www.nuget.org/api/v2 -InstallationPolicy Trusted
+    install-package ScalewayEcosystem
+    schtasks /create /SC ONSTART /RU System /RP "" /TN set_static_ip /TR "powershell c:\Scaleway\set_if.ps1"
+    ```
+7. Upload it to the VM:
+    ```shell
+    guestfish -a out/vmware-to-migrate-sda -i << EOF
+    upload script-init.sh /Scaleway/script-init.ps1
+    EOF
+    ```
+8. Edit this file:
+    ```shell
+    vi out/vmware-to-migrate.sh
+    ```
+    Replace `-display gtk \` by `-spice port=5900,addr=0.0.0.0,disable-ticketing=on \`
+    or by `-vnc :1,websocket=5700,password=off \` (noVNC is compatible with web browsers. Spice is an app running on Ubuntu, not MacOS)
+    Add RAM and CPU by adding
+    ```
+    -m 16384
+    -smp 8
+    ```
+    <Message type="note">
+      noVNC or Spice are used for remote access inside the VM.
+    </Message>
+
+9. Launch the noVNC server and the VM locally in the migration Instance (like a nested VM):
+    ```shell
+    git clone https://github.com/novnc/noVNC.git && cd noVNC
+    pip3 install websockify --break-system-packages
+    utils/novnc_proxy --vnc localhost:5901 --listen 6080 &
+    ./out/vmware-to-migrate.sh
+    ```
+10. Go to `http://<publicIP>:6080/vnc.html` to log into the VM.
+
+    <Message type="tip">
+        Sometimes, the migration script fails to install the QEMU Guest agent. Verify if the agent is correctly installed:
+        ![qemu_install.png](qemu_install.png)
+        If the QEMU guest agent does not appear in the list, install it manually. The package is present at the top of the C:\ drive
+        ![qemu_install_2.png](qemu_install_2.png)
+        Note that the VMware tools should also be removed
+        If you could not do it before (under VMware), you can launch PowerShell commands of the file `script-init.ps1`
+    </Message>
+
+##### Snapshot, block volume, and server creation
+
+1. Convert the raw file to qcow2
+    ```shell
+    qemu-img convert -p -Oqcow2 out/vmware-to-migrate-sda out/vmware-to-migrate.qcow2
+    ```
+2. Upload the QCOW2 image to Scaleway Object Storage
+    ```
+    aws s3 cp out/vmware-to-migrate.qcow2 s3://{the bucket you created earlier}/vmware-to-migrate.qcow2
+    ```
+    Example: `aws s3 cp out/vmware-to-migrate.qcow2 s3://migration-tool/vmware-to-migrate.qcow2`
+
+3. Import the QCOW2 image from Object Storage into Scaleway as a SBS snapshot:
+    ```
+    scw block snapshot import-from-object-storage bucket={your favorite bucket} key=vmware-to-migrate.qcow2 name=vmware-to
+    ```

@@ -127,7 +127,7 @@ git clone git@github.com:scaleway/docs-content.git | bash -s -- cd docs-content 
 
 Helpful pre-commit commands:
 
-- `yarn check-slugs` Output slugs that are not kebab-case well formatted.
+- `pnpm check-slugs` Output slugs that are not kebab-case well formatted.
 
 ### Commit conventions
 

@@ -62,7 +62,7 @@ Snapshots must be exported to a Scaleway Object Storage bucket in the same regio
     Replace `<snapshot-id>` with the snapshot ID, `<bucket-name>` with your Object Storage bucket name, and `<qcow2-file-name>` with the desired file name.
 
 
-- For legacy volumes, managed by the Instances API, usee the following command:
+- For legacy Block Storage volumes or Local Storage volumes, managed by the Instances API, usee the following command:
      ```bash
      scw instance snapshot export-to-object-storage zone=<zone-to-target> snapshot-id=<snapshot-id> bucket=<bucket-name> key=<qcow2-file-name>.qcow2
      ```
@@ -70,3 +70,56 @@ Snapshots must be exported to a Scaleway Object Storage bucket in the same regio
 
 
 ### Importing the Snapshot into the destination AZ
+
+Import your QCOW2 object as a Local Storage or Block Storage snapshot. You can then deploy an Instance from it.
+
+#### Importing snapshots via the console
+
+1. Navigate to **Object Storage** and select the Region you have exported your snaphot to.
+2. Click the name of the bucket containing your snapshot to display it's content.
+3. Click <Icon name="more" /> next to the name of snapshot to view the object menu.
+4. Click **Import as snapshot**. A pop-up displays.
+5. Enter a name for the snapshot or keep the suggested name, choose the destination AZ for the snapshot to be imported into and select the snapshot type.
+    - Imported snapshots can be either Local Storage or Block Storage.
+6. Click **Import object as snapshot**.
+
+#### Importing snapshots via CLI
+
+Import snapshots via the CLI using the following command:
+
+```bash
+scw block snapshot import-from-object-storage name=<snapshot-name> bucket=<bucket-name> key=<qcow2-file-name>.qcow2 size=<size-in-GB> project-id=<project-id-to-target> zone=<zone-to-target>
+```
+     Replace `<snapshot-name>` with the name for the snapshot to import, `<bucket-name>` with your Object Storage bucket name, and `<qcow2-file-name>` with the desired file name.
+     Replace `<size-in-GB>` with the desired size for the new snapshot, `<project-id>` with the Project ID to import the snapshot to (optional), `<zone-to-target>` with the AZ to import the snapshot into.
+
+### Creating a new Instance in the destination AZ
+
+#### Creating a new Instance via the console
+   - Navigate to **Compute > CPU & GPU Instances** and click **+ Create Instance > Create CPU Instance**.
+   - Select the destination AZ and desired Instance type.
+   - At the **Choose an image** step, go to the **My snapshots** tab and select the imported snapshot.
+   - Configure additional volumes, network settings, and flexible IPs as needed. To retain the original public IP, select it under **Select existing IPv4(s)**.
+   - Click **Create Instance**.
+
+#### Creating a new Instance via CLI
+
+Run the following command to create a new Instance with a Block Storage root volume from an imported snapshot:
+
+```sh
+scw instance server create image=none root-volume=block:<snapshot-id> type=<commercial-type> zone=<zone-to-target> project-id=<project-to-target>
+```
+
+    Replace `<snapshot-id>` with the ID of the imported snapshot, `<commercial-type>` with the commercial type of the Instance to create, `<zone-to-target>` with the AZ to create the Instance in, and `<project-to-target>` with the ID of the project to target.
+
+## Considerations for storage types
+- **Local Storage (LSSD)**:
+  - Snapshots are created and managed via the Instance API.
+  - Local Storage is tied to the Instance’s hypervisor and cannot be detached independently. Use snapshots to move data to a new Instance.
+- **Block Storage (BSSD/SBS)**:
+  - Block Storage volumes can be detached and reattached to another Instance in the same AZ without snapshotting, if moving within the same Project and AZ:
+    ```bash
+    scw instance server detach-volume volume-id=<volume-id> zone=<zone-to-target>
+    scw instance server attach-volume server-id=<server-id> volume-id=<volume-id> zone=<zone-to-target>
+    ```
+- LSSD snapshots can only be restored to Local Storage volumes, and BSSD snapshots to Block Storage volumes. Ensure the correct snapshot type is selected during import.

@@ -1,0 +1,325 @@
+---
+meta:
+  title: Dynamically create and destroy GitLab runner using Terraform
+  description: How to dynamically create and destroy GitLab runner using Scaleway Terraform provider
+content:
+  h1:  Dynamically create and destroy GitLab runner using Terraform
+  paragraph: How to dynamically create and destroy GitLab runner using Scaleway Terraform provider
+tags: automation terraform instances GitLab ci-cd
+categories:
+  - instances
+  - devtools
+---
+
+import Requirements from '@macros/iam/requirements.mdx'
+
+## Gitlab runner overview
+
+GitLab runners are the components that execute the jobs defined in your GitLab CI/CD pipelines. They can be installed on various operating systems and can run jobs on different platforms. Runners can be configured to be specific to a project or shared across multiple projects.
+With terraform Scaleway provider and GitLab one, runners can be dynamically created and destroyed.
+
+## Before you start
+
+To complete the actions presented below, you must have:
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Created IAM API key](/iam/how-to/create-api-keys/)
+- A GitLab account and project
+
+## Provision a GitLab runner on a Scaleway instance with terraform.
+
+### Gitlab setup
+
+he following GitLab CI/CD needs 3 secret variables :
+- GITLAB_TOKEN
+- SCW_SECRET_KEY
+- SCW_ACCES_KEY
+
+The `GITLAB_TOKEN` needs to be a GitLab personal access token with the Owner role, and create_runner scope.
+Create the environment variables in your [project cicd settings](https://docs.gitlab.com/ci/variables/)
+
+### terraform setup
+
+First we have to provide a basic terraform setup : 
+
+1. Create the main.tf file :
+        ```hcl
+        //providers
+        terraform {
+            required_providers {
+                scaleway = {
+                source = "scaleway/scaleway"
+                }
+                gitlab = {
+                source = "gitlabhq/gitlab"
+                }
+            }
+            required_version = ">= 0.13"
+        }
+
+        provider "gitlab" {
+            token = var.gitlab_token
+        }
+
+        provider "scaleway" {
+            zone       = "fr-par-1" //change to the zone you want to use
+            region     = "fr-par"
+            access_key = var.access_key
+            secret_key = var.secret_key
+        }
+
+        resource "scaleway_instance_ip" "main" {
+            tags       = ["cicd"] //or any tag you want to apply to all ci/cd instances
+            project_id = var.project_id
+        }
+
+        resource "scaleway_instance_server" "main" {
+            type = var.instance_type
+            image = "debian_bookworm"
+
+            project_id = var.project_id
+
+            ip_id = scaleway_instance_ip.main.id
+
+            tags = ["ci-cd", gitlab_user_runner.project_runner.id, var.gitlab_project_name, var.gitlab_commit_branch]
+
+            root_volume {
+                size_in_gb = var.volume_size
+                sbs_iops   = 15000
+            }
+
+            user_data = {
+                cloud-init = local.cloud_init
+            }
+        }
+
+        resource "gitlab_user_runner" "project_runner" {
+            runner_type     = "project_type"
+            project_id      = var.gitlab_project_id
+            untagged        = false
+            tag_list        = var.runner_tags
+            maximum_timeout = var.job_timeout
+        }
+
+        locals {
+            cloud_init = templatefile("${path.module}/cloud-init.yml", {
+                token = gitlab_user_runner.project_runner.token,
+                tags  = join(",", var.runner_tags)
+            })
+        }
+
+        
+        output "runner_id" {
+            value = gitlab_user_runner.project_runner.id
+        }
+        ```
+2. Create the var.tf file :
+        ```hcl
+        variable "project_id" {
+            type        = string
+            description = "Your project ID."
+        }
+
+        variable "scw_org_id" {
+            type        = string
+            description = "Your scaleway organisation ID"
+        }
+
+        variable "secret_key" {
+            type = string
+            sensitive = true
+        }
+
+        variable "access_key" {
+            type = string
+        }
+
+        variable "gitlab_token" {
+            type = string
+            sensitive = true
+        }
+
+        variable "gitlab_project_id" {
+            type = string
+        }
+
+        variable "gitlab_project_name" {
+            type = string
+        }
+
+        variable "gitlab_commit_branch" {
+            type = string
+        }
+
+        variable "runner_tags" {
+            type    = list(string)
+            default = []
+        }
+
+        variable "instance_type" {
+            type = string
+            default = "DEV1-S"
+        }
+
+        variable "job_timeout" {
+            type = number
+            default = 3600
+        }
+
+        variable "volume_size" {
+            type = number
+            default = 50
+            description = "volume in Gb"
+        }
+        ```
+3. Create the cloud-init.yml file :
+        ```yml
+        #cloud-config
+        package_update: true
+        package_upgrade: false
+
+        runcmd:
+        - sudo apt install -y curl
+        - curl -fsSL https://get.docker.com | sudo sh
+        - curl -L "https://packages.gitlab.com/install/repositories/runner/gitlab-runner/script.deb.sh" | sudo bash
+        - apt install -y gitlab-runner
+        - |
+            gitlab-runner register -n \
+            --url "https://gitlab.com/" \
+            --registration-token ${token} \
+            --executor docker \
+            --description "My Docker Runner" \
+            --docker-image "docker:24.0.5" \
+            --docker-privileged \
+            --tag-list "${tags}" \
+            --docker-volumes "/certs/client"
+        ```
+
+### Gitlab setup
+
+1. Create the .gitlab-ci.yml :
+        ```yml
+        stages:
+            - provision
+            - work
+            - clean
+
+        .default_env_vars: &default_env_vars |
+            cat <<EOF > env.tfvars
+            scw_org_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            project_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+            access_key = "$SCW_ACCES_KEY"
+            secret_key = "$SCW_SECRET_KEY"
+            gitlab_token = "$GITLAB_TOKEN"
+            gitlab_project_id = "$CI_PROJECT_ID"
+            runner_tags = [ "custom" ]
+            instance_type = "PLAY2-PICO"
+            job_timeout = 1200
+            volume_size = 20
+            gitlab_project_name="${CI_PROJECT_NAMESPACE_SLUG}-${CI_PROJECT_NAME}"
+            gitlab_commit_branch="$CI_COMMIT_BRANCH"
+            
+            EOF
+
+        provision:
+            stage: provision
+            image: alpine
+            before_script:
+                - apk update
+                - apk add --no-cache wget unzip bash curl openssl libc6-compat jq
+                - wget https://releases.hashicorp.com/terraform/1.6.6/terraform_1.6.6_linux_amd64.zip
+                - unzip terraform_1.6.6_linux_amd64.zip
+                - mv terraform /usr/local/bin/
+                - terraform -version
+            script:
+                - *default_env_vars
+                - terraform init -var-file="env.tfvars"
+                - terraform apply -var-file="env.tfvars" -auto-approve
+                - bash ./look.bash "$(terraform output -raw runner_id)" "$GITLAB_TOKEN" 600
+            artifacts:
+                paths:
+                    - "*.tfstate*"
+                when: always
+                access: none
+
+        work:
+            stage: work
+            image: alpine
+            tags: 
+                - custom
+            needs:
+                - provision
+            script:
+                - echo "hello-world"
+
+        clean:
+            stage: clean
+            image: alpine
+            when: always
+            needs:
+                - job: work
+                    optional: true
+                    artifacts: false
+                - provision
+            before_script:
+                - apk update
+                - apk add --no-cache wget unzip bash curl openssl libc6-compat
+                - wget https://releases.hashicorp.com/terraform/1.6.6/terraform_1.6.6_linux_amd64.zip
+                - unzip terraform_1.6.6_linux_amd64.zip
+                - mv terraform /usr/local/bin/
+                - terraform -version
+            script:
+                - *default_env_vars
+                - terraform init -var-file="env.tfvars"
+                - terraform apply -destroy -var-file="env.tfvars" -auto-approve
+        ```
+2. Create the look.bash file :
+        ```bash
+        #!/bin/bash
+
+        URL="https://gitlab.com/api/v4/runners/$1"
+        TOKEN="$2"
+        TIMEOUT=$3
+        START_TIME=$(date +%s)
+
+        while true; do
+        CURRENT_TIME=$(date +%s)
+        ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+
+        if [ $ELAPSED_TIME -ge $TIMEOUT ]; then
+            echo "Timeout: Runner did not come online within 5 minutes."
+            exit 1  # Exit with error code
+        fi
+
+        STATUS=$(curl --silent --header "PRIVATE-TOKEN: $TOKEN" "$URL" | jq .status)
+
+        if [ "$STATUS" == "\"online\"" ]; then
+            echo "Runner is online."
+            break
+        else
+            echo "Runner status: $STATUS. Retrying in 5 seconds..."
+            sleep 5
+        fi
+        done
+        ```
+
+With this setup the Gitlab-CI/CD create an instance and register it as a GitLab runner, run the work job on the instance, then delete the instance and the runner.
+This setup allows you to dynamically provide high computation runners in a cost-effective way. You can also customize the cloud init to fit your business needs, such as connecting to your company VPN.
+
+## Going further
+
+If you want to use a custom instance image, you can edit the `main.tf` file as bellow :
+
+        ```hcl
+        // ... previous code
+
+        data "scaleway_instance_image" "my_image" {
+            image_id = "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+        }
+
+        resource "scaleway_instance_server" "main" {
+            type = var.instance_type
+            image = data.scaleway_instance_image.my_image.id
+
+        // ...

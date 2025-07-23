@@ -38,43 +38,46 @@ Refer to [Scaleway’s Instance documentation](https://www.scaleway.com/en/docs/
 
 ## Glossary
 
-- **OVA/OVF**: Virtual machine image formats used by VMware.
-- **QCOW2**: Disk image format used by Scaleway’s KVM-based hypervisor.
-- **QEMU Guest Agent**: Facilitates communication between the guest OS and Scaleway’s hypervisor.
-- **VMDK**: Virtual disk image format used by VMware.
-- **VMX**: Configuration file specifying VM characteristics (e.g., CPU, RAM, volumes, network interfaces).
-- **VirtIO drivers**: Enable the guest OS to access Scaleway’s block storage and network devices.
-- **virt-v2v**: A tool from the [Libguestfs project](https://libguestfs.org/) that converts VMs between hypervisors, transforming VMDK to QCOW2, installing VirtIO drivers, and removing VMware Tools.
+| Term | Definition |
+|------|------------|
+| **OVA/OVF** | Virtual machine image formats used by VMware for exporting VMs. |
+| **QCOW2** | Disk image format used by Scaleway’s KVM-based hypervisor, optimized for cloud environments. |
+| **QEMU Guest Agent** | A service enabling communication between the guest OS and Scaleway’s hypervisor for tasks like shutdown or status reporting. |
+| **VMDK** | VMware’s virtual disk image format, which must be converted to QCOW2 for Scaleway. |
+| **VMX** | VMware configuration file specifying VM characteristics (e.g., CPU, RAM, disks, network interfaces). |
+| **VirtIO Drivers** | Drivers allowing the guest OS to interact with Scaleway’s block storage and network devices. |
+| **virt-v2v** | A tool from the [Libguestfs project](https://libguestfs.org/) for converting VMs between hypervisors, including VMDK to QCOW2 conversion. |
+| **Hypervisor** | Software that manages virtual machines, such as VMware ESXi or Scaleway’s KVM-based system. |
+| **Block Storage** | Scaleway’s persistent storage for Instance disks, used for snapshots and volumes. |
 
-## Validating the inventory of machines to migrate
 
-Identify the virtual machines (VMs) to migrate on your VMware platform:
+## Validating VMs to migrate
 
-- Disk configuration (number, size, type)
-  <Message type="tip">
-    If multiple disks are present, follow the same steps to create individual snapshots and then combine them into a single Scaleway image.
-    For more detailed instructions on creating an image from multiple volumes, refer to documentation on [how to create an image from a snapshot](/instances/how-to/create-image-from-snapshot/).
-  </Message>
-- Network configuration (number of NICs, type)
-  <Message type="tip">
-    If multiple NICs are needed, several Private Networks can be added to the Instance later.
-  </Message>
-- Boot type (BIOS or UEFI)
-  <Message type="important">
-    Only UEFI boot is compatible with Scaleway Instances
-  </Message>
-- For Windows VMs, a Scaleway POP2-WIN Instance type is required for licensing and compatibility.
+Review your VMware VMs to ensure compatibility with Scaleway Instances.
 
-## Migration Process
+1. Identify VMs:
+   - List VMs in your VMware environment via vCenter or ESXi console.
+   - Note the operating system (Windows 2019/2022 or RHEL 9).
+2. Check the disk configuration:
+   - Record the number, size, and type of disks (e.g., 1x 100 GB VMDK).
+   <Message type="tip">For VMs with multiple disks, create individual snapshots and combine them into a single Scaleway image. Refer to the documentation on [how to create an image from a snapshot](/instances/how-to/create-image-from-snapshot/) for furher information.</Message>
+3. Verify the network configuration:
+   - Note the number and type of network interfaces (NICs).
+   <Message type="tip">
+     Scaleway supports multiple NICs via Private Networks, configurable post-migration. See [Private Networks Quickstart](https://www.scaleway.com/en/docs/network/vpc/quickstart/).
+   </Message>
+4. Confirm the boot type of the VM:
+   - Ensure VMs use UEFI boot (check VMware settings under "Boot Options").
+   <Message type="important">
+     Legacy BIOS is not compatible with Scaleway Instances. Convert legacy BIOS VMs to UEFI in VMware if needed (refer to the official VMware documentation for more information).
+   </Message>
+5. Match resources to the new Scaleway Instance:
+   - Map VM resources (CPU, RAM, storage) to Scaleway Instance types:
+     - Windows: Use POP2-WIN (e.g., POP2-8C-32G-WIN for 8 cores, 32 GB RAM).
+     - RHEL: Use General-Purpose (e.g., POP2-8C-32G).
+   - Refer to [Choosing the best Scaleway Instance type for your workload](/instances/reference-content/choosing-instance-type/) for additional information.
 
-### Identify VMs to migrate
-
-1. Review the VMs in the VMware environment to determine which ones to migrate.
-2. Ensure the VMs boot with UEFI (not Legacy BIOS), as Scaleway Instances require UEFI.
-3. Match each VM’s resource requirements (CPU, RAM, storage) to an appropriate Scaleway Instance type:
-   - For Windows VMs, use a POP2-WIN Instance (e.g., POP2-8C-32G-WIN).
-   - For RHEL VMs, use a General-Purpose Instance (e.g., POP2-8C-32G).
-4. Refer to [Validating the inventory of machines to migrate](#validating-the-inventory-of-machines-to-migrate) for detailed guidance.
+## Migration process
 
 ### Windows VM migration (single volume)
 
@@ -90,16 +93,17 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
 3. Install the required migration tools:
 
   ```shell
+  # Update package lists
   apt update
   apt -y install python3-pip virt-v2v libguestfs-tools unzip
-  # Virtio drivers :
+  # Download VirtIO drivers for Windows
   wget https://fedorapeople.org/groups/virt/virtio-win/direct-downloads/stable-virtio/virtio-win.iso
   mkdir -p /usr/share/virtio-win
   mount virtio-win.iso /usr/share/virtio-win
-  # You will have the message : mount: /usr/share/virtio-win: WARNING: source write-protected, mounted read-only.
+  # You will see the following message: mount: /usr/share/virtio-win: WARNING: source write-protected, mounted read-only.
   curl -L -o - "https://github.com/vmware/govmomi/releases/latest/download/govc_$(uname -s)_$(uname -m).tar.gz" | tar -C /usr/local/bin -xvzf - govc
   # Tool used to convert rpm packages:
-  apt install -y rpm2cpio 
+  apt install -y rpm2cpio
   # Tool to run applications as Windows service
   wget -nd -O srvany.rpm https://kojipkgs.fedoraproject.org//packages/mingw-srvany/1.1/4.fc38/noarch/mingw32-srvany-1.1-4.fc38.noarch.rpm
   rpm2cpio srvany.rpm | cpio -idmv \
@@ -118,7 +122,8 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
    - Scaleway CLI: Run `scw init` and follow the prompts.
    - AWS CLI for Object Storage: Refer to [Using Object Storage with the AWS-CLI](https://www.scaleway.com/en/docs/storage/object/api-cli/object-storage-aws-cli/).
    - Adjust the `multipart_chunksize` in `~/.aws/config` for large file uploads (e.g., VM images).
-5. Optional: Configure govc for VMware (if downloading images directly):
+
+5. Optional: Configure `govc` for VMware (if downloading images directly):
 
    ```shell
    export GOVC_PASSWORD=<VMware_password>
@@ -130,10 +135,10 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
    Example:
 
    ```shell
-   export GOVC_PASSWORD=Scaleway00!
+   export GOVC_PASSWORD=<my_secret_password>
    export GOVC_USERNAME=root
    export GOVC_INSECURE=1
-   export GOVC_URL=195.154.91.156
+   export GOVC_URL=195.154.xxx.yyy #A public IP of a VMWare ESXI server
    ```
 
 6. Create an Object Storage bucket to store the converted images.
@@ -178,7 +183,7 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
    </Message>
 
 
-   Download and place the `set_if.ps1` script in `C:\Scaleway\` on the VM. This script configures static IP addresses to address DHCP limitations in Windows with /32 subnets. The script is available in [Scaleway’s migration repository](link to be provided) (https://github.com/orgs/scaleway/teams/sa/repositories).
+   Download and place the `set_if.ps1` script in `C:\Scaleway\` on the VM. This script configures static IP addresses to address DHCP limitations in Windows with /32 subnets. The script is available in [Scaleway’s migration repository](https://github.com/orgs/scaleway/teams/sa/repositories).
 
 #### Converting the VM on the converter Instance
 
@@ -205,8 +210,11 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
    - Convert the `.vmdk` to `.qcow2`:
 
      ```shell
+     # Convert VMDK to QCOW2 format for Scaleway compatibility
      qemu-img convert -p -Oqcow2 vmware-to-migrate/vmware-to-migrate-1.vmdk vmware-to-migrate/vmware-to-migrate.qcow2
+     # Create output directory
      mkdir out
+     # Run virt-v2v to install VirtIO drivers and prepare the image
      virt-v2v -i disk vmware-to-migrate/vmware-to-migrate.qcow2 -block-driver virtio-scsi -o qemu -os ./out
      ```
 
@@ -262,6 +270,9 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
      ```shell
      -m 16384 -smp 8
      ```
+     <Message type="important">
+       Ensure that the RAM and CPU values you choose do not exceed the available resources of the converter instance.
+     </Message>
 
    - Start the VM:
 
@@ -269,7 +280,7 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
      ./out/vmware-to-migrate.sh
      ```
 
-   - Access the VM at `http://<converter_instance_public_ip>:6080/vnc.html`.
+   - With the internet browser of your computer, access the VM at `http://<converter_instance_public_ip>:6080/vnc.html`.
    - Verify the QEMU Guest Agent is installed (check `C:\` for the package). If missing, install it manually.
    - Remove VMware Tools if not already done.
 
@@ -282,10 +293,16 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
 
 #### Creating snapshot, Block Volume, and Instance
 
+<Message type="important">
+   If you could not run the the powershell script (`script-init.ps1`) before, you must run it now.
+</Message>
+
 1. Convert and Upload the image:
 
-   ```shell
+   ```
+   # Convert final image to QCOW2
    qemu-img convert -p -Oqcow2 out/vmware-to-migrate-sda out/vmware-to-migrate.qcow2
+   # Upload to Object Storage
    aws s3 cp out/vmware-to-migrate.qcow2 s3://<bucket_name>/vmware-to-migrate.qcow2
    ```
 
@@ -336,12 +353,14 @@ This section outlines the migration of an RHEL 9 VM with a single volume to a Sc
 3. Install migration tools:
 
    ```shell
+   # Install unzip, Scaleway CLI and AWS CLI
    yum install unzip
    curl -s https://raw.githubusercontent.com/scaleway/scaleway-cli/master/scripts/get.sh | sh
    curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
    unzip awscliv2.zip
    sudo ./aws/install
    rm -rf aws awscliv2.zip
+   # Install conversion tools
    yum install python3-libguestfs virt-v2v
    ```
 
@@ -349,15 +368,15 @@ This section outlines the migration of an RHEL 9 VM with a single volume to a Sc
    - Scaleway CLI: Run `scw init`.
    - AWS CLI for Object Storage: Refer to [Using Object Storage with the AWS-CLI](/object-storage/api-cli/object-storage-aws-cli/).
    - Adjust `multipart_chunksize` in `~/.aws/config` for large file uploads.
-5. Download migration scripts:
+5. Download migration scripts from Scaleway's public [GitHub repository](https://github.com/orgs/scaleway/teams/sa/repositories):
 
    ```shell
-   git clone https://github.com/fg-scw/migration-scw-rhel
+   git clone https://github.com/orgs/scaleway/teams/sa/repositories
    ```
 
-6. Create an Object Storage Bucket.
+6. [Create](/object-storage/how-to/create-a-bucket/) an Object Storage bucket.
 
-#### Converting the VM on the Converter Instance
+#### Converting the VM on the converter Instance
 
 1. Upload or export the VM image:
    - Use `govc` (as shown in the Windows section) or upload the `.ova`/`.vmdk` file manually.
@@ -421,7 +440,7 @@ If the VM has multiple snapshots:
 
 Refer to [Scaleway CLI Documentation](https://cli.scaleway.com/instance/#create-an-instance-image).
 
-## Additional Tips
+## Additional tips
 
 - Uploading an OVA to ESXi:
 
@@ -429,6 +448,6 @@ Refer to [Scaleway CLI Documentation](https://cli.scaleway.com/instance/#create-
    govc import.ova <image_name>.ova
    ```
 
-- ESXi Console limitations: The ESXi free version’s remote console does not support copy-paste. Use RDP or SSH for easier interaction.
+- ESXi Console: If you do not succeed to enable copy-paste on the ESXI console, use RDP or SSH for easier interaction.
 - Verifying migration: After migration, verify that the QEMU Guest Agent is installed and VMware Tools are removed. Re-run migration scripts or manual steps if necessary.
 - Private Network configuration: For enhanced security, configure [Private Networks](/vpc/quickstart/) and use a [Public Gateway](/public-gateways/quickstart/) for external access.

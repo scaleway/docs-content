@@ -1,0 +1,190 @@
+---
+title: Connect Generative APIs to Serverless SQL with the Model Context Protocol 
+description: Create an intelligent agent that can analyze your Serverless SQL data using natural language queries through Model Context Protocol.
+tags: AI MCP SQL agent python database
+products:
+  - generative-apis
+  - serverless-sql
+dates:
+  validation: 2025-05-13
+  posted: 2025-05-13
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+[Model Context Protocol](https://modelcontextprotocol.io/introduction) (MCP) is an open, standardized communication protocol that enables Large Language Models to interact with external tools and services through a defined interface. 
+
+This tutorial demonstrates how to build a data analysis agent that connects Scaleway's Generative APIs with Serverless SQL using MCP. You'll learn how to create an AI agent that can:
+- Understand your database schema automatically
+- Convert natural language questions into SQL queries
+- Execute queries and present results in a human-friendly format
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing actions in the intended Organization
+- Python 3.9 or higher
+- An API key from Scaleway [Identity and Access Management](/iam/)
+- Access to Scaleway [Generative APIs](/generative-apis/quickstart/) and [Serverless SQL](/serverless-sql-databases/quickstart/)
+
+## Introduction
+
+The solution consists of three main components:
+
+1. **Generative APIs**: Provides the AI model that processes natural language queries
+2. **Serverless SQL**: Stores and manages the data
+3. **Local AI agent**: Coordinates between the AI model and database
+
+<Message type="note">
+  The agent runs on a local machine in this tutorial but could also be embedded as a remote application.
+</Message>
+
+## Configuring Scaleway services
+
+### Set up Generative APIs
+
+1. Go to the Scaleway console and navigate to **Generative APIs**
+2. Select a model (Mistral Small is used for this tutorial)
+3. Click **View Code* and note down the *base URL* and *model name*
+
+### Configure Serverless SQL
+
+1. Go to **Databases** > **Serverless SQL**
+2. [Create a new database](/serverless-sql-databases/how-to/create-a-database/) with default settings
+3. Click **Connect application** > **Connect with an existing IAM Secret Key**
+4. Switch to the **Connection string** tab and copy the connection string
+
+### Seed the database
+
+[Connect to your database](/serverless-sql-databases/how-to/connect-to-a-database/) and run the following SQL to create a test schema with some data:
+
+```sql
+CREATE TABLE Sales (
+    Product VARCHAR(50),
+    Buyer VARCHAR(50),
+    Timestamp TIMESTAMP
+);
+
+INSERT INTO Sales (Product, Buyer, Timestamp) VALUES
+    ('Laptop', 'Alice', NOW() - INTERVAL '2 days'),
+    ('Tablet', 'Bob', NOW() - INTERVAL '3 days'),
+    ('Webcam', 'Ivan', NOW() - INTERVAL '30 minutes'),
+    ('Printer', 'Judy', NOW() - INTERVAL '12 hours');
+```
+
+## Setting up the development environment
+
+The AI Agent is built in Python using the [fast-agent](https://github.com/evalstate/fast-agent) open-source framework which has native support for the MCP protocol.
+
+The [postgres-mcp](https://github.com/crystaldba/postgres-mcp) MCP server is used to communicate with Serverless SQL.
+
+1. Install a package manager. `uv` is the recommended package manager by `fast-agent`:
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+2. Create and activate a virtual environment:
+    ```bash
+    uv venv
+    ```
+
+3. Install required libraries:
+    ```bash
+    uv pip install fast-agent-mcp postgres-mcp
+    ```
+
+These libraries work together to create a secure and efficient bridge between the AI model and your database.
+
+## Creating the AI Agent
+
+### Configure the agent
+
+Create a file called `fastagent.config.yaml`:
+
+```yaml
+default_model: "generic.<Your model name>"
+
+generic:
+  api_key: "<Your Scaleway API Key>"
+  base_url: "<Your Generative API Base URL>"
+
+mcp:
+  servers:
+    database:
+      command: "uv" 
+      args: ["run", "postgres-mcp"]
+      env:
+        DATABASE_URI: "<Your Serverless SQL Connection String>"
+```
+
+### Create the agent script
+
+Create a file called `agent.py` which will contain your agent logic.
+
+1. Import the necessary modules and initialize the agent:
+    ```python
+    import asyncio
+    from mcp_agent.core.fastagent import FastAgent
+
+    fast = FastAgent("AI Agent")
+    ```
+
+2. Create agents with different responsibilities:
+    ```python
+    @fast.agent(
+        "db_schema_reader",
+        instruction="""Get the details of the 'sales' table in the 'public' schema of the database, which contains the sales data. Only return the column names and types.""",
+        servers=["database"],
+    )
+    @fast.agent(
+        "query_writer",
+        instruction="""Write a SQL query to fetch the sales data from the database (sales table) given the input constraint. Only return the SQL query, no other text."""
+    )
+    @fast.agent(
+        "query_executor",
+        instruction="""Execute the following SQL statement on the database and write the results in JSON format""",
+        servers=["database"],
+    )
+    ```
+
+    <Message type="note">
+    Each agent has a specific role. Some agents need direct database access through the MCP server (using the `servers=["database"]` parameter) while others don't
+    </Message>
+
+3. Create an orchestrator that coordinates the specialized agents:
+    ```python
+    @fast.orchestrator(
+        name="sales_analyst",
+        agents=["db_schema_reader","query_writer","query_executor"],
+        plan_type="iterative",
+        plan_iterations=4,
+        instruction="You are a sales analyst given an input criteria. Describe the corresponding sales data from the database in one sentence."
+    )
+    ```
+    The orchestrator:
+    - Determines which agents to use and in what order
+    - Sets an overall goal for the agent system
+    - Uses an iterative planning approach to refine the results
+    - Limits the number of iterations to prevent infinite loops
+
+4. Create an entrypoint running the data analysis query **Get sales from last day**: 
+    ```python
+    async def main() -> None:
+        async with fast.run() as agent:
+            await agent.sales_analyst("Get sales from last day")
+
+    if __name__ == "__main__":
+        asyncio.run(main())
+    ```
+
+5. Run the script with:
+   ```bash
+   python agent.py
+   ```
+
+The `fast-agent` framework provides details of all operations and outputs its data analysis:
+
+    The sales data from the last day includes two transactions: a webcam purchased by Ivan at 14:52 and a printer purchased by Judy at 03:22. 
+
+
+This tutorial demonstrated how to create an AI agent that can analyze your SQL database using natural language queries. By combining Scaleway **Generative APIs** with **Serverless SQL** through Model Context Protocol, you can create powerful tools that are accessible to non-technical users.

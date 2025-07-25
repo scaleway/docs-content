@@ -1,17 +1,13 @@
 ---
-meta:
-  title: Kubernetes service routing with wildcard DNS and ingress controller
-  description: This page explains how to route external traffic in Kubernetes using wildcard DNS and ingress controller
-content:
-  h1: Kubernetes service routing with wildcard DNS and ingress controller
-  paragraph: This page explains how to route external traffic in Kubernetes using wildcard DNS and ingress controller
+title: Deploying an NGINX ingress controller on Scaleway Kubernetes Kapsule without a LoadBalancer
+description: This page explains how to route external traffic in Kubernetes using wildcard DNS and ingress controller
 tags: kubernetes load-balancer-service wildcard ingress
 dates:
-  validation: 2025-05-12
-  posted: 2021-08-12
-categories:
-  - kubernetes
+  validation: 2025-06-17
+  posted: 2021-06-17
 ---
+import Requirements from '@macros/iam/requirements.mdx'
+
 
 Kubernetes wildcard DNS refers to a DNS configuration that allows for routing any subdomain of a domain to a particular service or set of services within a Kubernetes cluster. A wildcard DNS record is usually indicated by an asterisk (*), for example: `*.yourdomain.com`.
 
@@ -23,114 +19,207 @@ Using wildcard DNS with Kubernetes has several advantages:
 
 In short, Kubernetes wildcard DNS, combined with an ingress controller, provides a powerful way to dynamically route external traffic to different services in the cluster based on hostname patterns.
 
-<Macro id="requirements" />
+<Requirements />
 
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - [Created](/kubernetes/how-to/create-cluster/) a Scaleway Kubernetes cluster
 - Installed `helm` on your local computer
-- A domain name
 - A `TCP` or `HTTP` service you want to expose
 
-## Installing the ingress controller with helm
+## Overview of key concepts
 
-1. Add the Helm repository:
-   ```bash
-   helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
-   helm repo update
-   ```
+### Ingress controller
+An ingress controller manages external HTTP/HTTPS traffic to services within a Kubernetes cluster based on ingress resource rules. The NGINX ingress controller is used here.
 
-2. Install the Nginx ingress controller using the helm packet manager:
-   ```bash
-   helm install nginx-ingress ingress-nginx/ingress-nginx \
-     --namespace ingress-nginx --create-namespace
-   ```
+### NodePort service
+A `NodePort` service exposes the ingress controller on a specific port (e.g., 30000–32767) on each cluster node’s IP address, allowing external access without a Scaleway LoadBalancer.
 
-3. Verify the installation:
-   ```bash
-   kubectl get pods -n ingress-nginx
-   ```
+### Round-robin DNS
+Scaleway provides a wildcard DNS record (`<cluster-id>.nodes.k8s.<region>.scw.cloud`) that resolves to the public IPs of all nodes in the default pool. This acts as a round-robin DNS, distributing traffic randomly across nodes.
+However, this is not true load balancing, as DNS resolution is client-dependent and may not evenly distribute traffic. Consider [deploying a LoadBalancer service](/kubernetes/reference-content/lb-ingress-controller/) for production use.
 
-## Configuring wildcard DNS
+### Full isolation node pools
+Scaleway Kapsule supports “full isolation” node pools, where nodes lack public IPs. This is incompatible with `NodePort`-based ingress without additional configuration, as external traffic cannot reach nodes directly. A node selector is required to ensure the ingress controller runs on nodes with public IPs (e.g., in the default pool).
 
-1. Retrieve the ingress IP:
-   ```bash
-   kubectl get svc -n ingress-nginx
-   ```
-   <Message type="note">
-      It may take a few minutes for the Load Balancer IP to be assigned.
-   </Message>
+### Security groups
+Kapsule clusters use a default security group (`kubernetes-<cluster-id>`) that blocks incoming traffic by default. You must open ports (e.g., 80 and 443) to allow external access to the `NodePort`.
 
-2. Configure Wildcard DNS:
-   - Go to your DNS provider and add an A record for `*.yourdomain.com` pointing to the IP address of the ingress controller's load balancer.
+## Deployment of the ingress controller
 
-## Deploy a sample application
+## Installation prework
 
-1. Deploy a sample application by creating a file `hello-world.yaml`. Below is a simple deployment and service example. Copy the content in the file and save it:
-     ```yaml
-     apiVersion: apps/v1
-     kind: Deployment
-     metadata:
-       name: hello-world
-     spec:
-       replicas: 2
-       selector:
-         matchLabels:
-           app: hello-world
-       template:
-         metadata:
-           labels:
-             app: hello-world
-         spec:
-           containers:
-           - name: hello-world
-             image: nginxdemos/hello
-             ports:
-             - containerPort: 80
-     ---
-     apiVersion: v1
-     kind: Service
-     metadata:
-       name: hello-world
-     spec:
-       ports:
-       - port: 80
-       selector:
-         app: hello-world
-     ```
+To allow HTTP/HTTPS traffic to the `NodePort`:
+1. In the Scaleway console, navigate to **Compute > CPU & GPU Instances > Security Groups**.
+2. Locate the security group `kubernetes-<cluster-id>`.
+3. Add rules to allow:
+   - TCP port 80 (HTTP) from `0.0.0.0/0`.
+   - TCP port 443 (HTTPS) from `0.0.0.0/0`.
+   - TCP port range 30000–32767 (`NodePort` range) from `0.0.0.0/0` for external access to the ingress controller.
+  <Message type="tip">
+  Opening the `NodePort` range exposes all `NodePort` services. For production, consider restricting the source IP range or using a more specific port, if known.
+  </Message>
 
-2. Apply the configuration with `kubectl apply -f hello-world.yaml`.
+## Installing the NGINX ingress controller
+Use Helm to deploy the NGINX ingress controller with a `NodePort` service and a node selector to ensure it runs on nodes with public IPs.
 
-## Create an ingress resource
+1. Add the NGINX Ingress Helm Repository
+    ```bash
+    helm repo add ingress-nginx https://kubernetes.github.io/ingress-nginx
+    helm repo update
+    ```
 
-1. Copy the following sample resource and paste and save it into a YAML file called `wildcard-ingress.yaml`. Remember to replace the domain name with your own.
-     ```yaml
-     apiVersion: networking.k8s.io/v1
-     kind: Ingress
-     metadata:
-       name: wildcard-ingress
-       annotations:
-         nginx.ingress.kubernetes.io/rewrite-target: /
-     spec:
-       rules:
-       - host: "*.yourdomain.com"
-         http:
-           paths:
-           - path: /
-             pathType: Prefix
-             backend:
-               service:
-                 name: hello-world
-                 port:
-                   number: 80
-     ```
+2. Create a file named `ingress-values.yaml` and copy the following values into it:
+    ```yaml
+    controller:
+      service:
+        type: NodePort
+        # Specify NodePort values (optional, Kubernetes assigns random ports if omitted)
+        nodePorts:
+          http: 30080
+          https: 30443
+      # Node selector to ensure pods run on nodes with public IPs
+      nodeSelector:
+        scaleway.com/pool-name: <name-of-your-public-ip-pool>
+      config:
+        use-forwarded-headers: "true"
+        compute-full-forwarded-for: "true"
+      admissionWebhooks:
+        enabled: true
+    ```
+    <Message type="note">
+    - `type: `NodePort`` exposes the ingress controller on the specified ports (e.g., 30080 for HTTP, 30443 for HTTPS) on each node’s public IP.
+    - The `nodeSelector` ensures the ingress controller pods run on nodes in the `<name-of-your-public-ip-pool>` pool, which have public IPs. Replace `scaleway.com/pool-name: <name-of-your-public-ip-pool>` if your public IP pool has a different name (check via `kubectl get nodes -o wide`).
+    - Full isolation node pools lack public IPs, making them incompatible with `NodePort`-based ingress unless routed through nodes with public IPs (e.g., default pool).
+    - `admissionWebhooks.enabled: true` ensures the validating webhook is enabled for ingress resource validation.
+    </Message>
 
-2. Apply the configuration with `kubectl apply -f wildcard-ingress.yaml`.
+3. Deploy the ingress controller using `helm`:
+    ```bash
+    helm install ingress-nginx ingress-nginx/ingress-nginx --version 4.7.0 -f ingress-values.yaml --namespace ingress-nginx --create-namespace
+    ```
 
-## Test your setup
+4. Check the `NodePort` service:
+    ```bash
+    kubectl get svc -n ingress-nginx ingress-nginx-controller
+    ```
 
-1. Access your application by pointing your web browser to `http://anything.yourdomain.com` (replace this with your domain name). It should load the hello-world application.
+    You will see an output similar to the following example:
+    ```
+    NAME                       TYPE       CLUSTER-IP    EXTERNAL-IP   PORT(S)                      AGE
+    ingress-nginx-controller   `NodePort`   10.32.12.0    <none>        80:30080/TCP,443:30443/TCP   5m
+    ```
 
-2. Test with different subdomains, they should all lead to your `hello-world` application due to the wildcard DNS setup.
+  - The `PORT(S)` field shows the `NodePort`s (e.g., `30080` for HTTP, `30443` for HTTPS).
+  - The `EXTERNAL-IP` is `<none>` because `NodePort` uses the nodes’ IPs.
 
-You have successfully set up an ingress controller with wildcard DNS on Scaleway Kubernetes Kapsule. This setup allows you to easily manage multiple subdomains and route traffic to the various services in your Kubernetes cluster.
+5. Get the public IPs of the nodes in the default pool:
+    ```bash
+    kubectl get nodes -o wide
+    ```
+
+    You will see an output similar to the following example
+    ```
+    NAME              STATUS   ROLES    AGE   VERSION   INTERNAL-IP   EXTERNAL-IP
+    node-1            Ready    <none>   1h    v1.32.3   172.16.28.3   195.154.111.100
+    node-2            Ready    <none>   1h    v1.32.3   172.16.28.4   195.154.111.101
+    ```
+
+6. Configure DNS with round-robin DNS:
+    - Use Scaleway’s wildcard DNS (`<cluster-id>.nodes.k8s.<region>.scw.cloud`) for external access.
+        For example, for a cluster with ID `39b054d2-5255-4fe3-a327-7ccfac7ffdca` in the `fr-par` region, the DNS is `39b054d2-5255-4fe3-a327-7ccfac7ffdca.nodes.k8s.fr-par.scw.cloud`. This domain name resolves to the public IPs of all nodes in the default pool (e.g., `195.154.72.100`, `195.154.72.101`).
+
+    -Alternatively, for a custom domain, map your domain (e.g., `demo.example.com`) to all node IPs via your DNS provider, creating multiple A records:
+        ```
+        demo.example.com   A   195.154.111.100
+        demo.example.com   A   195.154.111.101
+        ```
+        <Message type="important">
+        DNS round-robin is not true load balancing. Client DNS resolution may favor one node, leading to uneven traffic distribution. For production, consider [using a Scaleway Load Balancer](/kubernetes/reference-content/lb-ingress-controller/) instead.
+        </Message>
+
+7. Create a file named `demo-app.yaml` and copy the following manifest into it to deploy a simple web application to test the ingress controller:
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: demo-app
+      namespace: default
+    spec:
+      replicas: 2
+      selector:
+        matchLabels:
+          app: demo-app
+      template:
+        metadata:
+          labels:
+            app: demo-app
+        spec:
+          containers:
+          - name: demo-app
+            image: nginx:1.21
+            ports:
+            - containerPort: 80
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: demo-app
+      namespace: default
+    spec:
+      selector:
+        app: demo-app
+      ports:
+        - protocol: TCP
+          port: 80
+          targetPort: 80
+    ---
+    apiVersion: networking.k8s.io/v1
+    kind: Ingress
+    metadata:
+      name: demo-app-ingress
+      namespace: default
+      annotations:
+        nginx.ingress.kubernetes.io/rewrite-target: /
+    spec:
+      ingressClassName: nginx
+      rules:
+      - host: demo.<cluster-id>.nodes.k8s.<region>.scw.cloud
+        http:
+          paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: demo-app
+                port:
+                  number: 80
+    ```
+    <Message type="note">
+    Replace `<cluster-id>` with your Kapsule cluster ID (found in the Scaleway console) and `<region>` with the region of your cluster. For a custom domain, use `demo.example.com`.
+    </Message>
+
+8. Apply the configuration:
+    ```bash
+    kubectl apply -f demo-app.yaml
+    ```
+
+9. Access the demo application using the wildcard DNS and the HTTP `NodePort` (e.g., 30080):
+    ```bash
+    curl http://demo.<cluster-id>.nodes.k8s.fr-par.scw.cloud:30080/
+    # or, using a node’s public IP
+    curl http://195.154.111.100:30080/
+    # or, with a custom domain
+    curl http://demo.example.com:30080/
+    ```
+
+You should see the NGINX welcome page. Test HTTPS if configured (port 30443).
+
+
+## Cleanup (optional)
+Once finished, you can remove the demo application and ingress controller from your cluster:
+```bash
+kubectl delete -f demo-app.yaml
+helm uninstall ingress-nginx -n ingress-nginx
+kubectl delete namespace ingress-nginx
+```

@@ -1,23 +1,23 @@
 ---
-meta:
-  title: How to manage routing
-  description: Learn how to manage routing in Scaleway Virtual Private Cloud (VPC). Configure custom routes to control traffic flow and optimize network performance.
-content:
-  h1: How to manage routing
-  paragraph: Learn how to manage routing in Scaleway Virtual Private Cloud (VPC). Configure custom routes to control traffic flow and optimize network performance.
+title: How to manage routing
+description: Learn how to manage routing in Scaleway Virtual Private Cloud (VPC). Configure custom routes to control traffic flow and optimize network performance.
 tags: private-network vpc routing route-table routes default-route local-route subnet
 dates:
-  validation: 2024-12-03
+  validation: 2025-06-11
   posted: 2024-04-09
-categories:
-  - network
 ---
+import Requirements from '@macros/iam/requirements.mdx'
 
-Routing is used to manage and control the flow of traffic within a VPC. It tells the VPC where to send traffic trying to get to a specific destination IP address. Notably, it allows traffic to be automatically routed between resources attached to different Private Networks within the VPC, using their [private IP addresses](/vpc/how-to/attach-resources-to-pn/#how-to-view-the-resources-ip-address). You can also create your own custom routes.
+import image from './assets/scaleway-route-table.webp'
+import image2 from './assets/scaleway-create-custom-route.webp'
+import image3 from './assets/scaleway-route-not-found.webp'
+
+
+Routing is used to manage and control the flow of traffic within a VPC. It tells the VPC where to send traffic trying to get to a specific destination IP address. Notably, it allows traffic to be automatically routed between resources attached to different Private Networks within the VPC, as well as along user-created custom routes.
 
 Read more about the VPC routing feature, including detailed explanations, usage considerations, limitations and best practices in our [dedicated reference content](/vpc/reference-content/understanding-routing/).
 
-<Macro id="requirements" />
+<Requirements />
  
   - A Scaleway account logged into the [console](https://console.scaleway.com)
 
@@ -39,18 +39,32 @@ To activate routing on a pre-existing VPC, follow these steps:
 
     Routing is activated on the VPC.
 
-## How to generate a managed route
+## How to update routing behavior
 
-Two types of auto-generated routes exist:
+If you created your VPC before July 1st 2025, you must manually update its routing behavior in order to get the following capabilities:
 
-- **Local subnet route**: Generated when you create a Private Network in a VPC. Allows traffic to be routed between different Private Networks in the VPC.
-- **Default route to internet**: Generated when you attach a Public Gateway to a Private Network in the VPC, and set it to advertise a [default route](/public-gateways/concepts/#default-route). Allows traffic to be routed to addresses outside the VPC (i.e. the public internet) via the gateway. 
+- Advertisement of custom routes across the entire VPC as standard.
+- Option to enable each Private Network in the VPC to receive default route advertisements not only from their locally attached Public Gateways, but from other Public Gateways (or default custom routes) attached to different Private Networks throughout the whole VPC. 
 
-<Message type="note">
-Public Gateways remain scoped to the Private Network(s) to which they are attached. They do not advertise the default route on other Private Networks in the VPC. For example, an Instance attached to Private Network A will not be able to access the internet via a Public Gateway in Private Network B.
-</Message>
+For more information on these new routing behaviors, see our [detailed documentation](/vpc/reference-content/understanding-routing/#updating-routing-behavior).
 
-You cannot edit or delete managed routes, as their lifecycle is fully managed by Scaleway. The route will be automatically deleted for you when you delete the Private Network or Public Gateway that it concerns.
+Updating routing behavior is irreversible: once updated, you cannot revert. However, [Network ACLs](/vpc/reference-content/undestanding-nacls) are configurable via the API to let you finely control and restrict routes within your VPC as necessary.
+
+Follow the steps below to update the routing behavior for a given VPC:
+
+1. Click **VPC** in the **Network** section of the [Scaleway console](https://console.scaleway.com) side menu. The list of your VPCs displays.
+
+2. Click **Update** in the **Routing** column of the VPC you want to update.
+
+    A three-step wizard displays, reiterating and reminding you of the changes to routing behavior.
+
+3. On page 1 of the wizard, read the recap of the changes to routing behavior, and click **Next**.
+
+4. On page 2 of the wizard, read the reminder of how these changes may impact your existing setup, and click **Next**.
+
+5. On page 3 of the wizard, read the explanation that updating will entail no downtime, though changes to routes may take up to 30 minutes to fully propagate. Then type **UPDATE** in the box and click **Confirm**.
+
+Your VPC's routing behavior is updated, and you are directed to its routing table. Custom routes will now be scoped to the entire VPC, and you can use the **Manage default routes** button if you want to select Private Networks to receive default routes from throughout the VPC.
 
 ## How to access and read the route table
 
@@ -70,11 +84,72 @@ Your VPC's **route table** can be found in its **Routing** tab. The route table 
     
     When your route table starts to populate, it will look something like this:
 
-    <Lightbox src="scaleway-route-table.webp" alt="" />
+    <Lightbox image={image} alt="" />
 
     For help with understanding the route table and how to read it, [refer to our documentation about route tables](/vpc/reference-content/understanding-routing/#route-table).
 
-### How to view VPC routes in IPV6 
+## How to generate a managed route
+
+Two types of auto-generated routes exist for VPCs:
+
+- **Local subnet route**: Generated when you create a Private Network in a VPC. Allows traffic to be routed between different Private Networks in the VPC.
+- **Default route to internet**: Generated when you attach a Public Gateway to a Private Network in the VPC, and set it to advertise a [default route](/public-gateways/concepts/#default-route). Allows traffic to be routed to addresses outside the VPC (i.e. the public internet) via the gateway. 
+
+<Message type="note">
+By default, Public Gateways remain scoped to the Private Network(s) to which they are attached. They do not, as standard, advertise the default route on other Private Networks in the VPC. 
+
+However, each Private Network can opt in to receive default route advertisements from across the entire VPC, rather than only from locally attached gateways. This allows them to find a route to the internet even if there is no Public Gateway or default custom route on their own Private Network. See our [dedicated documentation](/vpc/reference-content/understanding-routing/#default-routes) for full details. 
+</Message>
+
+You cannot delete managed routes, as their lifecycle is fully managed by Scaleway. The route will be automatically deleted for you when you delete the Private Network or Public Gateway that it concerns.
+
+## How to manage default route scope
+
+If your VPC is using [up-to-date routing behavior](#how-to-update-routing-behavior), you can enable each Private Network to receive default route advertisements not only from their locally attached Public Gateways, but also from throughout the VPC.
+
+This means that the Private Network will receive route advertisements from:
+- All locally attached Public Gateway advertising a default route
+- All Public Gateways attached to other Private Networks in the VPC advertising default routes
+- All custom routes with a destination of `0.0.0.0/0`.
+
+Each Private Network must individually opt in to receive all these default routes. This can be done when creating a Private Network, or later, from each Private Network's **Settings** tab, or from the VPC's **Routing** tab.
+
+<Tabs id="pn-settings">
+        <TabsTab label="via Private Network Settings">
+          <br />
+            1. Click **VPC** in the **Network** section of the Scaleway console side menu. A list of your VPCs displays.
+
+            2. Click the VPC containing the Private Network whose settings you want to update. A list of Private Networks in this VPC displays.
+
+            3. Click the Private Network whose settings you want to update, then click the **Settings** tab.
+
+            4. In the **Receive all default routes** panel, slide the toggle <Icon name="toggle" /> to the **on** position.
+
+            This Private Network will now receive default route advertisements from throughout the VPC. It may take up to 30 minutes for routes to propagate to all resources. You can toggle this behavior off at any time.
+
+        </TabsTab>
+        <TabsTab label="via VPC Routing Tab">
+          <br />
+            1. Click **VPC** in the **Network** section of the Scaleway console side menu. A list of your VPCs displays.
+
+            2. Click the VPC whose default route management you want to update, then click the **Routing** tab.
+
+            3. Click the **Manage default routes** button.
+
+                A screen displays, showing a list of all the Private Networks in your VPC. 
+                
+                The **Local default route** column shows whether or not a default route is already advertised locally in the Private Network via an attached Public Gateway or custom route.
+            
+            4. Click the checkbox next to each Private Network that you want to receive all default routes from throughout the VPC.
+
+            5. Click **Apply scope** when finished.
+
+            The selected Private Networks will now receive default route advertisements from throughout the VPC. It may take up to 30 minutes for routes to propagate to all resources. You can change default route scope settings at any time.
+
+        </TabsTab>
+    </Tabs>
+
+### How to view VPC routes in IPv6 
 
 Scaleway VPC routing supports both IPv4 and IPv6 protocols. Managed routes to Private Networks are simultaneously generated for both IPV4 and IPV6, and both are added to the route table. Use the toggle above the route table to switch from the default view of **IPV4** routes to a view of **IPV6** routes.
 
@@ -87,7 +162,9 @@ Each VPC has auto-generated, managed routes to local subnets and Public Gateways
 For example, you may wish to route all traffic for a certain private IP range to an Instance hosting a manually configured VPN tunnel, allowing secure connection to a corresponding subnet at the other end of the tunnel.
 
     <Message type="note">
-    Custom routes are scoped to the Private Network(s) of the "next hop" resource. Their routes are not propagated to other Private Networks in the VPC. In the scenario mentioned above of routing traffic towards a VPN tunnel, the origin of the packet must be in the same Private Network as the resource hosting the VPN.
+    The scope of custom routes depends on whether your VPC is using up-to-date routing behavior:
+    - If you created your VPC after July 1st 2025, or have [manually updated its routing behavior](#how-to-update-routing-behavior), custom routes are advertised across the entire VPC.
+    - Otherwise, custom routes are scoped only to the Private Network(s) of the "next hop" resource and not advertised to other Private Networks in the VPC. In this case, for the scenario mentioned above of routing traffic towards a VPN tunnel, the origin of the packet must be in the same Private Network as the resource hosting the VPN.
     </Message>
 
 Follow the steps below to define a custom route:
@@ -100,13 +177,19 @@ Follow the steps below to define a custom route:
 
 4. Click **Create route**. The custom route creation wizard displays.
 
-    <Lightbox src="scaleway-create-custom-route.webp" alt="The Scaleway console Custom Route wizard displays, with the sections detailed in the text below."/>
+    <Lightbox image={image2} alt="The Scaleway console Custom Route wizard displays, with the sections detailed in the text below." />
 
 5. Enter a **description** for your route, e.g. "Route to hosted VPN".
 
 6. Optionally, enter one or more **tags** for your route. Tags help you filter and organize your list of routes.
 
 7. Enter a **destination** for the route. The VPC will apply the route to all traffic with a matching destination IP. You must enter an IPv4 or IPv6 CIDR range with a subnet mask, e.g. `192.168.1.0/24`. For a single IP address, use the `/32` mask for IPv4.
+
+    <Message type="note">
+    If your VPC has [up-to-date routing behavior](#how-to-update-routing-behavior) and you enter a destination of `0.0.0.0/0`, this custom route is treated in the same way as a **default route** advertised by a Public Gateway.
+    - Its route will be advertised locally on the 'next hop' resource's Private Network.
+    - Other Private Networks who have opted in to receive default routes from throughout the VPC will also receive this route.
+    </Message>
 
 8. Enter a **next hop** for the route. The VPC will route traffic for the destination IP to the resource designated as next hop.
     - Select the Private Network which the next hop resource is attached to.
@@ -125,7 +208,7 @@ Follow the steps below to define a custom route:
 
 If you delete a resource used as a next hop in a custom route, or detach it from the Private Network, the custom route will cease to function. A **Not found!** warning will display in the **Next hop** column for this route in the route table. 
 
-    <Lightbox src="scaleway-route-not-found.webp" alt="A VPC route table displays in the Scaleway console, with a red 'Not found!' text in the next hop column of a custom route" />
+    <Lightbox image={image3} alt="A VPC route table displays in the Scaleway console, with a red 'Not found!' text in the next hop column of a custom route" />
 
 To resolve this, you must either:
 

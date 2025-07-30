@@ -1,0 +1,110 @@
+---
+title: I am having trouble verifying Public Gateway SSH key fingerprints from Cockpit
+description: Learn how to verify Public Gateway SSH key fingerprints when they appear in different formats (SHA256 in Cockpit and MD5 in the console) and resolve confusion for accurate key matching
+tags: public-gateway ssh fingerprint cockpit logs sha1 md5
+dates:
+  validation: 2025-07-23
+  posted: 2025-07-23
+---
+
+## Problem
+
+You may check your Public Gateway's [SSH bastion](/public-gateways/how-to/use-ssh-bastion/) logs in [Scaleway Cockpit](/cockpit) and notice that the SSH key fingerprints logged there do not match the SSH key fingerprints shown in your [Project dashboard](https://console.scaleway.com/project/ssh-keys) in the Scaleway console.
+
+## Cause
+
+SSH key fingerprints are in `SHA256` format in Cockpit logs, but in `MD5` format in the console's Project dashboard.
+
+- `SHA256` computes a 256-bit hash value from the SSH key, represented as a 64 character hexadecimal number, often then Base-64 encoded.
+    - Example: `SHA256:ZLqisKhPVs2R2jrpYlukWWMkbAdhD4zkUckc7L4/W5w`
+- `MD5` computes a 128-bit hash value from the SSH key, represented as a 32-character hexadecimal number.
+    - Example: `MD5:d2:40:3d:de:67:9c:d3:fd:1e:20:a3:c2:c3:d2:25:69`
+
+## Solution 
+
+You need access to the original public key in order to successfully cross-check the two sources. Depending on your situation, choose one of the solutions listed below.
+
+### Generate both fingerprint formats from a local public SSH key
+
+If you have the public SSH key stored on your local machine, you can use the `ssh-keygen` utility to generate both a `SHA256` and a `MD5` fingerprint of the key. You can then compare these fingerprints with those shown in Cockpit and the Scaleway console. 
+
+<Message type="tip">
+Use the following command to generate a `SHA256` fingerprint of the SSH key:
+
+```bash
+ssh-keygen -l -E sha256 -f ~/.ssh/id_rsa.pub
+```
+
+Example output:
+```bash
+256 SHA256:ZLqisKhPVs2R2jrpYlukWWMkbAdhD4zkUckc7L4/W5w
+```
+
+Use the following command to generate an `MD5` fingerprint of the SSH key: 
+
+```bash
+ssh-keygen -l -E md5 -f ~/.ssh/id_rsa.pub
+```
+
+Example output:
+```bash
+256 MD5:d2:40:3d:de:67:9c:d3:fd:1e:20:a3:c2:c3:d2:25:69
+```
+</Message>
+
+
+### Generate both fingerprint formats from a remote public SSH key
+
+If the public SSH key is stored on an accessible remote host, use the `ssh-keyscan` utility to get the key from the remote host. You can then examine the raw public key data and generate fingerprints in different formats as shown in the previous section, and compare these fingerprints with those shown in Cockpit and the Scaleway console.
+
+<Message type="tip">
+Use the following command to get public key information from the `examplehost` server, and save it in a file called `examplehost.ssh-keyscan`:
+
+```bash
+ssh-keyscan examplehost >examplehost.ssh-keyscan
+```
+
+You can examine the contents of the file with the following command:
+
+```bash
+cat examplehost.ssh-keyscan 
+```
+
+Example output, showing the `ECDSA`, `RSA`, and `Ed25519` public SSH keys for `examplehost`, each in their standard Base64-encoded format used for SSH authentication:
+
+```bash
+examplehost ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBCNvbWhtAjN7Zqr4I0XMu9PqAnQmCIgjenCIzd7Tk6sWOJk0As+HYheam8G4Ks1lx630lkZ0bR7KWqxUxz5A+h4=
+
+examplehost ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDAYoaW8+I4H5CjHMaRpG239DK/gJteIDfpsd9jxQR2D6KVht3nNc3asfDafAhYA1JXduleJmSWPuWVC0+jTyEgnPzI4rFyTEomnyRBAoNbWWSJZ9djqhi5pVBWSxUDXEzeRlPVzKNUJnmYE5xpP14o3RXkRsGTnKdpbubKm1gX3O4ItfjTKKljkYLG5WKCaGx7gCdf5uV6jtNSvLDZubPP6wC60WT6Iuaq1kTGugPY+wiEYnlunK47TAXyIMCIgDxvZPAlnWpgBaRJ8ZUT2kW5Rta0AO6bPtZIRz+AABtDsRRKBsW9v6FoYY3Pxp09ynRG5XgW76Z4dG4kr70HoRtDBXm0c2gMyxxek6XvH7WbWR0pOqGyFNSbK8GoCvxk/JElIW20UswTGbjO5EjtHcsn5bSaqS6ASu/lS2rfsFZtY5X5NQGNMyGQNVaRspA8J0nRT0FHDBOgEfIHG3Uubp0zgei80mTElVCgf+ICdufp0d6LiW27seiJOq0Exd/i7os=
+
+examplehost ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDd6NscKr2BdwojZxWoN30sZpLVRVoQIrcXUd1pUfQOZ
+```
+
+You can then use the commands shown in the [previous section](#generate-both-fingerprint-formats-from-a-local-public-SSH-key) to generate `SHA256` and/or `MD5` fingerprints of the public key:
+
+```bash
+## For SHA256:
+ssh-keygen -l -E sha256 -f examplehost.ssh-keyscan
+
+## Example output, where the second section shows the SHA256 fingerprint of the unhashed RSA public key
+256 SHA256:UxhErHbf4BtJWZ/BOuHJKDfjDfHcPVcHYvJUCdNQ7H8 (ECDSA)
+3072 SHA256:79CNwaJ+7+VURaVQDfFsoK3AL1K/3R9Ljv1qKv+PTvs (RSA)
+256 SHA256:DruvVmoX9chNwePv/8ezES8jLOQbgBJSkpZb+VNkuU8 (ED25519)
+
+## For MD5:
+ssh-keygen -l -E sha256 -f examplehost.ssh-keyscan
+
+## Example output, where the second section shows the MD5 fingerprint of the unhashed RSA public key
+256 MD5:1f:fa:de:02:fb:3c:34:0e:49:a6:29:7d:b1:7e:7a:af (ECDSA)
+3072 MD5:4c:1a:6e:0c:43:b2:18:1d:25:9f:7f:39:eb:59:f2:73 (RSA)
+256 MD5:09:e0:b6:fe:5f:e5:39:ce:5f:fb:54:42:48:6c:24:d9 (ED25519)
+```
+</Message>
+
+### Compare fingerprint to trusted fingerprint
+
+A trusted fingerprint is one that you or your organization has verified to be legitimate. You may have a trusted fingerprint e.g. in a `known_hosts` file or a secure key management system. It may be in `SHA25` or `MD5` format. You can compare this trusted fingerprint to the fingerprint shown in either the Cockpit fingerprint or the console fingerprint, depending on the format.
+
+### Converting one fingerprint format to another
+
+It is not possible to convert a `SHA256` format fingerprint to an `MD5` format fingerprint, or vice versa, without the original public key. This is because these fingerprints are created with one-way hash functions. You must have the original public key in order to generate the desired fingerprint type from it, and compare with fingerprints shown in Cockpit or the Scaleway console. 

@@ -182,7 +182,7 @@ MDX components are useful for adding rich content and interactions within your c
 
 This section shows code details listed on a full page.
 
-🔎 [See the full Components page](https://scaleway.com/en/docs/components/).
+🔎 [See the full Components page](https://storybook-docs.scaleway.com/).
 
 Feel free to explore this page in your markdown editor to see how the components were used, or in `.mdx` content files that already use MDX components.
 

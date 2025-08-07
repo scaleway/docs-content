@@ -1,0 +1,185 @@
+---
+title: Integrate Generative APIs into n8n workflows
+description: Learn how to integrate Scaleway Generative APIs with open-source workflow automation tool n8n
+tags: generative-apis ai machine-learning n8n workflow automation
+dates:
+  validation: 2025-08-06
+  posted: 2025-08-06
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+import scwN8nInterface from './assets/scw-n8n-interface.webp'
+import scwN8nChatmodel from './assets/scw-n8n-chatmodel.webp'
+import scwN8nEmbeddings from './assets/scw-n8n-embeddings.webp'
+
+n8n is an open-source workflow automation tool that allows users to build automated workflows by connecting various AI agents, apps, and services. It provides a visual interface to facilitate the creation of workflows - this document will show you how to use this interface to integrate Scaleway Generative APIs, by:
+- Adding a chat model to a workflow
+- Adding an embedding model to a workflow
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/iam/how-to/create-api-keys/) for API authentication
+- [Installed n8n](https://docs.n8n.io/hosting/installation/docker/) on your local machine
+
+## Adding a chat model
+
+You can add a chat model to a workflow by adding an **AI Agent** node, and configuring it to use Scaleway Generative APIs. Follow the steps below.
+
+1. Open the n8n visual interface on your local machine.
+
+    <Lightbox image={scwN8nInterface} alt="The visual interface of n8n displayed in a browser" />
+
+2. Click `+` > **Workflow** in the top left corner to create a new workflow.
+3. Click **Add first step** to define what will trigger this workflow.
+4. Type **AI agent** in the search bar, and select that option from the search results.
+    A form displays prompting you to define parameters and settings for the AI agent. You can come back to this later, if necessary.
+5. Click **Back to canvas** in the top left corner.
+    A canvas displays, visually showing the trigger **When chat message received**, connected to the node **AI agent**.
+6. Click **Chat Model +** underneath the AI agent node to define a chat model for the agent.
+    A list of language models displays.
+7. Select **OpenAI Chat Model**.
+    A form displays prompting you to define parameters and settings for the model.
+8. Under **Credential to connect with**, click **Select Credential** > **Create new credential**.
+    A form displays prompting you to enter the credentials.
+9. Fill in the form, to add where prompted:
+    - The secret part of your [Scaleway API key](https://console.scaleway.com/iam/api-keys)
+    - The URL `https://api.scaleway.ai/v1` as your base URL
+    <Message type="tip">
+    If you are using a Project other than your [default Project](/organizations-and-projects/concepts/#default-project), modify the base URL accordingly: `https://api.scaleway.ai/{project_id}/v1`
+    </Message>
+10. Click **Save**.
+    The credentials are saved, and an automatic connection test is carried out, displaying the message **Connected tested successfully**. This confirms that n8n can access the `/v1/models` and `/v1/chat/completions` endpoints. 
+11. Close the credentials screen to go back to the model parameters.
+12. Under **Model**, click your chosen model, e.g. `llama-3.3-70b-instruct`.
+13. Click **Back to canvas** in the top left corner.
+
+<Lightbox image={scwN8nChatmodel} alt="The visual interface of n8n shows the chat model workflow" />
+
+
+Your AI agent node is now configured to use the model you configured via Scaleway Generative APIs.
+
+### Testing the model
+
+You can test the model by opening a chat from the interface, asking it questions and checking the answers.
+
+1. Click the **Open chat** button at the bottom of the screen.
+    The chat interface displays.
+2. Enter your question in the **Chat** box on the left, e.g. `How much is 1 + 1 ?`, and send it.
+3. Check the result that displays in the **Output** box on the right, e.g. `I can calculate that for you. The answer is 2.`.
+
+### Adding tools
+
+You can add **tools** to the AI Agent node you created, to define new capabilities and actions for the agent. A "tool" lets the agent, for example, call another n8n workflow, make an HTTP request, or run pre-defined code.
+
+In the example below, we create and add a code tool to provide weather information.
+
+1. Click **Tool +** underneath the AI agent node to define a new tool for the agent.
+  A list of tools displays.
+2. Click **Code Tool**.
+  A form displays prompting you to define parameters and settings for the tool.
+3. In the **Description** box, enter `This tool provides the weather in Paris.`
+4. Under **Language**, select **Javascript**.
+5. In the **Javascript** code box, edit the return statement in the sample code as follows:
+    ```javascript
+    return "Paris is sunny with clear skies, and the temperature is 30 degrees"
+    ```
+6. Click **Back to canvas** in the top left corner.
+
+Now when you [test the model](#testing-the-model) by asking a question such as `What's the weather in Paris?`, you should see via the workflow that the agent calls the code tool, and ultimately returns the answer `Paris is sunny with clear skies, and the temperature is 30 degrees`.
+
+<Message type="tip">
+
+You can also specify a schema to define the input the tool receives, and modify the code accordingly. For example, edit the tool description with `This tool provides the weather in a city`, and edit the Javascript as follows:
+
+  ```
+  let weather = "unknown";
+  if (query.city === "Paris") {
+      weather = "sunny";
+  } else if (query.city === "London") {
+      weather = "rainy";
+  }
+  return weather;
+  ```
+
+Toggle the **Specify Input Schema** setting on, and under **Schema Type** select **Define using JSON Schema**. Add the following input schema:
+
+    ```json
+    {
+        "type": "object",
+        "properties": {
+         	"city": {
+          		"type": "string",
+          		"description": "City name"
+          		}
+         	}
+    }
+    ```
+  
+Now when you ask `What's the weather in London?` you should get the output `rainy.`, and `What's the weather in Tokyo` should generate the response `unknown`.
+</Message>
+
+## Adding an embedding model
+
+You can add an embedding model to a workflow by adding a **Simple Vector Store** node, and configuring it to use Scaleway Generative APIs. Follow the steps below to see how to create a workflow that takes a chat message as an input, and outputs an embedding of the message (list of vectors).
+
+1. Open the n8n visual interface on your local machine.
+
+    <Lightbox image={scwN8nInterface} alt="The visual interface of n8n displayed in a browser" />
+
+2. Click `+` > **Workflow** in the top left corner to create a new workflow.
+3. Click **Add first step** to define what will trigger this workflow.
+3. Select **On chat message** as the trigger, then click **Back to canvas**.
+4. Test the chat by sending a message in the bottom left. The output is a JSON object containing session ID, action and chatInput fields.
+5. Click `+` to the right of your **When chat message received** node to define what happens next.
+6. Type **Simple Vector Store** in the search bar, and select that option from the search results.
+7. From the **Actions** sub-menu that displays, click **Add documents to vector store**.
+    A form displays prompting you to define parameters and settings.
+8. Click **+** under **Embeddings** at the bottom of the form to add an embedding.
+    A list of embeddings nodes displays.
+9. Click **Embeddings OpenAPI**.
+    A form displays prompting you to define parameters and settings.
+10. Under **Credential to connect with**, select existing credentials and skip to step 15, or click **Select Credential** > **Create new credential**.
+    A form displays prompting you to enter the credentials.
+11. Fill in the form, to add where prompted:
+    - The secret part of your [Scaleway API key](https://console.scaleway.com/iam/api-keys)
+    - The URL `https://api.scaleway.ai/v1` as your base URL
+    <Message type="tip">
+    If you are using a Project other than your [default Project](/organizations-and-projects/concepts/#default-project), modify the base URL accordingly: `https://api.scaleway.ai/{project_id}/v1`
+    </Message>
+12. Click **Save**.
+    The credentials are saved, and an automatic connection test is carried out, displaying the message **Connected tested successfully**. This confirms that n8n can access the `/v1/models` and `/v1/chat/completions` endpoints. 
+13. Close the credentials screen to go back to the **Parameters** tab.
+14. Under **Model**, click your chosen model, e.g. `bge-multilingual-gemma2` (other listed models are not supported by Scaleway Generative APIs at the time of writing).
+    <Message type="note">
+    For n8n versions earlier than `1.104.1`, a [known issue](https://github.com/n8n-io/n8n/issues/16716) prevents the model list from displaying. If you cannot upgrade your n8n version, you can still Select **Expression** instead of **Fixed** and type the model name.
+    </Message>
+15. Click **Back to canvas** in the top left corner.
+16. Click **Document +** underneath the Simple Vector Store node.
+  A list of document loaders displays.
+17. Click **Default Data Loader**.
+  A form displays prompting you to define parameters and settings for the data loader.
+18. Under **Mode**, select ** Load Specific Data**.
+17. Drag and drop the **chatInput** field from the **Input** panel on the left into the **Data** field of the main form. Alternatively type `{{ $('When chat message received').item.json.chatInput }}` into the **Data** field.
+18. Click **Back to canvas**
+
+<Lightbox image={scwN8nEmbeddings} alt="The visual interface of n8n shows the embeddings workflow" />
+
+
+### Testing the workflow
+
+You can test the workflow by opening a chat from the interface, sending it a message, and checking that the output is an embedding (list of vectors). 
+
+1. Click the **Open chat** button at the bottom of the screen.
+    The chat interface displays.
+2. Enter your chat input in the **Chat** box on the left, e.g. `This is a message to embed`, and send it.
+3. In the middle **Logs** panel, click **Simple Vector Store** > **Embeddings OpenAI**.
+5. Check that the input shows your chat message, and the output is an embedding (list of vectors).
+
+### Going further
+
+You now know how to add a simple embedding model to your n8n workflows. To go further, you can:
+
+- Replace the **Simple Vector Store** node with a persistent storage node, such as **Postgres PGVector Store** or **Qdrant Vector Store**.
+- Implement a RAG pipeline using Vector retrieval components, such as **AI Agent** and **Query Data Tool** (using for instance [RAG Starter Template](https://n8n.io/workflows/5010-rag-starter-template-using-simple-vector-stores-form-trigger-and-openai/)).

@@ -1,0 +1,117 @@
+---
+title: Managing signatures using the Scaleway Go SDK and Key Manager
+description: Learn how to create and validate signatures using Key Manager with the Scaleway Go SDK.
+tags: key sensitive-data signature verification sign verify digest
+dates:
+  validation: 2025-05-27
+  posted: 2025-05-27
+---
+
+This page shows you how to perform asymmetric signing and verification using Scaleway Key Manager. This documentation page shows you how to set up your environment to interact with the Scaleway API and Key Manager, and sign and verify messages using asymmetric keys.
+
+## Configuring your environment variables
+
+Configuring your environment variables allows the Go application to authenticate and use the Scaleway API and Key Manager.
+
+Open a terminal and paste the following commands to export your environment variables. Make sure that you add your **own variables**. You can also use a Scaleway configuration file.
+
+  ```bash
+  export SCW_ACCESS_KEY="<API-ACCESS-KEY>"
+  export SCW_SECRET_KEY="<API-SECRET-KEY>"
+  export SCW_DEFAULT_ORGANIZATION_ID="<Scaleway-Organization-ID>"
+  export SCW_DEFAULT_REGION="<region>"
+  export SCW_API_URL="<api-URL>"
+  ```
+
+## Creating a signature
+
+```golang
+// signAsymmetric signs a plaintext message using a saved asymmetric private key 'ec_p256_sha256'
+// stored in Key Manager.
+//
+// Parameters:
+//   - keyID: The unique identifier of the asymmetric key stored in Key Manager.
+//   - message: The plaintext message that needs to be signed.
+//
+// Returns:
+//   - err: An error if the signing process fails, otherwise nil.
+func signAsymmetric(keyID string, message string) error {
+	// Initialize the Scaleway client
+	client, err := scw.NewClient(scw.WithEnv())
+	if err != nil {
+		panic(err)
+	}
+	kmsApi := key_manager.NewAPI(client)
+
+	// Convert the message into bytes. Cryptographic plaintexts and ciphertexts are always byte arrays.
+	plaintext := []byte(message)
+
+	// Calculate the digest of the message.
+	// Note: Digest algorithm must match the key algorithm.
+	//   - Use SHA-256 for most algorithms (e.g., RSA_OAEP_3072_SHA256, EC_P256_SHA256).
+	//   - Use SHA-384 **only** for ECC_P384_SHA384.
+	digest := sha256.New()
+	if _, err = digest.Write(plaintext); err != nil {
+		return fmt.Errorf("failed to create digest: %w", err)
+	}
+
+	// Build the signing request.
+	req := &key_manager.SignRequest{
+		Digest: digest.Sum(nil),
+		KeyID:  keyID,
+	}
+
+	// Call the API
+	response, err = kmsApi.Sign(req)
+	if err != nil {
+		return fmt.Errorf("failed to sign digest: %w", err)
+	}
+
+	fmt.Printf("Signed digest: %s", response.Signature)
+	return nil
+}
+```
+
+## Validating the signature
+
+```golang
+// verifyAsymmetricSignature verifies that an 'ec_p256_sha256' signature is valid for a given message.
+//
+// Parameters:
+//   - keyID: The unique identifier of the asymmetric key stored in Scaleway Key Manager.
+//   - message: The plaintext message that was originally signed.
+//   - signature: The signature obtained from a previous sign request.
+//
+// Returns:
+//   - error: An error if the verification process fails or if the signature is invalid, otherwise nil.
+func verifyAsymmetricSignature(keyID string, message, signature []byte) error {
+	// Initialize the Scaleway client
+	client, err := scw.NewClient(scw.WithEnv())
+	if err != nil {
+		panic(err)
+	}
+	kmsApi := key_manager.NewAPI(client)
+
+	// Verify signature.
+	// Calculate the digest of the message.
+	digest := sha256.New()
+	if _, err = digest.Write(message); err != nil {
+		return fmt.Errorf("failed to create digest: %w", err)
+	}
+
+	verify, err := kmsApi.Verify(&key_manager.VerifyRequest{
+		KeyID:     keyID,
+		Digest:    digest.Sum(nil),
+		Signature: signature,
+	})
+	if err != nil {
+		return err
+	}
+
+	if verify.Valid {
+		fmt.Printf("Verified signature!")
+	}
+
+	return nil
+}
+```

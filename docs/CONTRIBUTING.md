@@ -127,7 +127,7 @@ git clone git@github.com:scaleway/docs-content.git | bash -s -- cd docs-content 
 
 Helpful pre-commit commands:
 
-- `yarn check-slugs` Output slugs that are not kebab-case well formatted.
+- `pnpm check-slugs` Output slugs that are not kebab-case well formatted.
 
 ### Commit conventions
 
@@ -182,7 +182,7 @@ MDX components are useful for adding rich content and interactions within your c
 
 This section shows code details listed on a full page.
 
-🔎 [See the full Components page](https://scaleway.com/en/docs/components/).
+🔎 [See the full Components page](https://storybook-docs.scaleway.com/).
 
 Feel free to explore this page in your markdown editor to see how the components were used, or in `.mdx` content files that already use MDX components.
 
@@ -195,28 +195,21 @@ Here is a common example used in our `.mdx` files:
 
 ```markdown
 ---
-meta:
-  title: How to create a Bare Metal server
-  description: This page explains how to create a Bare Metal server
-content:
-  h1: Bare Metal server
-  paragraph: This is a tutorial Bare Metal
-hero: assets/scaleway-account.png
+title: How to create a Bare Metal server
+description: This page explains how to create a Bare Metal server
 tags: compute baremetal bare metal cloud server dedicated
 dates:
   validation: 2021-06-22
   posted: 2020-03-12
+categories:
+  - compute
 ---
 
 Here starts the content…
 ```
 
-- `meta` part is used for SEO `title` and `description`, it doesn't appear inside the website
-- `content` part which contains `h1` and `paragraph` is used for title and description inside website pages.
-- `h1` is used as H1 in pages, in the HTML head element as the browser tab title and for SEO.
-- `paragraph` is used in pages and in the head element for SEO.
-- `image` is used for the hero section image in tutorial pages. The image path can be relative to the file.
-- `tags` are used to help populate search result lists or pages top.
+- `title` and `description`, used for SEO, Algolia & for h1 and description in pages
+- `tags` are used to help populate search result lists or pages top. Use space separators.
 - `dates` are shown on pages under titles. `validation` must be a date later than the `posted`. Its format should be `AAAA-MM-DD`.
 
 ## Writing Guidelines

@@ -1,0 +1,119 @@
+---
+title: Connectivity tests for unreachable Instances in a Private Network
+description: When your Scaleway Instance is unreachable via its attached Private Network, this page sets out a detailed testing process to help you diagnose and resolve the issue.
+tags: resource private-network connectivity ping test
+dates:
+  validation: 2025-05-30
+  posted: 2025-05-30
+---
+
+When an Instance becomes unreachable over a Private Network, it can be challenging to diagnose and resolve the issue. 
+
+To help streamline the troubleshooting process, the Scaleway Network team has developed a step-by-step technique that can help identify and potentially fix connectivity problems. 
+
+This technique involves a series of tests and checks to determine the root cause of the issue, including DNS resolution, ARP table verification, and Link-Local Address (LLA) calculation. 
+
+By following these steps, you can quickly determine if the issue is related to DNS, network configuration, or resource-specific problems, and take corrective action to restore connectivity. 
+
+It is particularly useful to carry out these steps before opening a support ticket, and supplying the results of the tests. This enables a swifter and more efficient resolution of your problem.
+
+## Step-by-step connectivity testing process
+
+### Step 1: Ping the non-communicating Instance from another Instance in the Private Network
+
+1. [Connect to another Instance](/instances/how-to/connect-to-instance/) in the same Private Network as the non-communicating Instance.
+
+2. Try to reach the non-communicating Instance with a ping via `ping instance-name` (where `instance-name` is the name you gave your Instance upon creation.)
+
+3. Carry out the same test for both IPv4 and IPv6, ie `ping -4 instance-name` and `ping -6 instance-name`.
+    
+    - If these tests fail, there may be a DNS issue meaning the Instance's hostname cannot be resolved, see step 4 directly below.
+    - Otherwise, if the tests succeed, continue to the section [Check ARP](#step-2-check-arp)
+    
+4. Consider checking DNS records via the Scaleway Domains and DNS CLI as documented [here](/vpc/reference-content/dns/#troubleshooting), to see if the private DNS zone is correctly configured and the Instance's DNS records are up-to-date. 
+
+    <Message type="important">
+    Note that we do not recommend editing these records yourself, rather open a support ticket with the information you have gathered.
+    </Message>
+
+### Step 2: Check ARP
+
+A server's **A**ddress **R**esolution **P**rotocol (ARP) table maps IP addresses to MAC addresses on a local network. Use this data to find the probe state for the target Instance's MAC address.
+
+1.  From another Instance in the same Private Network as the non-communicating Instance, view ARP information via an `ip neigh` command.
+
+    You should see an output of many lines in the following format:
+
+    ```
+    172.16.8.2 dev ens5 lladdr 02:00:00:1c:0d:9b REACHABLE
+    ```
+
+2. Find the line beginning with the non-communicating Instance's private IP address, and containing also its MAC address. You can check both via the Scaleway console in the Private Network's **Attached resources** tab. You can use the following command to identify the line, replacing `<MAC_ADDRESS>` with the Instance's MAC address:
+
+    ```
+    ip neigh | grep --ignore-case <MAC_ADDRESS>
+    ```
+
+    The line ends with the state of the probe for that Instance's MAC address.
+
+    `FAILED` shows that the system tried to resolve the MAC address but did not get a response.
+    
+    Continue to the next stage of testing.
+
+### Step 3: Try reaching the Instance using its LLA
+
+If the Instance could not be reached via the resolution of its MAC address, next you should try to reach it via its IPv6 **L**ink **L**ocal **A**ddress (LLA) in the Private Network.
+
+The LLA is calculated from the Instance's MAC address.
+
+1. Use an online tool or guide to carry out the standardized process of calculating the Instance's LLA from its MAC address. Remember that you can view its MAC address from the Scaleway console, in the Private Network's **Attached Resources** tab.
+
+    <Message type="tip">
+    You can use the following code snippet to calculate the LLA:
+
+    ```
+    bash-5.2$ mac_to_ipv6_ll() {
+    IFS=':'; set $1; unset IFS
+    echo "fe80::$(printf %02x $((0x$1 ^ 2)))$2:${3}ff:fe$4:$5$6"
+    }
+    ```
+    <br/>
+    Example usage and output for a MAC address of `02:00:00:23:e4:01`:
+
+    ```
+    bash-5.2$ mac_to_ipv6_ll 02:00:00:23:e4:01
+    fe80::0000:00ff:fe23:e401
+    ```
+    </Message>
+
+2. Ping the LLA. Ensure that you specify which interface to ping over (the Private Network) by adding the `%interface` zone index to the end of the ping command. For example, for a LLA of `fe80::0:0ff:fe1c:d9b` and a Private Network interface name of `ens5`, use the following command:
+
+    ```
+    ping -6 fe80::0:0ff:fe1c:d9b%ens5
+    ```
+
+    <Message type="tip">
+    The interface name depends on the Instance type and OS. You can use the following command to get a compact summary of all network interfaces on your Instance:
+
+    ```
+    ip -brief -color addr show
+    ```
+    </Message>
+
+    A successful ping will show results similar to the following:
+
+    ```
+    PING fe80::0:0ff:fe1c:d9b%ens5 (fe80::ff:fe1c:d9b%ens5) 56 data bytes
+    64 bytes from fe80::ff:fe1c:d9b%ens5: icmp_seq=1 ttl=64 time=1.27 ms
+    64 bytes from fe80::ff:fe1c:d9b%ens5: icmp_seq=2 ttl=64 time=0.652 ms
+    64 bytes from fe80::ff:fe1c:d9b%ens5: icmp_seq=3 ttl=64 time=0.632 ms
+    --- fe80::0:0ff:fe1c:d9b%ens5 ping statistics ---
+    3 packets transmitted, 3 received, 0% packet loss, time 2042ms
+    rtt min/avg/max/mdev = 0.632/0.850/1.266/0.294 ms
+    ```
+
+    This response suggests the Instance is attached to the Private Network, but has lost its IPAM-provided IPv4 and IPv6 addresses. There could be a configuration issue on the Instance, such as DHCP client issue, a problem with `iptables` rules, or another parameter you may have manually altered.
+
+    You can connect to your Instance via SSH using the LLA, to take control and attempt to fix the issue.
+
+    If you do not believe you have modified any parameters affecting the Instance's DHCP or IP configuration over the Private Network, open a support ticket providing the full output from all of the above tests.

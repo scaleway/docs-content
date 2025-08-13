@@ -1,0 +1,102 @@
+---
+title: Migrating pools of End-of-Life Instances to newer Instances in your Kubernetes Kapsule cluster
+description: A step-by-step guide to transitioning from deprecated Instance types to newer ones in Scaleway's Kubernetes Kapsule clusters, ensuring minimal disruption and optimal performance.
+tags: kubernetes kapsule instance-migration
+dates:
+  validation: 2025-07-28
+  posted: 2025-01-24
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+Scaleway is deprecating support for certain Instance types that have reached their End of Life (EOL).
+This guide outlines the recommended steps to migrate your Kubernetes Kapsule cluster node pools from deprecated Instance types to currently supported ones.
+
+<Requirements />
+
+* A Scaleway account logged into the [Scaleway console](https://console.scaleway.com)
+* [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing actions in the intended Organization
+* [Created](/kubernetes/how-to/create-cluster) a Kubernetes Kapsule or Kosmos cluster
+
+
+## Identifying deprecated Instance pools
+
+1. Log in to the [Scaleway Console](https://console.scaleway.com).
+2. Navigate to **Kubernetes** under the **Containers** section in the side menu of the console.
+3. From the drop-down menu, select the geographical region you want to manage.
+4. Select the cluster containing the node pools using deprecated Instances.
+5. In the **Pools** tab, check the **Instance type** column for any pools using deprecated or soon-to-be-removed types.
+
+
+## Creating replacement pools with supported Instance types
+
+1. For each pool containing end of life Instances:
+   - Click **+ Create pool** (or **Add pool**).
+   - Choose a supported Instance type from the **Node Type** dropdown menu.
+   - Configure the pool settings (e.g., Availability Zone, size, autoscaling, autoheal) to mirror the existing pool configuration as closely as possible.
+   - Click **Create** (or **Add pool**) to initiate the new pool.
+
+2. Monitor the status of the new nodes until they reach **Ready** state:
+   - In the **Pools** tab of the console.
+   - Alternatively, use `kubectl` with the command:
+     ```bash
+     kubectl get nodes
+     ```
+
+<Message type="tip">
+  Schedule this migration during a maintenance window or low-traffic period to minimize service disruption.
+</Message>
+
+
+## Migrating workloads to the new pool
+
+1. [**Cordon**](https://kubernetes.io/docs/reference/kubectl/generated/kubectl_cordon/) the deprecated nodes to prevent them from receiving new pods:
+   ```bash
+   kubectl cordon <deprecated-node-name>
+   ```
+
+2. **Drain** the deprecated nodes to reschedule workloads onto the new nodes:
+
+   ```bash
+   kubectl drain <deprecated-node-name> --ignore-daemonsets --delete-emptydir-data
+   ```
+
+   <Message type="note">
+     The flags `--ignore-daemonsets` and `--delete-emptydir-data` may be necessary depending on your environment. Refer to the official [Kubernetes documentation](https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands#drain) for detailed information on these options.
+   </Message>
+
+These commands ensure that your workloads are running on the new nodes before proceeding to delete the old pool.
+
+
+## Removing deprecated Instance pools
+
+After verifying that workloads have been rescheduled, continue by deleting the old pool(s).
+
+1. Return to your cluster’s **Pools** tab and wait a few minutes to ensure all workloads have been rescheduled onto new nodes.
+2. Click <Icon name="more" /> next to the deprecated pool.
+3. Select **Delete pool**.
+4. Confirm the deletion.
+
+
+## Verifying migration success
+
+1. Check your nodes:
+
+   ```bash
+   kubectl get nodes
+   ```
+
+   <Message type="note">
+     Only nodes based on supported Instance types should now be listed.
+   </Message>
+
+2. Test your applications to confirm they are functioning correctly on the new nodes.
+
+
+<Message type="tip">
+  Minimize downtime by maintaining multiple replicas of key workloads and setting up [Pod Disruption Budgets (PDBs)](https://kubernetes.io/docs/tasks/run-application/configure-pdb/).
+</Message>
+
+<Message type="note">
+  If you require assistance during the transitioning process, please [contact our Support team](https://console.scaleway.com/support/tickets).
+</Message>

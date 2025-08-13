@@ -1,289 +1,225 @@
 ---
-meta:
-  title: Building your own Ceph distributed storage cluster on dedicated servers
-  description: Learn how to set up a Ceph cluster on Scaleway Dedibox and use it as datastore for your VMware ESXi machines.
-content:
-  h1: Building your own Ceph distributed storage cluster on dedicated servers
-  paragraph: Learn how to set up a Ceph cluster on Scaleway Dedibox and use it as datastore for your VMware ESXi machines.
-categories:
+title: Building your own Ceph distributed storage cluster on dedicated servers
+description: Learn how to set up a Ceph cluster on Scaleway Dedibox and use it as datastore for your VMware ESXi machines.
+products:
   - object-storage
   - dedibox
 tags: dedicated-servers dedibox Ceph object-storage
 hero: assets/scaleway_ceph.webp
 dates:
-  validation: 2023-11-27
+  validation: 2025-06-25
   validation_frequency: 18
   posted: 2020-06-29
 ---
+import Requirements from '@macros/iam/requirements.mdx'
 
-Ceph is an open-source, software-defined storage solution designed to address object, block, and file storage needs. It can handle several exabytes of data, replicating and ensuring fault tolerance using standard hardware. Ceph minimizes administration time and costs, making it both self-healing and self-managing.
 
-This tutorial guides you through deploying a three-node [Ceph](https://www.ceph.com) cluster using [Dedibox dedicated servers](https://www.scaleway.com/en/dedibox/) running Ubuntu Focal Fossa (20.04 LTS).
+Ceph is an open-source, software-defined storage solution that provides object, block, and file storage at exabyte scale. It is self-healing, self-managing, and fault-tolerant, using commodity hardware to minimize costs.
+This tutorial guides you through deploying a three-node Ceph cluster with a RADOS Gateway (RGW) for S3-compatible object storage on Dedibox dedicated servers running Ubuntu 24.04 LTS.
 
-<Macro id="requirements" />
+<Requirements />
 
 - A Dedibox account logged into the [console](https://console.online.net)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- 3 Dedibox servers running Ubuntu Focal Fossa 20.04 LTS or later
-- An additional admin machine available to install `ceph-deploy`
+- 3 Dedibox servers (Ceph nodes) running Ubuntu 24.04 LTS, each with:
+    - At least 8GB RAM, 4 CPU cores, and one unused data disk (e.g., /dev/sdb) for OSDs.
+    - Network connectivity between nodes and the admin machine.
+- An admin machine (Ubuntu 24.04 LTS recommended) with SSH access to Ceph nodes.
 
-## Installing ceph-deploy on the admin machine
+## Configure networking and SSH
 
-`ceph-deploy` simplifies Ceph cluster deployment with a user-friendly command-line interface. Install it on an independent admin machine using the following steps:
+1. Log into each of the ceph nodes and the admin machine using SSH
 
-1. Connect to the admin machine using SSH:
-
-    ```bash
-    ssh myuser@my.admin.server.ip
+2. Install software dependencies on all nodes and the admin machine:
+    ```
+    sudo apt update
+    sudo apt install -y python3 chrony lvm2 podman
+    sudo systemctl enable chrony
     ```
 
-2. Add the Ceph release key to apt:
-
-    ```bash
-    wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo apt-key add -
+3. Set unique hostnames on each Ceph node:
+    ```
+    sudo hostnamectl set-hostname ceph-node-a  # Repeat for ceph-node-b, ceph-node-c
     ```
 
-3. Add the Ceph repository to the APT package manager:
-
-    ```bash
-    echo deb https://eu.ceph.com/debian-octopus/ $(lsb_release -sc) main | sudo tee /etc/apt/sources.list.d/ceph.list
+4. Configure `/etc/hosts` on all nodes and the admin machine to resolve hostnames:
+    ```
+    echo "<node-a-ip> ceph-node-a" | sudo tee -a /etc/hosts
+    echo "<node-b-ip> ceph-node-b" | sudo tee -a /etc/hosts
+    echo "<node-c-ip> ceph-node-c" | sudo tee -a /etc/hosts
     ```
 
-4. Update the APT package manager to include Ceph's repository:
+5. Create a deployment user (cephadm) on each Ceph node:
+    ```
+    sudo useradd -m -s /bin/bash cephadm
+    sudo passwd cephadm
+    echo "cephadm ALL=(ALL) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/cephadm
+    sudo chmod 0440 /etc/sudoers.d/cephadm
+    ```
 
-    ```bash
+6. Enable passwordless SSH from the admin machine to Ceph nodes:
+    ```
+    ssh-keygen -t ed25519 -N "" -f ~/.ssh/id_ed25519
+    ssh-copy-id cephadm@ceph-node-a
+    ssh-copy-id cephadm@ceph-node-b
+    ssh-copy-id cephadm@ceph-node-c
+    ```
+
+7. Verify time synchronization on all nodes:
+    ```
+    chronyc sources
+    ```
+
+## Install cephadm on the admin machine
+
+1. Add the Ceph repository for the latest stable release (e.g., Reef or newer):
+    ```
+    wget -q -O- 'https://download.ceph.com/keys/release.asc' | sudo tee /etc/apt/trusted.gpg.d/ceph.asc
+    sudo apt-add-repository 'deb https://download.ceph.com/debian-squid/ jammy main'
     sudo apt update
     ```
 
-5. Install `ceph-deploy`:
-
-    ```bash
-    sudo apt install ceph-deploy
+2. Install `cephadm`:
+    ```
+    sudo apt install -y cephadm
     ```
 
-### Creating a ceph-deploy user
-
-`ceph-deploy` requires a user with passwordless sudo privileges for installing software on storage nodes. Follow these steps to create a dedicated user:
-
-1. Connect to a Ceph node using SSH:
-
-    ```bash
-    ssh user@ceph-node
+3. Verify the installation:
+    ```
+    cephadm --version
     ```
 
-2. Create a user called `ceph-deploy`:
 
-    ```bash
-    sudo useradd -d /home/ceph-deploy -m ceph-deploy
+## Bootstrap the Ceph cluster
+
+1. Bootstrap the cluster on the admin machine, using the admin node’s IP:
+    ```
+    sudo cephadm bootstrap \
+    --mon-ip <admin-node-ip> \
+    --initial-dashboard-user admin \
+    --initial-dashboard-password <strong-password> \
+    --dashboard-ssl
     ```
 
-    - Note: You can rename the user to your preferences if needed.
+2. Access the Ceph dashboard at `https://<admin-node-ip>:8443` to verify the setup.
 
-3. Configure the password of the `ceph-deploy` user:
 
-    ```bash
-    sudo passwd ceph-deploy
+## Add Ceph nodes to the cluster
+
+1. Add each Ceph node to the cluster:
+    ```
+    sudo cephadm orch host add ceph-node-a
+    sudo cephadm orch host add ceph-node-b
+    sudo cephadm orch host add ceph-node-c
     ```
 
-4. Add the user to the sudoers configuration:
-
-    ```bash
-    echo "ceph-deploy ALL = (root) NOPASSWD:ALL" | sudo tee /etc/sudoers.d/ceph-deploy
-    sudo chmod 0440 /etc/sudoers.d/ceph-deploy
+2. Verify hosts:
+    ```
+    sudo ceph orch host ls
     ```
 
-5. Install an NTP client on Ceph nodes to avoid time-drift issues:
 
-    ```bash
-    sudo apt install ntpsec
+
+### Deploy Object Storage devices (OSDs)
+
+1. List available disks on each node:
+    ```
+    sudo ceph orch device ls
     ```
 
-6. Install Python for deploying the cluster:
-
-    ```bash
-    sudo apt install python-minimal
+2. Deploy OSDs on all available unused disks:
+    ```
+    sudo ceph orch apply osd --all-available-devices
     ```
 
-7. Repeat the above steps for each of the three nodes.
-
-### Enabling passwordless SSH
-
-Generate an SSH key and distribute the public key to each Ceph node for passwordless authentication:
-
-1. Generate an SSH key pair on the admin node:
-
-    ```bash
-    ssh-keygen
+3. Verify the OSD deployment:
+    ```
+    sudo ceph osd tree
     ```
 
-    - Press Enter to save the key in the default location.
 
-2. Ensure Ceph node hostnames are configured in `/etc/hosts`.
+### Deploy RADOS gateway (RGW)
 
-3. Transfer the public key to each Ceph node:
-
-    ```bash
-    ssh-copy-id ceph-deploy@ceph-node-a
-    ssh-copy-id ceph-deploy@ceph-node-b
-    ssh-copy-id ceph-deploy@ceph-node-c
+1. Deploy a single RGW instance on ceph-node-a:
+    ```
+    sudo ceph orch apply rgw default --placement="count:1 host:ceph-node-a" --port=80
     ```
 
-## Deploying a Ceph cluster
-
-Deploy the Ceph cluster on your machines by following these steps:
-
-1. Create a directory on the admin node for configuration files and keys:
-
-    ```bash
-    mkdir my-ceph-cluster
-    cd my-ceph-cluster
+2. To use HTTPS (recommended), generate a self-signed certificate:
+    ```
+    sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+    -keyout /etc/ceph/private/rgw.key \
+    -out /etc/ceph/private/rgw.crt \
+    -subj "/CN=ceph-node-a"
     ```
 
-2. Create the cluster:
-
-    ```bash
-    ceph-deploy --username ceph-deploy new ceph-node-a
+3. Redeploy RGW with HTTPS:
+    ```
+    sudo ceph orch apply rgw default \
+    --placement="count:1 host:ceph-node-a" \
+    --port=443 \
+    --ssl-cert=/etc/ceph/private/rgw.crt \
+    --ssl-key=/etc/ceph/private/rgw.key
     ```
 
-    - Replace `ceph-node-a` with the FQDN of your node.
+4. Verify RGW by accessing http://ceph-node-a:80 (or https://ceph-node-a:443 for HTTPS).
 
-3. Install Ceph packages on the nodes:
+## Create an RGW user
 
-    ```bash
-    ceph-deploy --username ceph-deploy install ceph-node-a ceph-node-b ceph-node-c
+1. Create a user for S3-compatible access:
+    ```
+    sudo radosgw-admin user create \
+    --uid=johndoe \
+    --display-name="John Doe" \
+    --email=john@example.com
     ```
 
-4. Deploy initial monitors and gather keys:
+    Note the generated `access_key` and `secret_key` from the output.
 
-    ```bash
-    ceph-deploy --username ceph-deploy mon create-initial
+
+## Step 8: Configure AWS-CLI for Object Storage
+
+1. Install AWS-CLI on the admin machine or the "a" client:
+    ```
+    pip3 install awscli awscli-plugin-endpoint
     ```
 
-    - Verify generated files using `ls`.
-
-5. Copy the configuration file and admin key to Ceph Nodes:
-
-    ```bash
-    ceph-deploy --username ceph-deploy admin ceph-node-a ceph-node-b ceph-node-c
+2. Create a configuration file `~/.aws/config`:
     ```
-
-6. Deploy manager daemon on all Ceph nodes:
-
-    ```bash
-    ceph-deploy --username ceph-deploy mgr create ceph-node-a ceph-node-b ceph-node-c
-    ```
-
-7. Configure Object Storage Devices (OSD) on each Ceph node:
-
-    ```bash
-    ceph-deploy osd create --data /dev/sdb ceph-node-a
-    ceph-deploy osd create --data /dev/sdb ceph-node-b
-    ceph-deploy osd create --data /dev/sdb ceph-node-c
-    ```
-
-    - Ensure the device is not in use and does not contain important data.
-
-8. Check the cluster status:
-
-    ```bash
-    sudo ceph health
-    ```
-
-    - The cluster should report `HEALTH_OK`.
-
-### Deploying a Ceph Object Gateway (RGW)
-
-Deploy the Ceph Object Gateway (RGW) to access files using Amazon S3-compatible clients:
-
-1. Run the following command on the admin machine:
-
-    ```bash
-    ceph-deploy --username ceph-deploy rgw create ceph-node-a
-    ```
-
-    - Note the displayed information about the RGW instance.
-
-2. Modify the port in `/etc/ceph/ceph.conf`:
-
-    ```bash
-    sudo nano /etc/ceph/ceph.conf
-    ```
-
-    - Add or modify lines:
-
-    ```bash
-    [client]
-    rgw frontends = civetweb port=80
-    ```
-
-    - For HTTPS:
-
-    ```bash
-    [client]
-    rgw frontends = civetweb port=443s ssl_certificate=/etc/ceph/private/bundle_keyandcert.pem
-    ```
-
-3. Verify the installation by accessing `http://ceph-node-a:7480` in a web browser.
-
-## Creating Object Storage credentials
-
-On the gateway instance (`ceph-node-a`), run the following command to create a new user:
-
-```bash
-sudo radosgw-admin user create --uid=johndoe --display-name="John Doe" --email=john@example.com
-```
-
-- Note the `access_key` and `user_key`. Proceed to configure your Object Storage client, e.g., [aws-cli](/object-storage/api-cli/object-storage-aws-cli/).
-
-## Configuring AWS-CLI
-
-Use AWS-CLI to manage objects in your Ceph storage cluster:
-
-1. Install `aws-cli` and `awscli-plugin`:
-
-    ```bash
-    pip3 install awscli
-    pip3 install awscli-plugin-endpoint
-    ```
-
-2. Create `~/.aws/config`:
-
-    ```ini
     [plugins]
     endpoint = awscli_plugin_endpoint
 
     [default]
     region = default
     s3 =
-      endpoint_url = http://ceph-node-a:7480
-      signature_version = s3v4
-      max_concurrent_requests = 100
-      max_queue_size = 1000
-      multipart_threshold = 50 MB
-      multipart_chunksize = 10 MB
+    endpoint_url = http://ceph-node-a:80
+    signature_version = s3v4
     s3api =
-      endpoint_url = http://ceph-node-a:7480
-    ```
+    endpoint_url = http://ceph-node-a:80
 
-3. Create `~/.aws/credentials`:
+    For HTTPS, use https://ceph-node-a:443.
 
-    ```ini
+    Create ~/.aws/credentials:
     [default]
-    aws_access_key_id=<ACCESS_KEY>
-    aws_secret_access_key=<SECRET_KEY>
+    aws_access_key_id=<access_key>
+    aws_secret_access_key=<secret_key>
     ```
 
-    - Replace `<ACCESS_KEY>` and `<SECRET_KEY>` with user credentials.
-
-4. Create a bucket, upload a test file, and check the content:
-
-    ```bash
-    aws s3 mb s3://MyBucket
-    echo "Hello World!" > testfile.txt
-    aws s3 cp testfile.txt s3://MyBucket
-    aws s3 ls s3://MyBucket
+3. Test the setup:
+    ```sh
+    aws s3 mb s3://mybucket --endpoint-url http://ceph-node-a:80
+    echo "Hello Ceph!" > testfile.txt
+    aws s3 cp testfile.txt s3://mybucket --endpoint-url http://ceph-node-a:80
+    aws s3 ls s3://mybucket --endpoint-url http://ceph-node-a:80
     ```
+
+4. Verify the cluster health status:
+    ```
+    sudo ceph -s
+    ```
+
+    Ensure the output shows `HEALTH_OK`.
 
 ## Conclusion
 
-You have successfully configured an Amazon S3-compatible storage cluster using Ceph and three [Dedibox dedicated servers](https://www.scaleway.com/en/dedibox/). You can now manage your data using any Amazon S3-compatible tool. For advanced configuration, refer to the official [Ceph documentation](https://docs.ceph.com/docs/master/).
+You have deployed a Ceph storage cluster with S3-compatible object storage using three Dedibox servers on Ubuntu 24.04 LTS. The cluster is managed with `cephadm`, ensuring modern orchestration and scalability. For advanced configurations (e.g., multi-zone RGW, monitoring with Prometheus), refer to the official  [Ceph documentation](https://docs.ceph.com/docs/master/).

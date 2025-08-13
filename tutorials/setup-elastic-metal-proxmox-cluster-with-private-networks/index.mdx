@@ -1,22 +1,30 @@
 ---
-meta:
-  title: Setting up a Proxmox cluster on Elastic Metal servers using Private Networks
-  description: This page explains how to set up a Proxmox cluster on Elastic Metal servers using the Private Networks feature
-content:
-  h1: Setting up a Proxmox cluster on Elastic Metal servers using the Private Networks feature
-  paragraph: This page explains how to set up a Proxmox cluster on Elastic Metal servers using the Private Networks feature
-categories:
+title: Setting up a Proxmox cluster on Elastic Metal servers using Private Networks
+description: This page explains how to set up a Proxmox cluster on Elastic Metal servers using the Private Networks feature
+products:
   - elastic-metal
   - vpc
 tags: Proxmox Elastic-Metal KVM containers
 dates:
-  validation: 2024-10-08
+  validation: 2025-05-12
   posted: 2022-01-10
+  validation_frequency: 12
 ---
+import image from './assets/scaleway-proxmox-image.webp'
+import image2 from './assets/scaleway-proxmox-network-dashboard.webp'
+import image3 from './assets/scaleway-proxmox-vlan-details.webp'
+import image4 from './assets/scaleway-proxmox-cluster-overview.webp'
+import image5 from './assets/scaleway-proxmox-create-cluster.webp'
+import image6 from './assets/scaleway-proxmox-cluster-list.webp'
+import image7 from './assets/scaleway-proxmox-join-cluster.webp'
+import image8 from './assets/scaleway-proxmox-cluster-created.webp'
+
+import Requirements from '@macros/iam/requirements.mdx'
+
 
 Proxmox Virtual Environment (Proxmox VE) is a server virtualization platform, based on Debian Linux. It allows the deployment and management of [KVM-based](https://www.linux-kvm.org/page/Main_Page) virtual machines or [LXC](https://linuxcontainers.org/) containers. The tool provides a REST API as well as a graphical web interface to manage the virtual machines. It is also licensed under the [GNU Affero General Public License, version 3](https://www.gnu.org/licenses/agpl-3.0.html).
 
-<Macro id="requirements" />
+<Requirements />
 
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
@@ -32,7 +40,7 @@ Proxmox Virtual Environment (Proxmox VE) is a server virtualization platform, ba
 1. Select your Elastic Metal server by clicking on **Elastic Metal** in the **Compute** section of the side menu of the Scaleway console.
 2. Choose the server you want to install from the list and click its name to see the server dashboard.
 3. Click **Install** and select **Proxmox VE 7** from the list of available images.
-    <Lightbox src="scaleway-proxmox-image.webp" alt="" />
+    <Lightbox image={image} alt="" />
 4. Enter your credentials. The service username is `root`. The service password must have eight characters minimum.
 5. Enter a name and optional tags for your server.
 6. Toggle the switch to enable the **Private Networks** feature for the server.
@@ -59,39 +67,76 @@ Once the server has rebooted, the Proxmox web interface is available.
 
 ## Configuring the Private Network
 
-Instead of [configuring the Private Network interface directly from your server's command line](/elastic-metal/how-to/use-private-networks/#how-to-configure-the-network-interface-on-your-elastic-metal-server-for-private-networks), we must configure it using the Proxmox interface.
+Instead of [configuring the Private Network interface directly from your server's command line](/elastic-metal/how-to/use-private-networks/#how-to-configure-the-network-interface-on-your-elastic-metal-server-for-private-networks), it is required to configure it using the Proxmox interface.
 
 1. Click the Proxmox host in the data center menu on the left. The server's dashboard displays.
 2. Click **Network** in the **System** section of the menu. The network dashboard displays.
 3. Click **Create** > **Linux VLAN**.
-    <Lightbox src="scaleway-proxmox-network-dashboard.webp" alt="" />
+    <Lightbox image={image2} alt="" />
 4. Enter the VLAN details for your Private Network:
-    <Lightbox src="scaleway-proxmox-vlan-details.webp" alt="" />
+    <Lightbox image={image3} alt="" />
 
     * **Name**: The name of your primary network interface followed by a dot and the VLAN ID of your Private Network (e.g. `eno1.1918` for the primary network interface `eno1` and the VLAN ID `1918`)
-    * **IPv4/CIDR**: The IP address of the machine in your Private Network followed by its CIDR netmask (e.g. `192.168.1.101/24`)
+    * **(Optional) IPv4/CIDR**: The private IP of your server will be configured through DHCP if IPAM is configured correctly. Optionally, set the IP address of the machine in your Private Network followed by its CIDR netmask (e.g. `192.168.1.101/24`). 
     * **(Optional) Gateway (IPv4)**: The IP address of your [Public Gateway](/public-gateways/concepts/#public-gateway), if you want to use one.
     * **Autostart**: Tick this box to automatically bring up the interface during system startup.
 5. Click **Create** to create the Private Network interface.
+6. Click **Apply configuration** to activate the Private Network and to save the configuration.
     <Message type="note">
       Repeat the steps above on each node (in our case, each Elastic Metal server) you want to add to your Private Network.
     </Message>
 
-## Creating a cluster 
+### Network configuration on the console
+
+1. Open the file `/etc/network/interfaces` in a text editor and update any lines generated by Proxmox. Change lines such as `iface eno1.3010 inet manual` to `iface eno1.3010 inet dhcp`.
+2. In the same file, ensure that all lines generated by the Proxmox web UI are placed after the `vmbr0` interface declaration. Failing to do so will prevent both static and DHCP configurations from working correctly.
+3. Save the file and exit the text editor.
+    - Example of a `/etc/network/interfaces` file:
+    ```
+    auto lo
+    iface lo inet loopback
+
+    iface eno1 inet manual
+
+    iface eno2 inet manual
+
+    iface eno3 inet manual
+
+    iface eno4 inet manual
+
+    auto vmbr0
+    iface vmbr0 inet static
+            address 51.159.111.2/24
+            gateway 51.159.111.1
+            bridge-ports eno1
+            bridge-stp off
+            bridge-fd 0
+            hwaddress 44:a8:42:44:38:b4
+
+    # generated configuration that must be after vmbr0 declaration
+    auto eno1.3010
+    iface eno1.3010 inet dhcp
+    ```
+    <Message type="note">
+      If you choose to use DHCP, note that no DHCP client process runs automatically on the newly added interface. To resolve this, either run `dhclient` on the interface manually or reboot the server.
+    </Message>
+
+
+## Creating a cluster
 
 1. Click **Cluster** in the data center view of the Promox interface of your first node. The cluster dashboard displays.
-    <Lightbox src="scaleway-proxmox-cluster-overview.webp" alt="" />
+    <Lightbox image={image4} alt="" />
 2. Click **Create cluster**.
 3. Enter a name for the cluster and select your Private Network as the cluster network. Then click **Create**.
-    <Lightbox src="scaleway-proxmox-create-cluster.webp" alt="" />
+    <Lightbox image={image5} alt="" />
 4. Select the cluster in the list and click **Join Information**. The cluster join information displays.
-    <Lightbox src="scaleway-proxmox-cluster-list.webp" alt="" />
+    <Lightbox image={image6} alt="" />
 5. Click **Copy Information** to copy the cluster join information into the clipboard.
 6. Go to the Proxmox interface of your second node and click **Cluster** to enter the cluster configuration from the data center view of the machine.
 7. Click **Join cluster** and paste the cluster join information in the form.
 8. Enter your first node's `root` password and click **Join** to link the machine to the cluster.
-    <Lightbox src="scaleway-proxmox-join-cluster.webp" alt="" />
+    <Lightbox image={image7} alt="" />
 
 The second node appears now in the cluster in the Data center view of Proxmox. You can manage both machines using a single interface. The communication between members of the cluster is entirely in your Private Network, ensuring the highest level of security and the lowest latency.
 
-<Lightbox src="scaleway-proxmox-cluster-created.webp" alt="" />
+<Lightbox image={image8} alt="" />

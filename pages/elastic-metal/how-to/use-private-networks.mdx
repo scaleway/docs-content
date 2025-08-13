@@ -1,17 +1,13 @@
 ---
-meta:
-  title: How to use Private Networks with Elastic Metal servers
-  description: This page explains how to use Private Networks with Elastic Metal servers
-content:
-  h1: How to use Private Networks with Elastic Metal servers
-  paragraph: This page explains how to use Private Networks with Elastic Metal servers
+title: How to use Private Networks with Elastic Metal servers
+description: This page explains how to use Private Networks with Elastic Metal servers
 tags: private-networks elastic-metal private networks
 dates:
   validation: 2025-04-07
   posted: 2022-01-17
-categories:
-  - bare-metal
 ---
+import Requirements from '@macros/iam/requirements.mdx'
+
 
 [Private Networks](/vpc/concepts/#private-networks) allow your Elastic Metal servers to communicate in an isolated and secure network without needing to be connected to the public internet. This is an optional-billed feature, available with our Elastic Metal server ranges.
 
@@ -19,7 +15,7 @@ Each server can be connected to one or several Private Networks, letting you bui
 
 Private Networks allow your Elastic Metal servers to communicate with other Scaleway resources in an isolated and secure network, without the need of being connected to the public internet.
 
-<Macro id="requirements" />
+<Requirements />
 
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
@@ -61,13 +57,8 @@ You can also attach custom resources, such as virtual machines hosted on your El
 3. Click the **Private Networks** tab.
 4. Click **Attach to a Private Network** and continue to step 5. Otherwise, to detach your server from a Private Network, click the <Icon type="unlink" /> icon next to the Private Network and confirm the action when prompted.
 5. Either:
-    - Select **Attach to an existing Private Network**, and choose a network from the drop-down list to attach your server to. Remember, only Private Networks in the same region as your server will be displayed.
-    - Select **Attach to a new Private Network**, and enter a name for the new Private Network you wish to create.
-    <Message type="note">
-    The Private Network will have default settings, meaning:
-      - It is created in your [default VPC](/vpc/concepts/#default-vpc) for the region
-      - It has an auto-generated [CIDR block](/vpc/concepts/#cidr-block) used to allocate private IP addresses to servers attached to the network. Each attached Elastic Metal server will get an IPv4 and an IPv6 address on the Private Network.
-    </Message>
+    - Select a Private Network from the drop-down list to attach your server to. Remember, only Private Networks in the same region as your server will be displayed.
+    - Alternatively, select **Create a new Private Network** in the list. You are prompted to enter a name and tags for the Private Network, and to select the VPC it should be created in. The Private Network will be created with default configuration, meaning its [CIDR block](/vpc/concepts#cidr-block) will be automatically defined.
 6. Choose whether to **auto-allocate an available IP from the pool** (the [CIDR block](/vpc/concepts/#cidr-block) defined at the time of creating the Private Network), or use a [reserved IP address](/ipam/concepts/#reserved-ip-address) for the attachment. You must make this choice for both the IPv4 and IPv6 address that the Elastic Metal server will have on this Private Network.
 7. Click **Attach to Private Network** to confirm.
 
@@ -141,7 +132,7 @@ You must configure the virtual network interface on each Elastic Metal server yo
       - Ensure that you have defined the same adapter name (`eno1`) for the default network interface in the default Netplan configuration file (`/etc/netplan/50-cloud-init.yaml`) before applying the new configuration.
     </Message>
 
-## How to configure the Private Network on Windows Server 2019
+## How to configure the Private Network on Windows Server 2019 and 2022
 
 1. Log into your server as `Administrateur` using the Remote Desktop client.
     <Message type="note">
@@ -155,16 +146,60 @@ You must configure the virtual network interface on each Elastic Metal server yo
     <Message type="important">
       Two network interfaces display: Your VLAN and `default`. Make sure to keep the default network, otherwise you will lose access to your server via the public internet.
     </Message>
-7. Click **Start** > **Execute** and type `ncpa.cpl`. Then click **OK** to open the network connection manager.
-8. Click on your VLAN network connection and right-click on it to open the menu. Click **Properties** to display the connection properties.
-9. Select **Internet Protocol version 4 (TCP/IPv4)** and click **Properties**. A pop-up displays.
-10. Click **Use the following IP address** and configure the IPv4 configuration of your Private Network. Then click **OK** to save your configuration.
-11. Click **Close** to close the network interface properties.
 
-    You completed the configuration of your Private Network on Windows Server 2019.
+### Static IP configuration (optional)
+
+<Message type="important">
+  If you are running multiple virtual machines on an Elastic Metal server, our managed DHCP is not currently able to distribute IP addresses to your virtual machines. We recommend that you use the [IPAM API](https://www.scaleway.com/en/developers/api/ipam/) to book IP addresses for your virtual machines, and assign them manually.
+</Message>
+
+1. Click **Start** > **Run** and type `ncpa.cpl`. Then click **OK** to open the network connection manager.
+2. Click on your VLAN network connection and right-click on it to open the menu. Click **Properties** to display the connection properties.
+3. Select **Internet Protocol version 4 (TCP/IPv4)** and click **Properties**. A pop-up displays.
+4. Click **Use the following IP address** and configure the IPv4 configuration of your Private Network. Then click **OK** to save your configuration.
+    <Message type="tip">
+      To know what netmask and IP address to configure, refer to the **Private Network** menu for your Elastic Metal server in the Scaleway console.
+    </Message>
+5. Click **Close** to close the network interface properties.
+
     <Message type="tip">
       You can use the `ipconfig` command to verify your IP configuration from a command prompt.
     </Message>
+
+### Additional configuration for virtual machines running on Hyper-V
+
+If you are running virtual machines with Hyper-V, refer to the Microsoft documentation regarding [Hyper-V and VLANs](https://learn.microsoft.com/en-us/windows-server/virtualization/hyper-v/deploy/configure-virtual-local-area-networks-for-hyper-v).
+
+<Message type="note">
+  Since Windows Server 2022 came out, the procedure differs from Windows 2019. LBFO (a Hyper-V switch related to NIC teaming) has been deprecated and replaced by SET (Switch Embedded Teaming).
+  This change may introduce limitations regarding VLAN assignment for multiple VMs on clusters of Elastic Metal servers.
+</Message>
+
+Below is an example of how to connect one Private Network to a virtual machine created by Hyper-V on a Windows Server 2022 host (the Elastic Metal server's operating system).
+
+1. Open a PowerShell terminal and run the following command:
+    ```powershell
+    Get-NetAdapter
+    ```
+    <Message type="important">
+      Do not enable NIC Teaming on the host.
+    </Message>
+    This command will display the network interface names. Copy the name of the interface that is "Up".
+
+2. Create a new VMSwitch:
+    ```powershell
+    New-VMSwitch -Name "SET Team" -NetAdapterName "<NAME OF THE NETWORK INTERFACE>" -EnableEmbeddedTeaming $true
+    ```
+
+3. Create a "custom" resource in the [Private Network](/vpc/how-to/attach-resources-to-pn/).
+
+4. When creating the VM, select the SET switch in the networking creation menu.
+
+5. Copy the MAC address of the VM from the **Network adapter** section of the VM settings, under the **Advanced features** subsection.
+
+6. Change the Virtual Machine settings:
+   - Go to the "Network adapter" section of the VM in Hyper-V.
+   - Set the VLAN ID (copy it from the **Private Network** menu in the Elastic Metal server console).
 
 ## How to delete a Private Network
 

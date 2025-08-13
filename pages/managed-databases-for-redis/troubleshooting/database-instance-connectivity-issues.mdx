@@ -1,0 +1,142 @@
+---
+title: Dealing with Redis™ Database Instance connectivity issues
+description: Troubleshoot Database Instance connectivity issues for Managed Databases for Redis™.
+tags: disk-full databases
+dates:
+  validation: 2025-02-12
+  posted: 2025-02-12
+---
+
+## Public access
+
+### Problem
+
+I cannot connect to my Redis™ Database Instance through the public network.
+
+### Possible causes
+
+- The Database Instance TLS certificate is outdated
+- Your allowed IPs are not properly configured
+- You have reached the maximum number of connections
+- The Database Instance is experiencing instabilities due to a high load
+
+### Solution
+
+You can check the following points to identify and act on what might be causing the issue:
+
+1. If TLS is enabled on the Database Instance, make sure the certificate is up to date and that your client application is properly configured.
+2. Make sure your [ACLs](/managed-databases-for-redis/concepts/#allowed-ips) are [properly configured](/managed-databases-for-redis/how-to/manage-allowed-ip-addresses-redis).
+3. Make sure your Database Instance has not reached the maximum number of connections stipulated in the advanced settings of the Database Instance. You can monitor the number of connections on Cockpit. You can also [adjust the advanced settings](/managed-databases-for-redis/how-to/configure-advanced-settings-redis) to accept a higher number of connections.
+4. [Monitor other usage metrics on Cockpit](/managed-databases-for-redis/how-to/monitor-redis-databases-cockpit) to:
+
+    - Check if the memory usage is nominal. High memory usage could trigger OOM Kills and cause disconnection
+    - Check Database Instance logs and look for anything else that could explain the issue
+
+## Private access
+
+### Problem
+
+I cannot connect to my Database Instance through a Private Network.
+
+### Possible causes
+
+- The Database Instance TLS certificate is outdated
+- Client network issue
+- You have reached the maximum number of connections
+- The Database Instance is experiencing instabilities due to a high load
+
+### Solution
+
+You can carry out the following actions:
+
+1. Try to connect to the Database Instance from the public endpoint, if one is available, to identify the possible origin (network or instance). This information can help you or the support team to identify the issue.
+2. [Use Cockpit](/managed-databases-for-redis/how-to/monitor-redis-databases-cockpit) to check database logs and look for any activity or behavior that could explain the issue.
+3. Create a support ticket if the first two steps do not help troubleshoot the issue. In the body of the ticket, make sure you provide:
+
+    - The ID of the resource from which the connection was attempted
+    - The output of the `redis_troubleshoot.sh` script, indicated below. Make sure you execute the script on the machine from which the connection was attempted.
+
+#### Database Instance connectivity check script
+
+`redis_troubleshoot.sh`:
+
+```sh
+#!/bin/bash
+
+set -o nounset
+
+if [ -z "$INSTANCE_IP" ]; then
+    echo "INSTANCE_IP is a mandatory environment variable."
+    echo "e.g. export INSTANCE_IP=<xxx.xxx.xxx.xxx>"
+    exit 1
+fi
+
+if [ -z "$INSTANCE_PORT" ]; then
+    echo "INSTANCE_PORT is a mandatory environment variable."
+    echo "e.g. export INSTANCE_PORT=<xxxxx>"
+    exit 1
+fi
+
+function header() {
+    echo -e "\n # ${1}"
+    echo -e "---------------------------------\n"
+}
+
+echo -e "\nREDIS troubleshooting script\nThis script will run for several minutes to get enough information."
+header "Host information"
+if ! [ -x "$(command -v uname)" ]; then
+  echo 'Skipped: uname command is not availabe.'
+else
+  uname -a
+fi
+
+header "Host connectivity check"
+if ! [ -x "$(command -v ping)" ]; then
+  echo 'Skipped: ping command is not availabe.'
+else
+  ping -c 5 ${INSTANCE_IP}
+fi
+
+header "Database connectivity check"
+if ! [ -x "$(command -v telnet)" ]; then
+  # try to fallback on curl telnet
+  if ! [ -x "$(command -v curl)" ]; then
+    echo "Skipped: neither telnet nor curl command are availabe."
+  else
+    echo "(using curl)"
+    timeout 2 curl -v telnet://$INSTANCE_IP:$INSTANCE_PORT
+  fi
+else
+  echo "(using telnet)"
+  echo -n | telnet ${INSTANCE_IP} ${INSTANCE_PORT}
+fi
+
+header "Ip configuration check"
+if ! [ -x "$(command -v ip)" ]; then
+  echo 'Skipped: ip command is not availabe.'
+else
+  echo -e "Interfaces:\n- \n"
+  ip a
+  echo -e "\nNeighbour:\n- \n"
+
+  TEST_ITERATION=30
+  TEST_INTERVAL=10 # seconds
+
+  # Iterate a few times to try to catch relevant info
+  for ((i=1;i<=$TEST_ITERATION;i++)); do
+    echo -e "\nIteration $i:\n"
+    ip neighbour show
+    echo -e "\nWaiting ${TEST_INTERVAL}s...\n"
+    sleep $TEST_INTERVAL
+  done
+  echo -e "\nRoute:\n-\n"
+  ip route
+fi
+```
+Run the script in a terminal:
+
+```
+export INSTANCE_IP=<xxx.xxx.xxx.xxx>
+export INSTANCE_PORT=<xxxxx>
+./redis_troubleshoot.sh
+```

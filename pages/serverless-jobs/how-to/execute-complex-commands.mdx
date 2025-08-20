@@ -1,6 +1,6 @@
 ---
-title: How to execute complex commands using Serverless Jobs
-description: Learn how to run complex commands and scripts using Scaleway Serverless Jobs and Secrets Manager.
+title: How to execute complex startup commands using Serverless Jobs
+description: Learn how to run complex commands at job run start and scripts using Scaleway Serverless Jobs and Secrets Manager.
 tags: run execute start serverless job scaleway script startup secret bash complex command pipe
 dates:
   validation: 2025-08-19 
@@ -27,6 +27,9 @@ You can bypass this limitation by passing complex commands and scripts to a Serv
 3. Click **+ Create secret**.
 
 4.  Select **Import secret**, choose the **Opaque** secret type, then drag and drop your file to the dedicated area. The maximum file size for your secret is 64 KiB.
+    <Message type="note">
+    We recommend using a shell script (`.sh`) file containing your command. Refer to the [section below](#complex-commands-examples) for example commands.
+    </Message>
 
 5. Choose the **Scaleway-managed encryption key**, as it requires no configuration on your side.
 
@@ -38,4 +41,74 @@ You can bypass this limitation by passing complex commands and scripts to a Serv
 
 Your file can now be passed to your Serverless Job as a secret reference.
 
-##
+## Create a Serverles Job referencing your command as a secret
+
+1. Click **Jobs** in the **Serverless** section of the side menu. The jobs page displays.
+
+2. Click **Create job**. The job creation wizard displays.
+
+3. Select the **external** container registry.
+
+4. Enter the following image URL:
+    ```sh
+    scaleway/cli:latest
+    ```
+
+5. Enter a name, select the desired region, and choose the smallest **resources** available.
+
+6. Enter a CRON schedule to run your job periodically. Refer to the [dedicated documentation](/serverless-jobs/reference-content/cron-schedules/) on CRON schedules.
+
+7. Add your command file as a [secrets reference](/serverless-functions/concepts/#secrets). Refer to the [dedicated documentation] on secrets for more information.
+
+8. Add the following startup command to call your file:
+    ```sh
+    bash /complex_command.sh start
+    ```
+
+9. Click **Create job** to finish.
+
+You job is now ready to run at the specified schedule.
+
+## Complex commands examples
+
+Below are examples of commands that must be passed via a secret referenced as a file in Serverless Jobs. You can find more complex commands examples on the [Scaleway CLI repository](/https://github.com/scaleway/scaleway-cli/blob/master/docs/cookbook.md).
+
+**Retrieve a specific field from the output using jq**
+
+```bash
+## Retrieve all available instance type names
+
+# Using jq
+scw -o json instance server-type list | jq -r '.[].name'
+# Using CLI templates
+scw instance server-type list -o template="{{ .Name }}"
+```
+
+**Filter command output using jq**
+
+```bash
+# Retrieve all available instance type with GPUs
+scw -o json instance server-type list | jq '.[] | select (.gpu > 0)'```
+```
+
+**Parallelize actions using xargs**
+
+```bash
+## Reboot all listed servers at the same time, 8 max concurrent actions
+
+# Using jq
+scw -o json instance server list | jq -r '.[].id' | xargs -L1 -P8 scw instance server reboot
+# Using CLI templates
+scw instance server list -o template="{{ .ID }}" | xargs -L1 -P8 scw instance server reboot
+```
+
+**Create arguments for a CLI command and use it in xargs**
+
+```bash
+## List private-nics of all listed servers
+
+# Using jq
+scw -o json instance server list | jq -r '.[] | "server-id=\(.id)"' | xargs -L1 scw instance private-nic list
+# Using CLI templates
+scw instance server list -o template="server-id={{ .ID }}" | xargs -L1 scw instance private-nic list
+```

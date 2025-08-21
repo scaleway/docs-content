@@ -1,0 +1,164 @@
+---
+title: Deploying Jellyfin on a Scaleway Instance using Docker
+description: Learn how to deploy Jellyfin, an open-source media server that allows you to organize, stream, and manage your personal media collection.
+tags: jellyfin docker media streaming
+products:
+  - instances
+dates:
+  validation: 2025-08-21
+  posted: 2025-08-21
+  validation_frequency: 12
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+Jellyfin is an open-source media server that allows you to organize, stream, and manage your personal media collection.
+It supports various clients and devices, providing a self-hosted alternative to commercial streaming services.
+This tutorial explains how to deploy Jellyfin on a Scaleway Instance using Docker, which simplifies installation and management.
+We will use an Ubuntu-based Instance and the official Jellyfin Docker container.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An [SSH key](/organizations-and-projects/how-to/create-ssh-key/)
+- An [Instance](/instances/how-to/create-an-instance/) running the latest Ubuntu image
+
+## Connecting to the Instance
+
+1. Open a terminal on your local machine.
+
+2. Connect via SSH using the following command:
+
+   ```
+   ssh root@your_instance_ip
+   ```
+
+   Replace `your_instance_ip` with the actual IP. Accept the host key if prompted.
+
+    <Message type="tip">
+        If you are using a non-root user or a different key, adjust the command accordingly (e.g., `ssh -i /path/to/key ubuntu@your_instance_ip`).
+    </Message>
+
+## Installing Docker
+
+1. Update the `apt` package cache and upgrade already installed packages to their latest version:
+
+   ```
+   apt update && apt upgrade -y
+   ```
+
+2. Install the prerequisites for adding the Docker repository:
+
+   ```
+   apt install ca-certificates curl -y
+   ```
+
+3. Add Docker's official GPG key:
+
+   ```
+   install -m 0755 -d /etc/apt/keyrings
+   curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+   chmod a+r /etc/apt/keyrings/docker.asc
+   ```
+
+4. Add the Docker repository to `apt` sources:
+
+   ```
+   echo \
+     "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu \
+     $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | \
+     tee /etc/apt/sources.list.d/docker.list > /dev/null
+   apt update
+   ```
+
+5. Install the required Docker packages:
+
+   ```
+   apt install docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin acl -y
+   ```
+
+6. Verify that Docker is installed by running a test container:
+
+   ```
+   docker run hello-world
+   ```
+
+   This should download and run a simple image, confirming Docker works.
+
+## Creating a Jellyfin user
+
+1. Create a user named `jellyfin`:
+    ```
+    adduser jellyfin
+    ```
+    Enter the users' password, password confirmation, account information and confirm by pressing `Enter`.
+
+2. Enter the `jellyfin` user:
+    ```
+    su jellyfin
+    ```
+
+3. Run the following command to get the user ID and group ID of the user.
+    ```
+    id -u && id -g
+    ```
+    This command outputs two numbers: the user ID (e.g. `1001`) and the group ID (e.g. `10001`). Save these numbers as you will need them for the following steps.
+
+## Deploying Jellyfin
+
+1. Create a directory for Jellyfin configuration and navigate to it:
+
+   ```
+   mkdir ~/jellyfin && cd ~/jellyfin
+   ```
+
+2. Create a `docker-compose.yml` file with the following content:
+
+   ```
+   services:
+     jellyfin:
+       image: jellyfin/jellyfin
+       container_name: jellyfin
+       user: <USER ID>:<GROUP ID>
+       network_mode: 'host'
+       volumes:
+         - ./config:/config
+         - ./cache:/cache
+         - /path/to/your/media:/media
+       restart: 'unless-stopped'
+       environment:
+         - JELLYFIN_PublishedServerUrl=http://your_instance_ip:8096
+   ```
+
+   Customize the volumes: 
+   - Replace `/path/to/your/media` with the actual path to your media files on the Instance. You can mount additional volumes if needed. 
+   - Replace `your_instance_ip` with the public IP.
+   - Replace `<USER ID>` and `<GROUP ID>` with the `jellyfin` user ID and group ID retrieved in the previous step.
+
+    <Message type="note">
+    Running as a non-root user is recommended; the `user` line specifies the ID of the `jellyfin` user. Ensure the mounted directories have appropriate permissions.
+    Ensure the Jellyfin user has write and read permission to the `/config` and `/cache` folders by setting permissions: `setfacl -m u:jellyfin:rwx config` and `setfacl -m u:jellyfin:rwx cache`.
+    </Message>
+
+2. Start the Jellyfin container:
+
+   ```
+   docker compose up -d
+   ```
+
+   This pulls the image and runs it in detached mode.
+
+## Accessing Jellyfin
+
+1. Open a web browser on your local machine and navigate to `http://your_instance_ip:8096`, replacing `your_instance_ip` with the Instance's public IP.
+2. Follow the on-screen setup wizard: 
+- Create an admin account
+- Add your media libraries, and 
+- Configure settings like language and metadata.
+
+<Message type="tip">
+ Jellyfin listens on port `8096` by default. Ensure this port is open in your [Instance's security groups](/instances/how-to/use-security-groups/). For production, consider setting up HTTPS with a [reverse proxy like Nginx](/tutorials/nginx-reverse-proxy/).
+</Message>
+
+
+By following these steps, you have a functional Jellyfin media server running on Scaleway. For more advanced configurations, refer to the official [Jellyfin documentation](https://jellyfin.org/docs/).

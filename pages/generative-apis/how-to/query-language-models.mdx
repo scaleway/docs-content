@@ -3,11 +3,11 @@ title: How to query language models
 description: Learn how to interact with powerful language models using Scaleway's Generative APIs service.
 tags: generative-apis ai-data language-models chat-completions-api
 dates:
-  validation: 2025-05-12
+  validation: 2025-08-22
   posted: 2024-08-28
 ---
 import Requirements from '@macros/iam/requirements.mdx'
-
+import ChatCompVsResponsesApi from '@macros/ai/chat-comp-vs-responses-api.mdx'
 
 Scaleway's Generative APIs service allows users to interact with powerful language models hosted on the platform.
 
@@ -39,25 +39,12 @@ The web playground displays.
 
 ## Querying language models via API
 
-Both the [Chat Completions API](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) and the [Responses API](https://www.scaleway.com/en/developers/api/generative-apis/#path-responses-beta-create-a-response) are an OpenAI-compatible REST APIs for generating and manipulating conversations.
+You can query the models programmatically using your favorite tools or languages.
+In the example that follows, we will use the OpenAI Python client.
 
 ### Chat Completions API or Responses API?
 
-The table below compares the Chat Completions API to the Responses API. TODO CONTINUE HERE
-
-| Aspect                  | Responses API                                   | Chat Completions API                    |
-|-------------------------|------------------------------------------------|-----------------------------------------|
-| **Description           | Unified API for model responses (successor to Chat + Assistants). Offers tool-calling by built-in tools (e.g. web or file search) while the model generates a responses, though currently only `function` tools are supported by Scaleway. | Older API for chat-style completions. Offers only `function` tool-calling. |
-| **Status**              |  Beta | GA  |
-| **Endpoint**            | `/v1/{project_id}/responses`                                | `/v1/{project_id}/chat/completions`                  |
-| **Use cases**            | Agentic apps, tool-augmented workflows, multi-step tasks, future-proof apps | Simple chatbots, Q&A, summarization, stateless interactions |
-| **Features**             | - Plain chat completions<br>- Tool calling (Code Interpreter, image gen, file search, web search)<br>- MCP tool integration<br>- Background mode<br>- Reasoning summaries | - Plain chat completions only<br>- Function calling (basic tool use)<br>- No MCP, no background mode, no reasoning summaries |
-
-| **Long-term support**    | Future standard API (will replace Chat & Assistants) | Maintained for now, EOL expected mid-2026 |
-| **Complexity**           | More powerful but requires newer SDK methods (`client.responses.create`) | Simpler, lighter (`client.chat.completions.create`) |
-
-You can query the models programmatically using your favorite tools or languages.
-In the following example, we will use the OpenAI Python client.
+<ChatCompVsResponsesApi />
 
 ### Installing the OpenAI SDK
 
@@ -83,48 +70,95 @@ client = OpenAI(
 
 ### Generating a chat completion
 
-You can now create a chat completion, for example with the `llama-3.1-8b-instruct` model:
+You can now create a chat completion using either the Chat Completions or Responses API, as shown in the following examples: ,
 
-```python
-# Create a chat completion using the 'llama-3.1-8b-instruct' model
-response = client.chat.completions.create(
-    model="llama-3.1-8b-instruct",
-    messages=[{"role": "user", "content": "Describe a futuristic city with advanced technology and green energy solutions."}],
-    temperature=0.2,  # Adjusts creativity
-    max_tokens=100,   # Limits the length of the output
-    top_p=0.7         # Controls diversity through nucleus sampling. You usually only need to use temperature.
-)
+<Tabs id="generating-chat-completion">
 
-# Print the generated response
-print(response.choices[0].message.content)
-```
+    <TabsTab label="Chat Completions API">
 
-This code sends a message to the model and returns an answer based on your input. The `temperature`, `max_tokens`, and `top_p` parameters control the response's creativity, length, and diversity, respectively.
+    ```python
+    # Create a chat completion using the 'llama-3.1-8b-instruct' model
+    response = client.chat.completions.create(
+        model="llama-3.1-8b-instruct",
+        messages=[{"role": "user", "content": "Describe a futuristic city with advanced technology and green energy solutions."}],
+        temperature=0.2,  # Adjusts creativity
+        max_tokens=100,   # Limits the length of the output
+        top_p=0.7         # Controls diversity through nucleus sampling. You usually only need to use temperature.
+    )
+
+    # Print the generated response
+    print(response.choices[0].message.content)
+    ```
+
+    This code sends a message to the model and returns an answer based on your input. The `temperature`, `max_tokens`, and `top_p` parameters control the response's creativity, length, and diversity, respectively.
+
+    </TabsTab>
+
+    <TabsTab label="Responses API (Beta)">
+
+    ```python
+    # Create a chat completion using the 'gpt-oss-120b' model
+    response = client.responses.create(
+        model="gpt-oss-120b",
+        input=[{"role": "user", "content": "Briefly describe a futuristic city with advanced technology and green energy solutions."}],
+        temperature=0.2,  # Adjusts creativity
+        max_output_tokens=100,   # Limits the length of the output
+        top_p=0.7         # Controls diversity through nucleus sampling. You usually only need to use temperature.
+
+    )
+    # Print the generated response. Here, the last output message will contain the final content.
+    # Previous outputs will contain reasoning content.
+    print(response.output[-1].content[0].text)
+    ```
+    </TabsTab>
+</Tabs>
+
 
 A conversation style may include a default system prompt. You may set this prompt by setting the first message with the role system. For example:
 
-```python
-[
-  {
-  	"role": "system",
-  	"content": "You are Xavier Niel."
-  },
-  {
-  	"role": "user",
-  	"content": "Hello, what is your name?"
-  }
-]
-```
+  ```python
+  [
+    {
+      "role": "system",
+      "content": "You are Xavier Niel."
+    },
+    {
+      "role": "user",
+      "content": "Hello, what is your name?"
+    }
+  ]
+  ```
 
 ### Model parameters and their effects
 
 The following parameters will influence the output of the model:
 
-- **`messages`**: A list of message objects that represent the conversation history. Each message should have a `role` (e.g., "system", "user", "assistant") and `content`.
-- **`temperature`**: Controls the output's randomness. Lower values (e.g., 0.2) make the output more deterministic, while higher values (e.g., 0.8) make it more creative.
-- **`max_tokens`**: The maximum number of tokens (words or parts of words) in the generated output.
-- **`top_p`**: Recommended for advanced use cases only. You usually only need to use temperature. `top_p` controls the diversity of the output, using nucleus sampling, where the model considers the tokens with top probabilities until the cumulative probability reaches `top_p`.
-- **`stop`**: A string or list of strings where the model will stop generating further tokens. This is useful for controlling the end of the output.
+<Tabs id="model-params">
+
+  <TabsTab label = "Chat Completions API">
+
+  - **`messages`**: A list of message objects that represent the conversation history. Each message should have a `role` (e.g., "system", "user", "assistant") and `content`.
+  - **`temperature`**: Controls the output's randomness. Lower values (e.g., 0.2) make the output more deterministic, while higher values (e.g., 0.8) make it more creative.
+  - **`max_tokens`**: The maximum number of tokens (words or parts of words) in the generated output.
+  - **`top_p`**: Recommended for advanced use cases only. You usually only need to use temperature. `top_p` controls the diversity of the output, using nucleus sampling, where the model considers the tokens with top probabilities until the cumulative probability reaches `top_p`.
+  - **`stop`**: A string or list of strings where the model will stop generating further tokens. This is useful for controlling the end of the output.
+
+  See the [dedicated API documentation](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) for a full list of all available parameters.
+
+  </TabsTab>
+
+  <TabsTab label="Responses API (Beta)">
+
+  - **`input`**: A single text string, or an array of string/multi-modal inputs to provide to the model to generate a response. When using the array option, you can define a `role` and list of `content` inputs of different types (texts, files, images etc.)
+  - **`max_output_tokens`**: A maximum number of output tokens that can be generated for a completion. Different default maximum values
+are enforced for each model, to avoid edge cases where tokens are generated indefinitely.
+  - **`temperature`**: Controls the output's randomness. Lower values (e.g., 0.2) make the output more deterministic, while higher values (e.g., 0.8) make it more creative.
+  - **`top_p`**: Recommended for advanced use cases only. You usually only need to use temperature. `top_p` controls the diversity of the output, using nucleus sampling, where the model considers the tokens with top probabilities until the cumulative probability reaches `top_p`.
+
+  See the [dedicated API documentation](https://www.scaleway.com/en/developers/api/generative-apis/#path-responses-beta-create-a-response) for a full list of all available parameters.
+
+  </TabsTab>
+</Tabs>
 
 <Message type="warning">
  If you encounter an error such as "Forbidden 403" refer to the [API documentation](/generative-apis/api-cli/understanding-errors) for troubleshooting tips.
@@ -133,7 +167,8 @@ The following parameters will influence the output of the model:
 ## Streaming
 
 By default, the outputs are returned to the client only after the generation process is complete. However, a common alternative is to stream the results back to the client as they are generated. This is particularly useful in chat applications, where it allows the client to view the results incrementally as each token is produced.
-Following is an example using the chat completions API:
+
+Following is an example using the Chat Completions API, but the `stream` parameter can be set in the same way with the Responses API.
 
 ```python
 from openai import OpenAI
@@ -160,28 +195,62 @@ for chunk in response:
 
 The service also supports asynchronous mode for any chat completion.
 
-```python
+<Tabs id="async">
 
-import asyncio
-from openai import AsyncOpenAI
+  <TabsTab label="Chat Completions API">
 
-client = AsyncOpenAI(
-    base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
-    api_key="<SCW_API_KEY>"  # Your unique API key from Scaleway
-)
+  ```python
 
-async def main():
-    stream = await client.chat.completions.create(
-        model="llama-3.1-8b-instruct",
-        messages=[{
-        "role": "user",
-        "content": "Sing me a song",
-        }],
-        stream=True,
-    )
-    async for chunk in stream:
-        if chunk.choices and chunk.choices[0].delta.content:
-            print(chunk.choices[0].delta.content, end="")
+  import asyncio
+  from openai import AsyncOpenAI
 
-asyncio.run(main())
-```
+  client = AsyncOpenAI(
+      base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
+      api_key="<SCW_API_KEY>"  # Your unique API key from Scaleway
+  )
+
+  async def main():
+      stream = await client.chat.completions.create(
+          model="llama-3.1-8b-instruct",
+          messages=[{
+          "role": "user",
+          "content": "Sing me a song",
+          }],
+          stream=True,
+      )
+      async for chunk in stream:
+          if chunk.choices and chunk.choices[0].delta.content:
+              print(chunk.choices[0].delta.content, end="")
+
+  asyncio.run(main())
+  ```
+  </TabsTab>
+  <TabsTab label="Responses API (Beta)">
+  ```python
+  import asyncio
+  from openai import AsyncOpenAI
+
+  client = AsyncOpenAI(
+      base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
+      api_key="<SCW_API_KEY>"  # Your unique API key from Scaleway
+  )
+
+  async def main():
+      stream = await client.responses.create(
+          model="llama-3.1-8b-instruct",
+          input=[{
+              "role": "user",
+              "content": "Sing me a song"
+          }],
+          stream=True,
+      )
+      async for event in stream:
+          if event.type == "response.output_text.delta":
+              print(event.delta, end="")
+          elif event.type == "response.completed":
+              break
+
+  asyncio.run(main())
+  ```
+  </TabsTab>
+</Tabs>

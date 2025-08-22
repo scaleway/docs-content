@@ -7,6 +7,7 @@ dates:
   posted: 2024-10-30
 ---
 import Requirements from '@macros/iam/requirements.mdx'
+import ChatCompVsResponsesApi from '@macros/ai/chat-comp-vs-responses-api.mdx'
 
 
 Scaleway's Generative APIs service allows users to interact with powerful vision models hosted on the platform.
@@ -17,7 +18,7 @@ Scaleway's Generative APIs service allows users to interact with powerful vision
 
 There are several ways to interact with vision models:
 - The Scaleway [console](https://console.scaleway.com) provides a complete [playground](/generative-apis/how-to/query-vision-models/#accessing-the-playground), aiming to test models, adapt parameters, and observe how these changes affect the output in real-time.
-- Via the [Chat API](/generative-apis/how-to/query-vision-models/#querying-vision-models-via-the-api)
+- [Chat Completions API](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) or the [Responses API](https://www.scaleway.com/en/developers/api/generative-apis/#path-responses-beta-create-a-response)
 
 <Requirements />
 
@@ -43,16 +44,19 @@ The web playground displays.
 
 ## Querying vision models via the API
 
-The [Chat API](/generative-apis/api-cli/using-chat-api/) is an OpenAI-compatible REST API for generating and manipulating conversations.
+You can query vision models programmatically using your favorite tools or languages.
 
-You can query the vision models programmatically using your favorite tools or languages.
 Vision models take both text and images as inputs.
+
+In the example that follows,we will use the OpenAI Python client.
 
 <Message type="tip">
   Unlike traditional language models, vision models will take a content array for the user role, structuring text and images as inputs.
 </Message>
 
-In the following example, we will use the OpenAI Python client.
+### Chat Completions API or Responses API?
+
+<ChatCompVsResponsesApi />
 
 ### Installing the OpenAI SDK
 
@@ -78,30 +82,68 @@ client = OpenAI(
 
 ### Generating a chat completion
 
-You can now create a chat completion, for example with the `pixtral-12b-2409` model:
+You can now create a chat completion:
 
-```python
-# Create a chat completion using the 'pixtral-12b-2409' model
-response = client.chat.completions.create(
-    model="pixtral-12b-2409",
-    messages=[
-      {
-        "role": "user",
-        "content": [
-              {"type": "text", "text": "What is this image?"},
-              {"type": "image_url", "image_url": {"url": "https://picsum.photos/id/32/512/512"}},
-          ] #  Vision models will take a content array with text and image_url objects.
+<Tabs id="vision-chat-completion">
+    <TabsTab label="Chat Completions API">
+    ```python
+    # Create a chat completion using the 'pixtral-12b-2409' model
+    response = client.chat.completions.create(
+        model="pixtral-12b-2409",
+        messages=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "What is this image?"},
+                {"type": "image_url", "image_url": {"url": "https://picsum.photos/id/32/512/512"}},
+            ] #  Vision models will take a content array with text and image_url objects.
 
-      }
-    ],
-    temperature=0.7,  # Adjusts creativity
-    max_tokens=2048,   # Limits the length of the output
-    top_p=0.9         # Controls diversity through nucleus sampling. You usually only need to use temperature.
-)
+        }
+        ],
+        temperature=0.7,  # Adjusts creativity
+        max_tokens=2048,   # Limits the length of the output
+        top_p=0.9         # Controls diversity through nucleus sampling. You usually only need to use temperature.
+    )
 
-# Print the generated response
-print(response.choices[0].message.content)
-```
+    # Print the generated response
+    print(response.choices[0].message.content)
+    ```
+    </TabsTab>
+    <TabsTab label="Responses API">
+    ```python
+    from openai import OpenAI
+
+    # Initialize the client with your base URL and API key
+    client = OpenAI(
+        base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
+        api_key="<SCW_SECRET_KEY>"  # Your unique API secret key from Scaleway
+    )
+    # Create a chat completion using the 'mistral-small-3.2-24b-instruct-2506' model
+    response = client.responses.create(
+        model="mistral-small-3.2-24b-instruct-2506",
+        input=[
+        {
+            "role": "user",
+            "content": [
+                {"type": "input_text", "text": "What is this image?"},
+                {"type": "input_image",
+                "image_url": "https://picsum.photos/id/32/512/512",
+                "detail": "auto"}
+            ] #  Vision models will take a content array with text and image_url objects.
+
+        }
+        ],
+        temperature=0.7,  # Adjusts creativity
+        max_output_tokens=2048,   # Limits the length of the output
+        top_p=0.9         # Controls diversity through nucleus sampling. You usually only need to use temperature.
+    )
+
+    # Print the generated response. Here, the last output message will contain the final content.
+    # Previous outputs will contain reasoning content.
+    print(response.output[-1].content[0].text)
+    ```
+    </TabsTab>
+</Tabs>
 
 This code sends messages, prompts and images, to the vision model and returns an answer based on your input. The `temperature`, `max_tokens`, and `top_p` parameters control the response's creativity, length, and diversity, respectively.
 
@@ -182,64 +224,143 @@ The following parameters will influence the output of the model:
 ## Streaming
 
 By default, the outputs are returned to the client only after the generation process is complete. However, a common alternative is to stream the results back to the client as they are generated. This is particularly useful in chat applications, where it allows the client to view the results incrementally as each token is produced.
-The following example shows how to use the chat completion API:
 
-```python
-from openai import OpenAI
+Examples are provided below:
 
-client = OpenAI(
-    base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
-    api_key="<SCW_API_KEY>"  # Your unique API key from Scaleway
-)
-response = client.chat.completions.create(
-  model="pixtral-12b-2409",
-  messages=[{
-      "role": "user", 
-      "content": [
-          {"type": "text", "text": "What is this image?"},
-          {"type": "image_url", "image_url": {"url": "https://picsum.photos/id/32/512/512"}},
-      ]
-  }],
-  stream=True,
-)
+<Tabs id="vision-streaming">
+    <TabsTab label="Chat Completions API">
+    ```python
+    from openai import OpenAI
 
-for chunk in response:
-    if chunk.choices and chunk.choices[0].delta.content:
-        print(chunk.choices[0].delta.content, end="")
+    client = OpenAI(
+        base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
+        api_key="<SCW_API_KEY>"  # Your unique API key from Scaleway
+    )
+    response = client.chat.completions.create(
+    model="pixtral-12b-2409",
+    messages=[{
+        "role": "user", 
+        "content": [
+            {"type": "text", "text": "What is this image?"},
+            {"type": "image_url", "image_url": {"url": "https://picsum.photos/id/32/512/512"}},
+        ]
+    }],
+    stream=True,
+    )
+
+    for chunk in response:
+        if chunk.choices and chunk.choices[0].delta.content:
+            print(chunk.choices[0].delta.content, end="")
+    ```
+    </TabsTab>
+    <TabsTab label="Responses API">
+
+    ```python
+    from openai import OpenAI
+
+    client = OpenAI(
+        base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
+        api_key="<SCW_API_KEY>"  # Your unique API key from Scaleway
+    )
+
+    # Stream a response from the vision model
+    with client.responses.stream(
+        model="pixtral-12b-2409",
+        input=[
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What is this image?"},
+                    {"type": "image_url", "image_url": {"url": "https://picsum.photos/id/32/512/512"}},
+                ]
+            }
+        ]
+    ) as stream:
+        for event in stream:
+            # Print incremental text as it arrives
+            if event.type == "response.output_text.delta":
+                print(event.delta, end="")
+
+    # Optionally, get the final aggregated response
+    final_response = stream.get_final_response()
+    print("\nFinal output:\n", final_response.output_text)
 ```
+    </TabsTab>
+</Tabs>
+
 
 ## Async
 
 The service also supports asynchronous mode for any chat completion.
 
-```python
+<Tabs id="vision-async">
+    <TabsTab label="Chat Completions API">
+    ```python
 
-import asyncio
-from openai import AsyncOpenAI
+    import asyncio
+    from openai import AsyncOpenAI
 
-client = AsyncOpenAI(
-    base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
-    api_key="<SCW_API_KEY>"  # Your unique API key from Scaleway
-)
-
-async def main():
-    stream = await client.chat.completions.create(
-        model="pixtral-12b-2409",
-        messages=[{
-            "role": "user", 
-            "content": [
-                {"type": "text", "text": "What is this image?"},
-                {"type": "image_url", "image_url": {"url": "https://picsum.photos/id/32/512/512"}},
-            ]
-        }],
-        stream=True,
+    client = AsyncOpenAI(
+        base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
+        api_key="<SCW_API_KEY>"  # Your unique API key from Scaleway
     )
-    async for chunk in stream:
-        if chunk.choices and chunk.choices[0].delta.content:
-            print(chunk.choices[0].delta.content, end="")
 
-asyncio.run(main())
-```
+    async def main():
+        stream = await client.chat.completions.create(
+            model="pixtral-12b-2409",
+            messages=[{
+                "role": "user", 
+                "content": [
+                    {"type": "text", "text": "What is this image?"},
+                    {"type": "image_url", "image_url": {"url": "https://picsum.photos/id/32/512/512"}},
+                ]
+            }],
+            stream=True,
+        )
+        async for chunk in stream:
+            if chunk.choices and chunk.choices[0].delta.content:
+                print(chunk.choices[0].delta.content, end="")
+
+    asyncio.run(main())
+    ```
+    </TabsTab>
+    <TabsTab label="Responses API">
+    ```python
+    import asyncio
+    from openai import AsyncOpenAI
+
+    client = AsyncOpenAI(
+        base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
+        api_key="<SCW_API_KEY>"  # Your unique API key from Scaleway
+    )
+
+    async def main():
+        # Stream a response from the vision model
+        async with client.responses.stream(
+            model="pixtral-12b-2409",
+            input=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": "What is this image?"},
+                        {"type": "image_url", "image_url": {"url": "https://picsum.photos/id/32/512/512"}},
+                    ]
+                }
+            ]
+        ) as stream:
+            async for event in stream:
+                # Print incremental text as it arrives
+                if event.type == "response.output_text.delta":
+                    print(event.delta, end="")
+
+            # Optionally, get the final aggregated response
+            final_response = await stream.get_final_response()
+            print("\nFinal output:\n", final_response.output_text)
+
+    asyncio.run(main())
+    ```
+    </TabsTab>
+</Tabs>
 
 ## Frequently Asked Questions
 

@@ -59,17 +59,13 @@ We using the base code below to send our LLM a voice note transcript to structur
 
 ### Defining the voice note and transcript
 
-<Message type="note">
-If you are going to use this base code with the Responses API, note that for now you must use `gpt-oss-120b` as the only supported model.
-</Message>
-
     ```python
     import json
     from openai import OpenAI
     from pydantic import BaseModel, Field
 
     # Set your preferred model
-    MODEL = "llama-3.1-8b-instruct"
+    MODEL = "llama-3.1-8b-instruct" ## or "gpt-oss-120b" for the Responses API
 
     # Set your API key
     API_KEY = "<SCW_API_KEY>"
@@ -141,25 +137,26 @@ Using [Pydantic](https://docs.pydantic.dev/latest/concepts/models/), users can d
     </TabsTab>
     <TabsTab label="Responses API (Beta)">
     ```python
+
     extract = client.responses.create(
-    input=[
-        {
-            "role": "system",
-            "content": "The following is a voice message transcript. Only answer in JSON using '{' as the first character.",
-        },
-        {
-            "role": "user",
-            "content": TRANSCRIPT,
+        input=[
+            {
+                "role": "system",
+                "content": "The following is a voice message transcript. Only answer in JSON using '{' as the first character.",
+            },
+            {
+                "role": "user",
+                "content": TRANSCRIPT,
+            }
+        ],
+        model=MODEL,
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "VoiceNote",
+                "schema": VoiceNote.model_json_schema()
+            }
         }
-    ],
-    model=MODEL,
-    text={
-        "format": {
-            "type": "json_schema",
-            "name": "VoiceNote",
-            "schema": VoiceNote.model_json_schema()
-        }
-    }
     )
 
     # Print the generated response. Here, the last output message will contain the final content.
@@ -169,15 +166,16 @@ Using [Pydantic](https://docs.pydantic.dev/latest/concepts/models/), users can d
     ```
 
     Output example:
+
     ```json
     {
-    "title": "To-Do List",
-    "summary": "Returning from work, need to complete tasks before relaxing",
-    "actionItems": [
-        "Water garden",
-        "Prepare dinner: pasta dish with garlic bread",
-        "Catch up on missed phone calls"
-    ]
+        "actionItems": [
+            "Water the plants in the garden",
+            "Prepare a simple pasta dish with garlic bread",
+            "Catch up on missed phone calls while dinner is cooking"
+        ],
+        "summary": "The user plans to water plants, cook dinner, and make phone calls after arriving home at 6:30\u202fPM.",
+        "title": "Evening Tasks"
     }
     ```
     </TabsTab>
@@ -194,78 +192,25 @@ Using [Pydantic](https://docs.pydantic.dev/latest/concepts/models/), users can d
 
 ### Using structured outputs with JSON schema (manual definition)
 
-Alternatively, users can manually define the JSON schema inline when calling the model.
+Alternatively, users can manually define the JSON schema inline when calling the model. See below an example for doing this with the Chat Completions API:
 
-<Tabs id="structured-output_manual">
-    <TabsTab label="Chat Completions API">
-    ```python
-    extract = client.chat.completions.create(
-        messages=[
-            {
-                "role": "system",
-                "content": "The following is a voice message transcript. Only answer in JSON using '{' as the first character.",
-            },
-            {
-                "role": "user",
-                "content": TRANSCRIPT,
-            },
-        ],
-        model=MODEL,
-        response_format={
-            "type": "json_schema",
-            "json_schema": {
-                "name": "VoiceNote", 
-                "schema": {
-                    "type": "object",
-                    "properties": {
-                        "title": {"type": "string"},
-                        "summary": {"type": "string"},
-                        "actionItems": {
-                            "type": "array",
-                            "items": {"type": "string"}
-                        }
-                    },
-                    "additionalProperties": False,
-                    "required": ["title", "summary", "actionItems"]
-                }
-            }
-        }
-    )
-    output = json.loads(extract.choices[0].message.content)
-    print(json.dumps(output, indent=2))
-    ```
-
-    Output example:
-    ```json
-    {
-    "title": "Evening Routine",
-    "actionItems": [
-        "Water the plants",
-        "Cook dinner (pasta and garlic bread)",
-        "Make phone calls"
-    ],
-    "summary": "Made a list of tasks to accomplish before relaxing tonight"
-    }
-    ```
-    </TabsTab>
-    <TabsTab label="Responses API (Beta)">
-    ```python
-    extract = client.responses.create(
-    model=MODEL,
-    input=[
+```python
+extract = client.chat.completions.create(
+    messages=[
         {
             "role": "system",
-            "content": "The following is a voice message transcript. Only answer in JSON using '{' as the first character."
+            "content": "The following is a voice message transcript. Only answer in JSON using '{' as the first character.",
         },
         {
             "role": "user",
-            "content": TRANSCRIPT
-        }
+            "content": TRANSCRIPT,
+        },
     ],
+    model=MODEL,
     response_format={
         "type": "json_schema",
         "json_schema": {
-            "name": "VoiceNote",
+            "name": "VoiceNote", 
             "schema": {
                 "type": "object",
                 "properties": {
@@ -278,30 +223,26 @@ Alternatively, users can manually define the JSON schema inline when calling the
                 },
                 "additionalProperties": False,
                 "required": ["title", "summary", "actionItems"]
-                }
             }
         }
-    
-    )
-    output = json.loads(extract.choices[0].message.content)
-    print(json.dumps(output, indent=2))
-    ```
-
-    Output example:
-    ```json
-    {
-    "title": "Evening Routine",
-    "actionItems": [
-        "Water the plants",
-        "Cook dinner (pasta and garlic bread)",
-        "Make phone calls"
-    ],
-    "summary": "Made a list of tasks to accomplish before relaxing tonight"
     }
-    ```
-    </TabsTab>
-</Tabs>
+)
+output = json.loads(extract.choices[0].message.content)
+print(json.dumps(output, indent=2))
+```
 
+Output example:
+```json
+{
+"title": "Evening Routine",
+"actionItems": [
+    "Water the plants",
+    "Cook dinner (pasta and garlic bread)",
+    "Make phone calls"
+],
+"summary": "Made a list of tasks to accomplish before relaxing tonight"
+}
+```
 
 <Message type="tip">
   When using the OpenAI SDKs like in the examples above, you are expected to set `additionalProperties` to false, and to specify all your properties as required.
@@ -313,97 +254,49 @@ Alternatively, users can manually define the JSON schema inline when calling the
   JSON mode: It is important to explicitly ask the model to generate a JSON output either in the system prompt or user prompt. To prevent infinite generations, model providers most often encourage users to ask the model for short JSON objects. Prompt example: `Only answer in JSON using '{' as the first character.`.
 </Message>
 
-In JSON mode, you can prompt the model to output a JSON object without enforcing a strict schema.
+In JSON mode, you can prompt the model to output a JSON object without enforcing a strict schema. See below an example for the Chat Completions API:
 
-<Tabs id="structured-output_schemaless">
-    <TabsTab label="Chat Completions API">
-    ```python
-    extract = client.chat.completions.create(
-        messages=[
-            {
-                "role": "system",
-                "content": "The following is a voice message transcript. Only answer in JSON using '{' as the first character.",
-            },
-            {
-                "role": "user",
-                "content": TRANSCRIPT,
-            },
-        ],
-        model=MODEL,
-        response_format={
-            "type": "json_object",
+```python
+extract = client.chat.completions.create(
+    messages=[
+        {
+            "role": "system",
+            "content": "The following is a voice message transcript. Only answer in JSON using '{' as the first character.",
         },
-    )
-    output = json.loads(extract.choices[0].message.content)
-    print(json.dumps(output, indent=2))
-    ```
+        {
+            "role": "user",
+            "content": TRANSCRIPT,
+        },
+    ],
+    model=MODEL,
+    response_format={
+        "type": "json_object",
+    },
+)
+output = json.loads(extract.choices[0].message.content)
+print(json.dumps(output, indent=2))
+```
 
-    Output example:
-    ```json
+Output example:
+```json
+{
+"current_time": "6:30 PM",
+"tasks": [
     {
-    "current_time": "6:30 PM",
-    "tasks": [
-        {
-        "task": "water the plants in the garden",
-        "priority": "high"
-        },
-        {
-        "task": "prepare dinner (pasta with garlic bread)",
-        "priority": "high"
-        },
-        {
-        "task": "catch up on phone calls",
-        "priority": "medium"
-        }
-    ]
-    }
-    ```
-    </TabsTab>
-    <TabsTab label="Responses API (Beta)">
-    ```python
-    extract = client.responses.create(
-        model=MODEL,
-        input=[
-            {
-                "role": "system",
-                "content": "The following is a voice message transcript. Only answer in JSON using '{' as the first character."
-            },
-            {
-                "role": "user",
-                "content": TRANSCRIPT
-            }
-        ],
-        response_format={
-            "type": "json_object",
-        },
-    )
-
-    output = json.loads(extract.choices[0].message.content)
-    print(json.dumps(output, indent=2))
-    ```
-
-    Output example:
-    ```json
+    "task": "water the plants in the garden",
+    "priority": "high"
+    },
     {
-    "current_time": "6:30 PM",
-    "tasks": [
-        {
-        "task": "water the plants in the garden",
-        "priority": "high"
-        },
-        {
-        "task": "prepare dinner (pasta with garlic bread)",
-        "priority": "high"
-        },
-        {
-        "task": "catch up on phone calls",
-        "priority": "medium"
-        }
-    ]
+    "task": "prepare dinner (pasta with garlic bread)",
+    "priority": "high"
+    },
+    {
+    "task": "catch up on phone calls",
+    "priority": "medium"
     }
-    ```
-    </TabsTab>
-</Tabs>
+]
+}
+```
 
 ## Conclusion
 

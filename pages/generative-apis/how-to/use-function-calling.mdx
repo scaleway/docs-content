@@ -39,7 +39,7 @@ The workflow typically follows these steps:
 4. Execute selected functions
 5. Return results to model for final response
 
-## Code examples
+## Code example for Chat Completions API
 
 <Message type="tip">
     Before diving into the code examples, ensure you have the necessary libraries installed:
@@ -48,7 +48,7 @@ The workflow typically follows these steps:
     ```
 </Message>
 
-We will demonstrate function calling using a flight scheduling system that allows users to check available flights between European airports.
+We will demonstrate function calling with the Chat Completions API using a flight scheduling system that allows users to check available flights between European airports.
 
 ### Basic function definition
 
@@ -110,184 +110,86 @@ tools = [{
 
 To implement a basic function call, add the following code:
 
-<Tabs id="simple_function_call">
-    <TabsTab label="Chat Completions API">
-    ```python
-    # Initialize the OpenAI client
-    client = OpenAI(
-        base_url="https://api.scaleway.ai/v1",
-        api_key="<YOUR_API_KEY>"
-    )
+```python
+# Initialize the OpenAI client
+client = OpenAI(
+    base_url="https://api.scaleway.ai/v1",
+    api_key="<YOUR_API_KEY>"
+)
 
-    # Create a simple query
-    messages = [
-        {
-            "role": "system",
-            "content": "You are a helpful flight assistant."
-        },
-        {
-            "role": "user",
-            "content": "What flights are available from CDG to LHR on November 1st, 2024?"
-        }
-    ]
+# Create a simple query
+messages = [
+    {
+        "role": "system",
+        "content": "You are a helpful flight assistant."
+    },
+    {
+        "role": "user",
+        "content": "What flights are available from CDG to LHR on November 1st, 2024?"
+    }
+]
 
-    # Make the API call
-    response = client.chat.completions.create(
-        model="llama-3.1-70b-instruct",
-        messages=messages,
-        tools=tools,
-        tool_choice="auto"
-    )
+# Make the API call
+response = client.chat.completions.create(
+    model="llama-3.1-70b-instruct",
+    messages=messages,
+    tools=tools,
+    tool_choice="auto"
+)
 
-    print(response.choices[0].message.tool_calls)
-    ```
+print(response.choices[0].message.tool_calls)
+```
 
-    As the model detects properly that a tool call is required to answer the question, the output should be a list of tool calls specifying function names and parameter properties:
-    ```bash
-    [ChatCompletionMessageToolCall(id='chatcmpl-tool-81e63f4f496d429ba9ec6efcff6a86e1', function=Function(arguments='{"departure_airport": "CDG", "destination_airport": "LHR", "departure_date": "2024-11-01"}', name='get_flight_schedule'), type='function')]
-    ```
+As the model detects properly that a tool call is required to answer the question, the output should be a list of tool calls specifying function names and parameter properties:
+```bash
+[ChatCompletionMessageToolCall(id='chatcmpl-tool-81e63f4f496d429ba9ec6efcff6a86e1', function=Function(arguments='{"departure_airport": "CDG", "destination_airport": "LHR", "departure_date": "2024-11-01"}', name='get_flight_schedule'), type='function')]
+```
 
-    <Message type="note">
-        The model automatically decides which functions to call. However, you can specify a particular function by using the `tool_choice` parameter. In the example above, you can replace `tool_choice=auto` with `tool_choice={"type": "function", "function": {"name": "get_flight_schedule"}}` to explicitly call the desired function.
-    </Message>
+<Message type="note">
+    The model automatically decides which functions to call. However, you can specify a particular function by using the `tool_choice` parameter. In the example above, you can replace `tool_choice=auto` with `tool_choice={"type": "function", "function": {"name": "get_flight_schedule"}}` to explicitly call the desired function.
+</Message>
 
-    <Message type="important">
-        Some models must be told they can use external functions in the system prompt. If you do not provide a system prompt when using tools, Scaleway will automatically add one that works best for that specific model.
-    </Message>
-    </TabsTab>
-
-    <TabsTab label="Responses API">
-
-    ```python
-    from openai import OpenAI
-
-    # Initialize the OpenAI client
-    client = OpenAI(
-        base_url="https://api.scaleway.ai/v1",
-        api_key="<YOUR_API_KEY>"
-    )
-
-    # Create a simple query
-    response = client.responses.create(
-        model="gpt-oss-120b",
-        input=[
-            {
-                "role": "system",
-                "content": "You are a helpful flight assistant."
-            },
-            {
-                "role": "user",
-                "content": "What flights are available from CDG to LHR on November 1st, 2024?"
-            }
-        ],
-        tools=tools,
-        tool_choice="auto"
-    )
-
-    # Inspect tool calls
-    print(response.output[0].content[0].tool_calls)
-    ```
-
-    As the model detects properly that a tool call is required to answer the question, the output should be a list of tool calls specifying function names and parameter properties:
-
-    ```bash
-    [ToolCall(
-        id='resp-tool-81e63f4f496d429ba9ec6efcff6a86e1',
-        type='function',
-        function=ToolCallFunction(
-            name='get_flight_schedule',
-            arguments='{"departure_airport": "CDG", "destination_airport": "LHR", "departure_date": "2024-11-01"}'
-        )
-    )]
-    ```
-    </TabsTab>
-</Tabs>
-
+<Message type="important">
+    Some models must be told they can use external functions in the system prompt. If you do not provide a system prompt when using tools, Scaleway will automatically add one that works best for that specific model.
+</Message>
+  
 ### Call the tool and provide a final answer
 
 To provide the answer, or for more complex interactions, you will need to handle multiple turns of conversation:
 
-<Tabs id="call_tool">
-    <TabsTab label="Chat Completions API">
-    ```python
-    # Process the tool call
-    if response.choices[0].message.tool_calls:
-        tool_call = response.choices[0].message.tool_calls[0]
-        
-        # Execute the function
-        if tool_call.function.name == "get_flight_schedule":
-            function_args = json.loads(tool_call.function.arguments)
-            function_response = get_flight_schedule(**function_args)
-            
-            # Add results to the conversation
-            messages.extend([
-                {
-                    "role": "assistant",
-                    "content": None,
-                    "tool_calls": [tool_call]
-                },
-                {
-                    "role": "tool",
-                    "name": tool_call.function.name,
-                    "content": json.dumps(function_response),
-                    "tool_call_id": tool_call.id
-                }
-            ])
-            
-            # Get final response
-            final_response = client.chat.completions.create(
-                model="llama-3.1-70b-instruct",
-                messages=messages
-            )
-            print(final_response.choices[0].message.content)
-    ```
-    </TabsTab>
-    <TabsTab label="Responses API">
-    ```python
-    import json
-    from openai import OpenAI
 
-    client = OpenAI()
+```python
+# Process the tool call
+if response.choices[0].message.tool_calls:
+tool_call = response.choices[0].message.tool_calls[0]
 
-    messages = [
-        {"role": "user", "content": "What time is the next flight to Paris?"}
-    ]
-
-    # First request
-    response = client.responses.create(
-        model="gpt-4.1",
-        input=messages
+# Execute the function
+if tool_call.function.name == "get_flight_schedule":
+    function_args = json.loads(tool_call.function.arguments)
+    function_response = get_flight_schedule(**function_args)
+    
+    # Add results to the conversation
+    messages.extend([
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [tool_call]
+        },
+        {
+            "role": "tool",
+            "name": tool_call.function.name,
+            "content": json.dumps(function_response),
+            "tool_call_id": tool_call.id
+        }
+    ])
+    
+    # Get final response
+    final_response = client.chat.completions.create(
+        model="llama-3.1-70b-instruct",
+        messages=messages
     )
-
-    # Look for tool calls
-    tool_calls = [item for item in response.output if item.type == "tool_call"]
-
-    if tool_calls:
-        tool_call = tool_calls[0]
-
-        # Execute the function
-        if tool_call.function.name == "get_flight_schedule":
-            function_args = json.loads(tool_call.function.arguments)
-            function_response = get_flight_schedule(**function_args)
-
-            # Provide tool output and get final model response
-            final_response = client.responses.create(
-                model="gpt-4.1",
-                input=messages + [
-                    response,  # include assistant's tool request
-                    {
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "name": tool_call.function.name,
-                        "content": json.dumps(function_response)
-                    }
-                ]
-            )
-
-    print(final_response.output_text)
-    ```
-    </TabsTab>
-</Tabs>
+    print(final_response.choices[0].message.content)
+```
 
 ### Parallel function calling
 
@@ -392,6 +294,11 @@ messages = [
     {"role": "user", "content": "Turn this office building into a party!"}
 ]
 ```
+
+## Code example for Responses API
+
+See the OpenAPI documentation for a fully worked example on [function calling using the Responses API](https://platform.openai.com/docs/guides/function-calling#function-tool-example).
+
 
 ## Best practices
 

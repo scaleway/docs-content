@@ -3,13 +3,13 @@ title: How to use function calling
 description: Learn how to implement function calling capabilities using Scaleway's Chat Completions API service.
 tags: chat-completions-api
 dates:
-  validation: 2025-05-26
+  validation: 2025-08-22
   posted: 2024-09-24
 ---
 import Requirements from '@macros/iam/requirements.mdx'
 
 
-Scaleway's Chat Completions API supports function calling as introduced by OpenAI. 
+Scaleway's Chat Completions API supports function calling as introduced by OpenAI. The Responses API allows not only function calling, but also direct tool-calling by the model, e.g. web and file search. However currently only function calling is supported by Scaleway, as our support of Responses API is at beta stage. [Read more about Chat Completions vs Responses API](/generative-apis/how-to/query-language-models/#chat-completions-api-or-responses-api?).
 
 ## What is function calling?
 
@@ -39,7 +39,7 @@ The workflow typically follows these steps:
 4. Execute selected functions
 5. Return results to model for final response
 
-## Code examples
+## Code example for Chat Completions API
 
 <Message type="tip">
     Before diving into the code examples, ensure you have the necessary libraries installed:
@@ -48,7 +48,7 @@ The workflow typically follows these steps:
     ```
 </Message>
 
-We will demonstrate function calling using a flight scheduling system that allows users to check available flights between European airports.
+We will demonstrate function calling with the Chat Completions API using a flight scheduling system that allows users to check available flights between European airports.
 
 ### Basic function definition
 
@@ -152,42 +152,43 @@ As the model detects properly that a tool call is required to answer the questio
 <Message type="important">
     Some models must be told they can use external functions in the system prompt. If you do not provide a system prompt when using tools, Scaleway will automatically add one that works best for that specific model.
 </Message>
-
+  
 ### Call the tool and provide a final answer
 
 To provide the answer, or for more complex interactions, you will need to handle multiple turns of conversation:
 
+
 ```python
 # Process the tool call
 if response.choices[0].message.tool_calls:
-    tool_call = response.choices[0].message.tool_calls[0]
+tool_call = response.choices[0].message.tool_calls[0]
+
+# Execute the function
+if tool_call.function.name == "get_flight_schedule":
+    function_args = json.loads(tool_call.function.arguments)
+    function_response = get_flight_schedule(**function_args)
     
-    # Execute the function
-    if tool_call.function.name == "get_flight_schedule":
-        function_args = json.loads(tool_call.function.arguments)
-        function_response = get_flight_schedule(**function_args)
-        
-        # Add results to the conversation
-        messages.extend([
-            {
-                "role": "assistant",
-                "content": None,
-                "tool_calls": [tool_call]
-            },
-            {
-                "role": "tool",
-                "name": tool_call.function.name,
-                "content": json.dumps(function_response),
-                "tool_call_id": tool_call.id
-            }
-        ])
-        
-        # Get final response
-        final_response = client.chat.completions.create(
-            model="llama-3.1-70b-instruct",
-            messages=messages
-        )
-        print(final_response.choices[0].message.content)
+    # Add results to the conversation
+    messages.extend([
+        {
+            "role": "assistant",
+            "content": None,
+            "tool_calls": [tool_call]
+        },
+        {
+            "role": "tool",
+            "name": tool_call.function.name,
+            "content": json.dumps(function_response),
+            "tool_call_id": tool_call.id
+        }
+    ])
+    
+    # Get final response
+    final_response = client.chat.completions.create(
+        model="llama-3.1-70b-instruct",
+        messages=messages
+    )
+    print(final_response.choices[0].message.content)
 ```
 
 ### Parallel function calling
@@ -293,6 +294,11 @@ messages = [
     {"role": "user", "content": "Turn this office building into a party!"}
 ]
 ```
+
+## Code example for Responses API
+
+See the OpenAPI documentation for a fully worked example on [function calling using the Responses API](https://platform.openai.com/docs/guides/function-calling#function-tool-example). Note that Scaleway's support of the Responses API is currently at beta stage - [find out more](/generative-apis/how-to/query-language-models/#chat-completions-api-or-responses-api).
+
 
 ## Best practices
 

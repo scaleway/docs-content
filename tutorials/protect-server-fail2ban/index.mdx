@@ -5,7 +5,7 @@ tags: security Fail2Ban brute-force
 products:
   - instances
 dates:
-  validation: 2025-04-08
+  validation: 2025-08-25
   posted: 2018-08-22
   validation_frequency: 12
 ---
@@ -13,10 +13,8 @@ import image from './assets/scaleway-postfix-install.webp'
 
 import Requirements from '@macros/iam/requirements.mdx'
 
-
-Fail2Ban is a useful tool that analyses server log files for recurring patterns of failures. This allows blocking IPs trying to run brute force attacks against a server.
-
-In this tutorial, you will learn how to configure the service on an Ubuntu Bionic server to protect the SSH service. Fail2Ban can be used with all services generating log files.
+Fail2Ban is a powerful tool that analyzes server log files for recurring patterns of failed login attempts, enabling the blocking of IPs attempting brute force attacks against a server.
+In this tutorial, you will learn how to configure Fail2Ban on an Ubuntu 24.04 LTS (Noble Numbat) server to protect the SSH service. Fail2Ban can be used with any service that generates log files.
 
 <Requirements />
 
@@ -28,79 +26,87 @@ In this tutorial, you will learn how to configure the service on an Ubuntu Bioni
 
 ## Installing Fail2Ban
 
-1. The required packages are available in the repositories of Ubuntu and can be installed with `apt`:
-    ```
+1. Install Fail2Ban and Postfix (optional, for email notifications) using the package manager:
+    ```bash
     sudo apt-get install fail2ban postfix
     ```
-2. Choose `Internet Site` when asked for the configuration:
+2. During Postfix installation, select **Internet Site** when prompted for configuration.
     <Lightbox image={image} alt="" />
-3. Once the installation has completed, open the file `/etc/aliases` and add the following line:
+
+3. After installation, edit `/etc/aliases` to configure email notifications:
+    ```bash
+    sudo nano /etc/aliases
     ```
+
+4. Add the following line, replacing me@mydomain.tld with your email address:
+    ```bash
     root: me@mydomain.tld
     ```
 
-  Make sure to replace `me@mydomain.tld` with your actual email address.
-
-  <Message type="tip">
-    To receive notifications by email, it is required that the [email ports are unlocked](/instances/how-to/send-emails-from-your-instance/).
-  </Message>
+5. Save the file, exit nano and run the following command:
+    ```bash
+    sudo newaliases
+    ```
+    <Message type="note">
+    - To receive email notifications, ensure outbound email ports (e.g., 25, 587) are open on your server.
+    - Postfix is optional. Alternatives like `ssmtp` or external SMTP services can be used for notifications.
+    </Message>
 
 ## Configuring Fail2Ban
 
-1. Start by copying the configuration file:
-    ```
+1. Copy the default configuration file to create a custom configuration:
+    ```bash
     cd /etc/fail2ban && sudo cp jail.conf jail.local
     ```
+    The jail.local file overrides jail.conf for custom settings, preserving the default configuration.
 
-  The file `jail.conf` contains the default parameters. If a file `jail.local` is available, it will have priority over `jail.conf` if parameters are modified.
-2. Edit the file `/etc/fail2ban/jail.local` with your preferred editor.
-
-    Following are the parameters which should be modified:
-    - `ignoreip = 127.0.0.1/8` - By default the IPs of localhost are ignored, self-banning would not be very useful. It is possible to exclude other IPs from being banned.
-    - `bantime = 600` - The duration of a ban. By default, it is set to 10 Minutes. The value has to be specified in seconds and it is recommended to set it at least to one hour, or one day.
-    - `findtime = 600` - The timespan which will be considered for maxretry. If you want for example to ban somebody who made more than 3 malicious attempts during the last hour or, as here, in the last 10 minutes.
-    - `maxretry = 3` - Amount of attempts before being banned.
-    - `destemail = root@localhost` - The recipient of the mail. As an alias for root has been set during the installation, this value can be left as it is.
-    - `sendername = Fail2Ban` - The name of the sender of the mail.
-    - `action = %(action_)s` - This defines the action to execute when a limit is reached.
-        By default, it will only block the user.
-
-        To receive an email at each ban, set it to:
-
-        - `action = %(action_mw)`
-
-        To receive the logs with the mail, set it to:
-
-        - `action = %(action_mwl)`
-
-    Further down in the configuration file, it comes to the “Jails”. These are configurable blocks per service to filter logs and ban in cases where patterns are matched.
-    As a minimum, it is recommended to activate the jail ssh as follows:
-      ```
-      [ssh]
-
-      enabled  = true
-      port     = ssh
-      filter   = sshd
-      logpath  = /var/log/auth.log
-      ```
-
-      <Message type="tip">
-        If your SSH daemon is listening on multiple ports or a different port, you have to modify the line port with the correct parameters:
-        For example:
-        ```
-        port = ssh,1234
-        ```
-        Fail2Ban analyses the logs and will ban the users who made several intrusion attempts on ports 22 (SSH by default) & 1234.
-      </Message>
-3. Save the file once you have edited it.
-
-    Fail2Ban uses filters, pre-made configuration files indicating what to parse in a log.
-
-    They can be found in `/etc/fail2ban/filter.d`.
-    You can create your own filters in case you need to.
-4. Restart the service to take the actions into effect:
+2. Edit `/etc/fail2ban/jail.local` with your preferred editor (e.g., nano):
+    ```bash
+    sudo nano /etc/fail2ban/jail.local
     ```
-    sudo service fail2ban restart
+    Modify the following parameters:
+    ```bash
+    ignoreip = 127.0.0.1/8 - Ignores localhost IPs to prevent self-banning. Add other trusted IPs if needed (e.g., 127.0.0.1/8 192.168.1.0/24).
+    bantime = 3600 - Duration of a ban, set to 1 hour (3600 seconds) by default in newer versions. Consider increasing to 86400 (1 day) for stronger protection.
+    findtime = 3600 - Time window for counting failed attempts (1 hour). Adjust to 600 (10 minutes) for stricter monitoring if preferred.
+    maxretry = 5 - Number of failed attempts before a ban. The default in Ubuntu 24.04 is 5.
+    destemail = root@localhost - Email recipient for notifications. Leave as is if /etc/aliases is configured.
+    sendername = Fail2Ban - Sender name for notification emails.
+    banaction = nftables[multiport] - Default ban action using nftables, which is preferred in Ubuntu 24.04 over iptables.
+    action = %(action_mwl)s - Sends email with logs when banning. Use %(action_mw)s for email without logs, or %(action_)s for no email.
     ```
 
-The service will now analyze the connections made to the SSH service. The logs of Fail2Ban are located in the file `var/log/fail2ban.log`.
+3. Enable the SSH jail by ensuring the following configuration is present:
+    ```bash
+    [sshd]
+    enabled  = true
+    port     = ssh
+    filter   = sshd
+    logpath  = /var/log/auth.log
+    ```
+    If your SSH service uses a non-standard port, update the `port` line. For example, for ports 22 and 1234:
+    ```
+    port = ssh,1234
+    ```
+    Fail2Ban will monitor the specified ports for intrusion attempts.
+    <Message type="tip">
+    For systems using `systemd` logging (e.g., Proxmox), use:
+    ```
+    [sshd]
+    enabled  = true
+    port     = ssh
+    filter   = sshd
+    logpath  = %(sshd_log)s
+    backend  = systemd
+    ```
+    </Message>
+
+4. Save the file.
+ Fail2Ban uses filter files in `/etc/fail2ban/filter.d` to parse logs. The `sshd` filter is pre-configured for SSH. Custom [filters](https://fail2ban.readthedocs.io/en/latest/filters.html) can be created for other services.
+
+5. Restart Fail2Ban to apply changes:
+    ```bash
+    sudo systemctl restart fail2ban
+    ```
+
+Fail2Ban will now monitor SSH connections. Check logs at `/var/log/fail2ban.log` for activity.

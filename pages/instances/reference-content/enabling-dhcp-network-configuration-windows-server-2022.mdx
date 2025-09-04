@@ -1,0 +1,180 @@
+---
+title: Enabling DHCP network configuration for Windows Server 2022 Instances
+description: This page helps you to enable DHCP network configuration for Windows Server 2022 Instances
+tags: windows instance dhcp console
+dates:
+  validation: 2025-08-25
+  posted: 2023-08-25
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+The latest Windows Server 2022 and Windows Server 2022 Core images on Scaleway Instances now use DHCP for network configuration by default. This aligns with the standard mechanism used across all Scaleway Instance OS images.
+
+For existing running Instances, no changes to network configuration are necessary unless you plan to update the public IPv4 address. In such cases, the Instance may retain its static network configuration, continuing to use the previous public IPv4 address. 
+Follow the steps below to switch to DHCP, ensure the new address is applied correctly, and enable DHCP before assigning the new IP.
+
+<Message type="important">
+    These steps involve modifying network settings, which carry a risk of losing network connectivity (e.g., SSH or RDP access). To avoid this, enable and configure Serial Console access on your Instance beforehand. This allows you to maintain access via the Scaleway console even if standard network connections fail.
+</Message>
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An [Instance](/instances/how-to/create-an-instance/) running on Windows Server 2022
+
+
+## Enabling Serial Console access
+
+Scaleway provides a Serial Console (TTY) for Instances, which is essential for troubleshooting network issues.
+For Windows Server Instances, you must configure the OS to enable the Special Administration Console (SAC) for serial access.
+
+### Enabling SAC on Windows (OS configuration)
+
+Connect to your Windows Instance via RDP or another method and run the following commands in an elevated Command Prompt (Administrator) or PowerShell:
+
+1. Enable Emergency Management Services (EMS):
+   ```
+   bcdedit /emssettings EMSPORT:1
+   bcdedit /ems {current} on
+   ```
+
+2. (Optional, but recommended) Enable the boot menu in the Serial Console:
+   ```
+   bcdedit /set {bootmgr} displaybootmenu yes
+   bcdedit /set {bootmgr} timeout 10
+   bcdedit /set {bootmgr} bootems yes
+   ```
+
+3. Reboot the Instance to apply the changes:
+   ```
+   shutdown /r /t 0
+   ```
+
+For more details, refer to [Microsoft's Azure Serial Console for Windows](https://learn.microsoft.com/en-us/troubleshoot/azure/virtual-machines/windows/serial-console-windows) documentation on enabling Serial Console for Windows VMs.
+
+### Accessing the Serial Console via Scaleway console
+
+1. Log in to the [Scaleway console](https://console.scaleway.com/).
+2. Navigate to **Compute** > **CPU & GPU Instances**.
+3. Click on the Instance you want to configure.
+4. On the Instance **Overview** page, click **Console** to open the Serial Console in a pop-up window.
+5. Once connected, you should see the SAC prompt. Use commands like `cmd` to start a command channel, then `ch -si 1` to switch to it.
+
+For more information on using the Scaleway Serial Console, see [How to use the Serial Console to connect to an Instance](/instances/how-to/use-serial-console/).
+
+## Steps to enable DHCP configuration
+
+Once Serial Console access is confirmed, configure DHCP using the Server Configuration tool (sconfig) on your Windows Instance. You can access sconfig via RDP, PowerShell, or the Serial Console.
+
+    <Message type="note">
+      The reboot of the Instance is required for full activation.
+    </Message>
+
+1. Open an elevated Command Prompt (Administrator) or PowerShell and run:
+   ```
+   sconfig
+   ```
+
+2. In the sconfig menu, select option **8** (Network settings).
+
+3. Select the network adapter index (usually **1** for the primary adapter).
+
+4. Select option **1** (Set network adapter address).
+
+5. Choose **D** for DHCP.
+
+6. The system will apply the changes and release any existing DHCP lease.
+
+7. Return to the main menu and select option **13** (Restart server) to reboot and activate the configuration.  
+
+Below is an example interaction for reference:
+
+```sh
+===============================================================================
+                    Welcome to Windows Server 2022 Datacenter
+===============================================================================
+
+  1)  Domain/workgroup:                   Workgroup: WORKGROUP
+  2)  Computer name:                      WIN-010DQB68HIR
+  3)  Add local administrator
+  4)  Remote management:                  Enabled
+
+  5)  Update setting:                     Download only
+  6)  Install updates
+  7)  Remote desktop:                     Enabled (all clients)
+
+  8)  Network settings
+  9)  Date and time
+  10) Telemetry setting:                  Required
+  11) Windows activation
+
+  12) Log off user
+  13) Restart server
+  14) Shut down server
+  15) Exit to command line (PowerShell)
+
+Enter number to select an option: 8
+===============================================================================
+                                Network settings
+===============================================================================
+
+Available network adapters:
+
+Index # | IP address      | Description
+1       | 1.1.1.1         | Red Hat VirtIO Ethernet Adapter
+
+Select network adapter index # (Blank=Cancel): 1
+===============================================================================
+                            Network adapter settings
+===============================================================================
+
+NIC index:    1
+Description:  Red Hat VirtIO Ethernet Adapter
+IP address:   1.1.1.1,
+              fe80::dc00:ff:ff:ff:ff:ff
+Subnet mask:  255.255.255.255
+DHCP enabled: False
+
+Default gateway:      62.210.0.1
+Preferred DNS server: 
+Alternate DNS server: 
+
+  1) Set network adapter address
+  2) Set DNS servers
+  3) Clear DNS server settings
+
+Enter selection (Blank=Cancel): 1
+Select (D)HCP or (S)tatic IP address (Blank=Cancel): D
+Setting NIC to use DHCP...
+Successfully set gateway.
+Successfully enabled DHCP.
+Successfully released DHCP lease.. : 00-01-00-01-30-3E-73-36-DE-00-00-84-DB-2B
+(Press ENTER to continue): 
+===============================================================================
+                    Welcome to Windows Server 2022 Datacenter
+===============================================================================
+
+  1)  Domain/workgroup:                   Workgroup: WORKGROUP
+  2)  Computer name:                      WIN-010DQB68HIR
+  3)  Add local administrator
+  4)  Remote management:                  Enabled
+
+  5)  Update setting:                     Download only
+  6)  Install updates
+  7)  Remote desktop:                     Enabled (all clients)
+
+  8)  Network settings
+  9)  Date and time
+  10) Telemetry setting:                  Required
+  11) Windows activation
+
+  12) Log off user
+  13) Restart server
+  14) Shut down server
+  15) Exit to command line (PowerShell)
+
+Enter number to select an option: 13
+Are you sure you want to restart? (Y)es or (N)o: Y
+```

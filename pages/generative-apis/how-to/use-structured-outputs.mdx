@@ -3,22 +3,22 @@ title:  How to use structured outputs
 description: Learn how to get consistent JSON format responses using Scaleway's Chat Completions API service.
 tags: chat-completions-api
 dates:
-  validation: 2025-05-12
+  validation: 2025-08-22
   posted: 2024-09-17
 ---
 import Requirements from '@macros/iam/requirements.mdx'
-
+import ChatCompVsResponsesApi from '@macros/ai/chat-comp-vs-responses-api.mdx'
 
 
 Structured outputs allow users to get consistent, machine-readable JSON format responses from language models.
 JSON, as a widely-used format, enables seamless integration with a variety of platforms and applications. Its interoperability is crucial for developers aiming to incorporate AI functionality into their current systems with minimal adjustments.
 
-By specifying a response format when using the [Chat Completions API](/generative-apis/api-cli/using-chat-api/), you can ensure that responses are returned in a JSON structure.
+By specifying a response format when using the Chat Completions API or Responses API, you can ensure that responses are returned in a JSON structure.
 There are two main modes for generating JSON: **Object Mode** (schemaless) and **Schema Mode** (deterministic, structured output).
 
 There are several ways to interact with language models:
 - The Scaleway [console](https://console.scaleway.com) provides a complete [playground](/generative-apis/how-to/query-language-models/#accessing-the-playground), aiming to test models, adapt parameters, and observe how these changes affect the output in real-time.
-- Via the [Chat API](/generative-apis/how-to/query-language-models/#querying-language-models-via-api)
+- Via the [Chat Completions API](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) or the [Responses API](https://www.scaleway.com/en/developers/api/generative-apis/#path-responses-beta-create-a-response)
 
 <Requirements />
 
@@ -41,8 +41,12 @@ There are several ways to interact with language models:
    - JSON mode is older and has been used by developers since early API implementations, but lacks reliability in response formats.
 
 <Message type="note">
-    - All LLMs in the Scaleway library support **Structured outputs** and **JSON mode**. However, a schemaless **JSON mode** will produce lower quality results and is not recommended.
+    - All LLMs in the Scaleway library support **Structured outputs** and **JSON mode**. However, a schemaless **JSON mode** will produce lower quality results and is not recommended. Note that structured output is more reliably validated and more richly parsed with the Responses API.
 </Message>
+
+## Chat Completions API or Responses API?
+
+<ChatCompVsResponsesApi />
 
 ## Code examples
 
@@ -55,80 +59,132 @@ There are several ways to interact with language models:
 
 The following Python examples demonstrate how to use **Structured outputs** to generate structured responses.
 
-We are using the base code below to send our LLM a voice note transcript to structure:
+We using the base code below to send our LLM a voice note transcript to structure:
 
-```python
-import json
-from openai import OpenAI
-from pydantic import BaseModel, Field
+### Defining the voice note and transcript
 
-# Set your preferred model
-MODEL = "llama-3.1-8b-instruct"
+    ```python
+    import json
+    from openai import OpenAI
+    from pydantic import BaseModel, Field
 
-# Set your API key
-API_KEY = "<SCW_API_KEY>"
+    # Set your preferred model
+    MODEL = "llama-3.1-8b-instruct" ## or "gpt-oss-120b" for the Responses API
 
-client = OpenAI(
-    base_url="https://api.scaleway.ai/v1",
-    api_key=API_KEY,
-)
+    # Set your API key
+    API_KEY = "<SCW_API_KEY>"
 
-# Define the schema for the output using Pydantic
-class VoiceNote(BaseModel):
-    title: str = Field(description="A title for the voice note")
-    summary: str = Field(description="A short one sentence summary of the voice note.")
-    actionItems: list[str] = Field(description="A list of action items from the voice note")
+    client = OpenAI(
+        base_url="https://api.scaleway.ai/v1",
+        api_key=API_KEY,
+    )
 
-# Transcript to use for the output
-TRANSCRIPT = ( 
-    "Good evening! It's 6:30 PM, and I'm just getting home from work. I have a few things to do " 
-    "before I can relax. First, I'll need to water the plants in the garden since they've been in the sun all day. " 
-    "Then, I'll start preparing dinner. I think a simple pasta dish with some garlic bread should be good. " 
-    "While that's cooking, I'll catch up on a couple of phone calls I missed earlier."
-)
-```
+    # Define the schema for the output using Pydantic
+    class VoiceNote(BaseModel):
+        title: str = Field(description="A title for the voice note")
+        summary: str = Field(description="A short one sentence summary of the voice note.")
+        actionItems: list[str] = Field(description="A list of action items from the voice note")
+
+    # Transcript to use for the output
+    TRANSCRIPT = ( 
+        "Good evening! It's 6:30 PM, and I'm just getting home from work. I have a few things to do " 
+        "before I can relax. First, I'll need to water the plants in the garden since they've been in the sun all day. " 
+        "Then, I'll start preparing dinner. I think a simple pasta dish with some garlic bread should be good. " 
+        "While that's cooking, I'll catch up on a couple of phone calls I missed earlier."
+    )
+    ```
 
 ### Using structured outputs with JSON schema (Pydantic)
 
 Using [Pydantic](https://docs.pydantic.dev/latest/concepts/models/), users can define the schema as a Python class and enforce the model to return results adhering to this schema.
 
-```python
-extract = client.chat.completions.create(
-    messages=[
-        {
-            "role": "system",
-            "content": "The following is a voice message transcript. Only answer in JSON using '{' as the first character.",
-        },
-        {
-            "role": "user",
-            "content": TRANSCRIPT,
-        },
-    ],
-    model=MODEL,
-    response_format={
-        "type": "json_schema",
-        "json_schema": {
-            "name": "VoiceNote",
-            "schema": VoiceNote.model_json_schema(),
-        }
-    },
-)
-output = json.loads(extract.choices[0].message.content)
-print(json.dumps(output, indent=2))
-```
+<Tabs id="structured-output_pydantic">
+    <TabsTab label="Chat Completions API">
 
-Output example:
-```json
-{
-  "title": "To-Do List",
-  "summary": "Returning from work, need to complete tasks before relaxing",
-  "actionItems": [
-    "Water garden",
-    "Prepare dinner: pasta dish with garlic bread",
-    "Catch up on missed phone calls"
-  ]
-}
-```
+    ```python
+    extract = client.chat.completions.create(
+        messages=[
+            {
+                "role": "system",
+                "content": "The following is a voice message transcript. Only answer in JSON using '{' as the first character.",
+            },
+            {
+                "role": "user",
+                "content": TRANSCRIPT,
+            },
+        ],
+        model=MODEL,
+        response_format={
+            "type": "json_schema",
+            "json_schema": {
+                "name": "VoiceNote",
+                "schema": VoiceNote.model_json_schema(),
+            }
+        },
+    )
+    output = json.loads(extract.choices[0].message.content)
+    print(json.dumps(output, indent=2))
+    ```
+
+    Output example:
+    ```json
+    {
+    "title": "To-Do List",
+    "summary": "Returning from work, need to complete tasks before relaxing",
+    "actionItems": [
+        "Water garden",
+        "Prepare dinner: pasta dish with garlic bread",
+        "Catch up on missed phone calls"
+    ]
+    }
+    ```
+    </TabsTab>
+    <TabsTab label="Responses API (Beta)">
+    ```python
+
+    extract = client.responses.create(
+        input=[
+            {
+                "role": "system",
+                "content": "The following is a voice message transcript. Only answer in JSON using '{' as the first character.",
+            },
+            {
+                "role": "user",
+                "content": TRANSCRIPT,
+            }
+        ],
+        model=MODEL,
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "VoiceNote",
+                "schema": VoiceNote.model_json_schema()
+            }
+        }
+    )
+
+    # Print the generated response. Here, the last output message will contain the final content.
+    # Previous outputs will contain reasoning content.
+    output = json.loads(extract.output[-1].content[0].text)
+    print(json.dumps(output, indent=2))
+    ```
+
+    Output example:
+
+    ```json
+    {
+        "actionItems": [
+            "Water the plants in the garden",
+            "Prepare a simple pasta dish with garlic bread",
+            "Catch up on missed phone calls while dinner is cooking"
+        ],
+        "summary": "The user plans to water plants, cook dinner, and make phone calls after arriving home at 6:30\u202fPM.",
+        "title": "Evening Tasks"
+    }
+    ```
+    </TabsTab>
+</Tabs>
+
 
 <Message type="tip">
     Structured outputs accuracy may vary between models. For instance, with Llama models, we suggest adding a description of the field looked for in `response_format` and in `system` or `user` messages. In our example this would mean adding a system prompt similar to:
@@ -140,7 +196,7 @@ Output example:
 
 ### Using structured outputs with JSON schema (manual definition)
 
-Alternatively, users can manually define the JSON schema inline when calling the model.
+Alternatively, users can manually define the JSON schema inline when calling the model. See below an example for doing this with the Chat Completions API:
 
 ```python
 extract = client.chat.completions.create(
@@ -182,13 +238,13 @@ print(json.dumps(output, indent=2))
 Output example:
 ```json
 {
-  "title": "Evening Routine",
-  "actionItems": [
+"title": "Evening Routine",
+"actionItems": [
     "Water the plants",
     "Cook dinner (pasta and garlic bread)",
     "Make phone calls"
-  ],
-  "summary": "Made a list of tasks to accomplish before relaxing tonight"
+],
+"summary": "Made a list of tasks to accomplish before relaxing tonight"
 }
 ```
 
@@ -199,11 +255,10 @@ Output example:
 ### Using JSON mode (schemaless, Legacy method)
 
 <Message type="important">
-  - When using the OpenAI SDKs as in the examples above, you are expected to set `additionalProperties` to false, and to specify all your properties as required.
-  - JSON mode: It is important to explicitly ask the model to generate a JSON output either in the system prompt or user prompt. To prevent infinite generations, model providers most often encourage users to ask the model for short JSON objects. Prompt example: `Only answer in JSON using '{' as the first character.`.
+  JSON mode: It is important to explicitly ask the model to generate a JSON output either in the system prompt or user prompt. To prevent infinite generations, model providers most often encourage users to ask the model for short JSON objects. Prompt example: `Only answer in JSON using '{' as the first character.`.
 </Message>
 
-In JSON mode, you can prompt the model to output a JSON object without enforcing a strict schema.
+In JSON mode, you can prompt the model to output a JSON object without enforcing a strict schema. See below an example for the Chat Completions API:
 
 ```python
 extract = client.chat.completions.create(
@@ -229,21 +284,21 @@ print(json.dumps(output, indent=2))
 Output example:
 ```json
 {
-  "current_time": "6:30 PM",
-  "tasks": [
+"current_time": "6:30 PM",
+"tasks": [
     {
-      "task": "water the plants in the garden",
-      "priority": "high"
+    "task": "water the plants in the garden",
+    "priority": "high"
     },
     {
-      "task": "prepare dinner (pasta with garlic bread)",
-      "priority": "high"
+    "task": "prepare dinner (pasta with garlic bread)",
+    "priority": "high"
     },
     {
-      "task": "catch up on phone calls",
-      "priority": "medium"
+    "task": "catch up on phone calls",
+    "priority": "medium"
     }
-  ]
+]
 }
 ```
 

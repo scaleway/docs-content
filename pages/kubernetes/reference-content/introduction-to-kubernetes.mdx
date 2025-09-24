@@ -44,7 +44,7 @@ Kubernetes is able to manage a cluster of virtual or physical machines using a s
 
 Each machine in a Kubernetes cluster has a given role within the Kubernetes ecosystem. One of these servers acts as the **control plane**, the "brain" of the cluster exposing the different APIs, performing health checks on other servers, scheduling the workloads and orchestrating communication between different components. The control plane acts as the primary point of contact with the cluster.
 
-The other machines in the cluster are called **nodes**. These machines are designed to run workloads in containers, meaning each of them requires a container runtime installed on it (for example, [Docker](/tutorials/install-docker-ubuntu-bionic/) or [CRI-O](https://cri-o.io/)).
+The other machines in the cluster are called **nodes**. These machines are designed to run workloads in containers, meaning each of them requires a container runtime installed on it (for example, `containerd`).
 
 The different underlying components running in the cluster ensure that the desired state of an application matches the actual state of the cluster. To ensure the desired state of an application, the control plane responds to any changes by performing necessary actions. These actions include creating or destroying containers on the nodes and adjusting network rules to route and forward traffic as directed by the control plane.
 
@@ -94,16 +94,16 @@ Node components are maintaining pods and providing the Kubernetes runtime enviro
 
 The `kubelet` is an agent running on each node and ensuring that containers are running in a pod. It makes sure that containers described in `PodSpecs` are running and healthy. The agent does not manage any containers that were not created by Kubernetes.
 
-#### `kube-proxy`
+#### `kube-proxy` (optional)
 
 The `kube-proxy` is a network proxy running on each node in the cluster. It maintains the network rules on nodes to allow communication to the pods inside the cluster from internal or external connections.
 
 `kube-proxy` uses either the packet filtering layer of the operating system, if there is one, or forwards the traffic itself if there is none.
 
-### Container runtime
+#### Container runtime
 
 Kubernetes is able to manage containers, but is not capable of running them. Therefore, a container runtime is required that is responsible for running containers.
-Kubernetes supports several container runtimes like `Docker` or `containerd` as well as any implementation of the [Kubernetes CRI (Container Runtime Interface)](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-node/container-runtime-interface.md).
+Kubernetes Kapsule supports the `containerd` container runtimes as well as any implementation of the [Kubernetes CRI (Container Runtime Interface)](https://github.com/kubernetes/community/blob/master/contributors/devel/sig-node/container-runtime-interface.md).
 
 ## Kubernetes objects
 
@@ -119,11 +119,15 @@ A **service** is an abstraction which defines a logical group of pods that perfo
 
 By default, services are only available using internally routable IP addresses, but can be exposed publicly.
 
-It can be done either by using the `NodePort` configuration, which works by opening a static port on each node's external networking interface. Otherwise, it is possible to use the `LoadBalancer` service, which creates an external Load Balancer at a cloud provider using Kubernetes load-balancer integration.
+It can be done either by using the `NodePort` configuration, which works by opening a static port on each node's external networking interface. Otherwise, it is possible to use the `LoadBalancer` service, which creates an Scaleway Load Balancer using Kubernetes load-balancer integration, provided by the CCM.
+
+<Message type="note">
+  To use `NodePort` with Kubernetes Kapsule or Kosmos, security groups for Scaleway Instances must be configured to allow external connections to the exposed ports of the nodes.
+</Message>
 
 ### ReplicaSet
 
-A **ReplicaSet** contains information about how many pods it can acquire, how many pods it shall maintain, and a pod template specifying the data of new pods to meet the number of replicas criteria. The task of a ReplicaSet is to create and delete pods as needed to reach the desired status.
+A `ReplicaSet` contains information about how many pods it can acquire, how many pods it shall maintain, and a pod template specifying the data of new pods to meet the number of replicas criteria. The task of a ReplicaSet is to create and delete pods as needed to reach the desired status.
 
 Each pod within a ReplicaSet can be identified via the `metadata.ownerReference` field, allowing the ReplicaSet to know the state of each of them. It can then schedule tasks according to the state of the pods.
 
@@ -131,21 +135,21 @@ However, `Deployments` are a higher-level concept managing ReplicaSets and provi
 
 ### Deployments
 
-A Deployment is representing a set of identical pods with no individual identities, managed by a _deployment controller_.
+A `Deployment` in Kubernetes provides declarative updates for applications. It manages `ReplicaSets`, which in turn manage the actual Pods.
 
-The deployment controller runs multiple replicas of an application as specified in a _ReplicaSet_. In case any pods fail or become unresponsive, the deployment controller replaces them until the actual state equals the desired state.
+The deployment controller continuously ensures that the desired number of Pod replicas are running. If Pods fail, become unresponsive, or are deleted, it automatically creates replacements to match the desired state. Deployments also support rolling updates and rollbacks, making them the standard way to manage stateless applications.
 
 ### StatefulSets
 
-A StatefulSet is able to manage pods like the deployment controller but maintains a sticky identity of each pod. Pods are created from the same base, but are not interchangeable.
+A `StatefulSet` manages Pods in a similar way to a Deployment, but with one crucial difference: each Pod has a **persistent identity** and is **not interchangeable**. Pods are created from the same specification, yet each one gets a unique, ordinal-based name that persists even if the Pod is rescheduled to a different node.
 
-The operating pattern of StatefulSet is the same as for any other Controllers. The StatefulSet controller maintains the desired state, defined in a StatefulSet object, by making the necessary update to go from the actual state of a cluster to the desired state.
+Like other controllers, the StatefulSet controller continuously reconciles the cluster’s actual state with the desired state defined in the StatefulSet object.
 
-The unique, number-based name of each pod in the StatefulSet persists, even if a pod is being moved to another node.
+Because Pods are treated as unique, each can be associated with its own dedicated storage volume. This makes StatefulSets the preferred choice for workloads that require **stable network identities, persistent storage, and ordered deployment or scaling** — such as databases and distributed systems.
 
 ### DaemonSets
 
-Another type of pod controller is called DaemonSet. It ensures that all (or some) nodes run a copy of a pod. For most use cases, it does not matter where pods are running, but in some cases, it is required that a single pod runs on all nodes. This is useful for aggregating log files, collecting metrics, or running a network storage cluster.
+Another type of pod controller is called `DaemonSet`. It ensures that all (or some) nodes run a copy of a pod. For most use cases, it does not matter where pods are running, but in some cases, it is required that a single pod runs on all nodes. This is useful for aggregating log files, collecting metrics, or running a network storage cluster.
 
 ### Jobs and CronJobs
 

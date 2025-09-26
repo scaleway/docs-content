@@ -3,7 +3,7 @@ title: Identifiying devices of a Scaleway Instance
 description: This page explains how to identify devices on a Scaleway Instance
 tags: instance
 dates:
-  validation: 2025-03-25
+  validation: 2025-09-25
   posted: 2024-03-15
 ---
 
@@ -13,18 +13,18 @@ On a Linux host, devices are named by the kernel in the order they are discovere
 
 This guide aims to provide tips to help you stably identify devices on a Linux host.
 
-## Identifying Instance Block Storage volumes (b_ssd)
+## Identifying Block Storage volumes (sbs)
 
-Instance Block Storage (`b_ssd`) volumes are connected to the Instance as SCSI disks. They will therefore appear as devices handled by the sd driver in the dev file system, i.e. as `/dev/sd{a,b,c...}` devices.
+Block Storage volumes (`sbs_volume`) are connected to the Instance as SCSI disks. They will therefore appear as devices handled by the sd driver in the dev file system, i.e. as `/dev/sd{a,b,c...}` devices.
 
-SCSI disks have multiple attributes, such as vendor and product/model. They also have a serial. Instance Block Storage (`b_ssd`) volumes have the vendor name `SCW`, the model/product name `b_ssd`, and a serial set to `volume-<uuid>` where `<uuid>` is the ID of the volume.
+SCSI disks have multiple attributes, such as vendor and product/model. They also have a serial. Block Storage (`sbs_volume`) volumes have the vendor name `SCW`, the model/product name `sbs`, and a serial set to `volume-<uuid>` where `<uuid>` is the ID of the volume.
 
 The `lsblk` can be used to list SCSI devices and will show these attributes:
 
 ```sh
 root@test-instance:~# lsblk --scsi
-NAME HCTL       TYPE VENDOR   MODEL  REV SERIAL                                      TRAN
-sda  2:0:0:0    disk SCW      b_ssd v42  volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478
+NAME HCTL       TYPE VENDOR   MODEL        REV SERIAL                       TRAN
+sda  0:0:1:0    disk SCW      sbs          v42 volume-a5fb1cc7-70d3-457f-b4
 ```
 
 Through `udev` and the sets of configured `udev` rules, these attributes will be retrieved and symlinks will be automatically created for the `/dev/sdX` devices. As the attributes are stable, these symlinks provide a stable path to the devices, as long as the udev rule does not change.
@@ -46,12 +46,12 @@ root@test-instance:~# /lib/udev/scsi_id --export --whitelisted -d /dev/sda
 ID_SCSI=1
 ID_VENDOR=SCW
 ID_VENDOR_ENC=SCW\x20\x20\x20\x20\x20
-ID_MODEL=b_ssd
-ID_MODEL_ENC=b_ssd\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20
+ID_MODEL=sbs
+ID_MODEL_ENC=sbs\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20\x20
 ID_REVISION=v42
 ID_TYPE=disk
-ID_SERIAL=0SCW_b_ssd_volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478
-ID_SERIAL_SHORT=volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478
+ID_SERIAL=0SCW_sbs_volume-a5fb1cc7-70d3-457f-b4e0-a757997a4b33
+ID_SERIAL_SHORT=volume-a5fb1cc7-70d3-457f-b4e0-a757997a4b33
 ```
 
 The third and fourth rules create the symlinks properly, using these attributes. This will result in the following symlinks being created:
@@ -59,10 +59,11 @@ The third and fourth rules create the symlinks properly, using these attributes.
 ```sh
 root@test-instance:~# ls -l /dev/disk/by-id/
 total 0
-lrwxrwxrwx 1 root root  9 Mar  7 16:13 scsi-0SCW_b_ssd_volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478 -> ../../sda
-lrwxrwxrwx 1 root root 10 Mar  7 16:13 scsi-0SCW_b_ssd_volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478-part1 -> ../../sda1
-lrwxrwxrwx 1 root root 11 Mar  7 16:13 scsi-0SCW_b_ssd_volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478-part14 -> ../../sda14
-lrwxrwxrwx 1 root root 11 Mar  7 16:13 scsi-0SCW_b_ssd_volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478-part15 -> ../../sda15
+lrwxrwxrwx 1 root root  9 Sep 19 09:14 scsi-0SCW_sbs_volume-a5fb1cc7-70d3-457f-b4e0-a757997a4b33 -> ../../sda
+lrwxrwxrwx 1 root root 10 Sep 19 09:14 scsi-0SCW_sbs_volume-a5fb1cc7-70d3-457f-b4e0-a757997a4b33-part1 -> ../../sda1
+lrwxrwxrwx 1 root root 11 Sep 19 09:14 scsi-0SCW_sbs_volume-a5fb1cc7-70d3-457f-b4e0-a757997a4b33-part14 -> ../../sda14
+lrwxrwxrwx 1 root root 11 Sep 19 09:14 scsi-0SCW_sbs_volume-a5fb1cc7-70d3-457f-b4e0-a757997a4b33-part15 -> ../../sda15
+lrwxrwxrwx 1 root root 11 Sep 19 09:14 scsi-0SCW_sbs_volume-a5fb1cc7-70d3-457f-b4e0-a757997a4b33-part16 -> ../../sda16
 ```
 
 In this setup, we can see an entry named after the `f7a6f113-aaf6-4540-ac5a-9e18d7f61478` volume, pointing to the `/dev/sda` device node, along with three entries also created automatically which point to the individual partitions on the volume.
@@ -83,33 +84,12 @@ This rule will create a symlink `/dev/disk/scw/volume-<uuid>` (where `uuid` is t
 ```sh
 root@test-instance:~# ls -l /dev/disk/scw/
 total 0
-lrwxrwxrwx 1 root root  9 Mar  7 16:18 volume-f7a6f113-aaf6-4540-ac5a-9e18d7f61478 -> ../../sda
+lrwxrwxrwx 1 root root  9 Mar  7 16:18 volume-a5fb1cc7-70d3-457f-b4e0-a757997a4b33 -> ../../sda
 ```
 
 Note that this rule relies on `ID_VENDOR` and `ID_SERIAL_SHORT` being in the environment, and thus relies on the execution of `scsi_id` and the importing of its output.
 
 For more details on writing `udev` rules, please see `man 7 udev`.
-
-## Identifying Block Storage volumes (SBS)
-
-Block Storage devices are similar to Instance Block Storage devices. They are also connected to the Instance as SCSI devices and thus all explanations from the above section are also valid.
-
-The only difference is the SCSI model attribute. Instead of being fixed to the value `b_ssd`, its value depends on the class of the Block Storage volume.
-
-Two Block Storage volume classes currently exist: `bssd`, and `sbs`. Block Storage volumes migrated from Instance Block Storage (`b_ssd`) volumes have class `bssd`.
-
-Block Storage volumes with class `bssd` have a SCSI model of `b_ssd`, so migrated volumes won't change characteristics. Otherwise, Block Storage volumes have a SCSI model equal to the volume's class. 
-
-For example:
-
-```sh
-root@test-instance:~# lsblk --scsi
-NAME HCTL       TYPE VENDOR   MODEL  REV SERIAL                                      TRAN
-sda  0:0:0:0    disk SCW      sbs    v42 volume-7831d52c-758f-4a94-a074-39bfa14b66d8
-sdb  0:0:1:0    disk SCW      b_ssd  v42 volume-03e206f6-2a3b-4223-bb56-3d7f1495903f
-```
-
-Here, the first volume has been created through the Block Storage API with class `sbs`. The second volume is an Instance Block Storage (`b_ssd`) volume which has been migrated to Block Storage, and is now a Block Storage volume with class `bssd`.
 
 ## Identifying VPC Private Network interfaces
 

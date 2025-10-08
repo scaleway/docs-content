@@ -1,0 +1,64 @@
+export default {
+  items: [
+    {
+      label: 'Overview',
+      slug: '../audit-trail',
+    },
+    {
+      label: 'Concepts',
+      slug: 'concepts',
+    },
+    {
+      label: 'Quickstart',
+      slug: 'quickstart',
+    },
+    {
+      label: 'FAQ',
+      slug: 'faq',
+    },
+    {
+      items: [
+        {
+          label: 'Configure the Audit Trail permission set',
+          slug: 'configure-audit-trail-permissions',
+        },
+        {
+          label: 'Use Audit Trail',
+          slug: 'use-audit-trail',
+        },
+      ],
+      label: 'How to',
+      slug: 'how-to',
+    },
+    {
+      items: [
+        {
+          label: 'Audit Trail API Reference',
+          slug: 'https://www.scaleway.com/en/developers/api/audit-trail/',
+        },
+      ],
+      label: 'API/CLI',
+      slug: 'api-cli',
+    },
+    {
+      items: [
+        {
+          label: 'Audit Trail product integration',
+          slug: 'resource-integration-with-adt',
+        },
+        {
+          label: 'Supported endpoints for Audit Trail',
+          slug: 'adt-supported-endpoints',
+        },
+      ],
+      label: 'Additional Content',
+      slug: 'reference-content',
+    },
+    {
+      label: 'Troubleshooting',
+      slug: 'troubleshooting',
+    },
+  ],
+  label: 'Audit Trail',
+  slug: 'audit-trail',
+}

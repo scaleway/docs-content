@@ -1,0 +1,165 @@
+---
+title: How to query reasoning models
+description: Learn how to interact with powerful reasoning models using Scaleway's Generative APIs service.
+tags: generative-apis ai-data language-models chat-completions-api reasoning think
+dates:
+  validation: 2025-10-07
+  posted: 2025-10-07
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+Scaleway's Generative APIs service allows users to interact with language models benefitting from additional reasoning capabilities.
+
+A reasoning model is a language model that is capable of carrying out multiple inference steps and systematically verifying intermediate results before producing answers. You can specify how much effort it should put into reasoning via dedicated parameters, and access reasoning metadata (summaries, step counts, etc.) in its outputs. Even with default parameters, such models are designed to perform better on reasoning tasks like maths and logic problems, than non-reasoning language models. 
+
+Language models supporting the reasoning feature include `gpt-oss-120b`. See [Supported Models](/generative-apis/reference-content/supported-models/) for a full list.
+
+You can interact with reasoning models in the following ways:
+
+- Use the [playground](/generative-apis/how-to/query-language-models/#accessing-the-playground) in the Scaleway [console](https://console.scaleway.com) to test models, adapt parameters, and observe how your changes affect the output in real-time.
+- Use the [Chat Completions API](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) or the [Responses API](https://www.scaleway.com/en/developers/api/generative-apis/#path-responses-beta-create-a-response)
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/iam/how-to/create-api-keys/) for API authentication
+- Python 3.7+ installed on your system
+
+## Querying reasoning language models via the playground
+
+### Accessing the playground
+
+Scaleway provides a web playground for instruct-based models hosted on Generative APIs.
+
+1. Navigate to **Generative APIs** under the **AI** section of the [Scaleway console](https://console.scaleway.com/) side menu. The list of models you can query displays.
+2. Click the name of the chat model you want to try. Alternatively, click <Icon name="more" /> next to the chat model, and click **Try model** in the menu. Ensure that you choose a model with [reasoning capabilities](/generative-apis/reference-content/supported-models/).
+
+The web playground displays.
+
+### Using the playground
+
+1. Enter a prompt at the bottom of the page, or use one of the suggested prompts in the conversation area.
+2. Edit the hyperparameters listed on the right column, for example the default temperature for more or less randomness on the outputs. 
+3. Switch models at the top of the page, to observe the capabilities of chat models offered via Generative APIs. 
+4. Click **View code** to get code snippets configured according to your settings in the playground.
+
+<Message type="note">
+You cannot currently set values for parameters such as `reasoning_effort`, or access reasoning metadata in the model's output, via the console playground. Query the models programatically as shown below in order to access the full reasoning featureset.
+</Message>
+
+## Querying reasoning language models via API
+
+You can query models programmatically using your favorite tools or languages.
+In the example that follows, we will use the OpenAI Python client.
+
+### Chat Completions API or Responses API?
+
+Both the [Chat Completions API](/https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) and the [Responses API](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) allow you to access and control reasoning for supported models. Scaleway's support of the Responses API is currently in beta.
+
+Note however, that the Responses API was introduced in part to better support features for reasoning workflows, among other tasks. It provides richer support for reasoning than Chat Completions, for example by providing chain-of-thought reasoning summaries in its responses.
+
+For more information on Chat Completions versus Responses API, see the information provided in the [querying language models](/generative-apis/how-to/query-language-models/#chat-completions-api-or-responses-api) documentation.
+
+### Installing the OpenAI SDK
+
+Install the OpenAI SDK using pip:
+
+```bash
+pip install openai
+```
+
+### Initializing the client
+
+Initialize the OpenAI client with your base URL and API key:
+
+```python
+from openai import OpenAI
+
+# Initialize the client with your base URL and API key
+client = OpenAI(
+    base_url="https://api.scaleway.ai/v1",  # Scaleway's Generative APIs service URL
+    api_key="<SCW_SECRET_KEY>"  # Your unique API secret key from Scaleway
+)
+```
+
+### Generating a chat completion with reasoning
+
+You can now create a chat completion with reasoning, using either the Chat Completions or Responses API, as shown in the following examples:
+
+<Tabs id="generating-chat-completion">
+
+    <TabsTab label="Chat Completions API">
+
+    ```python
+    # Create a chat completion using the 'gpt-oss-120b' model
+    response = client.chat.completions.create(
+      model="gpt-oss-120b",
+      messages=[{"role": "user", "content": "Describe a futuristic city with advanced technology and green energy solutions."}],
+      temperature=0.2,  # Adjusts creativity
+      max_completion_tokens=512,   # Limits the length of the output
+      top_p=0.7,         # Controls diversity through nucleus sampling. You usually only need to use temperature.
+      reasoning_effort="medium"
+    )
+
+    # Print the generated response
+    print(f"Reasoning: {response.choices[0].message.reasoning_content}")
+    print(f"Answer: {response.choices[0].message.content}")
+    ```
+
+    This code sends a message to the model, as well as specifying the effort to make with reasoning, and returns an answer based on your input. The model's reasoning metadata can be accessed as well as its answer, with outputs such as:
+
+    ```python
+    Reasoning: The user wants a description of a futuristic city with advanced tech and green energy solutions. Should be creative, vivid, detailed. No disallowed content. Provide description.
+
+    Answer: **City of Luminara – A Blueprint for the Future** <rest of answer truncated> 
+   ```
+
+    </TabsTab>
+
+    <TabsTab label="Responses API (Beta)">
+
+    ```python
+      response = client.responses.create(
+        model="gpt-oss-120b",
+        input=[{"role": "user", "content": "Briefly describe a futuristic city with advanced technology and green energy solutions."}],
+        temperature=0.2,  # Adjusts creativity
+        max_output_tokens=100,   # Limits the length of the output
+        top_p=0.7,         # Controls diversity through nucleus sampling. You usually only need to use temperature.
+        reasoning={"effort":"medium"}
+      )
+      # Print the generated response. Here, the last output message will contain the final content.
+      # Previous outputs will contain reasoning content.
+      for output in response.output:
+        if output.type == "reasoning":
+            print(f"Reasoning: {output.content[0].text}")
+        if output.type == "message":
+            print(f"Answer: {output.content[0].text}")
+    ```
+    This code sends a message to the model, as well as specifying the effort to make with reasoning, and returns an answer based on your input. The model's reasoning metadata can be accessed as well as its answer, with outputs such as:
+
+    ```python
+    Reasoning: The user asks: "Briefly describe a futuristic city with advanced technology and green energy solutions." They want a brief description. Should be concise but vivid. Provide details: architecture, transport, energy, AI, sustainability. Probably a paragraph or a few sentences. Ensure it's brief. Let's produce a short description.
+    
+    Answer: **Solaris Arcadia** rises from a reclaimed river delta, its skyline a lattice of translucent, self‑healing bioglass towers that
+    ```
+    </TabsTab>
+</Tabs>
+
+## Exceptions and legacy models
+
+Some legacy models such as `deepseek-r1-distill-llama-70b` do not output reasoning data as described above, but make it available in the `content` field of the response inside special tags, as shown in the example below:
+
+```
+response.content = "<think> The user asks for questions about mathematics (...) </think>  Answer is 42."
+```
+
+The reasoning content is inside the `<think>`...`</think>` tags, and you can parse the response accordingly to access such content. There is, however, a known bug which can lead to the model to omit the opening `<think>` tag, so we suggest taking care when parsing such outputs.
+
+Note that the `reasoning_effort` parameter is not available for this model.
+
+
+## Impact on token generation
+
+Reasoning models generate reasoning tokens, which are billable. Generally these are in the model's output as part of the reasoning summary. To limit generation of reasoning tokens, you can adjust settings for the **reasoning effort** and **max completion/output tokens** parameters. Alternatively, use a non-reasoning model to avoid generation of reasoning tokens and subsequent billing.
+

@@ -61,7 +61,7 @@ export default {
           slug: 'revoke-outsourcing',
         },
         {
-          label: 'Contact the support team',
+          label: 'Contact the Support team',
           slug: 'contact-support',
         },
         {

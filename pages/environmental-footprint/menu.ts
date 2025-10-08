@@ -53,6 +53,10 @@ export default {
           label: 'Block Storage footprint calculation',
           slug: 'block-storage-env-footprint',
         },
+        {
+          label: 'Object Storage footprint calculation',
+          slug: 'object-storage-env-footprint'
+        }
       ],
       label: 'Additional Content',
       slug: 'additional-content',

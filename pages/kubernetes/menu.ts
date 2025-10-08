@@ -80,6 +80,10 @@ export default {
           slug: 'upgrade-kubernetes-version',
         },
         {
+          label: 'Upgrade a Kapsule cluster to the new node image system',
+          slug: 'upgrade-kapsule-new-node-image-system'
+        },
+        {
           label:
             'Use the NVIDIA GPU operator on Kapsule and Kosmos with GPU Instances',
           slug: 'use-nvidia-gpu-operator',

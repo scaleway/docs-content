@@ -63,12 +63,12 @@ export default {
           "slug": "use-placement-groups"
         },
         {
-          "label": "Create an image from a snapshot",
-          "slug": "create-image-from-snapshot"
+          "label": "Create an image",
+          "slug": "create-a-backup"
         },
         {
-          "label": "Migrate volumes and snapshots to Scaleway SBS",
-          "slug": "migrate-volumes-snapshots-to-sbs"
+          "label": "Create an image from a snapshot",
+          "slug": "create-image-from-snapshot"
         },
         {
           "label": "Resize Instances",
@@ -121,22 +121,6 @@ export default {
           "slug": "creating-managing-instances-with-cliv2"
         },
         {
-          "label": "Creating a volume via the Instance API",
-          "slug": "creating-a-volume"
-        },
-        {
-          "label": "Attaching a volume via the Instance API",
-          "slug": "attaching-a-volume"
-        },
-        {
-          "label": "Increasing volumes via the Instance API",
-          "slug": "increasing-volume-size"
-        },
-        {
-          "label": "Detaching a volume via the Instance API",
-          "slug": "detaching-a-volume"
-        },
-        {
           "label": "Creating backups",
           "slug": "creating-backups"
         },
@@ -187,20 +171,16 @@ export default {
           "slug": "instances-bandwidth-overview"
         },
         {
-          "label": "The right Instance for learning purposes",
-          "slug": "learning"
-        },
-        {
           "label": "The right Instance for development purposes",
-          "slug": "cost-optimized"
+          "slug": "development"
         },
         {
           "label": "The right Instance for production purposes",
-          "slug": "production-optimized"
+          "slug": "general-purpose"
         },
         {
-          "label": "The right Instance for workload purposes",
-          "slug": "workload-optimized"
+          "label": "The right Instance for specialized purposes",
+          "slug": "specialized"
         },
         {
           "label": "Instance OS images and InstantApps",
@@ -209,6 +189,10 @@ export default {
         {
           "label": "Understanding the differences between ARM and x86 Instances",
           "slug": "understanding-differences-x86-arm"
+        },
+        {
+          "label": "Moving Instances between Availability Zones and Projects",
+          "slug": "moving-instances-between-az-and-projects"
         },
         {
           "label": "Understanding QEMU Guest Agent",
@@ -245,6 +229,14 @@ export default {
         {
           "label": "Compatibility between Scaleway OS Images and Flexible IPs",
           "slug": "comaptibility-scw-os-images-flexible-ip"
+        },
+        {
+          "label": "Enabling DHCP network configuration for Windows Server 2022 Instances",
+          "slug": "enabling-dhcp-network-configuration-windows-server-2022"
+        },
+        {
+          "label": "Historical Instances offerings",
+          "slug": "historical-offers"
         }
       ],
       "label": "Additional Content",

@@ -39,16 +39,16 @@ export default {
           slug: 'create-volume-from-snapshot',
         },
         {
-          label: 'Identify which API is managing your volumes',
-          slug: 'identify-api-managing-volumes',
-        },
-        {
-          label: 'Migrate volumes and snapshots to Scaleway SBS',
-          slug: 'migrate-volumes-snapshots-to-sbs',
+          label: 'Identify the type of a volume or a snapshot',
+          slug: 'identify-volumes-snapshot-type',
         },
         {
           label: 'Detach a volume',
           slug: 'detach-a-volume',
+        },
+        {
+          label: 'Unmount a volume',
+          slug: 'unmount-a-volume'
         },
         {
           label: 'Delete a snapshot',
@@ -77,11 +77,6 @@ export default {
           slug: 'increasing-volume-size',
         },
         {
-          label:
-            'Identifying the API managing Block Storage volumes and snapshots',
-          slug: 'identifying-volume-snapshot-api',
-        },
-        {
           label: 'Unmounting a volume',
           slug: 'unmounting-a-volume',
         },
@@ -95,11 +90,6 @@ export default {
           label:
             'Differences between Block Storage volumes and Block Storage Low Latency volumes',
           slug: 'differences-between-5kiops-volumes',
-        },
-        {
-          label:
-            'Advantages of migrating from the Instance API to the Block Storage API for managing block volumes and snapshots',
-          slug: 'advantages-migrating-to-sbs',
         },
         {
           label: 'Block Storage and Instances bandwidth overview',

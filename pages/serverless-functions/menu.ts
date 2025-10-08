@@ -121,7 +121,7 @@ export default {
         },
         {
           label: 'Functions use cases',
-          slug: 'use-cases',
+          slug: 'functions-use-cases',
         },
         {
           label: 'Functions handlers',

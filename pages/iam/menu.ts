@@ -43,6 +43,10 @@ export default  {
           slug: 'enforce-security-requirements-members',
         },
         {
+          label: 'How to set up identity federation',
+          slug: 'set-up-identity-federation'
+        },
+        {
           label: 'Create an application',
           slug: 'create-application',
         },
@@ -99,10 +103,6 @@ export default  {
         {
           label: 'Permission sets',
           slug: 'permission-sets',
-        },
-        {
-          label: 'IAM Guests to Members migration',
-          slug: 'guests-to-members-migration',
         },
         {
           label:

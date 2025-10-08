@@ -27,56 +27,40 @@ export default {
           slug: 'connect-database-instance',
         },
         {
-          label: 'Connect a Database Instance to a Private Network',
-          slug: 'connect-database-private-network',
-        },
-        {
           label: 'Create a database',
           slug: 'add-a-database',
         },
         {
-          label: 'Add users',
-          slug: 'add-users',
+          label: 'Manage users',
+          slug: 'manage-users',
         },
         {
-          label: 'Manage permissions',
-          slug: 'manage-permissions',
+          label: 'Manage volumes',
+          slug: 'manage-volumes',
         },
         {
-          label: 'Manage allowed IPs',
-          slug: 'manage-allowed-ip-addresses',
+          label: 'Manage nodes',
+          slug: 'manage-nodes',
         },
         {
-          label: 'Monitor Database Instances with Cockpit',
-          slug: 'monitor-databases-cockpit',
-        },
-        {
-          label: 'Change the volume type',
-          slug: 'change-volume-type',
-        },
-        {
-          label: 'Enable Autobackup',
-          slug: 'enable-autobackup',
-        },
-        {
-          label: 'Manage manual backups',
-          slug: 'manage-manual-backups',
+          label: 'Manage backups',
+          slug: 'manage-backups',
         },
         {
           label: 'Manage snapshots',
           slug: 'manage-snapshots',
         },
         {
+          label: 'Manage Read Replicas',
+          slug: 'manage-read-replicas',
+        },
+        {
           label: 'Clone a Database Instance',
           slug: 'clone-a-database-instance',
         },
         {
-          label: 'Create Read Replicas',
-          slug: 'create-read-replica',
-        },
-        {
-          label: 'Manage Read Replicas',
-          slug: 'manage-read-replica',
+          label: 'Manage allowed IPs',
+          slug: 'manage-allowed-ip-addresses',
         },
         {
           label: 'Configure advanced settings',
@@ -87,16 +71,12 @@ export default {
           slug: 'renew-tls-certificate',
         },
         {
-          label: 'Upgrade a Database Instance',
-          slug: 'upgrade-a-database',
+          label: 'Monitor Database Instances with Cockpit',
+          slug: 'monitor-databases-cockpit',
         },
         {
-          label: 'Upgrade Database Instance engine version',
+          label: 'Upgrade Database Instance engine versions',
           slug: 'upgrade-version',
-        },
-        {
-          label: 'Enable High Availability',
-          slug: 'enable-high-availability',
         },
         {
           label: 'Apply scheduled maintenance',

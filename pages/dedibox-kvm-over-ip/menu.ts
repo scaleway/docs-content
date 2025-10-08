@@ -59,6 +59,10 @@ export default {
       label: 'How to',
       slug: 'how-to',
     },
+    {
+      label: 'Troubleshooting',
+      slug: 'troubleshooting',
+    }
   ],
   label: 'KVM-over-IP',
   slug: 'dedibox-kvm-over-ip',

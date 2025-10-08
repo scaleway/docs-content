@@ -47,6 +47,10 @@ export default {
           slug: 'manage-job-schedule',
         },
         {
+          label: 'Execute complex startup commands',
+          slug: 'execute-complex-commands'
+        },
+        {
           label: 'Reference secrets in a job',
           slug: 'reference-secret-in-job',
         },

@@ -107,6 +107,14 @@ export default  {
             'Encrypting and decrypting data streams with Streaming AEAD, Tink and Key Manager',
           slug: 'encrypt-decrypt-keys-with-streaming-aead-tink',
         },
+        {
+          label: 'Encrypting and decrypting data with an asymmetric key',
+          slug: 'encrypt-decrypt-asymmetric-key-with-go-sdk'
+        },
+        {
+          label: 'Managing signatures using the Scaleway Go SDK and Key Manager',
+          slug: 'sign-verify-key-with-go-sdk'
+        }
       ],
       label: 'API/CLI',
       slug: 'api-cli',

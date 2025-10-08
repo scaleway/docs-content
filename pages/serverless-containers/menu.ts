@@ -110,6 +110,10 @@ export default {
           slug: 'serverless-overview',
         },
         {
+          label: 'Migrating to Serverless Containers',
+          slug: 'migrate-to-serverless-containers'
+        },
+        {
           label: 'Containers and Private Networks integration',
           slug: 'containers-private-networks',
         },
@@ -123,7 +127,7 @@ export default {
         },
         {
           label: 'Containers use cases',
-          slug: 'use-cases',
+          slug: 'containers-use-cases',
         },
         {
           label:

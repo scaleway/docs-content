@@ -71,6 +71,10 @@ export default {
           slug: 'reinstall-mac-mini',
         },
         {
+          label: 'Adjust the available bandwidth',
+          slug: 'adjust-available-bandwidth'
+        },
+        {
           label: 'Manage your commitment plan',
           slug: 'manage-commitment-plan',
         },

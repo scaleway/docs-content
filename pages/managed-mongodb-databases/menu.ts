@@ -63,6 +63,10 @@ export default {
     {
       items: [
         {
+          label: 'Managing users',
+          slug: "managing-users-api"
+        },
+        {
           label: 'Back up and restore MongoDB® Databases',
           slug: 'backup-and-restore',
         },

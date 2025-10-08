@@ -32,16 +32,8 @@ export default {
           slug: 'autoconfigure-domain',
         },
         {
-          label: 'Add SPF and DKIM records to your domain',
-          slug: 'add-spf-dkim-records-to-your-domain',
-        },
-        {
-          label: 'Add an MX record to your domain',
-          slug: 'add-mx-record-to-your-domain',
-        },
-        {
-          label: 'Add a DMARC record to your domain',
-          slug: 'add-dmarc-record',
+          label: 'Authenticate your domain',
+          slug: 'authenticate-domain',
         },
         {
           label: 'Set up BIMI for transactional emails',

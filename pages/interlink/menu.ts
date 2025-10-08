@@ -19,11 +19,11 @@ export default {
     {
       items: [
         {
-          label: 'Order an InterLink',
+          label: 'Create an InterLink',
           slug: 'order-interlink',
         },
         {
-          label: 'Complete InterLink provisioning',
+          label: 'Complete hosted InterLink provisioning',
           slug: 'complete-provisioning',
         },
         {

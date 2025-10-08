@@ -35,6 +35,10 @@ export default {
           slug: 'query-code-models',
         },
         {
+          label: 'Query audio models',
+          slug: 'query-audio-models'
+        },
+        {
           label: 'Use structured outputs',
           slug: 'use-structured-outputs',
         },
@@ -105,6 +109,10 @@ export default {
         {
           label: 'Adding AI to the Zed IDE',
           slug: 'adding-ai-to-zed-ide',
+        },
+        {
+          label: 'Integrating Generative APIs with n8n',
+          slug: 'integrate-with-n8n'
         },
         {
           label: 'Integrating Generative APIs with popular AI tools',

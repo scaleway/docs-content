@@ -51,6 +51,10 @@ export default {
           slug: 'activate-ipv6-block',
         },
         {
+          label: 'Configure IPv6',
+          slug: 'configure-ipv6-dedibox'
+        },
+        {
           label: 'Modify Dedibox options',
           slug: 'modify-server-options',
         },

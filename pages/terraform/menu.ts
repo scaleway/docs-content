@@ -1,4 +1,4 @@
-export default {
+export const terraformMenu = {
   items: [
     {
       label: 'Quickstart',

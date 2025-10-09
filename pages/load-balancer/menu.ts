@@ -1,4 +1,4 @@
-export default {
+export const loadBalancersMenu = {
   items: [
     {
       label: 'Overview',

@@ -1,4 +1,4 @@
-export default {
+export const scwSdkMenu = {
   items: [
     {
       label: 'Python SDK quickstart',

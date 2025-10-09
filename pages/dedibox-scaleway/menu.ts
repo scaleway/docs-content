@@ -1,4 +1,4 @@
-export default {
+export const ddxScwMenu = {
   items: [
     {
       label: 'Overview',

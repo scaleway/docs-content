@@ -1,4 +1,4 @@
-export default {
+export const vpcMenu = {
   items: [
     {
       label: 'Overview',

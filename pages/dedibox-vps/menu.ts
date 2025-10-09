@@ -1,4 +1,4 @@
-export default {
+export const ddxVpsMenu = {
   items: [
     {
       label: 'Overview',

@@ -1,4 +1,4 @@
-export default {
+export const ddxHardwareMenu = {
   items: [
     {
       label: 'Overview',

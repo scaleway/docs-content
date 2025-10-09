@@ -1,4 +1,4 @@
-export default {
+export const dataLabMenu = {
   items: [
     {
       label: 'Overview',

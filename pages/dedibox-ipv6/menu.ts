@@ -1,4 +1,4 @@
-export default {
+export const ddxIpv6Menu = {
   items: [
     {
       label: 'Overview',

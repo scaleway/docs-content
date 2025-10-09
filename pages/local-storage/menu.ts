@@ -1,4 +1,4 @@
-export default {
+export const localStorageMenu = {
   items: [
     {
       label: 'Overview',

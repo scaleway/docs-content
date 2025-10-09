@@ -1,4 +1,4 @@
-export default {
+export const environmentalFootprintMenu = {
   items: [
     {
       label: 'Overview',

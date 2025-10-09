@@ -1,4 +1,4 @@
-export default {
+export const generativeApisMenu = {
   items: [
     {
       label: 'Overview',

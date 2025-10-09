@@ -1,4 +1,4 @@
-export default {
+export const transactionalEmailMenu = {
   items: [
     {
       label: 'Overview',

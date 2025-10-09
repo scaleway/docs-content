@@ -1,4 +1,4 @@
-export default {
+export const publicGatewaysMenu = {
   items: [
     {
       label: 'Overview',

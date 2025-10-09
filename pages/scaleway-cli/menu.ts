@@ -1,4 +1,4 @@
-export default {
+export const scwCliMenu = {
   items: [
     {
       label: 'Quickstart',

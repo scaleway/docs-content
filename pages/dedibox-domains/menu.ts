@@ -1,4 +1,4 @@
-export default {
+export const ddxDomainsMenu = {
   items: [
     {
       label: 'Overview',

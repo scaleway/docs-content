@@ -1,4 +1,4 @@
-export default {
+export const domainsAndDnsMenu = {
   items: [
     {
       label: 'Overview',

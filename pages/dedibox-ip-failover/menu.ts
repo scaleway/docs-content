@@ -1,4 +1,4 @@
-export default {
+export const ddxIpFailoverMenu = {
   items: [
     {
       label: 'Overview',

@@ -1,4 +1,4 @@
-export default {
+export const serverlessFunctionsMenu = {
   items: [
     {
       label: 'Overview',

@@ -1,4 +1,4 @@
-export default {
+export const webHostingMenu = {
   items: [
     {
       label: 'Overview',

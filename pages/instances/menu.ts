@@ -1,4 +1,4 @@
-export default {
+export const instanceMenu = {
   "items": [
     {
       "label": "Overview",

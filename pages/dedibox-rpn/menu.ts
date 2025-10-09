@@ -1,4 +1,4 @@
-export default {
+export const ddxRpnMenu = {
   items: [
     {
       label: 'Overview',

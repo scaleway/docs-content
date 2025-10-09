@@ -1,4 +1,4 @@
-export default {
+export const elasticMetalMenu = {
   items: [
     {
       label: 'Overview',

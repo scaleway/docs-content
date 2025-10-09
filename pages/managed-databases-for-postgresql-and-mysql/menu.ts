@@ -1,4 +1,4 @@
-export default {
+export const managedDatabasePostgresMySqlMenu = {
   items: [
     {
       label: 'Overview',

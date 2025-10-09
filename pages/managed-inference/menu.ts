@@ -1,4 +1,4 @@
-export default {
+export const managedInferenceMenu = {
   items: [
     {
       label: 'Overview',

@@ -1,4 +1,4 @@
-export default {
+export const ddxKvmOverIpMenu = {
   items: [
     {
       label: 'Overview',

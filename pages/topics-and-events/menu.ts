@@ -1,4 +1,4 @@
-export default {
+export const topicsAndEventsMenu = {
   items: [
     {
       label: 'Overview',

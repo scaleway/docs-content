@@ -1,4 +1,4 @@
-export default {
+export const organizationsNProjectsMenu = {
   items: [
     {
       label: 'Overview',

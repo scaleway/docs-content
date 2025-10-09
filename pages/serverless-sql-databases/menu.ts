@@ -1,4 +1,4 @@
-export default {
+export const serverlessSqlDatabasesMenu = {
   items: [
     {
       label: 'Overview',

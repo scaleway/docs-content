@@ -1,4 +1,4 @@
-export default  {
+export const secretManagerMenu = {
   items: [
     {
       label: 'Overview',

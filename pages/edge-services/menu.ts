@@ -1,4 +1,4 @@
-export default {
+export const edgeServicesMenu = {
   items: [
     {
       label: 'Overview',

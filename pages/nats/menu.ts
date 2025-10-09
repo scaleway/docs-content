@@ -1,4 +1,4 @@
-export default {
+export const natsMenu = {
   items: [
     {
       label: 'Overview',

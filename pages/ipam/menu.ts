@@ -1,4 +1,4 @@
-export default {
+export const ipamMenu = {
   items: [
     {
       label: 'Overview',

@@ -1,4 +1,4 @@
-export default {
+export const iotHubMenu = {
   items: [
     {
       label: 'Overview',

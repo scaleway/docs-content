@@ -1,4 +1,4 @@
-export default {
+export const objectStorageMenu = {
   items: [
     {
       label: 'Overview',

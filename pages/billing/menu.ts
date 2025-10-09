@@ -1,4 +1,4 @@
-export default {
+export const billingMenu = {
   items: [
     {
       label: 'Overview',

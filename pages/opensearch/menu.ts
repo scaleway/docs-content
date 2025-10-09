@@ -1,4 +1,4 @@
-export default {
+export const openSearchMenu = {
   items: [
     {
       label: 'Overview',

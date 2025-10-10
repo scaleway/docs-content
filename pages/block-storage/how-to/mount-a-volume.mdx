@@ -1,0 +1,128 @@
+---
+title: How to mount a Block Storage volume to an Instance
+description: This guide explains how to mount a Block Storage volume to your Scaleway Instance before being able to use it.
+tags: mount link volume disk instance
+dates:
+  validation: 2025-10-10
+  posted: 2025-10-10
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An [Instance](/instances/concepts/#instance)
+- [Attached](/block-storage/how-to/attach-a-volume/) an additional Block Storage volume to your Instance
+
+## Mounting and using a Block Storage volume
+
+In order to mount and use your Block Storage volume, you need to connect to the Instance it is attached to, via SSH.
+Then, check that the volume is available, format it, and mount it following the instructions below.
+
+### Verifying device availability
+
+1. Connect to your Instance with `ssh`.
+    ```
+    ssh root@<your_instance_ip>
+    ```
+2. Use the `lsblk` command to confirm that your block volume is available:
+    ```
+    lsblk
+    ```
+
+   You should see an output similar to the following. The root Block volume `sda`, contains your OS. The Block volume named `sdb` is the one we will be mounting to the Instance.
+
+    ```sh no-copy
+    root@scw-festive-agnesi:~# lsblk
+    NAME    MAJ:MIN RM  SIZE RO TYPE MOUNTPOINTS
+    sda       8:0    0 18.6G  0 disk
+    ├─sda1    8:1    0 18.5G  0 part /
+    ├─sda14   8:14   0    4M  0 part
+    └─sda15   8:15   0  106M  0 part /boot/efi
+    sdb       8:16   0 27.9G  0 disk
+    ```
+
+<Message type="note">
+  The Scaleway ecosystem uses [GB](https://en.wikipedia.org/wiki/Gigabyte) to define storage sizes and not [GiB](https://en.wikipedia.org/wiki/Gibibyte) as the default on linux.
+</Message>
+
+### Formatting the Block volume
+
+Formatting your volume prepares it for storing files.
+
+<Message type="important">
+ The procedure below describes how to format your volume using the `mkfs` command, which will **erase all data on the volume**.
+</Message>
+
+1. Create a file system with the following command. This command uses the `ext4` file system, though you can choose another if you prefer.
+    ```
+    # Make sure that you replace `/dev/sdX` with the name of your volume
+    mkfs.ext4 /dev/sdX
+    ```
+2. Run the following command to check if your file system was correctly created.
+    ```
+    lsblk -f
+    ```
+
+  You should see an output like the following. Check that the `FSTYPE` field matches `ext4` for your Block volume. In this example, we have formatted the `sdb` volume.
+
+  ```sh no-copy
+    root@scw-festive-agnesi:~# lsblk -f
+    NAME FSTYPE FSVER LABEL UUID                                 FSAVAIL FSUSE% MOUNTPOINTS
+    sda
+    ├─sda1
+    │    ext4   1.0   cloudimg-rootfs
+    │                       cf5b092b-9a8b-49e9-980c-b44b5e3ed197   14.5G    18% /
+    ├─sda14
+    │
+    └─sda15
+        vfat   FAT32 UEFI  D590-3FD4                              98.3M     6% /boot/efi
+    sdb  ext4   1.0         d36bdf8b-b2ff-4e2b-9736-cc05940aea35
+  ```
+
+---
+
+### Creating the mount point and mounting the Block volume
+
+Once you have created your file system, you need to define where you want to mount your volume, and create a mount point (directory) for it.
+
+1. Create the mount point. You can replace `block-volume` with another name for your mount point.
+    ```
+    mkdir /mnt/block-volume
+    ```
+2. Mount the volume. We recommend that you use the `defaults` option, as in the command below.
+    ```
+    # Replace sdX with the name of your volume
+    mount -o defaults /dev/sdX /mnt/block-volume
+    ```
+
+    If you want to see all available options, you can run `man mount` on your Instance.
+
+3. Run the following command to check if your volume was properly mounted:
+    ```
+    lsblk
+    ```
+
+    You should see an output like the following. Check the `MOUNTPOINT` field.
+
+    ```
+    root@scw-festive-agnesi:~# lsblk
+    NAME    MAJ:MIN RM  SIZE RO TYPE MOUNTPOINT
+    sda       8:0    0 18.6G  0 disk
+    ├─sda1    8:1    0 18.5G  0 part /
+    ├─sda14   8:14   0    4M  0 part
+    └─sda15   8:15   0  106M  0 part /boot/efi
+    sdb       8:16   0 27.9G  0 disk /mnt/block-volume
+    ```
+
+The `sdb` volume is mounted at `/mnt/block-volume`.
+
+### Using fstab for Persistent Mounting
+
+With the current configuration, your volume will not be mounted automatically upon reboot. Use the `/etc/fstab` file to ensure the reboot does not impact your file system.
+
+Run the following command to make sure your volume is automatically mounted to your Instance upon reboot. You must replace `sdX` with your volume.
+
+```bash
+echo "UUID=$(blkid --output value /dev/sdX | head -n1) /mnt/block-volume ext4 defaults 0 0" >> /etc/fstab
+```
+

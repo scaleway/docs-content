@@ -46,7 +46,7 @@ export const natsMenu = {
       items: [
         {
           label: 'NATS API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/messaging-and-queuing/nats-api/',
+          slug: 'https://www.scaleway.com/en/developers/api/nats/nats-api/',
         },
         {
           label: 'Using the NATS CLI',

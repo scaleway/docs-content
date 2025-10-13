@@ -50,7 +50,7 @@ export const publicGatewaysMenu = {
       items: [
         {
           label: 'Public Gateway API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/public-gateway/',
+          slug: 'https://www.scaleway.com/en/developers/api/public-gateways/',
         },
       ],
       label: 'API/CLI',

@@ -59,7 +59,7 @@ export const managedInferenceMenu = {
       items: [
         {
           label: 'Managed Inference API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/inference/',
+          slug: 'https://www.scaleway.com/en/developers/api/managed-inference/',
         },
       ],
       label: 'API/CLI',

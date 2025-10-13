@@ -62,7 +62,7 @@ export const containerRegistryMenu = {
       items: [
         {
           label: 'Container Registry API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/registry/',
+          slug: 'https://www.scaleway.com/en/developers/api/container-registry/',
         },
       ],
       label: 'API/CLI',

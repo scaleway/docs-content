@@ -88,7 +88,7 @@ export const blockStorageMenu = {
       items: [
         {
           label:
-            'Differences between Block Storage volumes and Block Storage volumes',
+            'Differences between Block Storage volumes',
           slug: 'differences-between-5kiops-volumes',
         },
         {

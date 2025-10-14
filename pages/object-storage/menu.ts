@@ -197,6 +197,10 @@ export const objectStorageMenu = {
           label: 'Supported checksums',
           slug: 'supported-checksums',
         },
+        {
+          label: 'Logs and metrics collected by Cockpit',
+          slug: 'logs-metrics-collection-cockpit',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

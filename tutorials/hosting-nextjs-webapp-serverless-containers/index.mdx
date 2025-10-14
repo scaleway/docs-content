@@ -1,0 +1,138 @@
+---
+title: Hosting a Next.js web app with Serverless Containers
+description: This page provides guidelines on how to host and deploy dynamic Next.js web applications using Scaleway Serverless Containers
+tags: deploy host website webapp react next containerize application docker dockerfile
+products:
+  - containers
+  - container-registry
+dates:
+  validation: 2025-10-06
+  posted: 2025-10-06
+  validation_frequency: 12
+difficulty: beginner
+usecase:
+  - application-hosting
+  - deploy-external-software
+  - website-hosting
+ecosystem:
+  - third-party
+---
+
+import Requirements from '@macros/iam/requirements.mdx'
+
+[Next.js](https://nextjs.org/) is a powerful React framework for building fast, scalable web applications with server-side rendering and static site generation. Hosting Next.js on [Scaleway Serverless Containers](/serverless-containers/) provides automatic scaling, simplified deployment, and minimal infrastructure management. This approach lets your application efficiently handle dynamic traffic, optimize resource usage, while you can focus on writing code and developing features rather than maintaining servers.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Installed [Docker](https://docs.docker.com/get-started/get-docker/) or [Docker Egine](https://docs.docker.com/engine/install/)
+- [Created a Scaleway Container Registry namespace](/container-registry/how-to/create-namespace/) and [logged into it](/container-registry/how-to/connect-docker-cli/)
+
+## Create and host a basic Next.js web application
+
+To host a [Next.js](https://nextjs.org/) web app on Serverless Containers, you must create a Next.js project, implement your pages and any API routes, and add a production-ready Dockerfile that builds and serves the app — either by running a Node server with `next build && next start` or by exporting static files with `next export` if your app is fully static. Build the container image locally, push it to the [Scaleway Container Registry](/container-registry/), and deploy it to [Scaleway Serverless Containers](/serverless-containers/).
+
+### Create your app and test it locally
+
+1. In a terminal, run the command below to create a new folder and access it:
+
+    ```bash
+    mkdir my-nextjs-app
+    cd my-nextjs-app
+    ```
+
+2. Run the command below to create an example Next.js application using the default template. You can also use an example from the [official Next.js GitHub repository](https://github.com/vercel/next.js/tree/canary/examples).
+
+    ```bash
+    npx create-next-app@latest my-nextjs-app
+    ```
+
+3. When prompted, configure your app according to your needs, or keep the default values to start quickly. Next.js will then create an app with a folder structure similar to the following:
+
+    ```
+    my-nextjs-app/
+    ├── app/                     # Core: Routes using the App Router
+    │   ├── layout.tsx           # Root layout (shared across pages)
+    │   ├── page.tsx             # Homepage (http://localhost:3000)
+    │   └── globals.css          # Global styles
+    │
+    ├── public/                  # Static assets (served at /)
+    │   ├── logo.svg
+    │   └── favicon.ico
+    │
+    ├── components/              # (Optional) Your reusable components
+    │   └── ...
+    │
+    ├── styles/                  # (Optional) CSS modules or theme files
+    │   └── ...
+    │
+    ├── next.config.js           # Next.js configuration file
+    ├── tailwind.config.js       # If you chose Tailwind
+    ├── postcss.config.js        # PostCSS setup (used with Tailwind)
+    ├── package.json             # Dependencies and scripts
+    ├── package-lock.json        # Locked dependencies
+    ├── .gitignore               # Git ignore rules
+    └── README.md                # Auto-generated docs
+    ```
+
+4. Run the command below to run your application locally:
+
+    ```bash
+    cd my-nextjs-app
+    npm run dev
+    ```
+
+    Access [http://localhost:3000](http://localhost:3000) to view the homepage of your web app.
+
+### Build the app image and push it to Scaleway Container Registry
+
+Before creating and pushing your image to the registry, make sure you have [Created a Scaleway Container Registry namespace](/container-registry/how-to/create-namespace/) and [logged into it](/container-registry/how-to/connect-docker-cli/).
+
+1. Create a new `dockerfile` file at the root of your app folder, then add the following code to it:
+
+    ```dockerfile
+    # Build the Next.js app
+    FROM node:22-alpine
+    WORKDIR /app
+    COPY package*.json ./
+    RUN npm install
+    COPY . .
+    RUN npm run build
+
+    # Expose port and run server
+    EXPOSE 3000
+    CMD ["npm", "start"]
+    ```
+
+2. Run the command below to build, tag, and push your image to the Scaleway Container registry:
+
+    ```bash
+    docker build \
+    --platform linux/amd64 \
+    --push \
+    -t <CONTAINER_REGISTRY_ENDPOINT>/my-nextjs-app:latest .
+    ```
+
+    <Message type="note">
+    You can find your Container Registry endpoint in the **Overview** tab of your Container Registry Endpoint in the [Scaleway console](https://console.scaleway.com/registry/namespaces)
+    </Message>
+
+### Deploy your app using Serverless Containers
+
+1. [Deploy a Serverless Container](/serverless-containers/how-to/deploy-container/) with the following parameters:
+
+    - **Registry**: Scaleway Container Registry
+    - **Registry namespace**: the Container Registry namespace you pushed your image to.
+    - **Container port**: `3000` as it is the [port](/serverless-containers/reference-content/port-parameter-variable/) exposed in the dockerfile.
+    - **Resources**: `1000 mVCPU` and `1024 MB` memory.
+    - **Autoscaling**: set a minimum scale of `1` to avoid [cold starts](/serverless-containers/concepts/#cold-start) (optional).
+
+    The deployment of your container can take up to a minute to complete.
+
+2. Once your container is **ready**, click the **container endpoint** from its **Overview** tab. Your web page displays, and is available to anyone with the link.
+
+## Going further
+
+- You can deploy an already existing app by building its image and pushing it to the Scaleway Container registry as explained above.
+- You can [add a custom domain](/serverless-containers/how-to/add-a-custom-domain-to-a-container/) name to your website.

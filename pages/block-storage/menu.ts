@@ -69,8 +69,8 @@ export const blockStorageMenu = {
           slug: 'https://www.scaleway.com/en/developers/api/block/',
         },
         {
-          label: 'Managing a volume',
-          slug: 'managing-a-volume',
+          label: 'Incrising the size of a partition',
+          slug: 'increasing-partition-size',
         },
         {
           label: 'Increasing volume size via the API',

@@ -54,7 +54,7 @@ export const managedDatabaseRedisMenu = {
       items: [
         {
           label: 'Managed Database for Redis™ API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/managed-database-redis/',
+          slug: 'https://www.scaleway.com/en/developers/api/managed-databases-for-redis/',
         },
         {
           label: 'Managing username and password',

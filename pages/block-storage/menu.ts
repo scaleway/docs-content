@@ -66,7 +66,7 @@ export const blockStorageMenu = {
       items: [
         {
           label: 'Block Storage API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/block/',
+          slug: 'https://www.scaleway.com/en/developers/api/block-storage/',
         },
         {
           label: 'Managing a volume',

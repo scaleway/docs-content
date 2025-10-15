@@ -46,7 +46,7 @@ export const topicsAndEventsMenu = {
       items: [
         {
           label: 'Topics and Events API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/messaging-and-queuing/sns-api/',
+          slug: 'https://www.scaleway.com/en/developers/api/topics-and-events/sns-api/',
         },
         {
           label: 'Connecting Topics and Events to the AWS-CLI',

@@ -42,7 +42,7 @@ export const queuesMenu = {
       items: [
         {
           label: 'Queues API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/messaging-and-queuing/sqs-api/',
+          slug: 'https://www.scaleway.com/en/developers/api/queues/sqs-api/',
         },
         {
           label: 'Connecting Queues to the AWS-CLI',

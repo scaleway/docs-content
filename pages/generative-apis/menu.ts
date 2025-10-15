@@ -23,6 +23,10 @@ export const generativeApisMenu = {
           slug: 'query-language-models',
         },
         {
+          label: "Query reasoning models",
+          slug: "query-reasoning-models"
+        },
+        {
           label: 'Query vision models',
           slug: 'query-vision-models',
         },

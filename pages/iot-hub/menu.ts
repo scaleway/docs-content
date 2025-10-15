@@ -110,7 +110,7 @@ export const iotHubMenu = {
       items: [
         {
           label: 'IoT Hub API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/iot/',
+          slug: 'https://www.scaleway.com/en/developers/api/iot-hub/',
         },
         {
           label: 'Getting started with the IoT Hub CLI',

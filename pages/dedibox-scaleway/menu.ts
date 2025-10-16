@@ -13,10 +13,6 @@ export const ddxScwMenu = {
       slug: 'quickstart',
     },
     {
-      label: 'FAQ',
-      slug: 'faq',
-    },
-    {
       items: [
         {
           label: 'Order a Dedibox',
@@ -69,11 +65,7 @@ export const ddxScwMenu = {
         {
           label: 'Terminate a Dedibox subscription',
           slug: 'terminate-dedibox',
-        },
-        {
-          label: 'Link an existing Dedibox account to Scaleway',
-          slug: 'link-dedibox-account',
-        },
+        }
       ],
       label: 'How to',
       slug: 'how-to',

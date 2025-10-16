@@ -17,10 +17,6 @@ export const ddxAccountMenu = {
       slug: 'how-to',
       items: [
         {
-          label: 'Create a Dedibox account',
-          slug: 'create-a-dedibox-account',
-        },
-        {
           label: 'Add a payment method',
           slug: 'add-payment-method',
         },

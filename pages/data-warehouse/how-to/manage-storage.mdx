@@ -7,3 +7,119 @@ dates:
   posted: 2025-10-16
 ---
 
+## Overview
+
+Scaleway Data Warehouse for ClickHouse® uses ClickHouse®'s native storage policies to decide where table data lives: on Scaleway Block storage (local PVC), and/or on Object Storage (Amazon S3). You can choose between three policies for your deployment:
+
+- `tiered` (default in Scaleway Data Warehouse for ClickHouse®)
+- `s3_cache` (cache mode)
+- `default` (local-only mode)
+
+The table below provides an overview of each storage policy's behavior and use case.
+
+| Storage&nbsp;policy | Behavior | When to use |
+|------|---------|------------|
+| `tiered` | Writes land on Block storage first (hot volume). When the local disk reaches ~90% fullness, parts are automatically moved to Object storage (cold volume). This is controlled by `move_factor: 0.1` (move when only ~10% free remains). | General purpose setting for fast local writes and transparent spillover to Object Storage as the dataset grows. |
+| `s3_cache` | Data is mainly stored on Object Storage. A local cache layer (on Block storage) keeps frequently-read parts to accelerate repeated reads. | Large datasets that mostly live in Object Storage, with repeated reads on hot subsets that benefit from local caching. |
+| `default` | Data is stored on Block storage only. | Small datasets where lowest latency for reads/writes on local disk is desired and capacity fits the PVC. |
+
+    Under the hood, our ClickHouse config defines three disks (default = local PVC, s3 = object storage, s3_cache = S3 + local cache) and three policies (tiered, s3_cache, default).
+    Cluster default (for new tables when not specified): tiered.
+
+How clients choose a policy (per table)
+
+The storage policy is chosen at table creation time via SETTINGS storage_policy = '...'.
+
+## Tiered storage policy
+
+**Tiered** (Block Storage first, spill to Object Storage) is the cluster default policy. If you omit the `storage_policy` setting; ClickHouse® will automatically apply this policy.
+
+<Tabs id="tiered-explicit-implicit">
+  <TabsTab label="Explicit">
+  
+  Storage policy is explicitly defined as `tiered`.
+
+    ```sql
+    CREATE TABLE tiered_table
+    (
+      id UInt64,
+      ts DateTime,
+      value Float32
+    )
+    ENGINE = MergeTree
+    PARTITION BY toYYYYMM(ts)
+    ORDER BY id
+    SETTINGS storage_policy = 'tiered';
+    ```
+
+  </TabsTab>
+  <TabsTab label="Implicit">
+
+    Storage policy is not defined, ClickHouse® applies the `tiered` storage policy by default.
+
+    ```sql
+    CREATE TABLE dw.tiered_table_implicit
+    (
+      id UInt64,
+      ts DateTime,
+      value Float32
+    )
+    ENGINE = MergeTree
+    PARTITION BY toYYYYMM(ts)
+    ORDER BY id;
+    ```
+  </TabsTab>
+</Tabs>
+
+S3 with local cache:
+
+```sql
+CREATE TABLE cache_table
+(
+  id UInt64,
+  ts DateTime,
+  value Float32
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(ts)
+ORDER BY id
+SETTINGS storage_policy = 's3_cache';
+```
+
+Local-only:
+
+```sql
+CREATE TABLE local_table
+(
+  id UInt64,
+  ts DateTime,
+  value Float32
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(ts)
+ORDER BY id
+SETTINGS storage_policy = 'default';
+```
+
+Moving data with the tiered policy
+
+With tiered, you can manually move partitions between volumes:
+
+Move specific partitions to cold (S3):
+
+```sql
+ALTER TABLE tiered_table MOVE PARTITION '2024-08' TO VOLUME 'cold';
+```
+
+For non-partitioned tables (tuple()):
+
+```sql
+ALTER TABLE tiered_table_without_partitions MOVE PARTITION tuple() TO VOLUME 'cold';
+```
+
+Move back to hot (local):
+
+```sql
+ALTER TABLE tiered_table MOVE PARTITION '2024-08' TO VOLUME 'hot';
+```
+

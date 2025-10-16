@@ -65,10 +65,6 @@ export const ddxAccountMenu = {
           slug: 'report-incident',
         },
         {
-          label: 'Resolve abuse',
-          slug: 'resolve-abuse',
-        },
-        {
           label: 'Manage privacy data settings',
           slug: 'manage-data-settings',
         },

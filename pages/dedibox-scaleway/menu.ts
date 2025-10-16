@@ -1,4 +1,4 @@
-export const ddxScwMenu = {
+export const dediboxScalewayMenu = {
   items: [
     {
       label: 'Overview',

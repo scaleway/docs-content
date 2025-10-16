@@ -1,4 +1,4 @@
-export const ddxIpFailoverMenu = {
+export const dediboxIpFailoverMenu = {
   items: [
     {
       label: 'Overview',

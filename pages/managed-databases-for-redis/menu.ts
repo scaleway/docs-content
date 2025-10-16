@@ -1,4 +1,4 @@
-export const managedDatabaseRedisMenu = {
+export const managedDatabasesForRedisMenu = {
   items: [
     {
       label: 'Overview',

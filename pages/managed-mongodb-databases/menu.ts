@@ -1,4 +1,4 @@
-export const managedDatabaseMongoDbMenu = {
+export const managedMongodbDatabasesMenu = {
   items: [
     {
       label: 'Overview',

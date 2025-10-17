@@ -1,4 +1,4 @@
-export const scwCliMenu = {
+export const scalewayCliMenu = {
   items: [
     {
       label: 'Quickstart',

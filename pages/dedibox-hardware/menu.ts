@@ -1,4 +1,4 @@
-export const ddxHardwareMenu = {
+export const dediboxHardwareMenu = {
   items: [
     {
       label: 'Overview',

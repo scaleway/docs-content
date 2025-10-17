@@ -1,4 +1,4 @@
-export const ddxNetworkMenu = {
+export const dediboxNetworkMenu = {
   items: [
     {
       label: 'Overview',

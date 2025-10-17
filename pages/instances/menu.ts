@@ -1,4 +1,4 @@
-export const instanceMenu = {
+export const instancesMenu = {
   "items": [
     {
       "label": "Overview",

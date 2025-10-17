@@ -1,4 +1,4 @@
-export const interLinkMenu = {
+export const interlinkMenu = {
   items: [
     {
       label: 'Overview',

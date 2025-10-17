@@ -1,4 +1,4 @@
-export const scwSdkMenu = {
+export const scalewySdkMenu = {
   items: [
     {
       label: 'Python SDK quickstart',

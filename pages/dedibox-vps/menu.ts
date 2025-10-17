@@ -1,4 +1,4 @@
-export const ddxVpsMenu = {
+export const dediboxVpsMenu = {
   items: [
     {
       label: 'Overview',

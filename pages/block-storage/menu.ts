@@ -69,8 +69,8 @@ export const blockStorageMenu = {
           slug: 'https://www.scaleway.com/en/developers/api/block-storage/',
         },
         {
-          label: 'Managing a volume',
-          slug: 'managing-a-volume',
+          label: 'Increasing the size of a partition',
+          slug: 'increasing-partition-size',
         },
         {
           label: 'Increasing volume size via the API',
@@ -88,7 +88,7 @@ export const blockStorageMenu = {
       items: [
         {
           label:
-            'Differences between Block Storage volumes and Block Storage Low Latency volumes',
+            'Differences between Block Storage volumes',
           slug: 'differences-between-5kiops-volumes',
         },
         {

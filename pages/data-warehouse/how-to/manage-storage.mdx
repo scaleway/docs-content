@@ -7,9 +7,16 @@ dates:
   posted: 2025-10-16
 ---
 
+import Requirements from '@macros/iam/requirements.mdx'
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+
 ## Overview
 
-Scaleway Data Warehouse for ClickHouse® uses ClickHouse®'s native storage policies to decide where table data lives: on Scaleway Block storage (local PVC), and/or on Object Storage (Amazon S3). You can choose between three policies for your deployment:
+Scaleway Data Warehouse for ClickHouse® uses ClickHouse®'s native storage policies to decide where table data lives: on Scaleway Block storage, and/or on Object Storage (Amazon S3). Policies are applied at table-level during table creation, using the settings presented below. You can choose between three policies for your deployment:
 
 - `tiered` (default in Scaleway Data Warehouse for ClickHouse®)
 - `s3_cache` (cache mode)
@@ -19,20 +26,17 @@ The table below provides an overview of each storage policy's behavior and use c
 
 | Storage&nbsp;policy | Behavior | When to use |
 |------|---------|------------|
-| `tiered` | Writes land on Block storage first (hot volume). When the local disk reaches ~90% fullness, parts are automatically moved to Object storage (cold volume). This is controlled by `move_factor: 0.1` (move when only ~10% free remains). | General purpose setting for fast local writes and transparent spillover to Object Storage as the dataset grows. |
-| `s3_cache` | Data is mainly stored on Object Storage. A local cache layer (on Block storage) keeps frequently-read parts to accelerate repeated reads. | Large datasets that mostly live in Object Storage, with repeated reads on hot subsets that benefit from local caching. |
-| `default` | Data is stored on Block storage only. | Small datasets where lowest latency for reads/writes on local disk is desired and capacity fits the PVC. |
-
-    Under the hood, our ClickHouse config defines three disks (default = local PVC, s3 = object storage, s3_cache = S3 + local cache) and three policies (tiered, s3_cache, default).
-    Cluster default (for new tables when not specified): tiered.
-
-How clients choose a policy (per table)
-
-The storage policy is chosen at table creation time via SETTINGS storage_policy = '...'.
+| `tiered` | Writes on Block Storage first, and parts are automatically moved to Object Storage when disk is 90% full. | General purpose setting for fast local writes and transparent spillover to Object Storage as the dataset grows. |
+| `s3_cache` | Data is stored on Object Storage. A local Block Storage cache layer keeps frequently-read parts to accelerate repeated reads. | Large datasets that mostly live in Object Storage, with repeated reads on smaller subsets that benefit from local caching. |
+| `default` | Data is stored on Block storage only. | Small datasets where lowest latency for reads/writes on local disk is desired and capacity fits the Block Storage volume. |
 
 ## Tiered storage policy
 
-**Tiered** (Block Storage first, spill to Object Storage) is the cluster default policy. If you omit the `storage_policy` setting; ClickHouse® will automatically apply this policy.
+### Applying the tiered policy
+
+**Tiered** is the deployment's default policy. Data is stored on the `hot` volume (Block Storage) until it reaches 90% of its capacity, then data is moved to the `cold` volume. This mechanism is controlled by `move_factor:0.1`.
+
+[Connect to you deployment](/data-warehouse/how-to/connect-applications/), then run the SQL query below to apply the `tiered` storage policy.
 
 <Tabs id="tiered-explicit-implicit">
   <TabsTab label="Explicit">
@@ -71,8 +75,40 @@ The storage policy is chosen at table creation time via SETTINGS storage_policy 
   </TabsTab>
 </Tabs>
 
-S3 with local cache:
+<Message type="note">
+If you omit the `storage_policy` setting, ClickHouse® will automatically apply the `tiered` policy.
+</Message>
 
+### Moving data with the tiered policy
+
+When using the `tiered` storage policy, you can manually move partitions between `hot` (Block Storage) and `cold` (Object Storage) volumes using the SQL queries below.
+
+- Moving specific partitions to the `cold` volume (Object Storage):
+
+    ```sql
+    ALTER TABLE tiered_table MOVE PARTITION '2024-08' TO VOLUME 'cold';
+    ```
+
+- Moving a non-partitioned table (`tuple()`) to the `cold` volume (Object Storage):
+
+    ```sql
+    ALTER TABLE tiered_table_without_partitions MOVE PARTITION tuple() TO VOLUME 'cold';
+    ```
+
+- Move a partition to the `hot` volume (Block Storage):
+
+    ```sql
+    ALTER TABLE tiered_table MOVE PARTITION '2024-08' TO VOLUME 'hot';
+    ```
+- Moving a non-partitioned table (`tuple()`) to the `hot` volume (Block Storage):
+
+    ```sql
+    ALTER TABLE tiered_table_without_partitions MOVE PARTITION tuple() TO VOLUME 'hot';
+    ```
+
+## S3 cache policy
+
+[Connect to you deployment](/data-warehouse/how-to/connect-applications/), then run the SQL query below to create a new table with the `s3_cache` policy enabled.
 ```sql
 CREATE TABLE cache_table
 (
@@ -86,7 +122,9 @@ ORDER BY id
 SETTINGS storage_policy = 's3_cache';
 ```
 
-Local-only:
+## Local-only policy
+
+[Connect to you deployment](/data-warehouse/how-to/connect-applications/), then run the SQL query below to create a new table with the `default` (Block Storage only) policy enabled.
 
 ```sql
 CREATE TABLE local_table
@@ -99,27 +137,5 @@ ENGINE = MergeTree
 PARTITION BY toYYYYMM(ts)
 ORDER BY id
 SETTINGS storage_policy = 'default';
-```
-
-Moving data with the tiered policy
-
-With tiered, you can manually move partitions between volumes:
-
-Move specific partitions to cold (S3):
-
-```sql
-ALTER TABLE tiered_table MOVE PARTITION '2024-08' TO VOLUME 'cold';
-```
-
-For non-partitioned tables (tuple()):
-
-```sql
-ALTER TABLE tiered_table_without_partitions MOVE PARTITION tuple() TO VOLUME 'cold';
-```
-
-Move back to hot (local):
-
-```sql
-ALTER TABLE tiered_table MOVE PARTITION '2024-08' TO VOLUME 'hot';
 ```
 

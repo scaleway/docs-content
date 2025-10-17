@@ -69,7 +69,7 @@ export const blockStorageMenu = {
           slug: 'https://www.scaleway.com/en/developers/api/block-storage/',
         },
         {
-          label: 'Incrising the size of a partition',
+          label: 'Increasing the size of a partition',
           slug: 'increasing-partition-size',
         },
         {

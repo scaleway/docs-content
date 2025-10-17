@@ -64,6 +64,10 @@ export const managedDatabasesForRedisMenu = {
           label: 'Using Publish/Subscribe messaging',
           slug: 'using-pub-sub-feature',
         },
+        {
+          label: 'Upgrade your Redis™ version',
+          slug: 'upgrade-redis-version',
+        }
       ],
       label: 'API/CLI',
       slug: 'api-cli',
@@ -77,7 +81,7 @@ export const managedDatabasesForRedisMenu = {
         {
           label: 'Ensuring data persistence',
           slug: 'ensuring-data-persistence',
-        },
+        }
       ],
       label: 'Additional Content',
       slug: 'reference-content',

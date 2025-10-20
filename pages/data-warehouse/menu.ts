@@ -31,6 +31,14 @@ export const dataWarehouseMenu = {
           slug: 'connect-applications',
         },
         {
+          label: 'Manage databases in a deployment',
+          slug: 'manage-databases',
+        },
+        {
+          label: 'Manage users in a deployment',
+          slug: 'manage-users',
+        },
+        {
           label: 'Connect a deployment with BI tools',
           slug: 'connect-bi-tools',
         },
@@ -43,12 +51,8 @@ export const dataWarehouseMenu = {
           slug: 'edit-autoscaling',
         },
         {
-          label: 'Manage databases in a deployment',
-          slug: 'manage-databases',
-        },
-        {
-          label: 'Manage users in a deployment',
-          slug: 'manage-users',
+          label: 'Manage the storage policy of a deployment',
+          slug: 'manage-storage',
         },
       ],
       label: 'How to',

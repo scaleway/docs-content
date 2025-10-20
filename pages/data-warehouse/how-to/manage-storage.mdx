@@ -1,0 +1,141 @@
+---
+title: How to manage data storage in a Data Warehouse for ClickHouse® deployment
+description: This page explains how to manage data storage in a Data Warehouse for ClickHouse® deployment using storage policies
+tags: data storage policy strategy options object block
+dates:
+  validation: 2025-10-16
+  posted: 2025-10-16
+---
+
+import Requirements from '@macros/iam/requirements.mdx'
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+
+## Overview
+
+Scaleway Data Warehouse for ClickHouse® uses ClickHouse®'s native storage policies to decide where table data lives: on Scaleway Block storage, and/or on Object Storage (Amazon S3). Policies are applied at table-level during table creation, using the settings presented below. You can choose between three policies for your deployment:
+
+- `tiered` (default in Scaleway Data Warehouse for ClickHouse®)
+- `s3_cache` (cache mode)
+- `default` (local-only mode)
+
+The table below provides an overview of each storage policy's behavior and use case.
+
+| Storage&nbsp;policy | Behavior | When to use |
+|------|---------|------------|
+| `tiered` | Writes on Block Storage first, and parts are automatically moved to Object Storage when disk is 90% full. | General purpose setting for fast local writes and transparent spillover to Object Storage as the dataset grows. |
+| `s3_cache` | Data is stored on Object Storage. A local Block Storage cache layer keeps frequently-read parts to accelerate repeated reads. | Large datasets that mostly live in Object Storage, with repeated reads on smaller subsets that benefit from local caching. |
+| `default` | Data is stored on Block storage only. | Small datasets where lowest latency for reads/writes on local disk is desired and capacity fits the Block Storage volume. |
+
+## Tiered storage policy
+
+### Applying the tiered policy
+
+**Tiered** is the deployment's default policy. Data is stored on the `hot` volume (Block Storage) until it reaches 90% of its capacity, then data is moved to the `cold` volume. This mechanism is controlled by `move_factor:0.1`.
+
+[Connect to you deployment](/data-warehouse/how-to/connect-applications/), then run the SQL query below to apply the `tiered` storage policy.
+
+<Tabs id="tiered-explicit-implicit">
+  <TabsTab label="Explicit">
+  
+  Storage policy is explicitly defined as `tiered`.
+
+    ```sql
+    CREATE TABLE tiered_table
+    (
+      id UInt64,
+      ts DateTime,
+      value Float32
+    )
+    ENGINE = MergeTree
+    PARTITION BY toYYYYMM(ts)
+    ORDER BY id
+    SETTINGS storage_policy = 'tiered';
+    ```
+
+  </TabsTab>
+  <TabsTab label="Implicit">
+
+    Storage policy is not defined, ClickHouse® applies the `tiered` storage policy by default.
+
+    ```sql
+    CREATE TABLE dw.tiered_table_implicit
+    (
+      id UInt64,
+      ts DateTime,
+      value Float32
+    )
+    ENGINE = MergeTree
+    PARTITION BY toYYYYMM(ts)
+    ORDER BY id;
+    ```
+  </TabsTab>
+</Tabs>
+
+<Message type="note">
+If you omit the `storage_policy` setting, ClickHouse® will automatically apply the `tiered` policy.
+</Message>
+
+### Moving data with the tiered policy
+
+When using the `tiered` storage policy, you can manually move partitions between `hot` (Block Storage) and `cold` (Object Storage) volumes using the SQL queries below.
+
+- Moving specific partitions to the `cold` volume (Object Storage):
+
+    ```sql
+    ALTER TABLE tiered_table MOVE PARTITION '2024-08' TO VOLUME 'cold';
+    ```
+
+- Moving a non-partitioned table (`tuple()`) to the `cold` volume (Object Storage):
+
+    ```sql
+    ALTER TABLE tiered_table_without_partitions MOVE PARTITION tuple() TO VOLUME 'cold';
+    ```
+
+- Moving a partition to the `hot` volume (Block Storage):
+
+    ```sql
+    ALTER TABLE tiered_table MOVE PARTITION '2024-08' TO VOLUME 'hot';
+    ```
+- Moving a non-partitioned table (`tuple()`) to the `hot` volume (Block Storage):
+
+    ```sql
+    ALTER TABLE tiered_table_without_partitions MOVE PARTITION tuple() TO VOLUME 'hot';
+    ```
+
+## S3 cache policy
+
+[Connect to your deployment](/data-warehouse/how-to/connect-applications/), then run the SQL query below to create a new table with the `s3_cache` policy enabled.
+```sql
+CREATE TABLE cache_table
+(
+  id UInt64,
+  ts DateTime,
+  value Float32
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(ts)
+ORDER BY id
+SETTINGS storage_policy = 's3_cache';
+```
+
+## Local-only policy
+
+[Connect to your deployment](/data-warehouse/how-to/connect-applications/), then run the SQL query below to create a new table with the `default` (Block Storage only) policy enabled.
+
+```sql
+CREATE TABLE local_table
+(
+  id UInt64,
+  ts DateTime,
+  value Float32
+)
+ENGINE = MergeTree
+PARTITION BY toYYYYMM(ts)
+ORDER BY id
+SETTINGS storage_policy = 'default';
+```
+

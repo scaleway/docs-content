@@ -75,7 +75,6 @@ def get_prod_cat_ref():
 
     return(product_categories)
 
-
 def needs_review(val_date, val_freq):
     "Returns true if doc needs to be reviewed, based on val date and frequency"
     val_date_conv, val_freq_conv = convert_to_date_and_delta(val_date, val_freq)
@@ -184,9 +183,9 @@ def main():
     docs_to_review = process_files(FILEPATH)
     docs_to_review_by_cat = organize_docs_by_category(docs_to_review)
     message = prep_message(docs_to_review_by_cat)
-    #if os.environ.get("DRY_RUN") != "true":
-    #    send_message(message)
-    print(message)
+    if os.environ.get("DRY_RUN") != "true":
+        send_message(message)
+
 
 if __name__ == "__main__":
     main()

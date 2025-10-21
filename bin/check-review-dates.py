@@ -33,7 +33,6 @@ def get_prod_cat_ref():
     js = re.sub(r"/\*.*?\*/", "", js, flags=re.S)           # strip block comments
     js = js.replace("export default", "").strip()           # strip "export default" and cleanup
 
-
     # Convert items - [accountMenu, billingMenu] → ['account', 'billing']
     js = re.sub(r"\b([a-zA-Z0-9_]+)Menu\b(?!')", r"'\1'", js)
 
@@ -184,7 +183,6 @@ def main():
     message = prep_message(docs_to_review_by_cat)
     if os.environ.get("DRY_RUN") != "true":
         send_message(message)
-
 
 if __name__ == "__main__":
     main()

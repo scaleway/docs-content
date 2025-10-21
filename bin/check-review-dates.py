@@ -33,7 +33,6 @@ def get_prod_cat_ref():
     js = re.sub(r"/\*.*?\*/", "", js, flags=re.S)           # strip block comments
     js = js.replace("export default", "").strip()           # strip "export default" and cleanup
 
-    # Replace only unquoted menu/icon references
 
     # Convert items - [accountMenu, billingMenu] → ['account', 'billing']
     js = re.sub(r"\b([a-zA-Z0-9_]+)Menu\b(?!')", r"'\1'", js)

@@ -1,0 +1,107 @@
+---
+title: Migrating from H100-2-80G to H100-SXM-2-80G
+description: Learn how to migrating from H100-2-80G to H100-SXM-2-80G GPU Instances.
+tags: gpu nvidia
+dates:
+  validation: 2025-10-21
+  posted: 2025-10-21
+---
+
+Scaleway is optimizing its H100 GPU Instance portfolio to improve long-term availability and provide better performance for all users.
+
+## Current situation
+
+Below is an overview of the current status of each instance type:
+
+| Instance type      | Availability status     | Notes                                                                                                                                  |
+| ------------------ | ----------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| H100-1-80G         | Low stock               | No additional GPUs can be added at this time.                                                                                          |
+| H100-2-80G         | Frequently out of stock | Supply remains unstable, and shortages are expected to continue.                                                                       |
+| H100-SXM-2-80G     | Good availability       | This Instance type can scale further and is ideal for multi-GPU workloads, offering NVLink connectivity and superior memory bandwidth. |
+
+In summary, while the single- and dual-GPU PCIe instances (H100-1-80G and H100-2-80G) are experiencing supply constraints, the H100-SXM-2-80G remains available in good quantity and is the recommended option for users requiring scalable performance and high-bandwidth interconnects.
+
+We recommend users to migrate their workload from PCIe-based GPU Instances to SXM GPU Instances for improvements in performance and fure-proof access to GPUs. As H100 PCIe-variants becomes increasingly scarce, migrating ensures uninterrupted access to H100-class compute.
+
+## Benefits of the migration
+
+There are two primary scenarios: migrating **Kubernetes (Kapsule)** workloads or **standalone** workloads.
+
+<Message type="important">
+  Always ensure that your **data is backed up** before performing any operations that could affect it.
+</Message>
+
+### Migrating Kubernetes workloads (Kubernetes Kapsule)
+
+If you are using Kapsule, follow these steps to move existing workloads to nodes powered by `H100-SXM-2-80G`.
+
+<Message type="important">
+  The Kubernetes autoscaler may get stuck if it tries to scale up a node pool with  out-of-stock. We recommend switching to `H100-SXM-2-80G` proactively to avoid disruptions.
+</Message>
+
+
+#### Step-by-step
+1. Create a new node pool using `H100-SXM-2-80G` GPU Instances.
+
+2. Run `kubectl get nodes` to check that the new nodes are in a `Ready` state.
+3. Cordon the nodes in the old node pool to prevent new Pods from being scheduled there. For each node, run: `kubectl cordon <node-name>`
+    <Message type="tip">
+      You can use a selector on the pool name label to cordon or drain multiple nodes at the same time if your app allows it (ex. `kubectl cordon -l k8s.scaleway.com/pool-name=mypoolname`)
+    </Message>
+4. Drain the nodes to evict the Pods gracefully.
+   - For each node, run: `kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data`
+   - The `--ignore-daemonsets` flag is used because daemon sets manage Pods across all nodes and will automatically reschedule them.
+   - The `--delete-emptydir-data` flag is necessary if your Pods use emptyDir volumes, but use this option carefully as it will delete the data stored in these volumes.
+   - Refer to the [official Kubernetes documentation](https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/) for further information.
+5. Run `kubectl get pods -o wide` after draining, to verify that the Pods have been rescheduled to the new node pool.
+6. Delete the old node pool.
+
+<Message type="tip">
+  For further information, refer to our dedicated documentation [How to migrate existing workloads to a new Kapsule node pool](/kubernetes/how-to/manage-node-pools/#how-to-migrate-existing-workloads-to-a-new-kubernets-kapsule-node-pool).
+</Message>
+
+### Migrating a standalone Instance
+
+For standalone GPU instances, you can recreate your environment using a `H100-SXM-2-80G` GPU Instance using either the CLI, API or in visual mode using the Scaleway console.
+
+#### Quick Start (CLI example):
+1. Stop the Instance.
+    ```
+    scw instance server stop <instance_id> zone=<zone>
+    ```
+    Replace `<zone>` with the Availability Zone of your Instance. For example, if your Instance is located in Paris-1, the zone would be `fr-par-1`. Replace `<instance_id>` with the ID of your Instance.
+    <Message type="tip">
+    You can find the ID of your Instance on it's overview page in the Scaleway console or using the CLI by running the following command: `scw instance server list`.
+    </Message>
+
+2. Update the commercial type of the Instance
+    ```
+    scw instance server update <instance_id> commercial-type=H100-SXM-2-80G zone=<zone>
+    ```
+    Replace `<instance_id>` with the UUID of your Instance and `<zone>` with the Availability Zone of your GPU Instance.
+
+3. Power on the Instance.
+    ```
+    scw instance server start <instance_id> zone=<zone>
+    ```
+For further information, refer to the [Instance CLI documentation](https://github.com/scaleway/scaleway-cli/blob/master/docs/commands/instance.md).
+
+<Message type="tip">
+  You can also migrate your GPU Instances using the [API](https://www.scaleway.com/en/docs/instances/api-cli/migrating-instances/) and via [Scaleway console](/instances/how-to/migrate-instances/).
+</Message>
+
+## FAQ
+
+#### Are PCIe-based H100 being discontinued?
+H100 PCIe-based GPU Instances are not End-of-Life (EOL), but due to limited availability, we recommend migrating to `H100-SXM-2-80G` to avoid future disruptions.
+
+#### Is H100-SXM-2-80G compatible with my current setup?
+Yes — it runs the same CUDA toolchain and supports standard frameworks (PyTorch, TensorFlow, etc.). However, verify that your workload does not require large system RAM or NVMe scratch space.
+
+#### Why is H100-SXM better for multi-GPU?
+Because of *NVLink*, which enables near-shared-memory speeds between GPUs. In contrast, PCIe-based instances like H100-2-80G have slower interconnects that can bottleneck training. Learn more: [Understanding NVIDIA NVLink](https://www.scaleway.com/en/docs/gpu/reference-content/understanding-nvidia-nvlink/)
+
+#### What if my workload needs more CPU or RAM?
+Let us know via [support ticket we’re evaluating options for compute-optimized configurations to complement our GPU offerings.
+
+-

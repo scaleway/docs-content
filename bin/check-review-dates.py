@@ -2,7 +2,8 @@ import os
 import logging
 from slack_sdk import WebClient
 from datetime import timedelta, date, datetime
-import json
+import re
+import ast
 
 DEFAULT_VAL_FREQ = 6
 FILEPATH = "./" ## for local testing use "../" and shift filepath_list[] indexes +1
@@ -22,20 +23,58 @@ def get_prod_cat_ref():
 
     product_categories = {}
 
-    # Load the menu file
-    with open(FILEPATH + 'menu/navigation.json', 'r') as file:
-        data = json.load(file)  # Parse the JSON content into a Python dictionary or list
+    # Read the menu file
+    with open(FILEPATH + "menu/navigation.ts", "r", encoding="utf-8") as f:
+        js = f.read()
 
-        for grouping in data:
-            for category in grouping["items"]:
-                category_label = category["label"]
-                for product in category["items"]:
-                    product_label = product["label"]
-                    product_slug = product["slug"]
-            
-                    product_categories[product_slug] = [category_label, product_label]
+    # remove all lines up to "export default"
+    js = re.sub(r"^import .*", "", js, flags=re.M)          # remove import lines
+    js = re.sub(r"//.*", "", js)                            # strip line comments
+    js = re.sub(r"/\*.*?\*/", "", js, flags=re.S)           # strip block comments
+    js = js.replace("export default", "").strip()           # strip "export default" and cleanup
+
+    # Replace only unquoted menu/icon references
+
+    # Convert items - [accountMenu, billingMenu] → ['account', 'billing']
+    js = re.sub(r"\b([a-zA-Z0-9_]+)Menu\b(?!')", r"'\1'", js)
+
+    # Convert icons - OrganizationDashboardCategoryIcon → 'OrganizationDashboardCategory'
+    js = re.sub(r"\b([A-Z][A-Za-z0-9]+)Icon\b(?!')", r"'\1'", js)
+
+    # Normalize JS → Python syntax ---
+    js = re.sub(r"(\w+):", r"'\1':", js)                    # quote keys
+    js = js.replace("null", "None")                         # replace nulls with Nones
+    js = re.sub(r",(\s*[}\]])", r"\1", js)                  # remove trailing commas
+
+    # Convert the js string now containing Python literal syntax, into an actual Python object.
+    data = ast.literal_eval(js)
+
+    # Helper function
+    def camel_to_kebab(name: str) -> str:
+        """Convert camelCase or PascalCase to kebab-case."""
+        s1 = re.sub('(.)([A-Z][a-z]+)', r'\1-\2', name)
+        s2 = re.sub('([a-z0-9])([A-Z])', r'\1-\2', s1)
+        return s2.lower()
+
+    # Helper function
+    def prettify_label(slug: str) -> str:
+        """Convert kebab-case to title case."""
+        return slug.replace("-", " ").title()
+
+    # Walk structure and make new dict
+
+    product_categories = {}
+
+    for section in data:
+        for category in section["items"]:
+            category_label = category["label"]
+            for item in category["items"]:
+                key = camel_to_kebab(item).lower().replace("_", "-")
+                label = prettify_label(key)
+                product_categories[key] = [category_label, label]
 
     return(product_categories)
+
 
 def needs_review(val_date, val_freq):
     "Returns true if doc needs to be reviewed, based on val date and frequency"
@@ -145,8 +184,9 @@ def main():
     docs_to_review = process_files(FILEPATH)
     docs_to_review_by_cat = organize_docs_by_category(docs_to_review)
     message = prep_message(docs_to_review_by_cat)
-    if os.environ.get("DRY_RUN") != "true":
-        send_message(message)
+    #if os.environ.get("DRY_RUN") != "true":
+    #    send_message(message)
+    print(message)
 
 if __name__ == "__main__":
     main()

@@ -19,6 +19,18 @@ export const cockpitMenu = {
     {
       items: [
         {
+          label: 'Configure the alert manager',
+          slug: 'enable-alert-manager',
+        },
+        {
+          label: 'Activate Scaleway preconfigured alerts',
+          slug: 'activate-managed-alerts',
+        },
+        {
+          label: 'Configure alerts for Scaleway resources',
+          slug: 'configure-alerts-for-scw-resources',
+        },
+        {
           label: 'Retrieve your Grafana credentials',
           slug: 'retrieve-grafana-credentials',
         },
@@ -27,24 +39,8 @@ export const cockpitMenu = {
           slug: 'create-token',
         },
         {
-          label: 'Enable the alert manager',
-          slug: 'enable-alert-manager',
-        },
-        {
           label: 'Create and push traces',
           slug: 'activate-push-traces',
-        },
-        {
-          label: 'Activate Scaleway preconfigured alerts',
-          slug: 'activate-managed-alerts',
-        },
-        {
-          label: 'Manage contacts',
-          slug: 'add-contact-points',
-        },
-        {
-          label: 'Configure alerts for Scaleway resources',
-          slug: 'configure-alerts-for-scw-resources',
         },
         {
           label: 'Access Grafana and preconfigured dashboards',

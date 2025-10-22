@@ -1,0 +1,261 @@
+---
+title: How to use SFS with Kubernetes Kapsule
+description: This page explains how to use the Scaleway File Storage Container Storage Interface (CSI) driver to enable Kubernetes users to manage Scaleway File Storage volumes within their clusters.
+tags: kubernetes kubernetes-kapsule kapsule sfs
+dates:
+  validation: 2025-01-13
+  posted: 2023-12-27
+categories:
+  - containers
+  - kubernetes
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+The Scaleway File Storage Container Storage Interface (CSI) driver enables Kubernetes users to manage Scaleway File Storage volumes within their clusters.
+The Scaleway File Storage CSI driver is designed to work with Kubernetes Kapsule and Kosmos clusters, providing a standardized interface to create, manage, and attach file storage volumes to your containerized workloads. For more details on Scaleway File Storage, refer to the [Scaleway File Storage documentation](https://www.scaleway.com/en/file-storage/).
+
+## Supported features
+
+The Scaleway File Storage CSI driver supports the following features:
+
+- Dynamic provisioning: Automatically create Scaleway File Storage volumes using PVCs and StorageClasses.
+- `ReadWriteMany` access mode: Allows multiple pods to read from and write to the same file storage volume simultaneously.
+- Import of existing Volumes: Integrate pre-existing Scaleway File Storage volumes into Kubernetes.
+- Custom storage classes: Define specific parameters, such as file system type (e.g., ext4), for volumes.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Created](/kubernetes/how-to/create-cluster/) a Kubernetes Kapsule cluster
+- Helm installed for deploying the CSI driver.
+- Access to the Scaleway File Storage API.
+
+## Installation
+
+The Scaleway File Storage CSI driver can be installed using Helm. Follow these steps to deploy the driver in your Kubernetes Kapsule cluster:
+
+1. Add the Scaleway Helm repository:
+   ```bash
+   helm repo add scaleway https://helm.scw.cloud/
+   helm repo update
+   ```
+
+2. Deploy the Scaleway File Storage CSI Driver. Use the Helm chart to install the driver, configuring it with your Scaleway credentials and default zone:
+   ```bash
+   helm upgrade --install scaleway-filestorage-csi --namespace kube-system scaleway/scaleway-filestorage-csi \
+     --set controller.scaleway.env.SCW_DEFAULT_ZONE=fr-par-1 \
+     --set controller.scaleway.env.SCW_DEFAULT_PROJECT_ID=<your-project-id> \
+     --set controller.scaleway.env.SCW_ACCESS_KEY=<your-access-key> \
+     --set controller.scaleway.env.SCW_SECRET_KEY=<your-secret-key>
+   ```
+
+   Replace `<your-project-id>`, `<your-access-key>`, and `<your-secret-key>` with your Scaleway credentials.
+
+3. Check that the CSI driver pods are running in the `kube-system` namespace:
+   ```bash
+   kubectl get pods -n kube-system -l app=scaleway-filestorage-csi
+   ```
+
+   You should see the `scaleway-filestorage-csi-controller` and `scaleway-filestorage-csi-node` pods in a `Running` state.
+
+## Using the Scaleway File Storage CSI Driver
+
+The Scaleway File Storage CSI driver supports dynamic provisioning of Persistent Volumes (PVs) and Persistent Volume Claims (PVCs) in Kubernetes. Below are examples of how to use the driver to create and manage file storage volumes.
+
+### Creating a Persistent Volume Claim (PVC)
+
+This example demonstrates how to create a PVC to dynamically provision a Scaleway File Storage volume and use it in a pod.
+
+1. **Create a PVC**:
+   Create a file named `pvc.yaml` with the following content:
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: my-file-pvc
+   spec:
+     accessModes:
+       - ReadWriteMany
+     resources:
+       requests:
+         storage: 10Gi
+     storageClassName: scaleway-file-default
+   ```
+
+   Apply the PVC:
+   ```bash
+   kubectl apply -f pvc.yaml
+   ```
+
+2. Create a file named `pod.yaml` to define a pod that uses the PVC:
+
+   ```yaml
+   apiVersion: v1
+   kind: Pod
+   metadata:
+     name: my-file-app
+   spec:
+     containers:
+     - name: busybox
+       image: busybox
+       command: ["sleep", "3600"]
+       volumeMounts:
+       - mountPath: "/data"
+         name: file-volume
+     volumes:
+     - name: file-volume
+       persistentVolumeClaim:
+         claimName: my-file-pvc
+   ```
+
+   Apply the pod configuration:
+   ```bash
+   kubectl apply -f pod.yaml
+   ```
+
+3. Check that the pod is running and the volume is mounted:
+   ```bash
+   kubectl get pods
+   kubectl exec -it my-file-app -- df -h /data
+   ```
+
+   The output should show the mounted Scaleway File Storage volume at `/data`.
+
+### Importing an existing File Storage volume
+
+You can import an existing Scaleway File Storage volume into Kubernetes using the Scaleway File Storage CSI driver. This is useful for integrating pre-existing storage volumes into your cluster.
+
+1. Create a file named `pv-import.yaml` to define a PV that references an existing Scaleway File Storage volume:
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolume
+   metadata:
+     name: my-imported-pv
+   spec:
+     capacity:
+       storage: 10Gi
+     accessModes:
+       - ReadWriteMany
+     persistentVolumeReclaimPolicy: Retain
+     storageClassName: scaleway-file-default
+     csi:
+       driver: filestorage.csi.scaleway.com
+       volumeHandle: fr-par-1/<volume-id>
+       volumeAttributes:
+         zone: fr-par-1
+   ```
+
+   Replace `<volume-id>` with the ID of the existing Scaleway File Storage volume.
+
+   Apply the PV:
+   ```bash
+   kubectl apply -f pv-import.yaml
+   ```
+
+2. Create a file named `pvc-import.yaml` to define a PVC that binds to the imported PV:
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: my-imported-pvc
+   spec:
+     accessModes:
+       - ReadWriteMany
+     resources:
+       requests:
+         storage: 10Gi
+     storageClassName: scaleway-file-default
+     volumeName: my-imported-pv
+   ```
+
+   Apply the PVC:
+   ```bash
+   kubectl apply -f pvc-import.yaml
+   ```
+
+3. Create a pod that uses the imported PVC, similar to the previous example:
+
+   ```yaml
+   apiVersion: v1
+   kind: Pod
+   metadata:
+     name: my-imported-file-app
+   spec:
+     containers:
+     - name: busybox
+       image: busybox
+       command: ["sleep", "3600"]
+       volumeMounts:
+       - mountPath: "/data"
+         name: file-volume
+     volumes:
+     - name: file-volume
+       persistentVolumeClaim:
+         claimName: my-imported-pvc
+   ```
+
+   Apply the pod configuration:
+   ```bash
+   kubectl apply -f pod.yaml
+   ```
+
+4. Verify that the pod is running and the imported volume is mounted:
+   ```bash
+   kubectl get pods
+   kubectl exec -it my-imported-file-app -- ls /data
+   ```
+
+   The output should list the contents of the imported Scaleway File Storage volume.
+
+### Using a custom storage class
+
+You can customize the storage class to define specific parameters for Scaleway File Storage volumes, such as the file system type.
+
+1. Create a file named `storageclass.yaml` with the following content:
+
+   ```yaml
+   kind: StorageClass
+   apiVersion: storage.k8s.io/v1
+   metadata:
+     name: my-file-storage-class
+   provisioner: filestorage.csi.scaleway.com
+   reclaimPolicy: Delete
+   parameters:
+     csi.storage.k8s.io/fstype: ext4
+   ```
+
+   Apply the storage class:
+   ```bash
+   kubectl apply -f storageclass.yaml
+   ```
+
+2. Modify the PVC from the first example to use the custom storage class:
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: my-custom-file-pvc
+   spec:
+     accessModes:
+       - ReadWriteMany
+     resources:
+       requests:
+         storage: 10Gi
+     storageClassName: my-file-storage-class
+   ```
+
+   Apply the PVC:
+   ```bash
+   kubectl apply -f pvc.yaml
+   ```
+
+3. Check that the PVC is created with the custom storage class:
+   ```bash
+   kubectl get pvc
+   kubectl describe pvc my-custom-file-pvc
+   ```

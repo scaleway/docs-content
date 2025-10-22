@@ -51,7 +51,7 @@ import { partnerSpaceMenu } from "../pages/partner-space/menu"
 import { publicGatewaysMenu } from "../pages/public-gateways/menu"
 import { queuesMenu } from "../pages/queues/menu"
 import { scalewayCliMenu } from "../pages/scaleway-cli/menu"
-import { scalewySdkMenu } from "../pages/scaleway-sdk/menu"
+import { scalewaySdkMenu } from "../pages/scaleway-sdk/menu"
 import { secretManagerMenu } from "../pages/secret-manager/menu"
 import { serverlessContainersMenu } from "../pages/serverless-containers/menu"
 import { serverlessFunctionsMenu } from "../pages/serverless-functions/menu"
@@ -61,7 +61,7 @@ import { terraformMenu } from "../pages/terraform/menu"
 import { topicsAndEventsMenu } from "../pages/topics-and-events/menu"
 import { transactionalEmailMenu } from "../pages/transactional-email/menu"
 import { vpcMenu } from "../pages/vpc/menu"
-import { webHostingMenu } from "../pages/webhosting/menu"
+import { webhostingMenu } from "../pages/webhosting/menu"
 
 export default [
   {
@@ -162,7 +162,7 @@ export default [
         icon: 'DevToolsCategoryIcon',
         items: [
           scalewayCliMenu,
-          scalewySdkMenu,
+          scalewaySdkMenu,
           terraformMenu,
         ],
         label: 'Developer Tools',
@@ -173,7 +173,7 @@ export default [
         items: [
           domainsAndDnsMenu,
           transactionalEmailMenu,
-          webHostingMenu,
+          webhostingMenu,
         ],
         label: 'Domains & Web Hosting',
         category: 'domains-and-web-hosting',

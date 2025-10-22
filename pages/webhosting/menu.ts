@@ -71,7 +71,7 @@ export const webHostingMenu = {
           slug: 'migrate-webhosting-plan',
         },
         {
-          label: 'How to verify my domain to send emails to Yahoo mailboxes',
+          label: 'Domain verification for Yahoo deliverability',
           slug: 'yahoo-domain-verification'
         },
       ],

@@ -69,7 +69,7 @@ export const dediboxScalewayMenu = {
         {
           label: 'Terminate a Dedibox subscription',
           slug: 'terminate-dedibox',
-        }
+        },
       ],
       label: 'How to',
       slug: 'how-to',

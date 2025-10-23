@@ -17,10 +17,6 @@ export const dediboxAccountMenu = {
       slug: 'how-to',
       items: [
         {
-          label: 'Create a Dedibox account',
-          slug: 'create-a-dedibox-account',
-        },
-        {
           label: 'Add a payment method',
           slug: 'add-payment-method',
         },
@@ -67,10 +63,6 @@ export const dediboxAccountMenu = {
         {
           label: 'Report an incident',
           slug: 'report-incident',
-        },
-        {
-          label: 'Resolve abuse',
-          slug: 'resolve-abuse',
         },
         {
           label: 'Manage privacy data settings',

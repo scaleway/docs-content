@@ -2,111 +2,124 @@
 meta:
   title: Using Secret Manager to store encryption key for SSE-C
   description: Learn how to use Secret Manager to store encryption key for Object Storage and SSE-C.
-content:
-  h1: Using Secret Manager to store encryption key for SSE-C
-  paragraph: Learn how to use Secret Manager to store encryption key for Object Storage and SSE-C.
 tags: object-storage secret-manager encryption
-categories:
+products:
   - object-storage
   - secret-manager
   - key-manager
 dates:
   validation: 2025-10-15
   posted: 2025-10-15
+  validation_frequency: 12
+difficulty: beginner
+usecase:
+  - manage-share-and-store-data
+ecosystem:
+  - scaleway-only
 ---
 import Requirements from '@macros/iam/requirements.mdx'
 
-In this tutorial you will learn how to use Key Manager and Secret Manager to generate and store an encryption key used with [SSE-C](/object-storage/api-cli/enable-sse-c/) to encrypt and decrypt objects stored in a Scaleway Object Storage bucket.
+This tutorial explains how to use Key Manager and Secret Manager to generate and store an encryption key for [SSE-C](/object-storage/api-cli/enable-sse-c/), used to encrypt and decrypt objects in your Scaleway Object Storage bucket.
 
 <Requirements />
 
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- An [Object Storage bucket](/object-storage/how-to/create-a-bucket/)
+- [Created](/object-storage/how-to/create-a-bucket/) an Object Storage bucket
 - Installed and initialized the [AWS CLI](/object-storage/api-cli/object-storage-aws-cli/)
 
-The goal here is to use Key Manager to generate the encryption key, store the encryption key in Secret Manager, then use it to encrypt Object Storage objects SSE-C.
+The goal of this tutorial is to:
+
+- Generate an encryption key using Key Manager
+- Store it securely in Secret Manager
+- Use it to encrypt your Object Storage objects with SSE-C
 
 ## Generating the encryption key
 
-Run the following commands to create a key in Key Manager, generate the encryption key, then store it in Secret Manager.
+1. Open a terminal and create a key in Key Manager:
 
-1. Create a key on the Key Manager
+    ```bash
+    KEY_ID=$(scw keymanager key create -o template="{{.ID}}")
+    ```
 
-  ```bash
-  KEY_ID=$(scw keymanager key create -o template="{{.ID}}")
-  ```
+2. Run the following command to generate a data encryption key:
 
-2. Generate the data encryption key
+    ```bash
+    scw keymanager key generate-data-key "$KEY_ID" -o json | jq -r .plaintext | base64 -d > ssec.key
+    ```
 
-  ```bash
-  scw keymanager key generate-data-key "$KEY_ID" -o json | jq -r .plaintext | base64 -d > ssec.key
-  ```
+3. Create a secret in Secret manager to store the data encryption key:
 
-3. Create a secret in the Secret manager to store the data encryption key
+    ```bash
+    SECRET_ID=$(scw secret secret create name=ssec-key path=/keys -o template="{{.ID}}")
+    ```
 
-  ```bash
-  SECRET_ID=$(scw secret secret create name=ssec-key path=/keys -o template="{{.ID}}")
-  ```
+4. Store the data encryption key in Secret Manager:
 
-4. Store the data encryption key
-
-  ```bash
-  scw secret version create "$SECRET_ID" data="@ssec.key"
-  ```
+    ```bash
+    scw secret version create "$SECRET_ID" data="@ssec.key"
+    ```
 
 ## Preparing the encryption key and its digest
 
-Run the following command to access the secret version to get the encryption key, encode it to base64, calculate the MD5 digest of the key (also encoded in base64), and store the outputs in environment variables. 
+You must now retrieve the encryption key from Secret Manager, encode it to base64, compute its MD5 digest, and store both values in environment variables.
 
-1. Accessing the raw key
+1. Access the secret version to retrieve the raw key:
 
-  ```bash
-  scw secret version access "$SECRET_ID" revision=latest raw=true > ssec.key
-  ```
+      ```bash
+      scw secret version access "$SECRET_ID" revision=latest raw=true > ssec.key
+      ```
 
-2. Serialize it to base64
+2. Encode the key to base64:
 
-  ```bash
-  ENCRYPTION_KEY=$(cat ssec.key | base64)
-  ```
+    ```bash
+    ENCRYPTION_KEY=$(cat ssec.key | base64)
+    ```
 
-3. Compute the MD5 digest
+3. Compute the MD5 digest of the key:
 
-  ```bash
-  KEY_DIGEST=$(openssl dgst -md5 -binary ssec.key | base64)
-  ```
+    ```bash
+    KEY_DIGEST=$(openssl dgst -md5 -binary ssec.key | base64)
+    ```
 
 <Message type="important">
-If you delete the secret containing the encryption key, you also lose the data encrypted with it, as you will not be able to perform `GET` operations on encrypted objects without the corresponding key.
+ If you delete the secret containing the encryption key, you also lose the data encrypted with it, as you will not be able to perform `GET` operations on encrypted objects without the corresponding key.
 </Message>
 
-### Upload and download object with SSE-C
+### Upload and download objects with SSE-C
 
-1. Run the command below to upload an object and encrypt it. Make sure to replace `<your-bucket-name>`, `<your-object-key>`, and `<path/to/your/file>` with the correct values.
+1. Upload an object of your choice to your bucket and encrypt it. Make sure that you replace:
+
+    - `<bucket-name>` with the name of your bucket
+    - `<object-key>` with the desired name of the object in the bucket
+    - `<path/to/your/file>` with the path to the file you want to upload
 
     ```bash
     aws s3api put-object \
-      --bucket <your-bucket-name> \
-      --key <your-object-key> \
+      --bucket <bucket-name> \
+      --key <object-key> \
       --body <path/to/your/file> \
       --sse-customer-algorithm AES256 \
       --sse-customer-key $ENCRYPTION_KEY \
       --sse-customer-key-md5 $KEY_DIGEST
     ```
 
-2. Run the command below to download the previously uploaded object and decrypt it. Make sure to replace `<your-bucket-name>`, `<your-object-key>`, and `<path/to/destination/file>` with the correct values.
+2. Download the previously uploaded object and decrypt it. Make sure that you replace:
+
+    - `<bucket-name>` with the name of your bucket
+    - `<object-key>` with the name of your object in the bucket
+    - `<path/to/your/file>` with the local path where you want to save the file
 
     ```bash
     aws s3api get-object \
-      --bucket <your-bucket-name> \
-      --key <your-object-key> \
+      --bucket <bucket-name> \
+      --key <object-key> \
       <path/to/destination/file> \
       --sse-customer-algorithm AES256 \
       --sse-customer-key $ENCRYPTION_KEY \
       --sse-customer-key-md5 $KEY_DIGEST
     ```
 
-You can now use Key Manager and Secret Manager to safely create and store an encryption key to secure your Object Storage deployment with SSE-C.
+You now know how to use Key Manager and Secret Manager to generate, store, and use an encryption key to protect your Object Storage data with SSE-C.
 
 Refer to the [dedicated documentation](/object-storage/api-cli/enable-sse-c/) for more information on how to use SSE-C for Scaleway Object Storage.

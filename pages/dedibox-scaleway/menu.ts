@@ -70,10 +70,6 @@ export const dediboxScalewayMenu = {
           label: 'Terminate a Dedibox subscription',
           slug: 'terminate-dedibox',
         },
-        {
-          label: 'Link an existing Dedibox account to Scaleway',
-          slug: 'link-dedibox-account',
-        },
       ],
       label: 'How to',
       slug: 'how-to',

@@ -39,7 +39,7 @@ import { keyManagerMenu } from '../pages/key-manager/menu'
 import { kubernetesMenu } from "../pages/kubernetes/menu"
 import { loadBalancerMenu } from "../pages/load-balancer/menu"
 import { localStorageMenu } from "../pages/local-storage/menu"
-import { managedDatabasesForPostgresAndMysqlMenu } from "../pages/managed-databases-for-postgresql-and-mysql/menu"
+import { managedDatabasesForPostgresqlAndMysqlMenu } from "../pages/managed-databases-for-postgresql-and-mysql/menu"
 import { managedDatabasesForRedisMenu } from "../pages/managed-databases-for-redis/menu"
 import { managedInferenceMenu } from "../pages/managed-inference/menu"
 import { managedMongodbDatabasesMenu } from "../pages/managed-mongodb-databases/menu"
@@ -139,7 +139,7 @@ export default [
       {
         icon: 'DatabaseCategoryIcon',
         items: [
-          managedDatabasesForPostgresAndMysqlMenu,
+          managedDatabasesForPostgresqlAndMysqlMenu,
           managedDatabasesForRedisMenu,
           managedMongodbDatabasesMenu,
           openSearchMenu,

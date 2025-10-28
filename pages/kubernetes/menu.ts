@@ -102,6 +102,10 @@ export const kubernetesMenu = {
           slug: 'recover-space-etcd',
         },
         {
+          "label": "How to use SFS with Kubernetes Kapsule",
+          "slug": "use-sfs-with-kubernetes"
+        },
+        {
           label: 'Enable or disable SSH',
           slug: 'enable-disable-ssh',
         },

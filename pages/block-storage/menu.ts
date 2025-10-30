@@ -27,6 +27,10 @@ export const blockStorageMenu = {
           slug: 'attach-a-volume',
         },
         {
+          label: 'Mount a volume',
+          slug: 'mount-a-volume',
+        },
+        {
           label: 'Increase the volume size',
           slug: 'increase-block-volume',
         },

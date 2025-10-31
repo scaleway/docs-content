@@ -91,6 +91,10 @@ export const dediboxScalewayMenu = {
           slug: '../../elastic-metal/reference-content/shared-responsibility-model',
         },
         {
+          label: 'Dedibox and Scaleway account linking',
+          slug: 'dedibox-scaleway-linking',
+        },
+        {
           label: 'Dedibox datasheet',
           slug: 'dedibox-datasheet',
         },

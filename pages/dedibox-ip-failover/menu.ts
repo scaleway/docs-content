@@ -43,7 +43,7 @@ export const dediboxIpFailoverMenu = {
           slug: 'configure-windows',
         },
         {
-          label: 'Create a vitual MAC address',
+          label: 'Create a virtual MAC address',
           slug: 'create-virtual-mac',
         },
         {

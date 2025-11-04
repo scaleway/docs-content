@@ -159,7 +159,7 @@ export const instancesMenu = {
           "slug": "choosing-instance-type"
         },
         {
-          "label": "Choosing bewteen shared or dedicated CPUs",
+          "label": "Choosing between shared or dedicated CPUs",
           "slug": "choosing-shared-vs-dedicated-cpus"
         },
         {
@@ -228,7 +228,7 @@ export const instancesMenu = {
         },
         {
           "label": "Compatibility between Scaleway OS Images and Flexible IPs",
-          "slug": "comaptibility-scw-os-images-flexible-ip"
+          "slug": "compatibility-scw-os-images-flexible-ip"
         },
         {
           "label": "Enabling DHCP network configuration for Windows Server 2022 Instances",

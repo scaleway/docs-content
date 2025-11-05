@@ -1,0 +1,178 @@
+---
+title: Manually mounting the filesystem of your Dedibox in rescue mode
+description: This page explains how to manually mount the filesystem of your Dedbox in rescue mode to acces your data.
+dates:
+  validation: 2025-11-05
+  posted: 2025-11-05
+tags: dedibox scaleway
+---
+
+This guide explains how to manually mount your server’s filesystem when running in [rescue mode](/dedibox/how-to/use-rescue-mode/).
+This procedure is commonly used to diagnose and repair issues on the root disk (e.g., filesystem corruption, kernel upgrade failure, lost credentials).
+
+<Message type="important">
+  Filesystem repair tools such as `fsck` or `xfs_repair` can cause data loss if used incorrectly. Always create a backup when possible.
+</Message>
+
+---
+
+1. Boot the server into rescue mode.
+   Refer to [How to use rescue mode](/dedibox/how-to/use-rescue-mode/) for detailed instructions.
+
+2. Log in via SSH. Use the temporary credentials shown on the server’s status page in the Scaleway console.
+   ```bash
+   ssh root@<DEDIBOX_IP>
+   ```
+
+3. Identify your disk and partitions:
+   ```bash
+   lsblk -f   # shows size, type, and filesystem label
+   ```
+   Example output (your layout will differ):
+
+   ```
+   NAME         MAJ:MIN RM   SIZE RO TYPE MOUNTPOINTS
+   sda            8:0    0   447G  0 disk
+   ├─sda1         8:1    0   512M  0 part /boot
+   │   vfat     FAT32
+   └─sda2         8:2    0 446.5G  0 part /
+       ext4     1.0
+   ```
+
+  <Message type="tip"> 
+   Use `blkid` or `fdisk -l` if you need UUIDs or more details.
+   Disk names may vary with names like `/dev/nvme0n1`, `/dev/vda`, etc. Replace `/dev/sdaX` in later steps with the correct device.
+  </Message>
+
+4. Check the filesystem integrity (recommended).
+
+   <Message type="important">
+     Always run repair tools on unmounted filesystems.
+   </Message>
+
+   ### ext4
+   ```bash
+   fsck -f /dev/sda2
+   ```
+
+   ### XFS
+   ```bash
+   xfs_repair /dev/sda2
+   ```
+
+   ### Btrfs
+   ```bash
+   btrfs check --repair /dev/sda2
+   ```
+
+5. Create a mount point:
+   ```bash
+   mkdir -p /mnt/root
+   ```
+
+6. Mount the root filesystem.
+   Replace `/dev/sda2` with your actual root partition:
+   ```bash
+   mount /dev/sda2 /mnt/root
+   ```
+   Verify the mount:
+   ```bash
+   ls /mnt/root
+   ``
+   If you have a separate `/boot` (often `sda1`):
+   ```bash
+   mount /dev/sda1 /mnt/root/boot
+   ```
+   For UEFI systems with an EFI System Partition (ESP):
+   ```bash
+   mount /dev/sda1 /mnt/root/boot/efi
+   ```
+
+7. (Optional) Mount additional partitions.
+   Common examples:
+   ```bash
+   mount /dev/sda3 /mnt/root/home
+   mount /dev/sda4 /mnt/root/var
+   ```
+
+8. Bind system directories (required for chroot).
+   ```bash
+   mount -t proc none /mnt/root/proc
+   mount -t sysfs none /mnt/root/sys
+   mount --bind /dev /mnt/root/dev
+   mount --bind /run /mnt/root/run
+   ```
+
+9 Enter the chroot environment to perform your desired rescue actions:
+   ```bash
+   chroot /mnt/root
+   ```
+
+9. Unmount and clean up once you are done.
+   Exit chroot first (if used):
+   ```bash
+   exit
+   ```
+
+   Then unmount everything recursively:
+   ```bash
+   umount -R /mnt/root
+   ```
+
+   Remove the temporary directory:
+   ```bash
+   rmdir /mnt/root
+   ```
+
+---
+
+## Troubleshooting
+
+### Mount fails with “wrong fs type”
+Run the following command to identify the filesystem type of the partition:
+```bash
+blkid /dev/sdaX
+```
+Then specify the filesystem type explicitly:
+```bash
+mount -t ext4 /dev/sdaX /mnt/root
+```
+
+### Encrypted partitions (LUKS)
+If you partition is encrypted, you have to open it prior to mounting it:
+```bash
+cryptsetup luksOpen /dev/sdaX encrypted_root
+mount /dev/mapper/encrypted_root /mnt/root
+```
+
+### LVM volume not found
+If you are using LVM and can not find your LVM volume, run the following commands to identify the volume:
+```bash
+vgscan
+vgchange -ay
+lvdisplay
+```
+Mount the logical volume:
+```bash
+mount /dev/<VG_NAME>/<LV_NAME> /mnt/root
+```
+
+### RAID volume not detected
+Run the following command to scan for RAID devices:
+```bash
+mdadm --assemble --scan
+cat /proc/mdstat
+```
+Mount the assembled device:
+```bash
+mount /dev/md0 /mnt/root
+```
+
+### Filesystem still will not mount after repair
+Force a deeper check (use with extreme caution):
+```bash
+fsck -y -C0 /dev/sdaX
+```
+<Message type="important">
+  Use this command only if you know what you are doing!
+</Message>

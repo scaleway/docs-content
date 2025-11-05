@@ -1,4 +1,4 @@
-export const managedDatabaseRedisMenu = {
+export const managedDatabasesForRedisMenu = {
   items: [
     {
       label: 'Overview',
@@ -54,7 +54,7 @@ export const managedDatabaseRedisMenu = {
       items: [
         {
           label: 'Managed Database for Redis™ API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/managed-database-redis/',
+          slug: 'https://www.scaleway.com/en/developers/api/managed-databases-for-redis/',
         },
         {
           label: 'Managing username and password',
@@ -64,6 +64,10 @@ export const managedDatabaseRedisMenu = {
           label: 'Using Publish/Subscribe messaging',
           slug: 'using-pub-sub-feature',
         },
+        {
+          label: 'Upgrade your Redis™ version',
+          slug: 'upgrade-redis-version',
+        }
       ],
       label: 'API/CLI',
       slug: 'api-cli',
@@ -77,7 +81,7 @@ export const managedDatabaseRedisMenu = {
         {
           label: 'Ensuring data persistence',
           slug: 'ensuring-data-persistence',
-        },
+        }
       ],
       label: 'Additional Content',
       slug: 'reference-content',

@@ -1,4 +1,4 @@
-export const managedDatabasePostgresMySqlMenu = {
+export const managedDatabasesForPostgresqlAndMysqlMenu = {
   items: [
     {
       label: 'Overview',
@@ -133,7 +133,7 @@ export const managedDatabasePostgresMySqlMenu = {
         {
           label:
             'Managed Database for PostgreSQL and MySQL API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/managed-database-postgre-mysql/',
+          slug: 'https://www.scaleway.com/en/developers/api/managed-databases-for-postgresql-and-mysql/',
         },
         {
           label: 'Setting up encryption at rest',

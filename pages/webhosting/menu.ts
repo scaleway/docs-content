@@ -1,4 +1,4 @@
-export const webHostingMenu = {
+export const webhostingMenu = {
   items: [
     {
       label: 'Overview',

@@ -1,4 +1,4 @@
-export const ddxIpv6Menu = {
+export const dediboxIpv6Menu = {
   items: [
     {
       label: 'Overview',

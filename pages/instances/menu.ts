@@ -1,4 +1,4 @@
-export const instanceMenu = {
+export const instancesMenu = {
   "items": [
     {
       "label": "Overview",
@@ -110,7 +110,7 @@ export const instanceMenu = {
       "items": [
         {
           "label": "Instances API Reference",
-          "slug": "https://www.scaleway.com/en/developers/api/instance/"
+          "slug": "https://www.scaleway.com/en/developers/api/instances/"
         },
         {
           "label": "Scaleway CLI Cheatsheet",
@@ -159,7 +159,7 @@ export const instanceMenu = {
           "slug": "choosing-instance-type"
         },
         {
-          "label": "Choosing bewteen shared or dedicated CPUs",
+          "label": "Choosing between shared or dedicated CPUs",
           "slug": "choosing-shared-vs-dedicated-cpus"
         },
         {
@@ -228,7 +228,7 @@ export const instanceMenu = {
         },
         {
           "label": "Compatibility between Scaleway OS Images and Flexible IPs",
-          "slug": "comaptibility-scw-os-images-flexible-ip"
+          "slug": "compatibility-scw-os-images-flexible-ip"
         },
         {
           "label": "Enabling DHCP network configuration for Windows Server 2022 Instances",

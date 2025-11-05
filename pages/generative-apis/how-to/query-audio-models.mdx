@@ -3,7 +3,7 @@ title: How to query audio models
 description: Learn how to interact with powerful audio models using Scaleway's Generative APIs service.
 tags: generative-apis ai-data audio-models voxtral
 dates:
-  validation: 2025-09-22
+  validation: 2025-10-17
   posted: 2025-09-22
 ---
 import Requirements from '@macros/iam/requirements.mdx'
@@ -12,7 +12,7 @@ Scaleway's Generative APIs service allows users to interact with powerful audio 
 
 There are several ways to interact with audio models:
 - The Scaleway [console](https://console.scaleway.com) provides a complete [playground](/generative-apis/how-to/query-language-models/#accessing-the-playground), aiming to test models, adapt parameters, and observe how these changes affect the output in real-time.
-- Via the [Chat Completions API](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion)
+- Via the [Chat Completions API](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) or the [Audio Transcriptions API](https://www.scaleway.com/en/developers/api/generative-apis/#path-audio-create-an-audio-transcription)
 
 <Requirements />
 
@@ -21,7 +21,7 @@ There are several ways to interact with audio models:
 - A valid [API key](/iam/how-to/create-api-keys/) for API authentication
 - Python 3.7+ installed on your system
 
-## Accessing the Playground
+## Accessing the playground
 
 Scaleway provides a web playground for instruct-based models hosted on Generative APIs.
 
@@ -45,6 +45,20 @@ You can also use the upload button to send supported audio file formats, such as
 
 You can query the models programmatically using your favorite tools or languages.
 In the example that follows, we will use the OpenAI Python client.
+
+###  Audio Transcriptions API or Chat Completions API?
+
+Both the [Audio Transcriptions API](https://www.scaleway.com/en/developers/api/generative-apis/#path-audio-create-an-audio-transcription) and the [Chat Completions API](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion)  are OpenAI-compatible REST APIs that accept audio input.
+
+The **Audio Transcriptions API** is designed for pure speech-to-text (audio transcription) tasks, such as transcribing a voice note or meeting recording file. It can be used with compatible audio models, such as `whisper-large-v3`.
+
+The **Chat Completions API** is more suitable for understanding audio input as part of a broader task, rather than a pure transcription task. For example, building a voice chat assistant which listens and responds in natural language, or sending multiple inputs (audio and text) to be interpreted or classified (answering questions like "Is this audio a ringtone?"). This API can be used for audio tasks with compatible multimodal models, such as `voxtral-small-24b`.
+
+<Message type="note">
+Scaleway's support for the Audio Transcriptions API is currently at beta stage. Support of the full feature set will be incremental.
+</Message>
+
+For full details on these APIs, see the [reference documentation](https://www.scaleway.com/en/developers/api/generative-apis/).
 
 ### Installing the OpenAI SDK
 
@@ -70,98 +84,131 @@ client = OpenAI(
 
 ### Transcribing audio
 
-You can now generate a text transcription of a given audio file using the Chat Completions API. This audio file can be remote or local.
+You can now generate a text transcription of a given audio file using a suitable API / model combination of your choice.
 
-#### Transcribing a remote audio file
+<Tabs id="transcribing-audio">
 
-In the example below, an audio file from a remote URL (`https://genapi-documentation-assets.s3.fr-par.scw.cloud/scaleway-ai-revolution.mp3`) is downloaded using the `requests` library, base64-encoded, and then sent to the model in a chat completion request alongside a transcription prompt. The resulting text transcription is printed to the screen.
+    <TabsTab label="Audio Transcriptions API (Beta)">
+    
+    <Message type="note">
+    The Audio Transcriptions API expects audio files to be found locally. It does not support passing the URL of a remote audio file.
+    </Message>
 
-```python
-import base64
-import requests
+    In the example below, a local audio file [scaleway-ai-revolution.mp3](https://genapi-documentation-assets.s3.fr-par.scw.cloud/scaleway-ai-revolution.mp3) is sent to the model. The resulting text transcription is printed to the screen.
 
-MODEL = "voxtral-small-24b-2507"
+    ```python
+    MODEL = "openai/whisper-large-v3:fp16"
+    AUDIO = 'scaleway-ai-revolution.mp3'
 
-url = "https://genapi-documentation-assets.s3.fr-par.scw.cloud/scaleway-ai-revolution.mp3"
-response = requests.get(url)
-audio_data = response.content
-encoded_string = base64.b64encode(audio_data).decode("utf-8")
+    audio_file = open(AUDIO, "rb")
 
-content = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "Transcribe this audio"
-                },
-                {
-                    "type": "input_audio",
-                    "input_audio": {
-                        "data": encoded_string,
-                        "format": "mp3"
+    response = client.audio.transcriptions.create(
+        model=MODEL,
+        file=audio_file,
+        language='en'
+    )
+
+    print(response.text)
+    ```
+
+    See the [dedicated API documentation](https://www.scaleway.com/en/developers/api/generative-apis/#path-audio-create-an-audio-transcription) for a full list of all available parameters.
+
+    </TabsTab>
+
+    <TabsTab label="Chat Completions API">
+
+    #### Transcribing a remote audio file
+
+    In the example below, an audio file from a remote URL (`https://genapi-documentation-assets.s3.fr-par.scw.cloud/scaleway-ai-revolution.mp3`) is downloaded using the `requests` library, base64-encoded, and then sent to the model in a chat completion request alongside a transcription prompt. The resulting text transcription is printed to the screen.
+
+    ```python
+    import base64
+    import requests
+
+    MODEL = "voxtral-small-24b-2507"
+
+    url = "https://genapi-documentation-assets.s3.fr-par.scw.cloud/scaleway-ai-revolution.mp3"
+    response = requests.get(url)
+    audio_data = response.content
+    encoded_string = base64.b64encode(audio_data).decode("utf-8")
+
+    content = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Transcribe this audio"
+                    },
+                    {
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": encoded_string,
+                            "format": "mp3"
+                        }
                     }
-                }
-            ]
-        }
-    ]
+                ]
+            }
+        ]
 
 
-response = client.chat.completions.create(
-    model=MODEL,
-    messages=content,
-    temperature=0.2,  # Adjusts creativity
-    max_tokens=2048,   # Limits the length of the output
-    top_p=0.95         # Controls diversity through nucleus sampling. You usually only need to use temperature.
-)
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=content,
+        temperature=0.2,  # Adjusts creativity
+        max_tokens=2048,   # Limits the length of the output
+        top_p=0.95         # Controls diversity through nucleus sampling. You usually only need to use temperature.
+    )
 
-print(response.choices[0].message.content)
-```
+    print(response.choices[0].message.content)
+    ```
 
-Various parameters such as `temperature` and `max_tokens` control the output. See the [dedicated API documentation](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) for a full list of all available parameters.
+    See the [dedicated API documentation](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-an) for a full list of all available parameters.
 
-#### Transcribing a local audio file
+    #### Transcribing a local audio file
 
-In the example below, a local audio file [scaleway-ai-revolution.mp3](https://genapi-documentation-assets.s3.fr-par.scw.cloud/scaleway-ai-revolution.mp3) is base-64 encoded and sent to the model, alongside a transcription prompt. The resulting text transcription is printed to the screen.
+    In the example below, a local audio file [scaleway-ai-revolution.mp3](https://genapi-documentation-assets.s3.fr-par.scw.cloud/scaleway-ai-revolution.mp3) is base-64 encoded and sent to the model, alongside a transcription prompt. The resulting text transcription is printed to the screen.
 
-```python
-import base64
+    ```python
+    import base64
 
-MODEL = "voxtral-small-24b-2507"
+    MODEL = "voxtral-small-24b-2507"
 
-with open('scaleway-ai-revolution.mp3', 'rb') as raw_file:
-        audio_data = raw_file.read()
-encoded_string = base64.b64encode(audio_data).decode("utf-8")
+    with open('scaleway-ai-revolution.mp3', 'rb') as raw_file:
+            audio_data = raw_file.read()
+    encoded_string = base64.b64encode(audio_data).decode("utf-8")
 
-content = [
-        {
-            "role": "user",
-            "content": [
-                {
-                    "type": "text",
-                    "text": "Transcribe this audio"
-                },
-                {
-                    "type": "input_audio",
-                    "input_audio": {
-                        "data": encoded_string,
-                        "format": "mp3"
+    content = [
+            {
+                "role": "user",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Transcribe this audio"
+                    },
+                    {
+                        "type": "input_audio",
+                        "input_audio": {
+                            "data": encoded_string,
+                            "format": "mp3"
+                        }
                     }
-                }
-            ]
-        }
-    ]
+                ]
+            }
+        ]
 
 
-response = client.chat.completions.create(
-    model=MODEL,
-    messages=content,
-    temperature=0.2,  # Adjusts creativity
-    max_tokens=2048,   # Limits the length of the output
-    top_p=0.95         # Controls diversity through nucleus sampling. You usually only need to use temperature.
-)
+    response = client.chat.completions.create(
+        model=MODEL,
+        messages=content,
+        temperature=0.2,  # Adjusts creativity
+        max_tokens=2048,   # Limits the length of the output
+        top_p=0.95         # Controls diversity through nucleus sampling. You usually only need to use temperature.
+    )
 
-print(response.choices[0].message.content)
-```
+    print(response.choices[0].message.content)
+    ```
 
-Various parameters such as `temperature` and `max_tokens` control the output. See the [dedicated API documentation](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) for a full list of all available parameters.
+    Various parameters such as `temperature` and `max_tokens` control the output. See the [dedicated API documentation](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) for a full list of all available parameters.
+    </TabsTab>
+</Tabs>

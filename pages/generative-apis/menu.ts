@@ -23,6 +23,10 @@ export const generativeApisMenu = {
           slug: 'query-language-models',
         },
         {
+          label: "Query reasoning models",
+          slug: "query-reasoning-models"
+        },
+        {
           label: 'Query vision models',
           slug: 'query-vision-models',
         },
@@ -113,6 +117,10 @@ export const generativeApisMenu = {
         {
           label: 'Integrating Generative APIs with n8n',
           slug: 'integrate-with-n8n'
+        },
+        {
+          label: 'Integrating Generative APIs with Cursor',
+          slug: 'integrate-with-cursor'
         },
         {
           label: 'Integrating Generative APIs with popular AI tools',

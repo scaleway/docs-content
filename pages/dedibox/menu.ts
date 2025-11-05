@@ -1,4 +1,4 @@
-export const ddxMenu = {
+export const dediboxMenu = {
   items: [
     {
       label: 'Overview',

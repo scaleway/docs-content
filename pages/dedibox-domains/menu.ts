@@ -1,4 +1,4 @@
-export const ddxDomainsMenu = {
+export const dediboxDomainsMenu = {
   items: [
     {
       label: 'Overview',

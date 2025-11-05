@@ -1,4 +1,4 @@
-export const ddxIpFailoverMenu = {
+export const dediboxIpFailoverMenu = {
   items: [
     {
       label: 'Overview',
@@ -43,7 +43,7 @@ export const ddxIpFailoverMenu = {
           slug: 'configure-windows',
         },
         {
-          label: 'Create a vitual MAC address',
+          label: 'Create a virtual MAC address',
           slug: 'create-virtual-mac',
         },
         {

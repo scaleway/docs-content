@@ -1,4 +1,4 @@
-export const ddxAccountMenu = {
+export const dediboxAccountMenu = {
   items: [
     {
       label: 'Overview',

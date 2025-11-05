@@ -1,0 +1,284 @@
+---
+title: How to use SFS with Kubernetes Kapsule
+description: This page explains how to use the Scaleway File Storage Container Storage Interface (CSI) driver to enable Kubernetes users to manage Scaleway File Storage volumes within their clusters.
+tags: kubernetes kubernetes-kapsule kapsule sfs
+dates:
+  validation: 2025-10-22
+  posted: 2025-10-22
+categories:
+  - containers
+  - kubernetes
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+The Scaleway File Storage Container Storage Interface (CSI) driver enables Kubernetes users to manage Scaleway File Storage file systems within their clusters.  
+The Scaleway File Storage CSI driver is designed to work with Kubernetes Kapsule and Kosmos clusters, providing a standardized interface to create, manage, and attach file storage volumes to your containerized workloads. For more details on Scaleway File Storage, refer to the [Scaleway File Storage documentation](https://www.scaleway.com/en/docs/file-storage/).
+
+## Supported features
+
+The Scaleway File Storage CSI driver supports the following features:
+
+- Dynamic provisioning: Automatically create Scaleway File Storage volumes using PVCs and StorageClasses.
+- Import of existing Volumes: Integrate pre-existing Scaleway File Storage volumes into Kubernetes.
+- Volume upsizing: The size of the volume can be [increased](https://github.com/scaleway/scaleway-filestorage-csi/tree/main?tab=readme-ov-file#file-systems-resizing) without the need to detach the file system
+- `ReadWriteOnce` access mode: The volume can be mounted as read-write by a single node.
+- `ReadOnlyMany` access mode: The volume can be mounted read-only by many nodes.
+- `ReadWriteMany` access mode: The volume can be mounted as read-write by many nodes.
+
+<Message type="important">
+  Ensure you have created your Kapsule cluster with the tag `scw-filestorage-csi` (or added it to an existing cluster) to have the File Storage CSI driver enabled on your cluster. 
+  Keep in mind, this tag must be specified at the **cluster level** rather than at the pool level. Setting it at the pool level has no effect.
+</Message>
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Created](/kubernetes/how-to/create-cluster/) a Kubernetes Kapsule cluster
+- Installed the Kubernetes command-line tool `kubectl`
+- Added the tag `scw-filestorage-csi` to your Kubernetes Kapsule cluster
+- Access to the Scaleway [File Storage API](https://www.scaleway.com/en/developers/api/file-storage/)
+
+## Installation
+
+The Scaleway File Storage CSI driver is preinstalled on Scaleway's managed Kubernetes.
+
+<Message type="tip">
+  Download the cluster's **kubeconfig** configuration file and make sure `kubectl` is configured to use the cluster's configuration before running any of the following commands. [Learn more.](/kubernetes/how-to/connect-cluster-kubectl/)
+</Message>
+
+<Message type="note">
+  This feature is currently in [Private Beta](https://www.scaleway.com/en/betas/#file-storage) and available to selected testers only. If you would like to sign up for the Private Beta to enable `ReadWriteMany`, fill out [this form](https://www.scaleway.com/en/betas/#file-storage).
+</Message>
+
+You can run the following command to check that the CSI driver pods are running:
+
+   ```bash
+   kubectl get pods -n kube-system -l app=filestorage-csi-node
+   ```
+
+You should see the `filestorage-csi-node` pods in a `Running` state.
+If you don't see any pod after running the previous command, make sure the `filestorage-csi-node` DaemonSet is present in your cluster (`$ kubectl get daemonset -n kube-system filestorage-csi-node`) and you have at least one pool with POP2 Instances.
+
+## Using the Scaleway File Storage CSI Driver
+
+The CSI driver supports dynamic provisioning of Persistent Volumes (PVs) and Persistent Volume Claims (PVCs).
+
+### Creating a Persistent Volume Claim (PVC)
+
+1. Create a file named `pvc.yaml`:
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: my-pvc
+   spec:
+     accessModes:
+       - ReadWriteMany
+     resources:
+       requests:
+         storage: 100G
+     storageClassName: scw-fs
+   ```
+
+    <Message type="note">
+      The minimum size for a File System is 100G.
+    </Message>
+
+   Apply it:
+
+   ```bash
+   kubectl apply -f pvc.yaml
+   ```
+
+2. Create a file named `pod.yaml`:
+
+   ```yaml
+   apiVersion: v1
+   kind: Pod
+   metadata:
+     name: my-app
+   spec:
+     containers:
+       - name: my-busybox
+         image: busybox
+         volumeMounts:
+           - name: my-volume
+             mountPath: "/data"
+         command: ["/bin/sh", "-c"]
+         args: ["tail -f /dev/null"]
+     volumes:
+       - name: my-volume
+         persistentVolumeClaim:
+           claimName: my-pvc
+   ```
+
+   Apply the pod configuration:
+
+   ```bash
+   kubectl apply -f pod.yaml
+   ```
+
+3. Verify the mount:
+
+   ```bash
+   kubectl get pods
+   kubectl exec -it my-app -- df -h /data
+   ```
+
+### Importing an existing File Storage volume
+
+<Message type="note">
+  To import an existing File Storage volume you must have created it using the [Scaleway console](/file-storage/how-to/create-file-system/), [CLI](https://cli.scaleway.com/file/#create-a-new-filesystem), or the [File Storage API](https://www.scaleway.com/en/developers/api/file-storage/#path-filesystem-create-a-new-filesystem) prior the attachment.
+</Message>
+
+1. Create a `pv-import.yaml` file:
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolume
+   metadata:
+     name: test-pv
+   spec:
+     capacity:
+       storage: 100G
+     volumeMode: Filesystem
+     accessModes:
+       - ReadWriteMany
+     storageClassName: scw-fs
+     csi:
+       driver: filestorage.csi.scaleway.com
+       volumeHandle: fr-par/11111111-1111-1111-111111111111
+     nodeAffinity:
+       required:
+         nodeSelectorTerms:
+           - matchExpressions:
+               - key: topology.filestorage.csi.scaleway.com/region
+                 operator: In
+                 values:
+                   - fr-par
+   ```
+
+   Replace `volumeHandle` with the actual ID of your existing volume.
+
+   Apply:
+
+   ```bash
+   kubectl apply -f pv-import.yaml
+   ```
+
+2. Create `pvc-import.yaml`:
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: my-imported-pvc
+   spec:
+     accessModes:
+       - ReadWriteMany
+     resources:
+       requests:
+         storage: 100G
+     storageClassName: scw-fs
+     volumeName: test-pv
+   ```
+
+   Apply:
+
+   ```bash
+   kubectl apply -f pvc-import.yaml
+   ```
+
+3. Create the pod (reuse the example from earlier with `claimName: my-imported-pvc`):
+
+   ```yaml
+   apiVersion: v1
+   kind: Pod
+   metadata:
+     name: my-imported-app
+   spec:
+     containers:
+       - name: my-busybox
+         image: busybox
+         volumeMounts:
+           - name: my-volume
+             mountPath: "/data"
+         command: ["/bin/sh", "-c"]
+         args: ["tail -f /dev/null"]
+     volumes:
+       - name: my-volume
+         persistentVolumeClaim:
+           claimName: my-imported-pvc
+   ```
+
+   Apply:
+
+   ```bash
+   kubectl apply -f pod.yaml
+   ```
+
+4. Verify:
+
+   ```bash
+   kubectl get pods
+   kubectl exec -it my-imported-app -- ls /data
+   ```
+
+### Using a custom storage class
+
+1. Create `storageclass.yaml`:
+
+   ```yaml
+   apiVersion: storage.k8s.io/v1
+   kind: StorageClass
+   metadata:
+     name: my-default-storage-class
+   provisioner: filestorage.csi.scaleway.com
+   reclaimPolicy: Delete
+   ```
+
+   Apply:
+
+   ```bash
+   kubectl apply -f storageclass.yaml
+   ```
+
+2. Update the PVC to use this storage class:
+
+   ```yaml
+   apiVersion: v1
+   kind: PersistentVolumeClaim
+   metadata:
+     name: my-pvc
+   spec:
+     accessModes:
+       - ReadWriteMany
+     resources:
+       requests:
+         storage: 100G
+     storageClassName: my-default-storage-class
+   ```
+
+### Specifying the region
+
+To specify a region explicitly for volume creation:
+
+```yaml
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: my-par-storage-class
+provisioner: filestorage.csi.scaleway.com
+reclaimPolicy: Delete
+allowedTopologies:
+  - matchLabelExpressions:
+      - key: topology.filestorage.csi.scaleway.com/region
+        values:
+          - fr-par
+```
+
+<Message type="tip">
+  For further information, refer to the [Scaleway File Storage CSI driver](https://github.com/scaleway/scaleway-filestorage-csi/tree/main) documentation.
+</Message>

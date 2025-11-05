@@ -23,10 +23,6 @@ export const secretManagerMenu = {
           slug: 'create-secret',
         },
         {
-          label: 'Set an Organization alias',
-          slug: 'set-organization-alias'
-        },
-        {
           label: 'Manage a secret',
           slug: 'manage-secret',
         },

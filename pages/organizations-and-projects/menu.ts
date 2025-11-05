@@ -1,4 +1,4 @@
-export const organizationsNProjectsMenu = {
+export const organizationsAndProjectsMenu = {
   items: [
     {
       label: 'Overview',

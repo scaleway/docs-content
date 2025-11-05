@@ -1,4 +1,4 @@
-export const ddxKvmOverIpMenu = {
+export const dediboxKvmOverIpMenu = {
   items: [
     {
       label: 'Overview',

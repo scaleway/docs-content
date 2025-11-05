@@ -1,65 +1,67 @@
+// please use precise camel case versions of each product slug
+// for its associated menu naming, to avoid breaking tooling
 import { accountMenu } from '../pages/account/menu'
-import { billingMenu } from '../pages/billing/menu'
-import { environmentalFootprintMenu } from '../pages/environmental-footprint/menu'
-import { iamMenu } from '../pages/iam/menu'
-import { keyManagerMenu } from '../pages/key-manager/menu'
-import { organizationsNProjectsMenu } from '../pages/organizations-and-projects/menu'
-import { secretManagerMenu } from "../pages/secret-manager/menu"
-import { generativeApisMenu } from "../pages/generative-apis/menu"
-import { managedInferenceMenu } from "../pages/managed-inference/menu"
 import { appleSiliconMenu } from "../pages/apple-silicon/menu"
-import { ddxScwMenu } from "../pages/dedibox-scaleway/menu"
-import { elasticMetalMenu } from "../pages/elastic-metal/menu"
-import { instanceMenu } from '../pages/instances/menu'
-import { gpuMenu } from "../pages/gpu/menu"
-import { containerRegistryMenu } from "../pages/container-registry/menu"
-import { kubernetesMenu } from "../pages/kubernetes/menu"
-import { managedDatabasePostgresMySqlMenu } from "../pages/managed-databases-for-postgresql-and-mysql/menu"
-import { managedDatabaseRedisMenu } from "../pages/managed-databases-for-redis/menu"
-import { managedDatabaseMongoDbMenu } from "../pages/managed-mongodb-databases/menu"
-import { openSearchMenu } from "../pages/opensearch/menu"
-import { serverlessSqlDatabasesMenu } from "../pages/serverless-sql-databases/menu"
-import { dataWarehouseMenu } from "../pages/data-warehouse/menu"
-import { dataLabMenu } from "../pages/data-lab/menu"
-import { natsMenu } from "../pages/nats/menu"
-import { scwCliMenu } from "../pages/scaleway-cli/menu"
-import { scwSdkMenu } from "../pages/scaleway-sdk/menu"
-import { terraformMenu } from "../pages/terraform/menu"
-import { domainsAndDnsMenu } from "../pages/domains-and-dns/menu"
-import { transactionalEmailMenu } from "../pages/transactional-email/menu"
-import { webHostingMenu } from "../pages/webhosting/menu"
-import { iotHubMenu } from "../pages/iot-hub/menu"
-import { topicsAndEventsMenu } from "../pages/topics-and-events/menu"
-import { queuesMenu } from "../pages/queues/menu"
 import { auditTrailMenu } from "../pages/audit-trail/menu"
+import { billingMenu } from '../pages/billing/menu'
+import { blockStorageMenu } from "../pages/block-storage/menu"
+import { classicHostingMenu } from "../pages/classic-hosting/menu"
 import { cockpitMenu } from "../pages/cockpit/menu"
+import { containerRegistryMenu } from "../pages/container-registry/menu"
+import { cpanelHostingMenu } from "../pages/cpanel-hosting/menu"
+import { dataLabMenu } from "../pages/data-lab/menu"
+import { dataWarehouseMenu } from "../pages/data-warehouse/menu"
+import { dediboxMenu } from "../pages/dedibox/menu"
+import { dediboxAccountMenu } from "../pages/dedibox-account/menu"
+import { dediboxDnsMenu } from "../pages/dedibox-dns/menu"
+import { dediboxDomainsMenu } from "../pages/dedibox-domains/menu"
+import { dediboxHardwareMenu } from "../pages/dedibox-hardware/menu"
+import { dediboxIpFailoverMenu } from "../pages/dedibox-ip-failover/menu"
+import { dediboxIpv6Menu } from "../pages/dedibox-ipv6/menu"
+import { dediboxKvmOverIpMenu } from "../pages/dedibox-kvm-over-ip/menu"
+import { dediboxNetworkMenu } from "../pages/dedibox-network/menu"
+import { dediboxRpnMenu } from "../pages/dedibox-rpn/menu"
+import { dediboxScalewayMenu } from "../pages/dedibox-scaleway/menu"
+import { dediboxVpsMenu } from "../pages/dedibox-vps/menu"
+import { domainsAndDnsMenu } from "../pages/domains-and-dns/menu"
 import { edgeServicesMenu } from "../pages/edge-services/menu"
-import { interLinkMenu } from "../pages/interlink/menu"
+import { elasticMetalMenu } from "../pages/elastic-metal/menu"
+import { environmentalFootprintMenu } from '../pages/environmental-footprint/menu'
+import { fileStorageMenu } from "../pages/file-storage/menu"
+import { generativeApisMenu } from "../pages/generative-apis/menu"
+import { gpuMenu } from "../pages/gpu/menu"
+import { iamMenu } from '../pages/iam/menu'
+import { instancesMenu } from '../pages/instances/menu'
+import { interlinkMenu } from "../pages/interlink/menu"
+import { iotHubMenu } from "../pages/iot-hub/menu"
 import { ipamMenu } from "../pages/ipam/menu"
-import { loadBalancersMenu } from "../pages/load-balancer/menu"
+import { keyManagerMenu } from '../pages/key-manager/menu'
+import { kubernetesMenu } from "../pages/kubernetes/menu"
+import { loadBalancerMenu } from "../pages/load-balancer/menu"
+import { localStorageMenu } from "../pages/local-storage/menu"
+import { managedDatabasesForPostgresqlAndMysqlMenu } from "../pages/managed-databases-for-postgresql-and-mysql/menu"
+import { managedDatabasesForRedisMenu } from "../pages/managed-databases-for-redis/menu"
+import { managedInferenceMenu } from "../pages/managed-inference/menu"
+import { managedMongodbDatabasesMenu } from "../pages/managed-mongodb-databases/menu"
+import { natsMenu } from "../pages/nats/menu"
+import { objectStorageMenu } from "../pages/object-storage/menu"
+import { openSearchMenu } from "../pages/opensearch/menu"
+import { organizationsAndProjectsMenu } from '../pages/organizations-and-projects/menu'
+import { partnerSpaceMenu } from "../pages/partner-space/menu"
 import { publicGatewaysMenu } from "../pages/public-gateways/menu"
-import { vpcMenu } from "../pages/vpc/menu"
+import { queuesMenu } from "../pages/queues/menu"
+import { scalewayCliMenu } from "../pages/scaleway-cli/menu"
+import { scalewaySdkMenu } from "../pages/scaleway-sdk/menu"
+import { secretManagerMenu } from "../pages/secret-manager/menu"
 import { serverlessContainersMenu } from "../pages/serverless-containers/menu"
 import { serverlessFunctionsMenu } from "../pages/serverless-functions/menu"
 import { serverlessJobsMenu } from "../pages/serverless-jobs/menu"
-import { blockStorageMenu } from "../pages/block-storage/menu"
-import { fileStorageMenu } from "../pages/file-storage/menu"
-import { localStorageMenu } from "../pages/local-storage/menu"
-import { objectStorageMenu } from "../pages/object-storage/menu"
-import { classicHostingMenu } from "../pages/classic-hosting/menu"
-import { cpanelHostingMenu } from "../pages/cpanel-hosting/menu"
-import { ddxAccountMenu } from "../pages/dedibox-account/menu"
-import { ddxHardwareMenu } from "../pages/dedibox-hardware/menu"
-import { ddxVpsMenu } from "../pages/dedibox-vps/menu"
-import { ddxMenu } from "../pages/dedibox/menu"
-import { ddxKvmOverIpMenu } from "../pages/dedibox-kvm-over-ip/menu"
-import { ddxDomainsMenu } from "../pages/dedibox-domains/menu"
-import { ddxDnsMenu } from "../pages/dedibox-dns/menu"
-import { ddxIpFailoverMenu } from "../pages/dedibox-ip-failover/menu"
-import { ddxIpv6Menu } from "../pages/dedibox-ipv6/menu"
-import { ddxNetworkMenu } from "../pages/dedibox-network/menu"
-import { ddxRpnMenu } from "../pages/dedibox-rpn/menu"
-import { partnerSpaceMenu } from "../pages/partner-space/menu"
+import { serverlessSqlDatabasesMenu } from "../pages/serverless-sql-databases/menu"
+import { terraformMenu } from "../pages/terraform/menu"
+import { topicsAndEventsMenu } from "../pages/topics-and-events/menu"
+import { transactionalEmailMenu } from "../pages/transactional-email/menu"
+import { vpcMenu } from "../pages/vpc/menu"
+import { webhostingMenu } from "../pages/webhosting/menu"
 
 export default [
   {
@@ -86,7 +88,7 @@ export default [
         items: [
           iamMenu,
           keyManagerMenu,
-          organizationsNProjectsMenu,
+          organizationsAndProjectsMenu,
           secretManagerMenu,
         ],
         label: 'Security & Identity',
@@ -110,7 +112,7 @@ export default [
         icon: 'BaremetalCategoryIcon',
         items: [
           appleSiliconMenu,
-          ddxScwMenu,
+          dediboxScalewayMenu,
           elasticMetalMenu,
         ],
         label: 'Bare Metal',
@@ -119,7 +121,7 @@ export default [
       {
         icon: 'ComputeCategoryIcon',
         items: [
-          instanceMenu,
+          instancesMenu,
           gpuMenu,
         ],
         label: 'Compute',
@@ -137,9 +139,9 @@ export default [
       {
         icon: 'DatabaseCategoryIcon',
         items: [
-          managedDatabasePostgresMySqlMenu,
-          managedDatabaseRedisMenu,
-          managedDatabaseMongoDbMenu,
+          managedDatabasesForPostgresqlAndMysqlMenu,
+          managedDatabasesForRedisMenu,
+          managedMongodbDatabasesMenu,
           openSearchMenu,
           serverlessSqlDatabasesMenu,
         ],
@@ -159,8 +161,8 @@ export default [
       {
         icon: 'DevToolsCategoryIcon',
         items: [
-          scwCliMenu,
-          scwSdkMenu,
+          scalewayCliMenu,
+          scalewaySdkMenu,
           terraformMenu,
         ],
         label: 'Developer Tools',
@@ -171,7 +173,7 @@ export default [
         items: [
           domainsAndDnsMenu,
           transactionalEmailMenu,
-          webHostingMenu,
+          webhostingMenu,
         ],
         label: 'Domains & Web Hosting',
         category: 'domains-and-web-hosting',
@@ -199,9 +201,9 @@ export default [
         icon: 'NetworkCategoryIcon',
         items: [
           edgeServicesMenu,
-          interLinkMenu,
+          interlinkMenu,
           ipamMenu,
-          loadBalancersMenu,
+          loadBalancerMenu,
           publicGatewaysMenu,
           vpcMenu,
         ],
@@ -239,7 +241,7 @@ export default [
         items: [
           classicHostingMenu,
           cpanelHostingMenu,
-          ddxAccountMenu,
+          dediboxAccountMenu,
         ],
         label: 'Dedibox Console',
         category: 'dedibox-console',
@@ -247,10 +249,10 @@ export default [
       {
         icon: 'DedicatedServerCategoryIcon',
         items: [
-          ddxHardwareMenu,
-          ddxMenu,
-          ddxVpsMenu,
-          ddxKvmOverIpMenu
+          dediboxHardwareMenu,
+          dediboxMenu,
+          dediboxVpsMenu,
+          dediboxKvmOverIpMenu
         ],
         label: 'Dedibox Servers',
         category: 'dedibox',
@@ -258,12 +260,12 @@ export default [
       {
         icon: 'NetworkCategoryIcon',
         items: [
-          ddxDomainsMenu,
-          ddxDnsMenu,
-          ddxIpFailoverMenu,
-          ddxIpv6Menu,
-          ddxNetworkMenu,
-          ddxRpnMenu,
+          dediboxDomainsMenu,
+          dediboxDnsMenu,
+          dediboxIpFailoverMenu,
+          dediboxIpv6Menu,
+          dediboxNetworkMenu,
+          dediboxRpnMenu,
         ],
         label: 'Dedibox Network',
         category: 'dedibox-network',

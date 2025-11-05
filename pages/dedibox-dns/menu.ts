@@ -1,4 +1,4 @@
-export const ddxDnsMenu = {
+export const dediboxDnsMenu = {
   items: [
     {
       label: 'Overview',

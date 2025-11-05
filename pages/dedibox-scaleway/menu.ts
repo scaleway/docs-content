@@ -1,4 +1,4 @@
-export const ddxScwMenu = {
+export const dediboxScalewayMenu = {
   items: [
     {
       label: 'Overview',
@@ -70,10 +70,6 @@ export const ddxScwMenu = {
           label: 'Terminate a Dedibox subscription',
           slug: 'terminate-dedibox',
         },
-        {
-          label: 'Link an existing Dedibox account to Scaleway',
-          slug: 'link-dedibox-account',
-        },
       ],
       label: 'How to',
       slug: 'how-to',
@@ -93,6 +89,10 @@ export const ddxScwMenu = {
         {
           label: 'Bare Metal shared responsibility model',
           slug: '../../elastic-metal/reference-content/shared-responsibility-model',
+        },
+        {
+          label: 'Dedibox and Scaleway account linking',
+          slug: 'dedibox-scaleway-linking',
         },
         {
           label: 'Dedibox datasheet',

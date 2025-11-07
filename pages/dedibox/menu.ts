@@ -82,6 +82,10 @@ export const dediboxMenu = {
           label: 'Terminate a server',
           slug: 'terminate-dedibox-server',
         },
+        {
+          label: 'Give IAM Members access to the Dedibox console',
+          slug: 'give-iam-members-access-to-dedibox-console',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

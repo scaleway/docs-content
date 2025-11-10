@@ -166,6 +166,10 @@ export const managedDatabasesForPostgresqlAndMysqlMenu = {
           slug: 'logical-replication-as-subscriber',
         },
         {
+          label: 'Setting up logical replication as a publisher',
+          slug: 'logical-replication-as-publisher',
+        },
+        {
           label:
             'Connecting Managed Databases to Kubernetes clusters',
           slug: 'connecting-managed-databases-to-kubernetes-clusters',

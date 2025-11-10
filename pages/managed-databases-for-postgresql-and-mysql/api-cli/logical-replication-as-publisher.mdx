@@ -1,0 +1,124 @@
+---
+title: Setting up logical replication as a publisher in PostgreSQL
+description: Learn how to set up and use logical replication as a publisher in PostgreSQL
+tags: postgresql logical replication publisher migration database
+dates:
+  validation: 2025-08-25
+  posted: 2025-02-20
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+The logical replication of databases as a publisher is available with [PostgreSQL 17](/managed-databases-for-postgresql-and-mysql/reference-content/pg-version-updates#postgresql-17), which is supported in Scaleway's Managed Databases for PostgreSQL.
+
+The feature allows you to replicate data from a managed PostgreSQL to another Database Instance (a Managed PostgreSQL in another region, for example).
+
+Replication slots can be created with the `failover` flag, which ensures that replication slots survive failovers. When a secondary node is promoted to primary, the replication slot is automatically available on the new main node.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A [Database Instance](/managed-databases-for-postgresql-and-mysql/how-to/create-a-database/) running PostgreSQL 17
+
+## Configuring advanced settings and user rights
+
+As the service uses physical replication to provide High Availability, some parameters must be enabled to allow the logical replication to remain active after the promotion of a secondary node, without disturbing the HA setup. It is essential to ensure these setting are enabled as even Database Instances with in standalone mode can be replaced with temporary replicas.
+
+The [replication slot](https://www.postgresql.org/docs/17/logicaldecoding-explanation.html#LOGICALDECODING-REPLICATION-SLOTS) is an important part of the logical replication. Each subscription receives changes via one replication slot created on the "publishing" node. You have one replication slot available per logical database.
+
+To use replication, users must also have the corresponding rights.
+
+Follow the steps in the [How to configure advanced settings](/managed-databases-for-postgresql-and-mysql/how-to/configure-advanced-settings) documentation page to configure the following settings:
+
+To enable logical replication, you must:
+
+- Enable the `rdb.enable_logical_replication` setting. This automatically changes the `wal_level` settings to `logical`.
+- Set `hot_standby_feedback` to `ON`
+- Set `sync_replication_slots` to `ON`
+
+Follow the steps in the [How to manage users](/managed-databases-for-postgresql-and-mysql/how-to/manage-users) documentation page to attribute user rights.
+
+To create publications and replication slots, the `replication_user` must:
+
+- Either be an admin user (`rdb_admin`)
+- Or be granted the following rights from an `rdb_admin`:
+    - `ALTER replication_user with REPLICATION`
+    - `GRANT CREATE ON DATABASE my_database TO my_replication_user;`
+
+## Setting up logical replication
+
+We use an example scenario to show how logical replication can be set up.
+
+1. Create the table and publication on the publisher database.
+    ```sql
+    CREATE TABLE mytable (id INTEGER PRIMARY KEY, val TEXT);
+    CREATE PUBLICATION pub FOR TABLE mytable;
+    ```
+2. Insert a sample row into the table. This ensures there's data to test the replication with.
+    ```sql
+    INSERT INTO mytable VALUES (1, 'foo');
+    ```
+3. Create the same table structure on the subscriber database. Leave the table empty, as data will be copied into it upon subscription.
+    ```sql
+    CREATE TABLE mytable (id INTEGER PRIMARY KEY, val TEXT);
+    ```
+4. Create a subscription. Two methods are available:
+    - **Direct subscription with failover** - use this method if your environment supports the failover option in `CREATE SUBSCRIPTION`
+    - **Creating a replication slot manually on the publisher** -
+
+    <Tabs>
+      <TabsTab label="Set up direct subscription">
+        ```sql
+        CREATE SUBSCRIPTION sub CONNECTION 'host=myhost port=myport user=myuser dbname=mydb password=mypassword' PUBLICATION pub WITH (failover);
+        ```
+      </TabsTab>
+      <TabsTab label="Create replication slot manually">
+      Some environments do not allow `CREATE SUBSCRIPTION` to auto-create slots due to permissions or configuration. In this case, you can create a slot with failover manually.
+        1. Create a replication slot on the publisher database.
+        ```sql
+        SELECT pg_create_logical_replication_slot('sub', 'pgoutput', false, false, true);
+        ```
+        <Message type="note">
+          The last `true` in the command above enables the `failover` flag.
+        </Message>
+        2. Create the subscription without creating a slot.
+        ```sql
+        CREATE SUBSCRIPTION sub CONNECTION 'host=myhost port=myport user=myuser dbname=mydb password=mypassword' PUBLICATION pub WITH (enabled=true, create_slot=false, slot_name='sub');
+        ```
+        <Message type="note">
+          Refer to the [PostgreSQL documentation](https://www.postgresql.org/docs/current/functions-admin.html#FUNCTIONS-REPLICATION) for more information about `pg_create_logical_replication_slot()`.
+        </Message>
+      </TabsTab>
+    </Tabs>
+
+5. Query the publisher table in the subscriber to test the replication.
+    ```sql
+    SELECT * FROM mytable;
+    ```
+
+## Limitations
+
+- 100 replication slots are available for each Database Instance.
+- 25 out of the 100 slots are reserved for Scaleway's internal systems.
+- During the synchronization phase, 2 or more slots might be needed for a subscription.
+    <Message type="important">
+      - If you need more than 50 replication slots, [create a support ticket](https://console.scaleway.com/support).
+      - If the limit is exceeded, your Managed Database service may become compromised.
+    </Message>
+
+    <Message type="tip">
+    Run the following command to get a list of your replication slots:
+    ```sql
+    SELECT * FROM pg_replication_slots where slot_type = 'logical';
+    ```
+    And the following command to check publications:
+    ```sql
+    SELECT * from pg_publication;
+    ```
+    </Message>
+
+- If a logical replication is not active but still consumed by a subscription or other tool, PostgreSQL WAL files will accumulate in the primary node, filling up storage. In the worst case scenario, your database can be set to read only mode (check disk full section).
+    <Message type="tip">
+      - We recommend you delete any replications that are no longer used.
+      - If a logical replication is inactive for 24h, it will be automatically removed.
+    </Message>

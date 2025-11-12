@@ -1,0 +1,96 @@
+---
+title: Migrating from H100-2-80G to H100-SXM-2-80G
+description: Learn how to migrating from H100-2-80G to H100-SXM-2-80G GPU Instances.
+tags: gpu nvidia
+dates:
+  validation: 2025-11-04
+  posted: 2025-11-04
+---
+
+Scaleway is optimizing its H100 GPU Instance portfolio to improve long-term availability and provide better performance for all users.
+
+For optimal availability and performance, we recommend switching from **H100-2-80G** to the next generation **H100-SXM-2-80G** GPU Instance. This latest generation has more stock, improved NVLink, better and faster VRAM.
+
+## Benefits of the migration
+
+There are two primary scenarios: migrating **Kubernetes (Kapsule)** workloads or **standalone** workloads.
+
+<Message type="important">
+  Always ensure that your **data is backed up** before performing any operations that could affect it. Keep in mind that **scratch storage** is ephemeral and does not survive once the Instance is stopped: doing a full stop/start cycle will **erase the scratch data**. However, doing a simple reboot or using the **stop in place** function will keep the data.
+</Message>
+
+### Migrating Kubernetes workloads (Kubernetes Kapsule)
+
+If you are using Kapsule, follow these steps to move existing workloads to nodes powered by `H100-SXM-2-80G` GPUs.
+
+<Message type="important">
+  The Kubernetes autoscaler may get stuck if it tries to scale up a node pool with out-of-stock Instances. We recommend switching to `H100-SXM-2-80G` GPU Instances proactively to avoid disruptions.
+</Message>
+
+
+#### Step-by-step
+1. Create a new node pool using `H100-SXM-2-80G` GPU Instances.
+
+2. Run `kubectl get nodes` to check that the new nodes are in a `Ready` state.
+3. Cordon the nodes in the old node pool to prevent new Pods from being scheduled there. For each node, run: `kubectl cordon <node-name>`
+    <Message type="tip">
+      You can use a selector on the pool name label to cordon or drain multiple nodes at the same time if your app allows it (ex. `kubectl cordon -l k8s.scaleway.com/pool-name=mypoolname`)
+    </Message>
+4. Drain the nodes to evict the Pods gracefully.
+   - For each node, run: `kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data`
+   - The `--ignore-daemonsets` flag is used because daemon sets manage Pods across all nodes and will automatically reschedule them.
+   - The `--delete-emptydir-data` flag is necessary if your Pods use emptyDir volumes, but use this option carefully as it will delete the data stored in these volumes.
+   - Refer to the [official Kubernetes documentation](https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/) for further information.
+5. Run `kubectl get pods -o wide` after draining, to verify that the Pods have been rescheduled to the new node pool.
+6. Delete the old node pool.
+
+<Message type="tip">
+  For further information, refer to our dedicated documentation [How to migrate existing workloads to a new Kapsule node pool](/kubernetes/how-to/manage-node-pools/#how-to-migrate-existing-workloads-to-a-new-kubernets-kapsule-node-pool).
+</Message>
+
+### Migrating a standalone Instance
+
+For standalone GPU instances, you can recreate your environment using a `H100-SXM-2-80G` GPU Instance using either the CLI, API or in visual mode using the Scaleway console.
+
+#### Quick Start (CLI example):
+1. Stop the Instance.
+    ```
+    scw instance server stop <instance_id> zone=<zone>
+    ```
+    Replace `<zone>` with the Availability Zone of your Instance. For example, if your Instance is located in Paris-1, the zone would be `fr-par-1`. Replace `<instance_id>` with the ID of your Instance.
+    <Message type="tip">
+    You can find the ID of your Instance on it's overview page in the Scaleway console or using the CLI by running the following command: `scw instance server list`.
+    </Message>
+
+2. Update the commercial type of the Instance
+    ```
+    scw instance server update <instance_id> commercial-type=H100-SXM-2-80G zone=<zone>
+    ```
+    Replace `<instance_id>` with the UUID of your Instance and `<zone>` with the Availability Zone of your GPU Instance.
+
+3. Power on the Instance.
+    ```
+    scw instance server start <instance_id> zone=<zone>
+    ```
+For further information, refer to the [Instance CLI documentation](https://github.com/scaleway/scaleway-cli/blob/master/docs/commands/instance.md).
+
+<Message type="tip">
+  You can also migrate your GPU Instances using the [API](https://www.scaleway.com/en/docs/instances/api-cli/migrating-instances/) and via [Scaleway console](/instances/how-to/migrate-instances/).
+</Message>
+
+## FAQ
+
+#### Are PCIe-based H100s being discontinued?
+H100 PCIe-based GPU Instances are not End-of-Life (EOL), but due to limited availability, we recommend migrating to `H100-SXM-2-80G` to avoid future disruptions.
+
+#### Is H100-SXM-2-80G compatible with my current setup?
+Yes — it runs the same CUDA toolchain and supports standard frameworks (PyTorch, TensorFlow, etc.). No changes in your code base are required when upgrading to a SXM-based GPU Instance.
+
+#### Why is H100-SXM better for multi-GPU?
+The NVIDIA H100-SXM outperforms the H100-PCIe in multi-GPU configurations due to its superior interconnect and higher power capacity.
+It leverages fourth-generation NVLink and NVSwitch, providing up to 900 GB/s of bidirectional bandwidth for rapid GPU-to-GPU communication, compared to the H100-PCIe's 128 GB/s via PCIe Gen 5, which creates bottlenecks in demanding workloads like large-scale AI training and HPC. 
+Additionally, the H100-SXM’s 700W TDP enables higher clock speeds and sustained performance, while the H100-PCIe’s 300-350W TDP limits its throughput.
+For high-communication, multi-GPU tasks, the H100-SXM is the optimal choice, while the H100-PCIe suits less intensive applications with greater flexibility.
+
+#### What if my workload needs more CPU or RAM?
+Let us know via [support ticket](https://console.scaleway.com/support/tickets/create) what your specific requoirements are. Currently we are evaluating options for compute-optimized configurations to complement our GPU offerings.

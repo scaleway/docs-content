@@ -59,6 +59,10 @@ export const objectStorageMenu = {
           slug: 'manage-lifecycle-rules',
         },
         {
+          label: 'Host healthcare data (HDS)',
+          slug: 'host-healthcare-data',
+        },
+        {
           label: 'View and abort incomplete multipart uploads',
           slug: 'abort-incomplete-mpu',
         },
@@ -184,6 +188,10 @@ export const objectStorageMenu = {
     },
     {
       items: [
+        {
+          label: 'Storage shared responsibility model',
+          slug: 'storage-shared-responsibility-model',
+        },
         {
           label: 'Optimize your Object Storage performance',
           slug: 'optimize-object-storage-performance',

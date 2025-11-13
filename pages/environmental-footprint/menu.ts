@@ -56,6 +56,10 @@ export const environmentalFootprintMenu = {
         {
           label: 'Object Storage footprint calculation',
           slug: 'object-storage-env-footprint'
+        },
+        {
+          label: 'Load Balancer footprint calculation',
+          slug: 'load-balancer-env-footprint'
         }
       ],
       label: 'Additional Content',

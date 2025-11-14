@@ -31,10 +31,6 @@ export const blockStorageMenu = {
           slug: 'mount-a-volume',
         },
         {
-          label: 'Host healthcare data',
-          slug: 'host-healthcare-data',
-        },
-        {
           label: 'Increase the volume size',
           slug: 'increase-block-volume',
         },

@@ -26,6 +26,10 @@ export const auditTrailMenu = {
           label: 'Use Audit Trail',
           slug: 'use-audit-trail',
         },
+        {
+          label: 'Create and manage Audit Trail exports',
+          slug: 'manage-adt-export',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

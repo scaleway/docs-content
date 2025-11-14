@@ -98,6 +98,10 @@ export const dediboxScalewayMenu = {
           label: 'Dedibox datasheet',
           slug: 'dedibox-datasheet',
         },
+        {
+          label: 'Mounting filesystems in rescue mode',
+          slug: 'mount-fs-ins-rescue-mode',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

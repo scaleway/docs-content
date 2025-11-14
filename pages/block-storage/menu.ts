@@ -91,6 +91,10 @@ export const blockStorageMenu = {
     {
       items: [
         {
+          label: 'Storage shared responsibility model',
+          slug: 'storage-shared-responsibility-model',
+        },
+        {
           label:
             'Differences between Block Storage volumes',
           slug: 'differences-between-5kiops-volumes',

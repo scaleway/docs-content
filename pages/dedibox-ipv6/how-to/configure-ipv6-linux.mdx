@@ -1,9 +1,9 @@
 ---
 title: How to configure IPv6 connectivity using systemd-networkd
-description: This page explains how to configure IPv6 connectivity on a Scaleway Dedibox using systemd-networkd.
+description: This page explains how to configure IPv6 connectivity on a Scaleway Dedibox using systemd-networkd or dhcpcd.
 tags: dedibox ipv6 systemd-networkd
 dates:
-  validation: 2025-04-30
+  validation: 2025-11-17
   posted: 2021-08-03
 ---
 import Requirements from '@macros/iam/requirements.mdx'
@@ -18,6 +18,7 @@ import Requirements from '@macros/iam/requirements.mdx'
 <Message type="note">
   If you are running Ubuntu and using Netplan, follow the **Ubuntu (Netplan)** section.
   If you use systemd-networkd directly, or run a different Linux distribution, follow the **Linux (systemd-networkd)** section.
+  If you use dhcpcd or your Linux distribution uses ifupdown, follow the **Linux (dhcpcd) section.
 </Message>
 
 ## How to configure IPv6 on Ubuntu
@@ -129,6 +130,62 @@ Your IPv6 prefix is routed statically; DHCPv6 is used only for lease negotiation
     ```bash
     sudo systemctl enable --now systemd-networkd
     ```
+
+## How to configure IPv6 on Linux with dhcpcd
+
+This section expands the existing tutorial on [dhcpcd](/tutorials/dhcpcd-dedibox/).
+
+On certain Linux distributions like Debian Trixie, you may find `dhcpcd` alongside `ifup` (`dhcpcd-base` must be installed).
+
+1. Enable SLAAC on your dashboard, if your server supports it.
+
+        <Message type="tip">
+        If SLAAC is not provided for your Dedibox, you can skip to the `dhcpcd` configuration.
+        </Message>
+
+2. Ensure the interface and firewall allow IPv6 routing advertisements.
+
+        For instance, if your interface is named `eno1`, as root, you can set it using:
+
+        ```bash
+        echo 1 > /proc/sys/net/ipv6/conf/eno1/accept_ra
+        ```
+
+        Next, configure `dhcpcd`:
+
+3. Copy DUID into  `/var/lib/dhcpcd/duid`. This file is auto-generated the first time by `dhcpcd`.
+
+        While there is a `duid <uuid>` option in the configuration, the Scaleway one is not in the correct format, resulting in the client using the generated one.
+
+4. Update the configuration of `/etc/dhcpcd.conf` with the following:
+
+        ```bash
+        interface eno1
+        # request to use dhcpv6
+        dhcp6
+        # request a non-temporary address
+        ia_na
+        # sets the "identifier" of the interface to 1
+        iaid 1
+
+        # request a prefix delegation on the interface 1 but do not allocate it (-)
+        ia_pd 1 -
+        ```
+        If you are only using the /48, you should request a prefix delegation (`ia_pd`) and allocate it to other interfaces (VMs, VPN, etc.) or just keep it blank with `-`.
+
+5. Restart the appropriate service:
+
+        On Debian, you can restart `networking` which relies on `ifup`:
+
+        ```bash
+        sudo systemctl restart networking
+        ```
+
+        Or if you use a distribution that has standalone `dhcpcd`:
+
+        ```bash
+        sudo systemctl restart dhcpcd@eno1
+        ```
 
 ## Additional notes
 

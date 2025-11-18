@@ -1,0 +1,94 @@
+---
+title: Migrating from H100-2-80G to H100-SXM-2-80G
+description: Learn how to migrate from H100-2-80G to H100-SXM-2-80G GPU Instances.
+tags: gpu nvidia
+dates:
+  validation: 2025-11-04
+  posted: 2025-11-04
+---
+
+Scaleway is optimizing its H100 GPU Instance portfolio to improve long-term availability and provide better performance for all users.
+
+For optimal availability and performance, we recommend switching from **H100-2-80G** to the improved **H100-SXM-2-80G** GPU Instance. This latest generation has more stock, improved NVLink, and better and faster VRAM.
+
+## Benefits of the migration
+
+There are two primary scenarios: migrating **Kubernetes (Kapsule)** workloads or **standalone** workloads.
+
+<Message type="important">
+  Always make sure your **data is backed up** before performing any operation that could affect it. Remember that **scratch storage** is ephemeral and will not persist after an Instance is fully stopped. A full stop/start cycle—such as during an Instance server migration—will **erase all scratch data**. However, outside of server-type migrations, a simple reboot or using **stop in place** will preserve the data stored on the Instance’s scratch storage.
+</Message>
+
+### Migrating Kubernetes workloads (Kubernetes Kapsule)
+
+If you are using Kapsule, follow these steps to move existing workloads to nodes powered by `H100-SXM-2-80G` GPUs.
+
+<Message type="important">
+  The Kubernetes autoscaler may get stuck if it tries to scale up a node pool with out-of-stock Instances. We recommend switching to `H100-SXM-2-80G` GPU Instances proactively to avoid disruptions.
+</Message>
+
+
+#### Step-by-step
+1. Create a new node pool using `H100-SXM-2-80G` GPU Instances.
+
+2. Run `kubectl get nodes` to check that the new nodes are in a `Ready` state.
+3. Cordon the nodes in the old node pool to prevent new Pods from being scheduled there. For each node, run: `kubectl cordon <node-name>`
+    <Message type="tip">
+      You can use a selector on the pool name label to cordon or drain multiple nodes at the same time if your app allows it (ex. `kubectl cordon -l k8s.scaleway.com/pool-name=mypoolname`)
+    </Message>
+4. Drain the nodes to evict the Pods gracefully.
+   - For each node, run: `kubectl drain <node-name> --ignore-daemonsets --delete-emptydir-data`
+   - The `--ignore-daemonsets` flag is used because daemon sets manage Pods across all nodes and will automatically reschedule them.
+   - The `--delete-emptydir-data` flag is necessary if your Pods use emptyDir volumes, but use this option carefully as it will delete the data stored in these volumes.
+   - Refer to the [official Kubernetes documentation](https://kubernetes.io/docs/tasks/administer-cluster/safely-drain-node/) for further information.
+5. Run `kubectl get pods -o wide` after draining, to verify that the Pods have been rescheduled to the new node pool.
+6. Delete the old node pool.
+
+<Message type="tip">
+  For further information, refer to our dedicated documentation: [How to migrate existing workloads to a new Kapsule node pool](/kubernetes/how-to/manage-node-pools/#how-to-migrate-existing-workloads-to-a-new-kubernets-kapsule-node-pool).
+</Message>
+
+### Migrating a standalone Instance
+
+For standalone GPU instances, you can recreate your environment using a `H100-SXM-2-80G` GPU Instance using either the CLI, API or in visual mode using the Scaleway console.
+
+#### Quick Start (CLI example):
+1. Stop the Instance.
+    ```
+    scw instance server stop <instance_id> zone=<zone>
+    ```
+    Replace `<zone>` with the Availability Zone of your Instance. For example, if your Instance is located in Paris-1, the zone would be `fr-par-1`. Replace `<instance_id>` with the ID of your Instance.
+    <Message type="tip">
+    You can find the ID of your Instance on its overview page in the Scaleway console or by running the following CLI command: `scw instance server list`.
+    </Message>
+
+2. Update the commercial type of the Instance.
+    ```
+    scw instance server update <instance_id> commercial-type=H100-SXM-2-80G zone=<zone>
+    ```
+    Replace `<instance_id>` with the UUID of your Instance and `<zone>` with the Availability Zone of your GPU Instance.
+
+3. Power on the Instance.
+    ```
+    scw instance server start <instance_id> zone=<zone>
+    ```
+For further information, refer to the [Instance CLI documentation](https://github.com/scaleway/scaleway-cli/blob/master/docs/commands/instance.md).
+
+<Message type="tip">
+  You can also migrate your GPU Instances using the [API](https://www.scaleway.com/en/docs/instances/api-cli/migrating-instances/) and via [Scaleway console](/instances/how-to/migrate-instances/).
+</Message>
+
+## FAQ
+
+#### Are PCIe-based H100s being discontinued?
+H100 PCIe-based GPU Instances are not End-of-Life (EOL), but due to limited availability, we recommend migrating to `H100-SXM-2-80G` to avoid future disruptions.
+
+#### Is H100-SXM-2-80G compatible with my current setup?
+Yes — it runs the same CUDA toolchain and supports standard frameworks (PyTorch, TensorFlow, etc.). No changes in your code base are required when upgrading to a SXM-based GPU Instance.
+
+### Why is the H100-SXM better for multi-GPU workloads?
+
+The NVIDIA H100-SXM outperforms the H100-PCIe in multi-GPU configurations primarily due to its higher interconnect bandwidth and greater power capacity. It uses fourth-generation NVLink and NVSwitch, delivering up to **900 GB/s of bidirectional bandwidth** for fast GPU-to-GPU communication. In contrast, the H100-PCIe is limited to a **theoretical maximum of 128 GB/s** via PCIe Gen 5, which becomes a bottleneck in communication-heavy workloads such as large-scale AI training and HPC.
+The H100-SXM also provides **HBM3e memory** with up to **3.35 TB/s of bandwidth**, compared to **2 TB/s** with the H100-PCIe’s HBM3, improving performance in memory-bound tasks.
+Additionally, the H100-SXM’s **700W TDP** allows higher sustained clock speeds and throughput, while the H100-PCIe’s **300–350W TDP** imposes stricter performance limits.
+Overall, the H100-SXM is the optimal choice for high-communication, multi-GPU workloads, whereas the H100-PCIe offers more flexibility for less communication-intensive applications.

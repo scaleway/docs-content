@@ -1,0 +1,149 @@
+---
+title: How to migrate data from Google BigQuery
+description: Learn how to migrate data from Google BigQuery to your Scaleway Data Warehouse for ClickHouse® deployment.
+tags: connect migration transfer copy data alternative migrate ClickHouse® integrate integration
+dates:
+  validation: 2025-11-05
+  posted: 2025-11-05
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+This page explains how to migrate anaytical datasets from Google BigQuery to a Scaleway Data Warehouse for ClickHouse® deployment. THe instructions are based on the [official ClickHouse® guide](https://clickhouse.com/docs/migrations/bigquery/migrating-to-clickhouse-cloud) to migrate from Google BigQuery.
+
+This documentation exemplifies the migration procedure using the [New York Taxi Data](https://clickhouse.com/docs/getting-started/example-datasets/nyc-taxi) provided by ClickHouse®.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A working Google Cloud Provider account with access to BigQuery and Google Cloud Storage
+- [Created a Data Warehouse for ClickHouse® deployment](/data-warehouse/how-to/create-deployment/)
+
+## How to export data from Google BigQuery
+
+Google BigQuery can only export data to Google Cloud Storage (GCS), so you must copy your data to GCS first, then transfer it from GCS to Scaleway Object Storage before ingesting it to your Data Warehouse for ClickHouse® deployment.
+
+### Exporting BigQuery data to GCS
+
+1. Log in to your Google Cloud account, then open BigQuery.
+
+2. Use the `EXPORT DATA` statement to export tables to GCS in the `Parquet` format. Make sure to replace `your-bucket-name`  with your GCS bucket name:
+
+    ```sql
+    EXPORT DATA OPTIONS (
+    uri='gs://your-bucket-name/nyc_taxi_data/*.parquet',
+    format='PARQUET',
+    overwrite=true
+    ) AS
+
+    SELECT * FROM `bigquery-public-data.new_york_taxi_trips.tlc_yellow_trips_2016`;
+    ```
+
+<Message type="note">
+- The `*` in the bucket URI allows Google BigQuery to shard the export into multiple parts if necessary.
+- You must have write access to the specified GCS bucket to perform this action.
+</Message>
+
+### Transferring data to Scaleway Object Storage
+
+To copy data from Google Cloud Storage (GCS) to Scaleway Object Storage, we recommend using [Rclone](https://rclone.org/), as it is compatible with both Google Cloud Storage and Scaleway Object Storage, and allows you to easily copy data from a cloud provider to another.
+
+1. Run the command below to install Rclone, or refer to the [official documentation](https://rclone.org/downloads/) for alternative methods:
+
+    ```sh
+    curl https://rclone.org/install.sh | sudo bash
+    ```
+
+2. Run the command below to start configuring your GCS remote:
+    ```sh
+    rclone config
+    ```
+
+3. Create a new remote, then enter the following parameters when prompted:
+    - Name: `gcs`
+    - Storage type: `Google Cloud Storage`
+    - ID and secret (service account JSON file recommended)
+
+    Your GCS remote for Rclone is now configured.
+
+4. Run the command below to start configuring your Scaleway Object Storage remote:
+    ```sh
+    rclone config
+    ```
+
+5. Create a new remote, then enter the following parameters when prompted:
+    - Name: `scw`
+    - Storage type: `s3`
+    - Provider: `Scaleway`
+    - Endpoint: `s3.fr-par.scw.cloud` (update according to your preferred region)
+    - API access key and secret key
+
+6. Run the command below to copy the content of your GCS bucket to your Scaleway Object Storage bucket. Make sure to replace the placeholders with the correct values:
+    ```sh
+    rclone copy gcs:your-gcs-bucket scw:your-scw-bucket --progress
+    ```
+
+Your Scaleway Object Storage now contains data exported from Google BigQuery in Parquet format, which can now be ingested into your Data Warehouse for ClickHouse® deployment.
+
+## Ingesting data into your Data Warehouse for ClickHouse® deployment
+
+1. Connect to your deployment by following the [dedicated documentation](/data-warehouse/how-to/connect-applications/). Alternatively, you can use the ClickHouse® Console from your deployment's **Overview** page.
+
+2. Run the command below to create a database and a table to store your new data:
+
+    ```sql
+    CREATE DATABASE IF NOT EXISTS nyc_taxi;
+
+    CREATE TABLE nyc_taxi.trips_small
+    (
+      pickup_datetime DateTime,
+      dropoff_datetime DateTime,
+      pickup_ntaname String
+      -- Add other relevant columns
+    )
+    ENGINE = MergeTree()
+    ORDER BY pickup_datetime;
+    ```
+
+2. Run the command below to import data from your Scaleway Object Storage bucket.
+
+    ```sql
+    INSERT INTO nyc_taxi.trips_small
+    SELECT
+        trip_id,
+        pickup_datetime,
+        dropoff_datetime,
+        pickup_longitude,
+        pickup_latitude,
+        dropoff_longitude,
+        dropoff_latitude,
+        passenger_count,
+        trip_distance,
+        fare_amount,
+        extra,
+        tip_amount,
+        tolls_amount,
+        total_amount,
+        payment_type,
+        pickup_ntaname,
+        dropoff_ntaname
+    FROM s3(
+    '<your_bucket_endpoint>/nyc-taxi/trips_{0..2}.gz',
+    'TabSeparatedWithNames'
+    );
+    ```
+
+3. Run the sample query below to make sure your data was properly ingested:
+
+    ```sql
+    SELECT 
+        pickup_ntaname,
+        count(*) AS count
+    FROM nyc_taxi.trips_small
+    WHERE pickup_ntaname != ''
+    GROUP BY pickup_ntaname
+    ORDER BY count DESC
+    LIMIT 10;
+    ```
+
+Your data is now imported into your Data Warehouse for ClickHouse® deployment.

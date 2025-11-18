@@ -68,6 +68,10 @@ export const gpuMenu = {
           slug: 'gpu-instances-bandwidth-overview',
         },
         {
+          label: 'Migrating from H100-2-80G to H100-SXM-2-80G',
+          slug: 'migration-h100',
+        },
+        {
           label: 'GPU time-slicing with Kubernetes',
           slug: 'kubernetes-gpu-time-slicing',
         },

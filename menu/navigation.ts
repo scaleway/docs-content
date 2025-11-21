@@ -62,6 +62,7 @@ import { topicsAndEventsMenu } from "../pages/topics-and-events/menu"
 import { transactionalEmailMenu } from "../pages/transactional-email/menu"
 import { vpcMenu } from "../pages/vpc/menu"
 import { webhostingMenu } from "../pages/webhosting/menu"
+import { quantumComputingMenu } from "../pages/quantum-as-a-service/menu"
 
 export default [
   {
@@ -219,6 +220,14 @@ export default [
         ],
         label: 'Serverless',
         category: 'serverless',
+      },
+      {
+        icon: 'QuantumCategoryIcon',
+        items: [
+          quantumComputingMenu,
+        ],
+        label: 'Quantum',
+        category: 'quantum',
       },
       {
         icon: 'StorageCategoryIcon',

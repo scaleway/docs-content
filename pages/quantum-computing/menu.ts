@@ -54,5 +54,5 @@ export const quantumComputingMenu = {
     },
   ],
   label: 'Quantum Computing',
-  slug: 'quantum-as-a-service',
+  slug: 'quantum-computing',
 }

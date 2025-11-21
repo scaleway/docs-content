@@ -1,4 +1,4 @@
-export const quantumAsAServiceMenu = {
+export const quantumComputingMenu = {
   items: [
     {
       label: 'Overview',

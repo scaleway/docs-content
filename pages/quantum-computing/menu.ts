@@ -2,7 +2,7 @@ export const quantumComputingMenu = {
   items: [
     {
       label: 'Overview',
-      slug: '../quantum-as-a-service',
+      slug: '../quantum-computing',
     },
     {
       label: 'Concepts',

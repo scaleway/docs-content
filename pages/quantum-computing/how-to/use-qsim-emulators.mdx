@@ -1,61 +1,119 @@
 ---
-title: How to monitor logs and metrics for Serverless Containers
-description: Guide to monitoring Scaleway Serverless Containers.
-tags: serverless containers logs metrics cockpit grafana activity
+title: Run quantum circuits on Qsim GPU emulation
+description: Run Google's Qsim quantum emulator on Scaleway's GPU infrastructure using Cirq or Qiskit.
+tags: qsim quantum cirq qiskit qaas
 dates:
-  validation: 2025-11-18
-  posted: 2024-04-22
+  validation: 2025-11-21
+  posted: 2021-11-21
 ---
-import Requirements from '@macros/iam/requirements.mdx'
 
+**Qsim** is a high-performance quantum circuit simulator developed by **Google Quantum AI** (via the QuantumLib initiative). It is designed to simulate quantum circuits on classical hardware with state-of-the-art performance, leveraging advanced techniques like gate fusion and AVX/SSE vectorization.
 
-Scaleway Serverless Containers is fully integrated into [Cockpit](/cockpit/quickstart/), and allows you to quickly access your logs and metrics. This page explains how to get started with Scaleway Cockpit to monitor your Serverless Containers.
+Scaleway QaaS allows you to scale Qsim beyond your local machine. You can execute your emulated computation on dedicated **CPU** or **GPU** (like Nvidia H100, L40S) seamlessly, benefiting from pre-configured, optimized environments.
 
-<Requirements />
+## Why use Qsim on Scaleway?
 
-- A Scaleway account logged into the [console](https://console.scaleway.com)
-- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- [Created a Serverless Container](/serverless-containers/how-to/deploy-container/)
+* **Billed at time:** The billing starting time begins only when the Platform is fully operational and the first Job can be executed.
+* **Multi-Framework support:** Uniquely, our Qsim platforms are accessible via both **Cirq** (Google's native SDK) and **Qiskit**. You can choose your preferred language while benefiting from the Qsim engine.
+* **Extreme performance:** Qsim is optimized for simulating intermediate-scale quantum circuits. When coupled with Scaleway's high-end GPUs, it drastically reduces execution time for deep circuits.
+* **Smart compression:** Just like our Aer offerings, the platform automatically compresses circuit data and computation results to optimize network throughput and latency.
 
-## How to activate your Cockpit
+## Option 1: Accessing via Cirq (Native)
 
-Scaleway Cockpit is activated by default if you have created [Scaleway resources integrated with Cockpit](/cockpit/reference-content/cockpit-limitations/#product-integration-into-cockpit).
+Cirq is the native language of Qsim. Using the `cirq-scaleway` adapter allows you to run your Google Cirq circuits directly on our cloud GPUs.
 
-## How to access the Grafana dashboard
+### 1. Installation
 
-To view your Serverless Containers logs, use the Grafana dashboard which is accessible from the Scaleway console:
-  - First you must create a user and their associated credentials (a username and password) for Grafana.
-  - Then use these credentials to access the Grafana dashboard for all your Scaleway products, via the Scaleway console.
+```bash
+pip install cirq-scaleway
+```
 
-1. Create a Grafana user and retrieve their username and password by following [this procedure](/cockpit/how-to/retrieve-grafana-credentials/).
+### 2. Running on QaaS
+The following example demonstrates how to run a computation on a Scaleway GPU instance. The workflow is identical to using a local emulator, but the computation happens remotely.
 
-2. From the Scaleway console [Cockpit overview page](https://console.scaleway.com/cockpit/overview), click **Open dashboards** in the top right corner.
+```python
+import cirq
+from cirq_scaleway import ScalewaySampler
 
-3. Enter your Grafana username and password to log in.
+# 1. Define your credentials
+PROJECT_ID = "your-project-id"
+SECRET_KEY = "your-secret-key"
 
-    You are directed to the Scaleway Cockpit dashboards homepage.
+# 2. Select the Platform
+# Example: 'EMU-QSIM-H100' targets Qsim running on an NVIDIA H100
+PLATFORM_NAME = "EMU-QSIM-H100"
 
-4. From the **Scaleway Dashboards** panel, select:
-    - **Serverless Containers logs** to access the logs of your containers.
-    - **Serverless Containers Overview** to access the metrics of your containers.
+# 3. Initialize the Sampler
+sampler = ScalewaySampler(
+    project_id=PROJECT_ID,
+    secret_key=SECRET_KEY,
+    platform=PLATFORM_NAME
+)
 
-  You are directed to the selected dashboard. You can use the filters at the top of the page to refine the displayed information.
+# 4. Create a Circuit (e.g., Bell State)
+q0, q1 = cirq.LineQubit.range(2)
+circuit = cirq.Circuit(
+    cirq.H(q0),
+    cirq.CNOT(q0, q1),
+    cirq.measure(q0, key='q0'),
+    cirq.measure(q1, key='q1')
+)
 
-<Message type="note">
-  You can also access your Serverless Containers logs and metrics from the [console](https://console.scaleway.com) via the **Logging** and **Metrics** tabs of a container.
-</Message>
+# 5. Execute on remote emulator
+# The circuit is sent to Scaleway, executed by Qsim on GPU, and results returned.
+print(f"Running on {PLATFORM_NAME}...")
+result = sampler.run(circuit, repetitions=1000)
 
-## Available metrics
+print("Results histogram:")
+print(result.histogram(key='q0'))
+print(result.histogram(key='q1'))
+```
 
-The following metrics are available to monitor your Serverless Containers:
+## Option 2: Accessing via Qiskit
 
-- Container status
-- Number of instances
-- Average memory usage across instances
-- Average CPU percentage usage across instances
-- Number of requests per second
-- Memory usage per instance
-- CPU usage per instance
-- Responses status code percentage
-- Network received bytes per instance
-- Network transmitted bytes per instance
+### 1. Installation
+
+```bash
+pip install qiskit-scaleway
+```
+
+### 2. Running on QaaS
+
+```python
+from qiskit import QuantumCircuit
+from qiskit_scaleway import ScalewayProvider
+
+# 1. Initialize Provider
+provider = ScalewayProvider(
+    project_id="your-project-id",
+    secret_key="your-secret-key"
+)
+
+# 2. Select the Qsim Backend
+# Scaleway bridges the Qiskit circuit to the Qsim engine automatically
+backend = provider.get_backend("EMU-QSIM-H100")
+
+# 3. Create & Run Circuit
+qc = QuantumCircuit(2)
+qc.h(0)
+qc.cx(0, 1)
+qc.measure_all()
+
+print(f"Submitting to Qsim backend: {backend.name}")
+job = backend.run(qc, shots=1000)
+
+print("Counts:", job.result().get_counts())
+```
+
+### 4. Understanding Platforms & billing
+Scaleway offers different "Platforms" for emulation, ranging from standard CPU instances to high-end GPU clusters.
+
+* **Platform selection**: When you choose a backend (e.g., EMU-AER-H100), Scaleway dynamically allocates the requested resource.
+* **Session & billing**: Behind the scenes, a Session is created for your computation. Unlike QPU "shots", emulation is typically billed based on the duration of resource usage (similar to renting a cloud instance). This makes it cost-effective for running massive batches of shots or debugging complex algorithms.
+* **End of billing**: It stops when you terminate your Session or after a timeout.
+
+## Official Resources
+* [Cirq Scaleway GitHub repository](https://github.com/scaleway/cirq-scaleway)
+* [Cirq documentation](https://quantumai.google/cirq)
+* [Qiskit Scaleway GitHub repository](https://github.com/scaleway/qiskit-scaleway)
+* [Qiskit documentation](https://qiskit.org/documentation/)

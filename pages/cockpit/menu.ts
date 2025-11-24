@@ -73,7 +73,64 @@ export const cockpitMenu = {
         {
           label: 'Configure alerts for Scaleway resources',
           slug: 'configure-alerts-for-scw-resources',
+<<<<<<< HEAD
         }
+=======
+        },
+        {
+          label: 'Retrieve your Grafana credentials',
+          slug: 'retrieve-grafana-credentials',
+        },
+        {
+          label: 'Create a token',
+          slug: 'create-token',
+        },
+        {
+          label: 'Create and push traces',
+          slug: 'activate-push-traces',
+        },
+        {
+          label: 'Access Grafana and preconfigured dashboards',
+          slug: 'access-grafana-and-managed-dashboards',
+        },
+        {
+          label: 'Create a custom data source',
+          slug: 'create-external-data-sources',
+        },
+        {
+          label: 'Manage data exports',
+          slug: 'manage-data-exports',
+        },
+        {
+          label: 'Change data retention period',
+          slug: 'change-data-retention',
+        },
+        {
+          label: 'Send metrics to Cockpit using Grafana Alloy',
+          slug: 'send-metrics-with-grafana-alloy',
+        },
+        {
+          label:
+            'Send metrics from your Kubernetes cluster to Cockpit',
+          slug: 'send-metrics-from-k8s-to-cockpit',
+        },
+        {
+          label: 'Send logs from your Kubernetes cluster to Cockpit',
+          slug: 'send-logs-from-k8s-to-cockpit',
+        },
+        {
+          label: 'Send metrics and logs to your Cockpit',
+          slug: 'send-metrics-logs-to-cockpit',
+        },
+        {
+          label: 'Federate Scaleway metrics with your own Prometheus',
+          slug: 'federate-scaleway-metrics',
+        },
+        {
+          label: 'Delete a custom data source',
+          slug: 'delete-external-data-sources',
+        },
+>>>>>>> 5605c9cdb (docs(add): add data export docs)
       ],
       label: 'How to',
       slug: 'how-to',
@@ -102,6 +159,10 @@ export const cockpitMenu = {
         {
           label: 'Cockpit capabilities and limits',
           slug: 'cockpit-limitations',
+        },
+        {
+          label: 'Cockpit pricing information',
+          slug: 'cockpit-pricing',
         },
         {
           label:

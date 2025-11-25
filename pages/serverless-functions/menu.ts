@@ -47,9 +47,12 @@ export const serverlessFunctionsMenu = {
           slug: 'add-a-custom-domain-name-to-a-function',
         },
         {
-          label:
-            'Create and manage an authentication token from the console',
+          label: 'Manage authentication for private functions',
           slug: 'create-auth-token-from-console',
+        },
+        {
+          label: 'Migrate from legacy JWT to IAM authentication',
+          slug: 'migrate-jwt-to-iam-authentication',
         },
         {
           label: 'Secure a function',

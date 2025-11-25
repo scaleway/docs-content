@@ -81,11 +81,7 @@ export const vpcMenu = {
         {
           label: 'VPC use case 1: basic infrastructure',
           slug: 'use-case-basic',
-        },
-        {
-          label: 'Understanding VPC GA and migration',
-          slug: 'vpc-migration',
-        },
+        }
       ],
       label: 'Additional Content',
       slug: 'reference-content',

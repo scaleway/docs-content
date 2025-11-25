@@ -113,6 +113,11 @@ export const cockpitMenu = {
             'Cockpit supported API endpoints for data source management',
           slug: 'cockpit-supported-endpoints',
         },
+        {
+          label:
+            'Cockpit product integration',
+          slug: 'cockpit-product-integration',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

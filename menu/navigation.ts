@@ -6,6 +6,7 @@ import { auditTrailMenu } from "../pages/audit-trail/menu"
 import { billingMenu } from '../pages/billing/menu'
 import { blockStorageMenu } from "../pages/block-storage/menu"
 import { classicHostingMenu } from "../pages/classic-hosting/menu"
+import { clustersForKafkaMenu } from "../pages/clusters-for-kafka/menu"
 import { cockpitMenu } from "../pages/cockpit/menu"
 import { containerRegistryMenu } from "../pages/container-registry/menu"
 import { cpanelHostingMenu } from "../pages/cpanel-hosting/menu"
@@ -153,6 +154,7 @@ export default [
         items: [
           dataWarehouseMenu,
           dataLabMenu,
+          clustersForKafkaMenu,
           natsMenu,
         ],
         label: 'Data & Analytics',

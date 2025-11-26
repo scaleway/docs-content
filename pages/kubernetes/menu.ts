@@ -233,6 +233,10 @@ export const kubernetesMenu = {
           slug: 'wildcard-dns',
         },
         {
+          label: 'Using Kubernetes subPath with SFS on Kapsule',
+          slug: 'using-subpath-with-sfs',
+        },
+        {
           label: 'Migrate end-of-life pools to newer Instances',
           slug: 'migrate-end-of-life-pools-to-newer-instances',
         },

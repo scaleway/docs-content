@@ -1,0 +1,198 @@
+---
+title: Using Kubernetes subPath with Scaleway File Storage on Kapsule cluster
+description: This page explains how to use the Kubernetes `subPath` feature with Scaleway File Storage on Kapsule
+tags: kubernetes storage filestorage file storage
+dates:
+  validation: 2025-11-26
+  posted: 2025-11-26
+---
+
+## Overview
+
+[Scaleway File Storage (SFS)](/file-storage/quickstart/) is a managed shared filesystem that supports **ReadWriteMany (RWX)** access mode. When used with Kapsule through the [Scaleway CSI driver](https://github.com/scaleway/scaleway-csi), PersistentVolumes can be provisioned dynamically using PersistentVolumeClaims (PVCs).
+
+This guide explains how to use Kubernetes **`subPath`** to mount different subdirectories of a **single SFS volume** into separate container paths. This allows you to logically partition storage between workloads without creating multiple volumes.
+
+Common use cases include (but are not limited to):
+- Separating application data and logs within a shared filesystem
+- Allowing multiple containers to mount isolated directories from the same PVC
+- Organizing multi-service deployments that share a single storage backend
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Created](/kubernetes/how-to/create-cluster/) a Kubernetes Kapsule cluster
+- [Installed](https://kubernetes.io/docs/tasks/tools/) the Kubernetes command-line tool `kubectl`
+- [Added](/kubernetes/how-to/use-sfs-with-kubernetes/) the tag `scw-filestorage-csi` to your Kubernetes Kapsule cluster
+- Access to the Scaleway [File Storage API](https://www.scaleway.com/en/developers/api/file-storage/)
+
+
+## Creating a PVC using Scaleway File Storage
+
+1. Create a file named `pvc.yaml`:
+
+    ```yaml
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
+    name: shared-fs-pvc
+    spec:
+    accessModes:
+        - ReadWriteMany
+    resources:
+        requests:
+        storage: 100Gi ## volume size - edit towards your requirements
+    storageClassName: scw-fs
+    ```
+
+2. Apply it to your cluster using `kubectl`:
+
+    ```bash
+    kubectl apply -f pvc.yaml
+    ```
+
+    The Scaleway CSI driver automatically provisions a File Storage volume.
+
+## Using subPath inside a Pod or Deployment
+
+You can mount different subdirectories of the same PVC using `subPath`.
+
+1. Create an example `deployment.yaml`:
+
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+    name: demo-app
+    spec:
+    replicas: 1
+    selector:
+        matchLabels:
+        app: demo
+    template:
+        metadata:
+        labels:
+            app: demo
+        spec:
+        containers:
+            - name: web
+            image: nginx
+            volumeMounts:
+                - name: shared-data
+                mountPath: /var/www/html
+                subPath: html
+                - name: shared-data
+                mountPath: /var/log/nginx
+                subPath: logs
+        volumes:
+            - name: shared-data
+            persistentVolumeClaim:
+                claimName: shared-fs-pvc
+    ```
+
+2. Apply it using `kubectl`:
+
+    ```bash
+    kubectl apply -f deployment.yaml
+    ```
+
+    The Deployment mounts:
+
+    * `/var/www/html` as subdirectory `html` inside the PVC
+    * `/var/log/nginx` as subdirectory `logs` inside the PVC
+
+### Directory creation and permissions
+
+<Message type="important">
+  If a specified `subPath` directory does not exist, Kubernetes will create it with **root ownership**, which may cause permission issues for non-root containers.
+</Message>
+
+To control directory ownership, you can:
+
+* pre-create directories using an initContainer
+* `chown` them in an initContainer
+* run your main container as a user who already has access
+
+Example `initContainer`:
+
+```yaml
+initContainers:
+  - name: init-permissions
+    image: busybox
+    command: ["sh", "-c", "mkdir -p /data/html /data/logs && chown -R 1000:1000 /data"]
+    volumeMounts:
+      - name: shared-data
+        mountPath: /data
+```
+
+## Multi-container Pod example
+
+A common pattern is to have multiple containers inside the same Pod, each mounting a different directory of the same Scaleway File Storage PVC. This allows shared storage while keeping each component's data logically separated.
+
+Example: We have two **web + worker** containers sharing one PVC using different `subPath` values.
+
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: multi-container-demo
+spec:
+  containers:
+    - name: web
+      image: nginx
+      volumeMounts:
+        - name: shared-data
+          mountPath: /usr/share/nginx/html
+          subPath: frontend
+
+    - name: worker
+      image: busybox
+      command: ["sh", "-c", "while true; do echo 'worker running' >> /data/logs/worker.log; sleep 5; done"]
+      volumeMounts:
+        - name: shared-data
+          mountPath: /data/logs
+          subPath: worker-logs
+
+  volumes:
+    - name: shared-data
+      persistentVolumeClaim:
+        claimName: shared-fs-pvc
+```
+
+Apply the configuration using `kubectl apply -f pod.yaml`.
+
+* The **web container** serves files from the `frontend` directory on the PVC.
+* The **worker container** writes logs into the `worker-logs` directory.
+
+Both containers use the same File Storage volume, but their data stays cleanly separated.
+
+### Optional: Prepare subdirectories
+
+If you want to ensure directories exist with correct permissions add an `initContainers` to your configuration:
+
+    ```yaml
+    initContainers:
+    - name: init-folders
+        image: busybox
+        command: ["sh", "-c", "mkdir -p /data/frontend /data/worker-logs && chmod -R 755 /data"]
+        volumeMounts:
+        - name: shared-data
+            mountPath: /data
+    ```
+
+## Cleaning up
+
+Remove the Deployment:
+
+```bash
+kubectl delete -f deployment.yaml
+```
+
+Remove the PVC:
+
+```bash
+kubectl delete -f pvc.yaml
+```
+
+This will delete the Scaleway File Storage volume as well.

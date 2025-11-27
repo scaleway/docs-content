@@ -1,0 +1,91 @@
+---
+title: Deploying Contour Ingress Controller in gateway API mode on a Scaleway Kapsule cluster
+description: Discover how to deploy Contour Ingress Controller in gateway API mode on a Scaleway Kapsule cluster.
+tags: contour ingress kapsule kubernetes k8s
+products:
+  - kubernetes
+dates:
+  validation: 2025-11-27
+  posted: 2025-11-27
+  validation_frequency: 12
+difficulty: advanced
+usecase:
+  - application-hosting
+ecosystem:
+  - third-party
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+This guide explains how to install Contour with Gateway API support on a Scaleway Kapsule Kubernetes cluster.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An [SSH key](/organizations-and-projects/how-to/create-ssh-key/)
+- An [Instance](/instances/how-to/create-an-instance/) running on Ubuntu or Debian
+
+
+## Installing Contour using kubectl
+
+1. Run the following command to add the `projectcontour` Helm chart repositiory to your local machine:
+    ```bash
+    helm repo add contour https://projectcontour.github.io/helm-charts/
+    ```
+2. Install the Contour chart using `helm`:
+    ```bash
+    helm install my-release contour/contour --namespace projectcontour --create-namespace
+    ```
+    <Message type="note">
+        The installation of contour may take a moment. Do not proceed with the tuorial until you get a confirmation message.
+    </Message>
+3. Check Countour is running using the following command:
+    ```bash
+    kubectl -n projectcontour get po,svc
+    ```
+    You should get an output like the following example:
+    ```bash
+    NAME                                              READY   STATUS    RESTARTS   AGE
+    pod/my-release-contour-contour-5c79cb6f76-kshnv   1/1     Running   0          9m45s
+    pod/my-release-contour-envoy-b2rzb                2/2     Running   0          9m45s
+    pod/my-release-contour-envoy-b4qdz                2/2     Running   0          9m45s
+    pod/my-release-contour-envoy-cqldx                2/2     Running   0          9m45s
+
+    NAME                               TYPE           CLUSTER-IP     EXTERNAL-IP     PORT(S)                      AGE
+    service/my-release-contour         ClusterIP      10.32.6.116    <none>          8001/TCP                     9m45s
+    service/my-release-contour-envoy   LoadBalancer   10.32.14.104   195.154.75.78   80:32736/TCP,443:32408/TCP   9m45s
+    ```
+    You should see the following:
+
+    - 1 instance of `pod/my-release-contour-contour with status` `Running` and 1/1 Ready
+    - 1+ instance(s) of `pod/my-release-contour-envoy` with each status `Running` and 2/2 Ready
+    - 1 instance of `service/my-release-contour`
+    - 1 instance of `service/my-release-contour-envoy`
+
+## Installing a demo application and routing traffic to it 
+
+1. Install `htttpbin` unsing `kubectl` with the following command:
+    ```bash
+    kubectl apply -f https://projectcontour.io/examples/httpbin.yaml
+    ```
+2. Verify the installation by running: 
+    ```bash
+    kubectl get po,svc,ing -l app=httpbin
+    ```
+    You should see an output similar to the following example:
+    ```bash
+    NAME                          READY   STATUS    RESTARTS   AGE
+    pod/httpbin-865bfd74d-6dlnx   1/1     Running   0          8m52s
+    pod/httpbin-865bfd74d-hjq22   1/1     Running   0          8m52s
+    pod/httpbin-865bfd74d-wgqvm   1/1     Running   0          8m52s
+
+    NAME              TYPE        CLUSTER-IP    EXTERNAL-IP   PORT(S)   AGE
+    service/httpbin   ClusterIP   10.32.3.254   <none>        80/TCP    8m52s
+
+    NAME                                CLASS     HOSTS   ADDRESS         PORTS   AGE
+    ingress.networking.k8s.io/httpbin   contour   *       195.154.75.78   80      8m52s
+    ```
+    - 3 instances of `pod/httpbin`, each with status `Running` and 1/1 Ready
+    - 1 `service/httpbin` of the type `ClusterIP`, listening on port 80
+    - 1 Ingress class `contour` on port 80

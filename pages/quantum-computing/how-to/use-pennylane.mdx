@@ -10,13 +10,12 @@ dates:
 **[Pennylane](https://pennylane.ai/)** is an open-source framework for quantum machine learning (QML), automatic differentiation, and optimization of hybrid quantum-classical computations.
 It is among the most popular frameworks for quantum machine learning. It offers a high-level interface for building and training quantum circuits in a hardware-agnostic fashion, using Python.
 
-Scaleway offers access to the `pennylane-scaleway` package, which enables you to run your already written Pennylane's circuits on Scaleway's QaaS infrastructure simply by changing its name.
+Scaleway offers access to the `pennylane-scaleway` plugin, which enables you to run your already written Pennylane's circuits on Scaleway's QaaS infrastructure simply by changing its name.
 It is an open-source package under active development and contributions are welcome! Access the repository [here](https://github.com/scaleway/pennylane-scaleway).
 
-## Accessing Pennylane via Scaleway QaaS
+## Using Pennylane with Scaleway QaaS
 
 ### 1. Prerequisites:
-
 
 Get your `project-id` as well as `secret-key` credentials from your Scaleway account.
 You can find them in the **[Scaleway console](https://console.scaleway.com/)**.
@@ -42,7 +41,7 @@ pip install pennylane-scaleway
 
 ### 3. Usage:
 
-Then, all you have to do is replace your device definition, with the device-backend pair of your choice and your Scaleway credentials:
+Replace your device definition, with the device-backend pair of your choice and your Scaleway credentials:
 
 ```python
 import pennylane as qml
@@ -51,33 +50,31 @@ device = qml.device("scaleway.aer", wires=2, backend="EMU-AER-2L4", project_id="
 ...
 ```
 
-And you're good to go!
-
 <Message type="tip"> You can also define SCW_PROJECT_ID and SCW_SECRET_KEY environment variables. They will automatically be loaded by the plugin. </Message>
 
 ## Examples:
 
 ```python
-import pennylane as qml # You're not dreaming, no need to import pennylane-scaleway as long as it is installed in your current environment.
+import pennylane as qml # You are not dreaming, no need to import pennylane-scaleway as long as it is installed in your current environment.
 
 device = qml.device("scaleway.aer",
         wires=2,
-        project_id=<your-project-id>,   # Or set SCW_PROJECT_ID environment variable
-        secret_key=<your-secret-key>,   # Or set SCW_SECRET_KEY environment variable
+        project_id=<your-project-id>,   # Or set SCW_PROJECT_ID environment variable.
+        secret_key=<your-secret-key>,   # Or set SCW_SECRET_KEY environment variable.
         backend="EMU-AER-16C-128M"
     )
 
-@qml.set_shots(512)
-@qml.qnode(device)
-def my_circuit():
+@qml.set_shots(512) # Decorating the circuit with set_shots() is the preferred way of specifying shots.
+@qml.qnode(device)  # The pennylane circuit and its device are defined by the qnode() decorator.
+def my_circuit():   # Define a simple Bell state circuit.
     qml.Hadamard(wires=0)
     qml.CNOT(wires=[0, 1])
     return qml.counts()
 
-result = my_circuit()
+result = my_circuit()   # Execute the circuit.
 print(result)
 
-device.stop() # Don't forget to close the session when you're done!
+device.stop() # Do not forget to close the session when you are done.
 ```
 
 You can also use the device as a context manager so your session is automatically closed when exiting the context:
@@ -119,11 +116,95 @@ with qml.device("scaleway.aer",
     max_duration="1h",
     max_idle_duration="5m"
 ) as dev:
-...
+    ...
 ```
 
-You can visualize your sessions on the **[Scaleway Console](https://console.scaleway.com/)** under the Labs/Quantum section.
+Visualize your sessions on the **[Scaleway Console](https://console.scaleway.com/)** under the Labs/Quantum section.
+
+## What you can do
+
+Pennylane in itself is a framework that allows you to write quantum programs in a high-level way, abstracting away the low-level details of the hardware.
+You may be more comfortable writing quantum circuits with Pennylane rather than the other frameworks we support, although I recommend you take a look at [Qiskit](https://github.com/scaleway/qiskit-scaleway) if you are not already familiar with it.
+
+Pennylane has a lot of features that make it easy to work with quantum machine learning techniques.
+You can effortlessly train a quantum neural network with a few lines of code. See their [demonstrations](https://pennylane.ai/qml/demonstrations) to get a feel for what is possible.
+
+A toy example of a variational quantum circuit, where we find the optimal value of a parameterized rotation on a single qubit to match invert its state (Z-basis).
+```python
+import pennylane as qml
+from pennylane import numpy as np
+
+MAX_ITER = 100
+EPSILON = 1e-9
+
+with qml.device("scaleway.aer", wires=1, backend="EMU-AER-16C-128M") as dev:
+
+    # Circuit definition, with a parameterized rotation
+    @qml.set_shots(100)
+    @qml.qnode(dev)
+    def circuit(params):
+
+        qml.RX(params, wires=0)
+
+        # Output is 1 for state |0> and -1 for state |1>
+        return qml.expval(qml.PauliZ(0))
+
+    #Loss function
+    def cost(params):
+        prediction = circuit(params)
+        target = -1.0  # TARGET -> We want the qubit to output -1 (the |1> state)
+        return np.abs(prediction - target)
+
+    opt = qml.GradientDescentOptimizer(stepsize=0.5)
+    params = np.array(0.0, requires_grad=True)
+
+    print(f"Initial rotation: {params:.4f} rad")
+
+    for i in range(MAX_ITER):
+
+        old_params = params.copy()
+        params = opt.step(cost, params)
+        delta_params = np.abs(params - old_params)
+
+        cost_t = cost(params)
+
+        print(f"Step {i}: Delta params = {delta_params:.4f} rad, Cost = {cost_t:.6f}")
+
+        if cost_t < EPSILON and delta_params < EPSILON:
+            print("Converged!")
+            break
+
+print(f"\nFinal rotation: {params % (2*np.pi):.4f} rad (Target: Pi approx 3.14)")
+```
+
+Gradient descent is handled by PennyLane, even on real hardware, by using tricks such as parameter-shifting.
+
+With a bit of luck you *should* get a result close to $\pi$ radians. The difference is due to a plateau near the optimal solution:
+```text
+Initial rotation: 0.0000 rad
+Step 0: Delta params = 0.0150 rad, Cost = 2.000000
+Step 1: Delta params = 0.0300 rad, Cost = 2.000000
+Step 2: Delta params = 0.0450 rad, Cost = 2.000000
+Step 3: Delta params = 0.0200 rad, Cost = 2.000000
+Step 4: Delta params = 0.0450 rad, Cost = 1.980000
+Step 5: Delta params = 0.1450 rad, Cost = 1.940000
+Step 6: Delta params = 0.0900 rad, Cost = 1.920000
+Step 7: Delta params = 0.1750 rad, Cost = 1.920000
+Step 8: Delta params = 0.2400 rad, Cost = 1.800000
+Step 9: Delta params = 0.3550 rad, Cost = 1.360000
+Step 10: Delta params = 0.4550 rad, Cost = 1.060000
+Step 11: Delta params = 0.5000 rad, Cost = 0.540000
+Step 12: Delta params = 0.4350 rad, Cost = 0.140000
+Step 13: Delta params = 0.2950 rad, Cost = 0.080000
+Step 14: Delta params = 0.1250 rad, Cost = 0.000000
+Step 15: Delta params = 0.0000 rad, Cost = 0.000000
+Converged!
+
+Final rotation: 2.9100 rad (Target: Pi approx 3.14)
+```
+
 
 ## Official ressources
 * [Scaleway QaaS](https://www.scaleway.com/en/quantum-as-a-service/)
+* [pennylane-scaleway plugin repository](https://github.com/scaleway/pennylane-scaleway)
 * [Pennylane](https://pennylane.ai/)

@@ -64,6 +64,10 @@ export const dataWarehouseMenu = {
           label: 'Example datasets',
           slug: 'example-datasets',
         },
+        {
+          label: 'Features and limitations',
+          slug: 'features-limitations',
+        },
       ],
       label: 'Additional content',
       slug: 'reference-content',

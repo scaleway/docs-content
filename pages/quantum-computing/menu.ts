@@ -52,6 +52,28 @@ export const quantumComputingMenu = {
       label: 'API/CLI',
       slug: 'api-cli',
     },
+    {
+      items: [
+        {
+          label: 'Quantum Computing Information',
+          slug: 'quantum-computing-information',
+        },
+        {
+          label: 'IBEX Q1 Information',
+          slug: 'ibex-q1-information',
+        },
+        {
+          label: 'IQM QPUs Information',
+          slug: 'iqm-qpus',
+        },
+        {
+          label: 'Pasqal Processors Information',
+          slug: 'pasqal-processors-information',
+        }
+      ],
+      label: 'Additional Content',
+      slug: 'additional-content',
+    },
   ],
   label: 'Quantum Computing',
   slug: 'quantum-computing',

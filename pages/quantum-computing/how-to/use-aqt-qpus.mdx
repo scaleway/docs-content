@@ -6,119 +6,87 @@ dates:
   validation: 2025-11-21
   posted: 2021-11-21
 ---
+import Requirements from '@macros/iam/requirements.mdx'
 
 **Alpine Quantum Technologies (AQT)** is an Austrian quantum computing company spin-off from the University of Innsbruck. They specialize in **trapped-ion** quantum computers, a technology renowned for its exceptional gate fidelity and long coherence times.
 
-Unlike superconducting qubits which rely on printed circuits, AQT uses individual calcium ions confined in a vacuum trap as qubits. This approach allows for a unique feature: **all-to-all connectivity**. Any qubit can talk to any other qubit directly, simplifying circuit design and reducing the need for noisy SWAP gates.
+Unlike superconducting qubits, which rely on printed circuits, AQT uses individual calcium ions confined in a vacuum trap as qubits. This approach allows for a unique feature: **all-to-all connectivity**. Any qubit can talk to any other qubit directly, simplifying circuit design and reducing the need for noisy SWAP gates.
 
-## IBEX-Q1: The Universal Trapped-Ion QPU
+<Message type="important">
+  Refer to the [IBEX-Q1 documentation page](/quantum-computing/additional-content/ibex-q1-information) for more details about AQT's general-purpose quantum processor.
+</Message>
 
-The **IBEX-Q1** (specifically the `QPU-IBEX-12PQ` platform on Scaleway) is AQT's general-purpose quantum processor.
+On Scaleway QaaS, we provide a dedicated provider `qiskit-scaleway` that allows you to use standard Qiskit code to target AQT's hardware seamlessly.Refer to the [Qiskit Scaleway GitHub repository](https://github.com/scaleway/qiskit-scaleway) for more information.
 
-| QPU Model | Qubits & Topology | Fidelity Metrics (Avg)* | Speed Metrics | Pricing Model |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **QPU-IBEX-12PQ**<br>IBEX-Q1 | 12 Qubits<br> All-to-All| 1 gate: 99.97%<br>2-Gates: 98.7% | 5.5Hz | 0.31€/circuit + 0.021€/shot |
-
-### Key Features
-* **All-to-all Connectivity:** The ions are arranged in a linear chain but controlled by lasers that can entangle any pair. This massively reduces circuit depth for complex algorithms like QAOA or QML.
-* **High fidelity:** Trapped ions offer some of the lowest error rates in the industry for 2-qubit gates.
-* **Room temperature operation:** The system fits in standard rack cabinets and does not require the massive dilution refrigerators needed for superconducting qubits.
-
-### Use cases
-Thanks to its connectivity, the IBEX-Q1 QPU is particularly well suited for:
-* **Combinatorial optimization:** Problems where variables are highly interdependent (Finance, Logistics).
-* **Quantum simulation:** Simulating complex molecules where entanglement structure is dense.
-* **Deep circuits:** Algorithms requiring long computation times before decoherence sets in.
-
-## Qiskit: The Industry Standard SDK
-
-**Qiskit** is an open-source software development kit (SDK) widely used to program quantum computers. Originally developed by IBM, it has become a standard language for the quantum ecosystem.
-
-It allows you to:
-* **Build** quantum circuits using Python.
-* **Transpile** (optimize) them for specific hardware.
-* **Execute** them on various backends (simulators or real QPUs).
-
-On Scaleway QaaS, we provide a dedicated provider `qiskit-scaleway` that allows you to use standard Qiskit code to target AQT's hardware seamlessly.
-
-## Accessing AQT via Scaleway QaaS
+## How to access AQT with Scaleway
 
 Scaleway acts as a bridge, allowing you to run Qiskit circuits directly on AQT's machines hosted in Innsbruck, or on their digital twins (emulators) hosted on Scaleway's GPU clusters.
 
 <Requirements />
 
-* A Scaleway account with a valid **Project ID**.
-* A Scaleway **API Key** (Secret Key).
-* Python installed with the `qiskit-scaleway` package.
+- A Scaleway account with a valid **Project ID**.
+- A Scaleway **API Key** (Secret Key).
+- Python and `qiskit` installed on your local machine
 
-### 2. Installation
+1. Install the `qiskit-scaleway` provider. Refer to the [Qiskit Scaleway GitHub repository](https://github.com/scaleway/qiskit-scaleway) for more information.
 
-Install the official [Scaleway provider for Qiskit](https://github.com/scaleway/qiskit-scaleway):
+    ```bash
+    pip install qiskit-scaleway
+    ```
 
-```bash
-pip install qiskit-scaleway
-```
+3. Create a file with the following computation script. Replace `$SCW_PROJECT_ID` and `$SCW_SECRET_KEY` with your Scaleway Project ID and secret key.
 
-### 3. Connection and execution
+    ```python
+    from qiskit import QuantumCircuit
+    from qiskit_scaleway import ScalewayProvider
 
-<Message type="important">
-  **Billing Warning:** AQT QPUs are billed **Pay-As-You-Go**. You pay a fixed fee per circuit + a fee per shot. There is no need to "Book" the QPU; jobs are processed via a shared queue.
-</Message>
+    # 1. Connection credentials
+    PROJECT_ID = "$SCW_PROJECT_ID"
+    SECRET_KEY = "$SCW_SECRET_KEY"
 
-```python
-from qiskit import QuantumCircuit
-from qiskit_scaleway import ScalewayProvider
+    # 2. Initialize the Scaleway Provider
+    provider = ScalewayProvider(
+        project_id=PROJECT_ID,
+        secret_key=SECRET_KEY
+    )
 
-# 1. Connection credentials
-PROJECT_ID = "your-scaleway-project-id"
-SECRET_KEY = "your-scaleway-secret-key"
+    # 3. Select the Backend
+    # - 'QPU-IBEX-12PQ' : The real hardware (Paid per shot)
+    # - 'EMU-IBEX-12PQ-L4' : The emulator (Digital Twin) running on GPU, billed per minute
+    backend_name = "QPU-IBEX-12PQ"
 
-# 2. Initialize the Scaleway Provider
-provider = ScalewayProvider(
-    project_id=PROJECT_ID,
-    secret_key=SECRET_KEY
-)
+    try:
+        backend = provider.get_backend(backend_name)
+        print(f"Connected to backend: {backend.name}")
 
-# 3. Select the Backend
-# - 'QPU-IBEX-12PQ' : The real hardware (Paid per shot)
-# - 'EMU-IBEX-12PQ-L4' : The emulator (Digital Twin) running on GPU, billed per minute
-backend_name = "QPU-IBEX-12PQ"
+        # 4. Create a Quantum Circuit (e.g., Bell State)
+        # Note: AQT supports all-to-all connectivity, so you don't need to worry about coupling maps.
+        qc = QuantumCircuit(2)
+        qc.h(0)
+        qc.cx(0, 1)
+        qc.measure_all()
 
-try:
-    backend = provider.get_backend(backend_name)
-    print(f"Connected to backend: {backend.name}")
+        # 5. No transpilation
+        # Scaleway QaaS handles the transpilation server-side for you
 
-    # 4. Create a Quantum Circuit (e.g., Bell State)
-    # Note: AQT supports all-to-all connectivity, so you don't need to worry about coupling maps.
-    qc = QuantumCircuit(2)
-    qc.h(0)
-    qc.cx(0, 1)
-    qc.measure_all()
+        # 6. Execute the Job
+        # Warning: On the real QPU, this line triggers billing.
+        print("Submitting job...")
+        job = backend.run(qc, shots=100) # IBEX-Q1 handles
 
-    # 5. No transpilation
-    # Scaleway QaaS handles the transpilation server-side for you
+        # 7. Retrieve Results
+        result = job.result()
+        print("Results:", result)
 
-    # 6. Execute the Job
-    # Warning: On the real QPU, this line triggers billing.
-    print("Submitting job...")
-    job = backend.run(qc, shots=100) # IBEX-Q1 handles
+    except Exception as e:
+        print(f"Error: {e}")
+    ```
+4. Save the script. In this example we save it as `aqt.py`.
 
-    # 7. Retrieve Results
-    result = job.result()
-    print("Results:", result)
-
-except Exception as e:
-    print(f"Error: {e}")
-```
-
-### 4. Understanding platform names
-
-Scaleway exposes AQT resources via two distinct Platform IDs that you must specify when selecting a backend:
-
-* **`QPU-IBEX-12PQ`**: This connects you to the **real trapped-ion quantum computer** located at AQT's headquarters, in Innbruck. Use this for final runs and validatable experiments.
-* **`EMU-IBEX-12PQ-L4`**: This connects you to a **noisy emulator** hosted on Scaleway's L4 GPU instances. It mimics the IBEX connectivity and gates but runs classically. Use this for debugging and testing your code logic before paying for real quantum shots.
-
-## Official Resources
-
-* [Qiskit Scaleway GitHub repository](https://github.com/scaleway/qiskit-scaleway)
-* [Qiskit Documentation](https://qiskit.org/documentation/)
+5. Run the script.
+    ```bash
+    python ~/aqt.py
+    ```
+    <Message type="important">
+      AQT QPUs are billed in **pay-as-you-go**. You pay a fixed fee per circuit and a fee per shot. There is no need to reserve the QPU since jobs are processed via a shared queue. Refer to the [Quantum Computing information page](/quantum-computing/additional-content/quantum-computing-information) for more details on how emulation platforms and billing work.
+    </Message>

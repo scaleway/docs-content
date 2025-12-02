@@ -22,7 +22,7 @@ This tutorial will guide you through creating a web agent that can interact with
 
 ## Why Holo2 model ?
 
-[Holo2 model](https://huggingface.co/Hcompany/Holo2-30B-A3B) is a Vision Language Model optimized to understand Graphical User Interface (GUI) such as web pages or mobile applications, and perform actions on them. Compared to traditional HTML DOM parsing, using a vision model helps building more flexible pipelines that requires less maintenance over time when website code and structure changes.
+The [Holo2 model](https://huggingface.co/Hcompany/Holo2-30B-A3B) is a vision-language model optimized to understand Graphical User Interfaces (GUIs) such as web pages or mobile applications, and perform actions on them. Compared to traditional HTML DOM parsing, using a vision model allows you to build more flexible pipelines that require less maintenance over time when website code and structure changes.
 
 ## What you will learn
 - How to take screenshot and perform actions using ***Selenium***

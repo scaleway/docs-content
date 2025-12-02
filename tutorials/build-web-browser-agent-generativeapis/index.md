@@ -75,7 +75,7 @@ For this example we will make the agent go to the Scaleway Documentation website
 
 ## Create the model output structure
 
-By default, Holo2 outputs text data. However, it can be guided to output coordinates in a structured way using `JSON`.
+By default, Holo2 outputs text data. However, it can be guided to output coordinates in a structured way using `JSON`:
 
 ```python
 #holo2-agent.py

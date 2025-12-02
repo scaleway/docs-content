@@ -1,0 +1,92 @@
+---
+title: How to program AQT QPUs
+description: Access Alpine Quantum Technologies (AQT) trapped-ion QPUs and emulators using Qiskit on Scaleway QaaS.
+tags: aqt quantum ibex qaas qiskit
+dates:
+  validation: 2025-11-21
+  posted: 2021-11-21
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+**Alpine Quantum Technologies (AQT)** is an Austrian quantum computing company spin-off from the University of Innsbruck. They specialize in **trapped-ion** quantum computers, a technology renowned for its exceptional gate fidelity and long coherence times.
+
+Unlike superconducting qubits, which rely on printed circuits, AQT uses individual calcium ions confined in a vacuum trap as qubits. This approach allows for a unique feature: **all-to-all connectivity**. Any qubit can talk to any other qubit directly, simplifying circuit design and reducing the need for noisy SWAP gates.
+
+<Message type="important">
+  Refer to the [IBEX-Q1 documentation page](/quantum-computing/additional-content/aqt-qpus) for more details about AQT's general-purpose quantum processor.
+</Message>
+
+On Scaleway QaaS, we provide a dedicated provider `qiskit-scaleway` that allows you to use standard Qiskit code to target AQT's hardware seamlessly.Refer to the [Qiskit Scaleway GitHub repository](https://github.com/scaleway/qiskit-scaleway) for more information.
+
+## How to access AQT with Scaleway
+
+Scaleway acts as a bridge, allowing you to run Qiskit circuits directly on AQT's machines hosted in Innsbruck, or on their digital twins (emulators) hosted on Scaleway's GPU clusters.
+
+<Requirements />
+
+- A Scaleway account with a valid **Project ID**.
+- A Scaleway **API Key** (Secret Key).
+- Python and `qiskit` installed on your local machine
+
+1. Install the `qiskit-scaleway` provider. Refer to the [Qiskit Scaleway GitHub repository](https://github.com/scaleway/qiskit-scaleway) for more information.
+
+    ```bash
+    pip install qiskit-scaleway
+    ```
+
+3. Create a file with the following computation script. Replace `$SCW_PROJECT_ID` and `$SCW_SECRET_KEY` with your Scaleway Project ID and secret key.
+
+    ```python
+    from qiskit import QuantumCircuit
+    from qiskit_scaleway import ScalewayProvider
+
+    # 1. Connection credentials
+    PROJECT_ID = "$SCW_PROJECT_ID"
+    SECRET_KEY = "$SCW_SECRET_KEY"
+
+    # 2. Initialize the Scaleway Provider
+    provider = ScalewayProvider(
+        project_id=PROJECT_ID,
+        secret_key=SECRET_KEY
+    )
+
+    # 3. Select the Backend
+    # - 'QPU-IBEX-12PQ' : The real hardware (Paid per shot)
+    # - 'EMU-IBEX-12PQ-L4' : The emulator (Digital Twin) running on GPU, billed per minute
+    backend_name = "QPU-IBEX-12PQ"
+
+    try:
+        backend = provider.get_backend(backend_name)
+        print(f"Connected to backend: {backend.name}")
+
+        # 4. Create a Quantum Circuit (e.g., Bell State)
+        # Note: AQT supports all-to-all connectivity, so you don't need to worry about coupling maps.
+        qc = QuantumCircuit(2)
+        qc.h(0)
+        qc.cx(0, 1)
+        qc.measure_all()
+
+        # 5. No transpilation
+        # Scaleway QaaS handles the transpilation server-side for you
+
+        # 6. Execute the Job
+        # Warning: On the real QPU, this line triggers billing.
+        print("Submitting job...")
+        job = backend.run(qc, shots=100) # IBEX-Q1 handles
+
+        # 7. Retrieve Results
+        result = job.result()
+        print("Results:", result)
+
+    except Exception as e:
+        print(f"Error: {e}")
+    ```
+4. Save the script. In this example we save it as `aqt.py`.
+
+5. Run the script.
+    ```bash
+    python ~/aqt.py
+    ```
+    <Message type="important">
+      AQT QPUs are billed in **pay-as-you-go**. You pay a fixed fee per circuit and a fee per shot. There is no need to reserve the QPU since jobs are processed via a shared queue. Refer to the [Quantum Computing information page](/quantum-computing/additional-content/quantum-computing-information) for more details on how emulation platforms and billing work.
+    </Message>

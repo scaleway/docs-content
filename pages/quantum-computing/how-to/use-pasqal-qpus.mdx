@@ -1,0 +1,89 @@
+---
+title: How to program Pasqal QPUs
+description: Access Pasqal neutral-atoms QPUs using Pulser on Scaleway QaaS.
+tags: pasqal orion quantum pulser qaas
+dates:
+  validation: 2025-11-21
+  posted: 2021-11-21
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+**Pasqal** is a full-stack quantum computing company based in France, pioneering the use of **Neutral Atoms** (manipulated by optical tweezers) to build quantum processors.
+
+Their technology is fundamentally different from superconducting circuits. Instead of fixed wires, Pasqal uses lasers to hold individual atoms (Rubidium or Strontium) in 2D or 3D arrays. This allows for **arbitrary topology**: you can arrange the qubits (atoms) in any shape (triangle, square, honeycombs) to match the geometry of the problem you are trying to solve.
+
+Pasqal processors operate primarily in **Analog Mode** (applying pulses to the whole system to evolve the Hamiltonian), making them exceptionally powerful for quantum simulation and combinatorial optimization.
+
+<Message type="note">
+  Refer to the [Pasqal processors information page](/quantum-computing/additional-content/pasqal-qpus) for more details.
+</Message>
+
+## How to access Pasqal with Scaleway
+
+The following example shows how to create a simple register, define a pulse, and send it to Fresnel QPU emulator.
+
+<Requirements />
+
+- A Scaleway account with a valid **Project ID**
+- A Scaleway **API Key** (Secret Key)
+- Python and [Pulser](https://pulser.readthedocs.io/) installed on your local machine
+
+1. Install the `pulser-scaleway` provider. Refer to the [Pulser Scaleway GitHub repository](https://github.com/scaleway/pulser-scaleway) for more information.
+
+    ```bash
+    pip install pulser-scaleway
+    ```
+
+2. Create a file with the following computation script. Replace `$SCW_PROJECT_ID` and `$SCW_SECRET_KEY` with your Scaleway Project ID and secret key.
+
+
+        ```python
+        from pulser import Pulse, Sequence, Register
+        from pulser_scaleway import ScalewayProvider
+
+        # 1. Initiate provider
+        qaas_connection = ScalewayProvider(
+            project_id="$SCW_PROJECT_ID",
+            secret_key="$SCW_SECRET_KEY",
+        )
+
+        # 2. Retrieve all QPU devices (emulated or real) and select the good one
+        devices = qaas_connection.fetch_available_devices()
+        fresnel_device = devices["EMU-FRESNEL-100PQ"]
+
+        # 3. Create a register of trapped atoms before performing operation on them
+        # and declare the sequence of pulses to perform on the register
+        register = Register.square(5, 5).with_automatic_layout(fresnel_device)
+        sequence = Sequence(register, fresnel_device)
+        sequence.declare_channel("rydberg_global", "rydberg_global")
+        t = sequence.declare_variable("t", dtype=int)
+
+        amp_wf = BlackmanWaveform(t, np.pi)
+        det_wf = RampWaveform(t, -5, 5)
+        sequence.add(Pulse(amp_wf, det_wf, 0), "rydberg_global")
+
+        # 4. Declare a backend based on the sequence and remote connection
+        backend = QPUBackend(sequence=sequence, connection=qaas_connection)
+
+        # 5. Run jobs with different arguments over the same sequence and register
+        results = backend.run(
+            job_params=[
+                {"runs": 100, "variables": {"t": 1000}},
+                {"runs": 20, "variables": {"t": 2000}},
+            ],
+            wait=True,
+        )
+
+        print("Results:", results)
+        ```
+
+4. Save the script. In this example we save it as `pasqal.py`.
+
+5. Run the script.
+    ```bash
+    python ~/pasqal.py
+    ```
+
+    <Message type="note">
+    While Pulser focuses on Analog computing (Pulses), it also supports a Digital mode to emulate gate-based circuits. However, Pasqal's hardware advantage lies primarily in the Analog approach for optimization problems (MIS, MaxCut). Refer to the [Pulser documentation](https://pulser.readthedocs.io/) for more information.
+    </Message>

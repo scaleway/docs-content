@@ -1,0 +1,98 @@
+---
+title: How to program IQM QPUs
+description: Access IQM's superconducting quantum processors (Garnet, Sirius, Emerald) using Qiskit on Scaleway QaaS.
+tags: aqt quantum ibex qaas
+dates:
+  validation: 2025-11-21
+  posted: 2021-11-21
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+**IQM Quantum Computers** is the European leader in building superconducting quantum computers. Headquartered in Finland, IQM provides on-premises quantum computers for supercomputing centers and research laboratories, as well as cloud access.
+
+The technology is based on **superconducting transmon qubits**, the most established approach in the industry (similar to IBM or Google). These processors operate at near-absolute zero temperatures using dilution refrigerators. IQM's unique "co-design" strategy optimizes hardware for specific applications, but they also offer powerful general-purpose processors.
+
+## How to access IQM with Scaleway
+The primary way to program IQM machines on Scaleway is through **Qiskit**. You do not need to learn a proprietary language; standard Qiskit circuits are fully compatible.
+
+The integration is handled by the [Scaleway Provider for Qiskit](https://github.com/scaleway/qiskit-scaleway), which manages the translation of your circuits and their submission to the specific IQM backend.
+
+The workflow below is identical to other gate-based providers on the platform. You connect using your credentials, select the specific IQM backend you want to target, and run your circuit.
+
+<Message type="important">
+  Currently, there are no specific high-performance GPU emulators (Digital Twins) available for IQM chips on the Scaleway Quantum Computing platform. Jobs are executed directly on the physical QPUs.
+
+  Refer to the [IQM QPUs information page](/quantum-computing/additional-content/iqm-qpus) for more details.
+</Message>
+
+<Requirements />
+
+- A Scaleway account with a valid **Project ID**
+- A Scaleway **API Key** (Secret Key)
+- Python and `qiskit` installed on your local machine
+
+1. Install the `qiskit-scaleway` provider. Refer to the [Qiskit Scaleway GitHub repository](https://github.com/scaleway/qiskit-scaleway) for more information.
+
+    ```bash
+    pip install qiskit-scaleway
+    ```
+
+2. Create a file with the following computation script. Replace `$SCW_PROJECT_ID` and `$SCW_SECRET_KEY` with your Scaleway Project ID and secret key.
+
+    ```python
+    from qiskit import QuantumCircuit
+    from qiskit_scaleway import ScalewayProvider
+
+    # 1. Connection credentials
+    PROJECT_ID = "$SCW_PROJECT_ID"
+    SECRET_KEY = "$SCW_SECRET_KEY"
+
+    # 2. Initialize the Scaleway Provider
+    provider = ScalewayProvider(
+        project_id=PROJECT_ID,
+        secret_key=SECRET_KEY
+    )
+
+    # 3. Select the Backend
+    # - 'QPU-SIRIUS-24PQ' : Sirius real hardware (Paid per shot)
+    # - 'QPU-GARNET-20PQ' : Garnet real hardware (Paid per shot)
+    # - 'QPU-EMERALD-54PQ' : Emerald real hardware (Paid per shot)
+    backend_name = "QPU-GARNET-20PQ"
+
+    try:
+        backend = provider.get_backend(backend_name)
+        print(f"Connected to backend: {backend.name}")
+
+        # 4. Create a Quantum Circuit (e.g., Bell State)
+        # Note: IQM supports square-lattice connectivity, so you don't need to worry about coupling maps.
+        qc = QuantumCircuit(2)
+        qc.h(0)
+        qc.cx(0, 1)
+        qc.measure_all()
+
+        # 5. No transpilation
+        # Scaleway QaaS handles the transpilation server-side for you
+
+        # 6. Execute the Job
+        # Warning: On the real QPU, this line triggers billing.
+        print("Submitting job...")
+        job = backend.run(qc, shots=100)
+
+        # 7. Retrieve Results
+        result = job.result()
+        print("Results:", result)
+
+    except Exception as e:
+        print(f"Error: {e}")
+    ```
+
+4. Save the script. In this example we save it as `iqm.py`.
+
+5. Run the script.
+    ```bash
+    python ~/iqm.py
+    ```
+
+<Message type="tip">
+  Always check the connectivity map (topology) of the specific QPU you are targeting, especially for Sirius, to optimize your circuit transpilation.
+</Message>

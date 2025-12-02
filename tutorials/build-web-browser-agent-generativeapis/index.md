@@ -1,6 +1,6 @@
 ---
 title: Building a web browser agent with Generative APIs, Holo2 and Selenium
-description: Step by step web browser agent with Holo2, Selenium and Scaleway Generative APIs
+description: Follow our step by step guide to build a web browser agent with Holo2, Selenium and Scaleway Generative APIs
 tags: inference API selenium browser holo2 agent vision ai
 dates:
   validation: 2025-11-28

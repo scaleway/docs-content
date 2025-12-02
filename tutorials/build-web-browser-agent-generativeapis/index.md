@@ -214,4 +214,4 @@ Congratulations! You have built a web browser agent navigating through website o
 - Add other actions types such as scrolling through the page or typing text.
 - Use [Pydantic](https://docs.pydantic.dev/latest/) to define output structure and check its validity
 - Extract information from the browsed page
-- Use the agent with "thick" client applications, such as desktop or mobile applications (without selenium)
+- Use the agent with "thick" client applications, such as desktop or mobile applications (without Selenium)

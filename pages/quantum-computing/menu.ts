@@ -60,7 +60,7 @@ export const quantumComputingMenu = {
         },
         {
           label: 'AQT QPUs Information',
-          slug: 'aqt-qpus-information',
+          slug: 'aqt-qpus',
         },
         {
           label: 'IQM QPUs Information',

@@ -204,7 +204,7 @@ SCW_SECRET_KEY="your_scaleway_secret_key" \
 python holo2-agent.py
 ```
 
-You should see your browser open and perform the given actions until the latest added features are displayed.
+You should see your browser open and perform the given actions until the most recently added features are displayed.
 
 Congratulations! You have built a web browser agent navigating through website only based on text written tasks.
 

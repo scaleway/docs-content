@@ -93,7 +93,7 @@ output_structure = {
 
 This structure ensures coordinates are valid within the expected range (0-1000 that is normalized and independant from exact browser window size).
 
-## Connect to Scaleway's Generative API
+## Connect to Scaleway's Generative APIs
 
 Set up the OpenAI client to connect to Scaleway's API:
 

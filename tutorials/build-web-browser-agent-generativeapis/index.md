@@ -107,7 +107,7 @@ client = OpenAI(
 
 ## Identify where to click on an image
 
-Create a function that will send a task an interface screenshot to the AI model and output an (x,y) coordinates on the screen. The coordinates corresponds to the location the agent needs to click to perform the task:
+Create a function that sends a task and an interface screenshot to the AI model and output (x,y) coordinates on the screen. The coordinates correspond to the location the agent needs to click to perform the task:
 
 ```python
 #holo2-agent.py

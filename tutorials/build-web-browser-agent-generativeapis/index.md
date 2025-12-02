@@ -155,7 +155,7 @@ Use Selenium to:
 - Take a screenshot of the current page
 - Click on the right location to perform the task. 
 
-Click coordinates are retrieved from Holo2 using `get_next_action` function. These coordinates are adjusted to exact browser coordinates using `window.innerWidth` and `window.innerHeight` browser properties.
+Click coordinates are retrieved from Holo2 using the `get_next_action` function. These coordinates are adjusted to exact browser coordinates using `window.innerWidth` and `window.innerHeight` browser properties.
 
 ```python
 #holo2-agent.py

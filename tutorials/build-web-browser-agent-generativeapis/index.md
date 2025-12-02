@@ -71,7 +71,7 @@ Define what tasks you want your agent to perform and on which website:
 TASKS = ["Accept cookies", "Click on changelog", "Select newly added feature"]
 WEBSITE_URL = "https://www.scaleway.com/en/docs/"
 ```
-For this example we will make the agent go to Scaleway Documentation Website, and look for recently added features.
+For this example we will make the agent go to the Scaleway Documentation website, and look for recently added features.
 
 ## Create the model output structure
 

@@ -38,6 +38,10 @@ export const quantumComputingMenu = {
           label: 'Use remote Qsim emulators',
           slug: 'use-qsim-emulators',
         },
+        {
+          label: 'Run Quantum Machine Learning with Pennylane',
+          slug: 'use-qsim-emulators',
+        },
       ],
       label: 'How to',
       slug: 'how-to',
@@ -45,7 +49,7 @@ export const quantumComputingMenu = {
     {
       items: [
         {
-          label: 'Containers API Reference',
+          label: 'QaaS API Reference',
           slug: 'https://www.scaleway.com/en/developers/api/qaas/',
         },
       ],
@@ -69,6 +73,10 @@ export const quantumComputingMenu = {
         {
           label: 'Pasqal QPUs Information',
           slug: 'pasqal-qpus',
+        },
+        {
+          label: 'Quandela QPUs Information',
+          slug: 'quandela-qpus',
         }
       ],
       label: 'Additional Content',

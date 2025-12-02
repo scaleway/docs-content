@@ -18,7 +18,7 @@ import Requirements from '@macros/iam/requirements.mdx'
 
 # Building a web browser agent with Generative APIs, Holo2 and Selenium
 
-This tutorial will guide you through creating a web agent that can interact with websites using LLM vision and browser automation. You will build on Scaleway's Generative APIs to create a system that can "see" web pages and take actions based on visual understanding. This approach is particularly useful to build more flexible pipelines compared to HTML DOM parsing and requires less maintenance over time when website HTML code changes.
+This tutorial will guide you through creating a web agent that can interact with websites using LLM vision and browser automation. You will build on Scaleway's Generative APIs to create a system that can "see" web pages and take actions based on visual understanding. This approach is particularly useful for building more flexible pipelines compared to HTML DOM parsing, and requires less maintenance over time when website HTML code changes.
 
 ## Why Holo2 model ?
 

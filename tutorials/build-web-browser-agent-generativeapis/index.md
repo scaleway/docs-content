@@ -45,7 +45,7 @@ pip install openai selenium
 ```
 
 - `openai` enables to query Holo2 model through Generative APIs
-- `selenium` enables interaction with browser
+- `selenium` enables interaction with browsers
 
 ## Import dependencies
 

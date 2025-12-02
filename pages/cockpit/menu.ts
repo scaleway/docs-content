@@ -51,6 +51,10 @@ export const cockpitMenu = {
           slug: 'create-external-data-sources',
         },
         {
+          label: 'Manage data exports',
+          slug: 'manage-data-exports',
+        },
+        {
           label: 'Change data retention period',
           slug: 'change-data-retention',
         },
@@ -107,6 +111,10 @@ export const cockpitMenu = {
         {
           label: 'Cockpit capabilities and limits',
           slug: 'cockpit-limitations',
+        },
+        {
+          label: 'Cockpit pricing information',
+          slug: 'cockpit-pricing',
         },
         {
           label:

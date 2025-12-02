@@ -73,6 +73,10 @@ export const quantumComputingMenu = {
         {
           label: 'Pasqal QPUs Information',
           slug: 'pasqal-qpus',
+        },
+        {
+          label: 'Quandela QPUs Information',
+          slug: 'quandela-qpus',
         }
       ],
       label: 'Additional Content',

@@ -59,16 +59,16 @@ export const quantumComputingMenu = {
           slug: 'quantum-computing-information',
         },
         {
-          label: 'IBEX Q1 Information',
-          slug: 'ibex-q1-information',
+          label: 'AQT QPUs Information',
+          slug: 'aqt-qpus-information',
         },
         {
           label: 'IQM QPUs Information',
           slug: 'iqm-qpus',
         },
         {
-          label: 'Pasqal Processors Information',
-          slug: 'pasqal-processors-information',
+          label: 'Pasqal QPUs Information',
+          slug: 'pasqal-qpus',
         }
       ],
       label: 'Additional Content',

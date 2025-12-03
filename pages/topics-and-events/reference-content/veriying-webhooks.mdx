@@ -1,0 +1,35 @@
+---
+title: Verifying webhook signatures
+description: Learn how to securely validate webhook signatures from Scaleway Topics and Events using certificate trust chains and handle certificate rotations properly.
+tags: messaging sns webhooks certificates signingcerturl
+dates:
+  validation: 2025-12-03
+  posted: 2025-12-03
+---
+
+When consuming webhook events from Scaleway Topics and Events, clients must verify the authenticity of incoming messages using digital signatures. This document sets out key points of advice to ensure robust and future-proof signature validation.
+
+## Anticipate certificate rotation
+
+The signing certificate used for webhook messages is rotated at least once per year. Do not be surprised by changes in the public key retrieved from the `SigningCertURL`. This is normal behavior and does not indicate an issue.
+ 
+## Use the CA trust chain, do not directly trust the certificate
+
+Your application should **not** directly trust the certificate pointed to by `SigningCertURL`. Instead, you must validate that this certificate was issued by our trusted Certificate Authority (CA), using the CA trust chain.
+
+Download and trust the long-term CA certificate, which is valid until 2032:
+
+- For fr-par: [https://messaging.s3.fr-par.scw.cloud/fr-par/sns/sns-trust-chain.pem](https://messaging.s3.fr-par.scw.cloud/fr-par/sns/sns-trust-chain.pem)
+- For nl-ams: [https://messaging.s3.fr-par.scw.cloud/nl-ams/sns/sns-trust-chain.pem](https://messaging.s3.fr-par.scw.cloud/nl-ams/sns/sns-trust-chain.pem)
+
+Then, for each incoming message:
+- Check if the SigningCertURL has changed.
+- If so, download the new certificate.
+- Verify that the certificate is signed by the trusted CA (using the `.pem` file above).
+- Only then use it to verify the message signature.
+
+To avoid excessive downloads, we recommend that you cache the certificate locally. You can use the unique ID in the `SigningCertURL` as a cache key. Revalidate only when the URL changes.
+
+## Handling mixed certificates during rotation
+
+During certificate rollover, you may receive messages signed by both old and new certificates (due to retries or delayed deliveries).Your system must accept messages signed by any currently valid certificate (i.e., those issued by the trusted CA).

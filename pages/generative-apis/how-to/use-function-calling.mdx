@@ -202,7 +202,7 @@ This section shows an example for how you can use parallel function calling.
 
 Define the tools:
 
-```
+```python
 def open_floor_space(floor_number: int) -> bool:
     """Opens up the specified floor for party space by unlocking doors and moving furniture."""
     print(f"Floor {floor_number} is now open party space!")
@@ -222,7 +222,7 @@ def prep_snack_station(activate: bool) -> bool:
 
 Define the specifications:
 
-```
+```python
 tools = [
     {
         "type": "function",
@@ -280,7 +280,7 @@ tools = [
 
 Next, call the model with proper instructions
 
-```
+```python
 system_prompt = """
 You are an office party control assistant. When asked to transform the office into a party space, you should:
 1. Open up a floor for the party
@@ -293,6 +293,84 @@ messages = [
     {"role": "system", "content": system_prompt},
     {"role": "user", "content": "Turn this office building into a party!"}
 ]
+```
+
+### Tool calling with stream mode
+
+Tool calling can be performed using stream mode. 
+
+<Message type="note">
+    Most workflows using tools will require multiple steps before a final useful answer can be provided the end user. Since stream mode adds an additional complexity to parse elements from each events, we recommend disabling stream mode when using tool calling for the first time.
+</Message>
+
+Because tool arguments are formatted in `JSON` but sent gradually in each event, multiple response events need to be aggregated and then parsed as `JSON` to perform the tool call.
+If you want to use tool calls with streaming, replace the last part of your code with the following:
+
+```python
+# Make the API call
+response = client.chat.completions.create(
+    model="llama-3.1-70b-instruct",
+    messages=messages,
+    tools=tools,
+    tool_choice="auto",
+    stream=True
+)
+
+tool_calls = []
+tool_call_index = 0
+tool_call_required = False
+
+for chunk in response:
+  if chunk.choices and (len(chunk.choices) >= 1):
+    choice = chunk.choices[0]
+    if choice.delta.content: # Pass text content
+        pass
+    if choice.delta.tool_calls:
+        if choice.delta.tool_calls[0].function.name: # Store function name and id
+          tool_calls.append({
+              "id": choice.delta.tool_calls[0].id,
+              "type": "function",
+              "function":{
+                  "name": choice.delta.tool_calls[0].function.name,
+                  "arguments": ""
+              }
+          })
+          tool_call_index = choice.delta.tool_calls[0].index
+        if choice.delta.tool_calls[0].function.arguments: # Store function arguments
+          tool_calls[tool_call_index]["function"]["arguments"] += choice.delta.tool_calls[0].function.arguments
+    if choice.finish_reason and (chunk.choices[0].finish_reason == "tool_calls"):
+        tool_call_required = True
+
+# Process the tool call
+if tool_call_required and (len(tool_calls) >= 1):
+    tool_call = tool_calls[0]
+
+    # Execute the function
+    if tool_call["function"]["name"] == "get_flight_schedule":
+        function_args = json.loads(tool_call["function"]["arguments"])
+        function_response = get_flight_schedule(**function_args)
+
+        # Add results to the conversation
+        messages.extend([
+            {
+                "role": "assistant",
+                "content": None,
+                "tool_calls": [tool_call]
+            },
+            {
+                "role": "tool",
+                "name": tool_call["function"]["name"],
+                "content": json.dumps(function_response),
+                "tool_call_id": tool_call["id"]
+            }
+        ])
+
+        # Get final response
+        final_response = client.chat.completions.create(
+            model="llama-3.1-70b-instruct",
+            messages=messages
+        )
+        print(final_response.choices[0].message.content)
 ```
 
 ## Code example for Responses API

@@ -1,0 +1,256 @@
+---
+meta:
+  title: How to move from Serverless Functions to Serverless Containers
+  description: Learn how to migrate your workloads from Scaleway Serverless Functions to Serverless Containers for greater control and flexibility.
+  dates:
+    validation: 2025-11-25
+    posted: 2025-11-25
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+Serverless Functions and Serverless Containers share the same architecture (based on Knative).
+When you deploy a Function, Scaleway simply injects your code into a pre-built container image.
+
+Migrating to Serverless Containers just means you take control of that container image creation yourself.
+
+<Requirements />
+
+## Understanding the differences
+
+Scaleway Serverless Functions allow you to quickly deploy snippets of code without worrying about anything but the business logic.
+
+* **Best for:** Webhooks, lightweight APIs, and glue code.
+* **Key benefit:** "Zero config" deployment—just paste your code and go.
+
+However, as your application grows, you face limitations regarding dependency management (e.g., needing system-level libraries like ffmpeg or specific C extensions), or complex build pipelines.
+
+This is where Serverless Containers can be more adapted.
+
+**Moving to Containers means:**
+
+* You take control of the "wrapping": Instead of Scaleway wrapping your code, you write a Dockerfile.
+* You gain flexibility: You can install any system library, use any language version, and control the exact OS environment.
+* Better portability: A containerized app can run on Scaleway, your local machine, or any other cloud provider without changing the code.
+
+## When to migrate to Serverless Containers?
+
+While Functions are excellent for "zero-config" deployments, Serverless Containers are the recommended choice when your project requirements expand.
+
+Consider migrating if:
+
+* **You need custom system dependencies:** Functions run in a managed environment. If your code requires specific system libraries (e.g., `ffmpeg`, `ImageMagick`, custom C-bindings) that are not present in the standard runtime, containers allow you to install them via the Dockerfile.
+
+* **You need full portability:** A Docker container is the industry standard for shipping code. By containerizing your application, you ensure it can run anywhere: on your local machine, on various Scaleway products, on Kubernetes clusters, or any other cloud provider, without changing a single line of code.
+
+* **You need a specific language version:** Serverless Functions support a specific list of runtimes (e.g., Node 22, Python 3.13). If you need an older version, a beta version, or a completely different language (like Java, Ruby, or .NET), Serverless Containers are the solution.
+
+* **You have a complex build pipeline:** If your application requires a compilation step, complex asset building, or private package managers, defining these steps in a `Dockerfile` gives you granular control over the build process.
+
+## Containerize your Serverless Function
+
+The main step in migrating is creating a `Dockerfile` that replicates the runtime environment your function was using.
+
+Below are standard `Dockerfile` templates for the main Serverless Functions runtimes. You can add this file to the root of your project (where your `handler` or `index` file is located).
+
+<Message type="important">
+  Scaleway Serverless Containers inject a `PORT` environment variable (defaulting to `8080`). Your application must listen on this port to receive traffic.
+</Message>
+
+<Tabs id="runtimes">
+  <TabsTab label="Node 22">
+    Use this Dockerfile to migrate from the **Node.js 22** runtime.
+
+    ```dockerfile
+    # Use the official Node.js 22 Alpine image for a small footprint
+    FROM node:22-alpine
+
+    # Set the working directory
+    WORKDIR /usr/src/app
+
+    # Copy package files first to leverage Docker cache
+    COPY package*.json ./
+
+    # Install production dependencies
+    RUN npm ci --only=production
+
+    # Copy the rest of your application code
+    COPY . .
+
+    # Serverless Containers inject the PORT env var (default 8080)
+    ENV PORT 8080
+    EXPOSE 8080
+
+    # Start the application
+    CMD [ "node", "index.js" ]
+    ```
+  </TabsTab>
+
+  <TabsTab label="Python 3.13">
+    Use this Dockerfile to migrate from the **Python 3.13** runtime. We recommend using a WSGI server like Gunicorn for production.
+
+    ```dockerfile
+    # Use the official Python 3.13 slim image
+    FROM python:3.13-slim
+
+    WORKDIR /app
+
+    # Copy requirements and install dependencies
+    COPY requirements.txt .
+    RUN pip install --no-cache-dir -r requirements.txt
+
+    # Copy application code
+    COPY . .
+
+    # Define the default port
+    ENV PORT 8080
+    EXPOSE 8080
+
+    # Run the application using Gunicorn
+    # Replace 'main:app' with 'your_filename:your_flask_object'
+    CMD exec gunicorn --bind :$PORT --workers 1 --threads 8 --timeout 0 main:app
+    ```
+  </TabsTab>
+
+  <TabsTab label="Go 1.24">
+    Use this Dockerfile to migrate from the **Go 1.24** runtime. This uses a multi-stage build to keep the final image lightweight.
+
+    ```dockerfile
+    # --- Build Stage ---
+    FROM golang:1.24-alpine AS builder
+
+    WORKDIR /app
+
+    # Copy module files and download dependencies
+    COPY go.mod go.sum ./
+    RUN go mod download
+
+    # Copy source code
+    COPY . .
+
+    # Build the binary
+    RUN CGO_ENABLED=0 GOOS=linux go build -o my-function .
+
+    # --- Run Stage ---
+    FROM alpine:latest
+
+    WORKDIR /root/
+
+    # Copy the binary from the builder
+    COPY --from=builder /app/my-function .
+
+    # Install certificates for HTTPS calls
+    RUN apk --no-cache add ca-certificates
+
+    ENV PORT 8080
+    EXPOSE 8080
+
+    CMD ["./my-function"]
+    ```
+  </TabsTab>
+
+  <TabsTab label="Rust 1.85">
+    Use this Dockerfile to migrate from the **Rust 1.74** runtime.
+
+    ```dockerfile
+    # --- Build Stage ---
+    FROM rust:1.85-slim as builder
+
+    WORKDIR /usr/src/app
+
+    # Create a new empty shell project
+    RUN USER=root cargo new --bin my-app
+    WORKDIR /usr/src/app/my-app
+
+    # Copy manifests
+    COPY Cargo.toml Cargo.lock ./
+
+    # Build only the dependencies to cache them
+    RUN cargo build --release
+
+    # Remove the dummy source
+    RUN rm src/*.rs
+
+    # Copy your actual source code
+    COPY ./src ./src
+
+    # Build for release
+    RUN rm ./target/release/deps/my_app*
+    RUN cargo build --release
+
+    # --- Run Stage ---
+    FROM debian:bookworm-slim
+
+    # Install OpenSSL if required
+    RUN apt-get update && apt-get install -y libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+
+    COPY --from=builder /usr/src/app/my-app/target/release/my-app /usr/local/bin/my-app
+
+    ENV PORT 8080
+    EXPOSE 8080
+
+    CMD ["my-app"]
+    ```
+  </TabsTab>
+
+  <TabsTab label="PHP 8.4">
+    Use this Dockerfile to migrate from the **PHP 8.4** runtime.
+
+    ```dockerfile
+    # Use the official PHP 8.4 Apache image
+    FROM php:8.4-apache
+
+    WORKDIR /var/www/html
+
+    # Copy application source
+    COPY . .
+
+    # Configure Apache to listen on the Scaleway PORT env var
+    RUN sed -i 's/80/${PORT}/g' /etc/apache2/sites-available/000-default.conf /etc/apache2/ports.conf
+
+    # Install required extensions (Example)
+    # RUN docker-php-ext-install pdo pdo_mysql
+
+    ENV PORT 8080
+    EXPOSE 8080
+
+    CMD ["apache2-foreground"]
+    ```
+  </TabsTab>
+</Tabs>
+
+## Build and push the image
+
+Once your `Dockerfile` is ready, you need to build the image and push it to your Scaleway Container Registry.
+
+1.  Log in to your registry:
+    ```bash
+    docker login rg.fr-par.scw.cloud/your-namespace -u nologin --password-stdin <<< "$SCW_SECRET_KEY"
+    ```
+2.  Build the image:
+    ```bash
+    docker build -t my-migrated-function:latest .
+    ```
+3.  Tag and push the image:
+    ```bash
+    docker tag my-migrated-function:latest rg.fr-par.scw.cloud/your-namespace/my-migrated-function:latest
+    docker push
+    ```
+
+Refer to the [dedicated documentation](/serverless-containers/how-to/build-push-container-image/) for more information on how to build and push images to the Scaleway Container Registry.
+
+## Deploy to Serverless Containers
+
+1.  Navigate to **Serverless Containers** in the [Scaleway console](https://console.scaleway.com).
+2.  Click **Deploy container**.
+3.  Select **Scaleway Container Registry** and choose the image you just pushed (`my-migrated-function`).
+4.  Set the **Port** to `8080` (or match the `PORT` environment variable in your Dockerfile).
+5.  Set the same resources (vCPU/RAM) and scaling parameters (min/max scale) as your original function.
+6.  Click **Deploy**.
+
+Your code is now running as a Serverless Container, giving you the freedom to modify the OS, install binaries, and manage complex dependencies exactly as you need.
+
+## Additional content
+
+For advanced usage, such as larger projects with dependencies, automation, and more, check out our [GitHub repository](https://github.com/scaleway/serverless-examples) for more examples.
+

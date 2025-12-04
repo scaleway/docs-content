@@ -1,0 +1,62 @@
+---
+title: Troubleshooting Error 500 on boot after custom installation on an Elastic Metal server
+description: Solutions for resolving boot issues after a custom installation on an Elastic Metal server.
+tags: elastic-metal troubleshooting installation
+dates:
+  validation: 2025-12-05
+  posted: 2025-12-05
+---
+
+## Problem
+Your Scaleway Elastic Metal server is blocked during the boot process with an iPXE *Error 500* after performing a custom installation.
+
+### Symptoms
+- The server jumps directly into iPXE mode even though a bootable disk appears to be present.
+- The console displays repeated attempts to PXE boot, ending with an `iPXE 500` error.
+- After several failed attempts, the system may eventually boot if the correct EFI entry exists.
+
+## Possible causes
+- Incorrect or missing UEFI boot entries: The OS installer did not create (or could not create) the necessary UEFI NVRAM entry for the new system.
+- EFI bootloader installed in a non-standard location: The EFI binary (e.g., `grubx64.efi`, `shimx64.efi`, `bootmgfw.efi`) is not located where the Bootscript expects it.
+- No generic fallback loader (`\EFI\Boot\bootx64.efi`): Some installers rely solely on vendor-specific paths and do not populate the fallback bootloader that UEFI firmware attempts automatically.
+- Incomplete OS installation: The bootloader files may be missing or corrupted if the installation did not finish properly.
+- Overwritten or erased NVRAM entries: Some custom installers clear existing UEFI entries but fail to add new ones.
+- Bootscript fallback behavior: Scaleway’s Bootscript attempts PXE boot when it does not find a valid EFI loader. Since it cannot predict the bootloader path for custom installations, PXE will fail with a 500 error by design.
+
+## Solution
+
+On Elastic Metal servers using UEFI, the PXE boot mechanism depends on the system’s ability to locate a valid EFI bootloader on disk.
+For custom installations, bootscript cannot know in advance which EFI binary to use, because the path varies depending on the operating system you install.
+For example:
+
+- Windows uses: `\EFI\Microsoft\Boot\bootmgfw.efi`
+- Many Linux distributions use: `\EFI\{distro}\grubx64.efi`
+- Generic fallback loader (if present): `\EFI\Boot\bootx64.efi`
+
+Because of this uncertainty:
+
+1. The Bootscript attempts to identify a valid EFI loader.
+2. It fails to locate one (because the path is not predictable).
+3. It falls back to PXE boot, which fails with **iPXE Error 500**.
+4. The server then moves on to the next boot option.
+
+This behavior is expected and does **not** mean that your hardware or installation is broken.
+
+If your custom OS installation completed correctly, it should have created its own boot entry (e.g., `\EFI\Microsoft\Boot\bootmgfw.efi` or a GRUB entry). Once that entry exists, the server will use it and boot normally after the PXE fallback.
+
+### What you should do
+- Ensure your custom installation places a valid EFI loader on the disk.
+- Verify that the EFI files exist in the partition mounted at `/boot/efi` (Linux) or the EFI System Partition (ESP).
+- Confirm that a UEFI boot entry was created by the installer.
+  - On Linux, you can check with `efibootmgr -v`.
+- If necessary, manually create or restore the EFI loader in:
+```bash
+\EFI\Boot\bootx64.efi
+```
+(the generic fallback path recognized by most UEFI firmwares).
+
+<Message type="important">
+This issue is a direct result of a custom installation that does not properly declare or place the EFI bootloader and is not caused by Scaleway.
+Since the installation is custom, determining the correct EFI paths and entries is your responsibility.
+The iPXE 500 error is simply a fallback mechanism and can be safely ignored once a correct boot entry is present.
+</Message>

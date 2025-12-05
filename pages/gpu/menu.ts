@@ -63,6 +63,10 @@ export const gpuMenu = {
           slug: 'choosing-gpu-instance-type',
         },
         {
+          label: 'Blackwell vs Hopper - Choosing the right NVIDIA GPU architecture',
+          slug: 'blackwell-vs-hopper-choosing-the-right-architecture',
+        },
+        {
           label:
             'GPU Instances internet and Block Storage bandwidth overview',
           slug: 'gpu-instances-bandwidth-overview',

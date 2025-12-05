@@ -92,6 +92,10 @@ export const gpuMenu = {
           slug: 'understanding-nvidia-tao',
         },
         {
+          label: 'Understanding NVIDIA FP4 format',
+          slug: 'understanding-nvidia-fp4',
+        },
+        {
           label: 'Understanding NVIDIA FP8 format',
           slug: 'understanding-nvidia-fp8',
         },

@@ -43,6 +43,10 @@ export const appleSiliconMenu = {
           slug: 'install-package-manager-mac-mini',
         },
         {
+          label: 'Create a GitHub/GitLab runner',
+          slug: 'create-runner',
+        },
+        {
           label: 'Update the OS of a Mac mini',
           slug: 'update-os-mac-mini',
         },
@@ -101,6 +105,10 @@ export const appleSiliconMenu = {
         {
           label: 'Bare Metal shared responsibility model',
           slug: '../../elastic-metal/reference-content/shared-responsibility-model',
+        },
+        {
+          label: 'Scaleway Dev OS for Apple silcion',
+          slug: 'scaleway-dev-os',
         },
       ],
       label: 'Additional Content',

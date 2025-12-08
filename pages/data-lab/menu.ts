@@ -23,10 +23,6 @@ export const dataLabMenu = {
           slug: 'create-data-lab',
         },
         {
-          label: 'Connect to a Data Lab cluster',
-          slug: 'connect-to-data-lab',
-        },
-        {
           label: 'Access the notebook',
           slug: 'access-notebook',
         },

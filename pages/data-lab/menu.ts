@@ -19,15 +19,27 @@ export const dataLabMenu = {
     {
       items: [
         {
-          label: 'Create a Data Lab',
+          label: 'Create a Data Lab cluster',
           slug: 'create-data-lab',
         },
         {
-          label: 'Connect to a Data Lab',
+          label: 'Connect to a Data Lab cluster',
           slug: 'connect-to-data-lab',
         },
         {
-          label: 'Manage and delete a Data Lab',
+          label: 'Access the notebook',
+          slug: 'access-notebook',
+        },
+        {
+          label: 'Access the Spark™ UI',
+          slug: 'access-spark-ui',
+        },
+        {
+          label: 'Use a cluster with Private Networks',
+          slug: 'use-private-network',
+        },
+        {
+          label: 'Manage and delete a cluster',
           slug: 'manage-delete-data-lab',
         },
       ],

@@ -32,7 +32,7 @@ export const dataLabMenu = {
         },
         {
           label: 'Use a cluster with Private Networks',
-          slug: 'use-private-network',
+          slug: 'use-private-networks',
         },
         {
           label: 'Manage and delete a cluster',

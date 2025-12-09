@@ -27,7 +27,7 @@ export const cockpitMenu = {
           slug: 'access-grafana-and-managed-dashboards',
         },
         {
-          label: 'Create a token',
+          label: 'Create a Cockpit token',
           slug: 'create-token',
         },
         {
@@ -39,7 +39,7 @@ export const cockpitMenu = {
           slug: 'delete-external-data-sources',
         },
         {
-          label: 'Change datasources retention period',
+          label: 'Change data sources retention period',
           slug: 'change-data-retention',
         },
         {

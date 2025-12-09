@@ -137,10 +137,6 @@ export const instancesMenu = {
           "slug": "managing-instance-snapshot-via-cli"
         },
         {
-          "label": "Using routed IPs",
-          "slug": "using-routed-ips"
-        },
-        {
           "label": "Using cloud-init",
           "slug": "using-cloud-init"
         },

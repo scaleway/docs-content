@@ -71,6 +71,8 @@ export const cockpitMenu = {
           slug: 'configure-alerts-for-scw-resources',
         }
       ],
+      label: 'How to',
+      slug: 'how-to',
     },
     {
       items: [

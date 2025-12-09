@@ -19,36 +19,24 @@ export const cockpitMenu = {
     {
       items: [
         {
-          label: 'Configure the alert manager',
-          slug: 'enable-alert-manager',
-        },
-        {
-          label: 'Activate Scaleway preconfigured alerts',
-          slug: 'activate-managed-alerts',
-        },
-        {
-          label: 'Configure alerts for Scaleway resources',
-          slug: 'configure-alerts-for-scw-resources',
-        },
-        {
           label: 'Retrieve your Grafana credentials',
           slug: 'retrieve-grafana-credentials',
-        },
-        {
-          label: 'Create a token',
-          slug: 'create-token',
-        },
-        {
-          label: 'Create and push traces',
-          slug: 'activate-push-traces',
         },
         {
           label: 'Access Grafana and preconfigured dashboards',
           slug: 'access-grafana-and-managed-dashboards',
         },
         {
+          label: 'Create a token',
+          slug: 'create-token',
+        },
+        {
           label: 'Create a custom data source',
           slug: 'create-external-data-sources',
+        },
+        {
+          label: 'Delete a custom data source',
+          slug: 'delete-external-data-sources',
         },
         {
           label: 'Change data retention period',
@@ -59,29 +47,30 @@ export const cockpitMenu = {
           slug: 'send-metrics-with-grafana-alloy',
         },
         {
-          label:
-            'Send metrics from your Kubernetes cluster to Cockpit',
-          slug: 'send-metrics-from-k8s-to-cockpit',
-        },
-        {
           label: 'Send logs from your Kubernetes cluster to Cockpit',
           slug: 'send-logs-from-k8s-to-cockpit',
         },
         {
-          label: 'Send metrics and logs to your Cockpit',
-          slug: 'send-metrics-logs-to-cockpit',
+          label: 'Send metrics from your Kubernetes cluster to Cockpit',
+          slug: 'send-metrics-from-k8s-to-cockpit',
         },
         {
-          label: 'Federate Scaleway metrics with your own Prometheus',
-          slug: 'federate-scaleway-metrics',
+          label: 'Create and push traces',
+          slug: 'activate-push-traces',
         },
         {
-          label: 'Delete a custom data source',
-          slug: 'delete-external-data-sources',
+          label: 'Configure the alert manager',
+          slug: 'enable-alert-manager',
         },
+        {
+          label: 'Activate Scaleway preconfigured alerts',
+          slug: 'activate-managed-alerts',
+        },
+        {
+          label: 'Configure alerts for Scaleway resources',
+          slug: 'configure-alerts-for-scw-resources',
+        }
       ],
-      label: 'How to',
-      slug: 'how-to',
     },
     {
       items: [

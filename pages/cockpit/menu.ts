@@ -39,7 +39,7 @@ export const cockpitMenu = {
           slug: 'delete-external-data-sources',
         },
         {
-          label: 'Change data retention period',
+          label: 'Change datasources retention period',
           slug: 'change-data-retention',
         },
         {
@@ -55,7 +55,7 @@ export const cockpitMenu = {
           slug: 'send-metrics-from-k8s-to-cockpit',
         },
         {
-          label: 'Create and push traces',
+          label: 'Create and push and traces to your Cockpit',
           slug: 'activate-push-traces',
         },
         {

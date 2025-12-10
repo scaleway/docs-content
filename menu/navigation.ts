@@ -6,6 +6,7 @@ import { auditTrailMenu } from "../pages/audit-trail/menu"
 import { billingMenu } from '../pages/billing/menu'
 import { blockStorageMenu } from "../pages/block-storage/menu"
 import { classicHostingMenu } from "../pages/classic-hosting/menu"
+import { clustersForKafkaMenu } from "../pages/clusters-for-kafka/menu"
 import { cockpitMenu } from "../pages/cockpit/menu"
 import { containerRegistryMenu } from "../pages/container-registry/menu"
 import { cpanelHostingMenu } from "../pages/cpanel-hosting/menu"
@@ -62,6 +63,7 @@ import { topicsAndEventsMenu } from "../pages/topics-and-events/menu"
 import { transactionalEmailMenu } from "../pages/transactional-email/menu"
 import { vpcMenu } from "../pages/vpc/menu"
 import { webhostingMenu } from "../pages/webhosting/menu"
+import { quantumComputingMenu } from "../pages/quantum-computing/menu"
 
 export default [
   {
@@ -153,6 +155,7 @@ export default [
         items: [
           dataWarehouseMenu,
           dataLabMenu,
+          clustersForKafkaMenu,
           natsMenu,
         ],
         label: 'Data & Analytics',
@@ -219,6 +222,14 @@ export default [
         ],
         label: 'Serverless',
         category: 'serverless',
+      },
+      {
+        icon: 'LabsCategoryIcon',
+        items: [
+          quantumComputingMenu,
+        ],
+        label: 'Quantum',
+        category: 'quantum',
       },
       {
         icon: 'StorageCategoryIcon',

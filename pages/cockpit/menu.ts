@@ -19,6 +19,46 @@ export const cockpitMenu = {
     {
       items: [
         {
+          label: 'Retrieve your Grafana credentials',
+          slug: 'retrieve-grafana-credentials',
+        },
+        {
+          label: 'Access Grafana and preconfigured dashboards',
+          slug: 'access-grafana-and-managed-dashboards',
+        },
+        {
+          label: 'Create a Cockpit token',
+          slug: 'create-token',
+        },
+        {
+          label: 'Create a custom data source',
+          slug: 'create-external-data-sources',
+        },
+        {
+          label: 'Delete a custom data source',
+          slug: 'delete-external-data-sources',
+        },
+        {
+          label: 'Change data sources retention period',
+          slug: 'change-data-retention',
+        },
+        {
+          label: 'Send metrics to Cockpit using Grafana Alloy',
+          slug: 'send-metrics-with-grafana-alloy',
+        },
+        {
+          label: 'Send logs from your Kubernetes cluster to Cockpit',
+          slug: 'send-logs-from-k8s-to-cockpit',
+        },
+        {
+          label: 'Send metrics from your Kubernetes cluster to Cockpit',
+          slug: 'send-metrics-from-k8s-to-cockpit',
+        },
+        {
+          label: 'Create and push and traces to your Cockpit',
+          slug: 'activate-push-traces',
+        },
+        {
           label: 'Configure the alert manager',
           slug: 'enable-alert-manager',
         },
@@ -29,56 +69,7 @@ export const cockpitMenu = {
         {
           label: 'Configure alerts for Scaleway resources',
           slug: 'configure-alerts-for-scw-resources',
-        },
-        {
-          label: 'Retrieve your Grafana credentials',
-          slug: 'retrieve-grafana-credentials',
-        },
-        {
-          label: 'Create a token',
-          slug: 'create-token',
-        },
-        {
-          label: 'Create and push traces',
-          slug: 'activate-push-traces',
-        },
-        {
-          label: 'Access Grafana and preconfigured dashboards',
-          slug: 'access-grafana-and-managed-dashboards',
-        },
-        {
-          label: 'Create a custom data source',
-          slug: 'create-external-data-sources',
-        },
-        {
-          label: 'Change data retention period',
-          slug: 'change-data-retention',
-        },
-        {
-          label: 'Send metrics to Cockpit using Grafana Alloy',
-          slug: 'send-metrics-with-grafana-alloy',
-        },
-        {
-          label:
-            'Send metrics from your Kubernetes cluster to Cockpit',
-          slug: 'send-metrics-from-k8s-to-cockpit',
-        },
-        {
-          label: 'Send logs from your Kubernetes cluster to Cockpit',
-          slug: 'send-logs-from-k8s-to-cockpit',
-        },
-        {
-          label: 'Send metrics and logs to your Cockpit',
-          slug: 'send-metrics-logs-to-cockpit',
-        },
-        {
-          label: 'Federate Scaleway metrics with your own Prometheus',
-          slug: 'federate-scaleway-metrics',
-        },
-        {
-          label: 'Delete a custom data source',
-          slug: 'delete-external-data-sources',
-        },
+        }
       ],
       label: 'How to',
       slug: 'how-to',

@@ -74,6 +74,10 @@ export const serverlessFunctionsMenu = {
           label: 'Delete a function',
           slug: 'delete-a-function',
         },
+        {
+          label: 'Migrate Functions to Containers',
+          slug: 'migrate-functions-to-containers',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

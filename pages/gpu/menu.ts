@@ -63,6 +63,10 @@ export const gpuMenu = {
           slug: 'choosing-gpu-instance-type',
         },
         {
+          label: 'Blackwell vs Hopper - Choosing the right NVIDIA GPU architecture',
+          slug: 'blackwell-vs-hopper-choosing-the-right-architecture',
+        },
+        {
           label:
             'GPU Instances internet and Block Storage bandwidth overview',
           slug: 'gpu-instances-bandwidth-overview',
@@ -90,6 +94,10 @@ export const gpuMenu = {
         {
           label: 'Understanding the NVIDIA TAO toolkit',
           slug: 'understanding-nvidia-tao',
+        },
+        {
+          label: 'Understanding NVIDIA FP4 format',
+          slug: 'understanding-nvidia-fp4',
         },
         {
           label: 'Understanding NVIDIA FP8 format',

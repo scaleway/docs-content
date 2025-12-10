@@ -1,0 +1,79 @@
+---
+title: How to program Quandela QPUs
+description: Access Quandela photonic QPUs and emulators using Perceval on Scaleway QaaS.
+tags: quandela photonic quantum qpu perceval
+dates:
+  validation: 2025-11-21
+  posted: 2025-11-21
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+**Quandela** is a European leader in photonic quantum computing. Their technology relies on manipulating light (single photons) through linear optical components to perform quantum calculations.
+
+Unlike superconducting qubits or cold atoms, Quandela's photonic approach uses "qumodes" and photons that circulate in optical circuits at room temperature (although emitters and detectors require cooling). This offers a promising path towards a modular and scalable quantum computer.
+
+To control these processors (QPUs) and run advanced simulations, Quandela develops **Perceval**, a reference open-source SDK.
+
+<Message type="note">
+  Refer to the [Quandela processors information page](/quantum-computing/additional-content/quandela-qpus) for more details.
+</Message>
+
+## How to access Quandela via Perceval
+
+<Requirements />
+
+- A Scaleway account with a valid **Project ID**.
+- A Scaleway **API Key** (Secret Key).
+- Python and [Quandela Perceval](https://github.com/Quandela/Perceval) installed on your local machine
+
+1. Create a file with the following script to create a session, define a simple circuit, and run it. Replace `$SCW_PROJECT_ID` and `$SCW_SECRET_KEY` with your Scaleway Project ID and secret key.
+
+    <Message type="tip">
+    Scaleway Quantum Computing provides privileged access to Quandela's physical QPUs and high-performance emulators optimized for GPUs hardware. Integration is done directly via the `perceval.providers.scaleway` module.
+    </Message>
+
+    ```python
+    import perceval as pcvl
+    import perceval.providers.scaleway as scw
+
+    # The session handles resource allocation and billing
+    session = scw.Session(
+        platform_name="QPU-ASCELLA-6PQ",  # Example of a Ascella photonic platform
+        project_id="$SCW_PROJECT_ID",
+        token="your-scaleway-api-key"
+    )
+
+    try:
+        # Starts the session (provisions the resource, as it is a real QPU without booking, you will be billing on circuit & shot count)
+        session.start()
+
+        # 3. Create the Remote Processor
+        processor = session.build_remote_processor()
+
+        # 4. Define the Circuit (Simple Example: Hong-Ou-Mandel Interference)
+        # Using a 50:50 Beam Splitter (Hadamard)
+        circuit = pcvl.Circuit(2) // pcvl.BS.H()
+
+        processor.set_circuit(circuit)
+        processor.with_input(pcvl.BasicState("|1,1>")) # Input: 1 photon in each mode
+        processor.min_detected_photons_filter(2)       # Keep only 2-photon events
+
+        # 5. Execution (Sampling)
+        sampler = pcvl.algorithm.Sampler(processor, max_shots_per_call=10000)
+        job = sampler.samples(1000) # Request 1000 shots
+
+        print("Sampling results:")
+        print(job['results'])
+
+    finally:
+        session.stop() # Stops the session
+    ```
+4. Save the script. In this example we save it as `quandela.py`.
+
+5. Run the script.
+    ```bash
+    python ~/quandela.py
+    ```
+
+## How to manage a session
+- **Context Manager** (`with`) - You can use `with scw.Session(...) as session`: to automatically handle starting and stopping the session, ensuring you do not forget to stop it.

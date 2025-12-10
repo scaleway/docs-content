@@ -75,6 +75,10 @@ export const topicsAndEventsMenu = {
           slug: 'topics-and-events-support',
         },
         {
+          label: 'Verifying webhook signatures',
+          slug: 'verifying-webhooks',
+        },
+        {
           label: 'Limitations',
           slug: 'limitations',
         },

@@ -47,6 +47,10 @@ export const iamMenu = {
           slug: 'set-up-identity-federation'
         },
         {
+          label: 'How to set up SSO with Authentik',
+          slug: 'set-up-sso-with-authentik'
+        },
+        {
           label: 'Create an application',
           slug: 'create-application',
         },

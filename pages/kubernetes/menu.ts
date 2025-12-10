@@ -47,7 +47,6 @@ export const kubernetesMenu = {
           slug: 'connect-private-cluster',
         },
         {
-        {
           label: 'Manage Kapsule node pools',
           slug: 'manage-node-pools',
         },

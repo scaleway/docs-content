@@ -135,9 +135,6 @@ Anyone who has a GitHub account can contribute to the documentation content:
     
 1. Go to [the pull requests page](https://github.com/scaleway/docs-content/pulls) to open a pull request.
 
-    All pull requests names must comply with the following naming convention:
-    `docs(product_name): description with some words`.
-
 7. Click **Create pull request**, then select
 
   - base repository: `scaleway/docs-content`
@@ -150,7 +147,8 @@ Anyone who has a GitHub account can contribute to the documentation content:
 
 8. Click **Create pull request**.
 
-    All pull requests names must comply with the following naming convention: `docs(<PRODUCT_NAME>): <ACTION> <EXPLANATION> <BRANCH_NAME>`.
+    All pull requests names must comply with the following naming convention:
+    `docs(product_name): description with some words`.
 
 :warning: **Important**
   All pull requests are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
@@ -243,6 +241,8 @@ Here starts the content…
 - `title` and `description`, used for SEO, Algolia & for h1 and description in pages
 - `tags` are used to help populate search result lists or pages top. Use space separators.
 - `dates` are shown on pages under titles. `validation` must be a date later than the `posted`. Its format should be `AAAA-MM-DD`.
+
+---
 
 ## Writing Guidelines
 

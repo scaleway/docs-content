@@ -43,6 +43,11 @@ export const kubernetesMenu = {
           slug: 'connect-cluster-kubectl',
         },
         {
+          label: 'Connect to a cluster within a Private Network',
+          slug: 'connect-private-cluster',
+        },
+        {
+        {
           label: 'Manage Kapsule node pools',
           slug: 'manage-node-pools',
         },

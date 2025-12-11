@@ -58,6 +58,7 @@ import { serverlessContainersMenu } from "../pages/serverless-containers/menu"
 import { serverlessFunctionsMenu } from "../pages/serverless-functions/menu"
 import { serverlessJobsMenu } from "../pages/serverless-jobs/menu"
 import { serverlessSqlDatabasesMenu } from "../pages/serverless-sql-databases/menu"
+import { siteToSiteVpnMenu } from "../pages/site-to-site-vpn/menu"
 import { terraformMenu } from "../pages/terraform/menu"
 import { topicsAndEventsMenu } from "../pages/topics-and-events/menu"
 import { transactionalEmailMenu } from "../pages/transactional-email/menu"
@@ -208,6 +209,7 @@ export default [
           ipamMenu,
           loadBalancerMenu,
           publicGatewaysMenu,
+          siteToSiteVpnMenu,
           vpcMenu,
         ],
         label: 'Network',

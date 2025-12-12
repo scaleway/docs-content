@@ -113,9 +113,10 @@ No, this repository only hosts the documentation site **content**, and does not 
     - `action`: The action you will perform in the documentation, described in 3 letters or less: `add` for adding content, `rm` for removing content, or `fix` to fix typos.
 
     - `product`: the name of the product that corresponds to the documentation page you will edit.
-    > [!TIP]
-    > **Example**: in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
-<!-- -->
+
+    :information_source: **Example:**
+      in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
+
 1. Make your edits to the documentation. Refer to the [writing guidelines](https://www.scaleway.com/en/docs/guidelines/) to ensure your changes comply with our guidelines.
 
 1. Run the command below to stage your changes before committing them:
@@ -138,7 +139,7 @@ No, this repository only hosts the documentation site **content**, and does not 
     
 1. Go to [the pull requests page](https://github.com/scaleway/docs-content/pulls) to open a pull request.
 
-7. Click **Create pull request**, then select
+1. Click **Create pull request**, then select
 
   - base repository: `scaleway/docs-content`
 
@@ -148,13 +149,13 @@ No, this repository only hosts the documentation site **content**, and does not 
 
   - compare: `<your-branch-with-changes>`
 
-8. Click **Create pull request**.
+1. Click **Create pull request**.
 
     All pull requests names must comply with the following naming convention:
     `docs(product_name): description with some words`.
 
-:warning: **Important**
-  All pull requests are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
+> [!IMPORTANT]
+> All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
 
 ---
 

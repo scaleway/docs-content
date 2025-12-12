@@ -13,81 +13,133 @@ Anyone who has a GitHub account can contribute to the documentation content:
 
 - External users (i.e. not part of the Scaleway organization) must [fork the repository and open a pull request from the forked repository](#contribution-procedure-for-external-users).
 
+## Can I build the documentation locally?
+
+No, this repository only hosts the documentation site **content**, and does not include any of the frontend or backend components required to build or render the site. Internal Scaleway users must refer to the dedicated internal guidelines to build previews of the documentation.
+
 ## How to contribute?
 
 ### Prerequisites
 
 - You have [Git](https://git-scm.com/) installed
 - You have a [GitHub](https://github.com/signup) personal account
-- You have installed [yarn](https://yarnpkg.com/getting-started) package manager
 - You have [Markdown](https://guides.github.com/features/mastering-markdown/#GitHub-flavored-markdown) and [MDX](https://mdxjs.com/guides/) syntax knowledge
 - You have read [the writing guidelines](https://www.scaleway.com/en/docs/guidelines/)
 
 ### Contribution procedure for internal Scaleway users
 
-:warning: **Important**
-  - All rules below concern this repository.
-  - Any PRs which do not comply with the rules below will be rejected.
+> [!IMPORTANT]
+>  - All rules below concern this repository.
+>  - Any PRs which do not comply with the rules below will be rejected.
 
-1. Clone the `docs-content` repository by following the [cloning procedure](#cloning-the-project) below.
+1. Run the command below in a terminal to clone the repository and access it:
 
-2. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
+    ```bash
+    git clone git@github.com:scaleway/docs-content.git && cd docs-content
+    ```
 
-3. Create your branch locally. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
+1. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write or edit (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
+
+1. Run the command below to create a local Git branch:
+
+    ```bash
+    git checkout -b name-of-my-branch
+    ```
+
+    All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
 
     - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors).
 
-    - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
+    - `action`: The action you will perform in the documentation, described in 3 letters or less: `add` for adding content, `rm` for removing content, or `fix` to fix typos.
 
     - `product`: the name of the product that corresponds to the documentation page you will edit.
 
     :information_source: **Example:**
       in the branch `int-add-instances`, an internal contributor will add information to a documentation page of the Instances product category.
 
-4. Make your edits to the documentation. Refer to the [writing guidelines](https://www.scaleway.com/en/docs/guidelines/) to ensure your changes comply with our style guide.
+1. Make your edits to the documentation. Refer to the [writing guidelines](https://www.scaleway.com/en/docs/guidelines/) to ensure your changes comply with our style guide.
 
-5. Run `git commit -m "type(module): description with some words <BRANCH_NAME>"`. Refer to the [commit naming conventions](#commit-conventions) below to properly name your commit.
+1. Run the command below to stage your changes before committing them:
 
-6. Run `git push --set-upstream origin <YOUR_BRANCH_NAME>`, and go to [the pull requests page](https://github.com/scaleway/docs-content/pulls) to open a pull request.
+    ```bash
+    git add path/to/files
+    ```
 
-    All PR names must comply with the following naming convention: `docs($PRODUCTNAME): $FIXEXPLANATION BRANCHNAME`.
+1. Run the command below to create a new commit containing the changes previously staged. Refer to the [commit naming conventions](#commit-conventions) below to properly name your commit.
+
+    ```bash
+    git commit -m "docs(product): description with some words"
+    ```` 
+
+1. Run the command below to push your changes to the remote repository:
+
+    ```
+    git push --set-upstream origin <YOUR_BRANCH_NAME>
+    ```
+    
+1. Go to [the pull requests page](https://github.com/scaleway/docs-content/pulls) to open a pull request.
+
+    All pull requests names must comply with the following naming convention:
+    `docs(product_name): description with some words`.
 
 
-:warning: **Important**
-  All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
+> [!IMPORTANT]
+> All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
 
 ---
 
 ### Contribution procedure for external users
 
-:warning: **Important**
-  - All rules below concern this repository.
-  - Any PRs which do not comply with the rules below will be rejected.
+> [!IMPORTANT]
+>  - All rules below concern this repository.
+>  - Any PRs which do not comply with the rules below will be rejected.
 
 1. Access the [docs-content repository](https://github.com/scaleway/docs-content/), and click **Fork** in the top right corner. A form appears.
 
 2. Keep the default values in the form, and click **Create Fork**.
 
-3. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
+1. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write or edit (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
 
-4. Create your branch locally. All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
+1. Run the command below to create a local Git branch:
 
-    - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors). If you are not a Scaleway staff member, use `ext`.
+    ```bash
+    git checkout -b name-of-my-branch
+    ```
 
-    - `action`: The action you will perform in the documentation you wish to work on, described in 3 letters or less. Example: `add` (for adding content), `rm` (for removing content) or `fix` (for when you wish to fix typos).
+    All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
+
+    - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors).
+
+    - `action`: The action you will perform in the documentation, described in 3 letters or less: `add` for adding content, `rm` for removing content, or `fix` to fix typos.
 
     - `product`: the name of the product that corresponds to the documentation page you will edit.
 
     :information_source: **Example:**
       in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
 
-4. Make your edits to the documentation. Refer to the [writing guidelines](https://www.scaleway.com/en/docs/guidelines/) to ensure your changes comply with our guidelines.
+1. Make your edits to the documentation. Refer to the [writing guidelines](https://www.scaleway.com/en/docs/guidelines/) to ensure your changes comply with our guidelines.
 
-5. Run `git commit -m "type(module): description of what you performed <BRANCH_NAME>"`. Refer to the [commit naming conventions](#commit-conventions) below to properly name your commit.
+1. Run the command below to stage your changes before committing them:
 
-6. Run `git push --set-upstream origin <YOUR_BRANCH_NAME>`, and go to the pull request page of the **forked** repository to open a pull request.
+    ```bash
+    git add path/to/files
+    ```
 
-7. Click **Create pull request**, then select
+1. Run the command below to create a new commit containing the changes previously staged. Refer to the [commit naming conventions](#commit-conventions) below to properly name your commit.
+
+    ```bash
+    git commit -m "docs(product): description with some words"
+    ```` 
+
+1. Run the command below to push your changes to the remote repository:
+
+    ```
+    git push --set-upstream origin <YOUR_BRANCH_NAME>
+    ```
+    
+1. Go to [the pull requests page](https://github.com/scaleway/docs-content/pulls) to open a pull request.
+
+1. Click **Create pull request**, then select
 
   - base repository: `scaleway/docs-content`
 
@@ -97,39 +149,25 @@ Anyone who has a GitHub account can contribute to the documentation content:
 
   - compare: `<your-branch-with-changes>`
 
-8. Click **Create pull request**.
+1. Click **Create pull request**.
 
-    All pull requests names must comply with the following naming convention: `docs(<PRODUCT_NAME>): <ACTION> <EXPLANATION> <BRANCH_NAME>`.
+    All pull requests names must comply with the following naming convention:
+    `docs(product_name): description with some words`.
 
-:warning: **Important**
-  All pull requests are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
+> [!IMPORTANT]
+> All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
 
 ---
 
-## Use the repository locally
+## Reference
 
-You have to clone the project locally to work on it.
-
-:warning:
-  If you are not a member of the Scaleway organization, you need to fork the repository. [Follow this link](https://docs.github.com/en/get-started/quickstart/fork-a-repo) to find out how.
-
-### Cloning the project
-
-1. Copy the following code and enter it in your terminal:
-
-```bash
-git clone git@github.com:scaleway/docs-content.git | bash -s -- cd docs-content && yarn
-```
-
-2. Ensure `yarn` has been run, if not run `yarn install`.
-
-## Git commit
+### Git commit
 
 Helpful pre-commit commands:
 
 - `pnpm check-slugs` Output slugs that are not kebab-case well formatted.
 
-### Commit conventions
+#### Commit conventions
 
 This project uses [conventional commits](https://www.conventionalcommits.org/en/v1.0.0/) based on the [Angular convention](https://github.com/angular/angular/blob/22b96b9/CONTRIBUTING.md#-commit-message-guidelines).
 
@@ -154,7 +192,7 @@ Here is the list of `type` to use (commons in bold):
 - `style`
   - _For simple format changes that are not content changes_
 
-### Commit examples
+#### Commit examples
 
 `feat(console): add vpc how-to page MTA-2342`
 
@@ -164,7 +202,7 @@ Here is the list of `type` to use (commons in bold):
 
 ---
 
-## Markdown
+### Markdown
 
 Markdown is a lightweight markup language for creating formatted text using a plain-text editor.
 
@@ -174,19 +212,16 @@ As we need to use evolved dynamic and designed blocks, for the Scaleway Document
 
 With MDX files traditional markdown content can be used with React components.
 
-### MDX components
+#### MDX components
 
 MDX components are useful for adding rich content and interactions within your contributions.
 
-#### Components
-
-This section shows code details listed on a full page.
-
-🔎 [See the full Components page](https://storybook-docs.scaleway.com/).
+> [!TIP]
+> [See the full Components page](https://storybook-docs.scaleway.com/).
 
 Feel free to explore this page in your markdown editor to see how the components were used, or in `.mdx` content files that already use MDX components.
 
-### Frontmatter
+#### Frontmatter
 
 Any Markdown file that contains a YAML frontmatter block will be processed by Gatsby as a special file.
 The front matter must be the first thing in the file and must take the form of a valid YAML set between triple-dashed lines.
@@ -211,6 +246,8 @@ Here starts the content…
 - `title` and `description`, used for SEO, Algolia & for h1 and description in pages
 - `tags` are used to help populate search result lists or pages top. Use space separators.
 - `dates` are shown on pages under titles. `validation` must be a date later than the `posted`. Its format should be `AAAA-MM-DD`.
+
+---
 
 ## Writing Guidelines
 

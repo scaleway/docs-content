@@ -13,6 +13,10 @@ Anyone who has a GitHub account can contribute to the documentation content:
 
 - External users (i.e. not part of the Scaleway organization) must [fork the repository and open a pull request from the forked repository](#contribution-procedure-for-external-users).
 
+## Can I build the documentation locally?
+
+No, this repository only hosts the documentation site **content**, and does not include any of the frontend or backend components required to build or render the site. Internal Scaleway users must refer to the dedicated internal guidelines to build previews of the documentation.
+
 ## How to contribute?
 
 ### Prerequisites

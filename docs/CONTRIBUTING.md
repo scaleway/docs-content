@@ -216,7 +216,8 @@ With MDX files traditional markdown content can be used with React components.
 
 MDX components are useful for adding rich content and interactions within your contributions.
 
-🔎 [See the full Components page](https://storybook-docs.scaleway.com/).
+> [!TIP]
+> [See the full Components page](https://storybook-docs.scaleway.com/).
 
 Feel free to explore this page in your markdown editor to see how the components were used, or in `.mdx` content files that already use MDX components.
 

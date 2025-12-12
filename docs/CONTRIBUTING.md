@@ -28,9 +28,9 @@ No, this repository only hosts the documentation site **content**, and does not 
 
 ### Contribution procedure for internal Scaleway users
 
-:warning: **Important**
-  - All rules below concern this repository.
-  - Any PRs which do not comply with the rules below will be rejected.
+> [!IMPORTANT]
+>  - All rules below concern this repository.
+>  - Any PRs which do not comply with the rules below will be rejected.
 
 1. Run the command below in a terminal to clone the repository and access it:
 

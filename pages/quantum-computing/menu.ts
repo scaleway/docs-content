@@ -40,7 +40,7 @@ export const quantumComputingMenu = {
         },
         {
           label: 'Run Quantum Machine Learning with Pennylane',
-          slug: 'use-qsim-emulators',
+          slug: 'use-pennylane',
         },
       ],
       label: 'How to',

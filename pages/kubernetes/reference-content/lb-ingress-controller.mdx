@@ -50,13 +50,14 @@ Kapsule clusters use a default security group (`kubernetes-<cluster-id>`) that b
    - TCP port 80 (HTTP) from `0.0.0.0/0`.
    - TCP port 443 (HTTPS) from `0.0.0.0/0`.
 
-## Reserve a flexible IP
-To use a persistent IP with the ingress controller:
-1. Create a flexible IP using the Scaleway CLI:
+## Reserve flexible IPs
+To use persistent IPs with the ingress controller:
+1. Create flexible IPs using the Scaleway CLI:
    ```bash
    scw lb ip create
+   scw lb ip create is-ipv6=true
    ```
-2. Note the IP address (e.g., `195.154.72.226`) and IP ID for use in the LoadBalancer service.
+2. Note the IP address (e.g., `195.154.72.226`) and IP IDs (e.g., `11111111-1111-1111-1111-111111111111` for IPv4 and `22222222-2222-2222-2222-222222222222` for IPv6) for use in the LoadBalancer service.
 
 ## Installing the NGINX ingress controller
 
@@ -68,14 +69,16 @@ Use Helm to deploy the NGINX ingress controller with Scaleway-specific configura
     helm repo update
     ```
 
-2. Create a file named `ingress-values.yaml` with and edit the `loadBalancerIP` to your flexible IP:
+2. Create a file named `ingress-values.yaml` and configure your flexible IP. You can use either `loadBalancerIP` (IPv4 only) or the `service.beta.kubernetes.io/scw-loadbalancer-ip-ids` annotation (supports IPv4 and IPv6):
     ```yaml
     controller:
       service:
         type: LoadBalancer
-        # Specify reserved flexible IP
+        # Option 1: Use loadBalancerIP for a single IPv4 address
         loadBalancerIP: "195.154.72.226"
         annotations:
+          # Option 2: Use this annotation for IPv4 and/or IPv6 (takes priority over loadBalancerIP)
+          # service.beta.kubernetes.io/scw-loadbalancer-ip-ids: "11111111-1111-1111-1111-111111111111,22222222-2222-2222-2222-222222222222"
           # Enable PROXY protocol v2
           service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2: "true"
           # Use hostname for cert-manager compatibility
@@ -87,7 +90,9 @@ Use Helm to deploy the NGINX ingress controller with Scaleway-specific configura
         compute-full-forwarded-for: "true"
     ```
     <Message type="note">
-    - Replace `195.154.72.226` with your reserved flexible IP. Omitting `loadBalancerIP` results in an ephemeral IP.
+    - **Option 1 - `loadBalancerIP`**: Replace `195.154.72.226` with your reserved flexible IPv4 address. This field only supports a single IPv4 address.
+    - **Option 2 - `service.beta.kubernetes.io/scw-loadbalancer-ip-ids`**: Use this annotation for IPv4 and IPv6 support. It accepts a single IP ID or a comma-delimited list (at most one IPv4 and one IPv6). At least one IPv4 is required. This annotation takes priority over `loadBalancerIP`.
+    - Omitting both results in an ephemeral IP.
     - The `service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2` annotation enables PROXY protocol v2.
     - The `service.beta.kubernetes.io/scw-loadbalancer-use-hostname` annotation supports cert-manager HTTP01 challenges.
     </Message>
@@ -102,18 +107,18 @@ Use Helm to deploy the NGINX ingress controller with Scaleway-specific configura
     kubectl get svc -n ingress-nginx ingress-nginx-controller
     ```
 
-    You will see an output similar to the following example: 
+    You will see an output similar to the following example:
     ```
     NAME                       TYPE           CLUSTER-IP      EXTERNAL-IP     PORT(S)                      AGE
     ingress-nginx-controller   LoadBalancer   10.100.0.1      195.154.72.226   80/TCP,443/TCP               5m
     ```
     <Message type="note">
-    - The `EXTERNAL-IP` should match your reserved flexible IP (e.g., `195.154.72.226`).
-    - If an ephemeral IP appears, verify that the `loadBalancerIP` field is correctly set and matches a valid Load Balancer flexible IP attached to your Scaleway Project.
-    - Confirm the LoadBalancer in the Scaleway console under **Network > Load Balancers**.
+    - The `EXTERNAL-IP` should match your reserved flexible IPv4 (e.g., `195.154.72.226`).
+    - If using the annotation with IPv6, the IPv6 address will not appear in `kubectl` output. Verify the IPv6 configuration in the Scaleway console under **Network > Load Balancers**.
+    - If an ephemeral IP appears, verify that either `loadBalancerIP` or the `service.beta.kubernetes.io/scw-loadbalancer-ip-ids` annotation is correctly set and matches a valid Load Balancer flexible IP attached to your Scaleway Project.
     </Message>
 
-5. Configure DNS by setting the A-Record of your domain (e.g., `demo.example.com`) to the flexible IP via Scaleway's Domains & DNS product or your DNS provider. Persistent IPs ensure stability and will not change as long as they are reserved.
+5. Configure DNS by setting the A-Record (for IPv4) and AAAA-Record (for IPv6) of your domain (e.g., `demo.example.com`) to the flexible IPs via Scaleway's Domains & DNS product or your DNS provider. Persistent IPs ensure stability and will not change as long as they are reserved.
 
 ### Deploying a demo application
 

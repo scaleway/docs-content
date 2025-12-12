@@ -38,7 +38,7 @@ No, this repository only hosts the documentation site **content**, and does not 
     git clone git@github.com:scaleway/docs-content.git && cd docs-content
     ```
 
-1. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
+1. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write or edit (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
 
 1. Run the command below to create a local Git branch:
 
@@ -98,7 +98,7 @@ No, this repository only hosts the documentation site **content**, and does not 
 
 2. Keep the default values in the form, and click **Create Fork**.
 
-1. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
+1. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write or edit (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
 
 1. Run the command below to create a local Git branch:
 

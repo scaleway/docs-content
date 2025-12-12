@@ -113,10 +113,9 @@ No, this repository only hosts the documentation site **content**, and does not 
     - `action`: The action you will perform in the documentation, described in 3 letters or less: `add` for adding content, `rm` for removing content, or `fix` to fix typos.
 
     - `product`: the name of the product that corresponds to the documentation page you will edit.
-
     > [!TIP]
     > **Example**: in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
-
+<!-- -->
 1. Make your edits to the documentation. Refer to the [writing guidelines](https://www.scaleway.com/en/docs/guidelines/) to ensure your changes comply with our guidelines.
 
 1. Run the command below to stage your changes before committing them:

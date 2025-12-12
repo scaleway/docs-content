@@ -28,10 +28,10 @@ Anyone who has a GitHub account can contribute to the documentation content:
   - All rules below concern this repository.
   - Any PRs which do not comply with the rules below will be rejected.
 
-1. Run the command below in a terminal to clone the repository:
+1. Run the command below in a terminal to clone the repository and access it:
 
     ```bash
-    git clone git@github.com:scaleway/docs-content.git
+    git clone git@github.com:scaleway/docs-content.git && cd docs-content
     ```
 
 1. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).

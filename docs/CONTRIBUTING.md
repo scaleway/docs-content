@@ -114,8 +114,8 @@ No, this repository only hosts the documentation site **content**, and does not 
 
     - `product`: the name of the product that corresponds to the documentation page you will edit.
 
-    > [!TIP]
-    > **Example**: in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
+> [!TIP]
+> **Example**: in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
 
 1. Make your edits to the documentation. Refer to the [writing guidelines](https://www.scaleway.com/en/docs/guidelines/) to ensure your changes comply with our guidelines.
 

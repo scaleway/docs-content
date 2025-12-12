@@ -28,9 +28,9 @@ No, this repository only hosts the documentation site **content**, and does not 
 
 ### Contribution procedure for internal Scaleway users
 
-    > [!IMPORTANT]
-    >  - All rules below concern this repository.
-    >  - Any PRs which do not comply with the rules below will be rejected.
+> [!IMPORTANT]
+>  - All rules below concern this repository.
+>  - Any PRs which do not comply with the rules below will be rejected.
 
 1. Run the command below in a terminal to clone the repository and access it:
 
@@ -83,16 +83,16 @@ No, this repository only hosts the documentation site **content**, and does not 
     `docs(product_name): description with some words`.
 
 
-:warning: **Important**
-  All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
+> [!IMPORTANT]
+> All PRs are reviewed and approved by the Scaleway Product Documentation team before being merged by them.
 
 ---
 
 ### Contribution procedure for external users
 
-:warning: **Important**
-  - All rules below concern this repository.
-  - Any PRs which do not comply with the rules below will be rejected.
+> [!IMPORTANT]
+>  - All rules below concern this repository.
+>  - Any PRs which do not comply with the rules below will be rejected.
 
 1. Access the [docs-content repository](https://github.com/scaleway/docs-content/), and click **Fork** in the top right corner. A form appears.
 
@@ -114,8 +114,8 @@ No, this repository only hosts the documentation site **content**, and does not 
 
     - `product`: the name of the product that corresponds to the documentation page you will edit.
 
-    :information_source: **Example:**
-      in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
+    > [!TIP]
+    > **Example**: in the branch `ext-add-instances`, an external contributor will add information to a documentation page of the Instances product category.
 
 1. Make your edits to the documentation. Refer to the [writing guidelines](https://www.scaleway.com/en/docs/guidelines/) to ensure your changes comply with our guidelines.
 

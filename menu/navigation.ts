@@ -73,6 +73,7 @@ export default [
         icon: 'OrganizationDashboardCategoryIcon',
         items: [
           accountMenu,
+          organizationsAndProjectsMenu,
         ],
         label: 'Account',
         category: 'console',
@@ -91,7 +92,6 @@ export default [
         items: [
           iamMenu,
           keyManagerMenu,
-          organizationsAndProjectsMenu,
           secretManagerMenu,
         ],
         label: 'Security & Identity',

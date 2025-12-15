@@ -19,14 +19,6 @@ export const iamMenu = {
     {
       items: [
         {
-          label: 'Log in as a Member',
-          slug: 'log-in-as-a-member',
-        },
-        {
-          label: 'Comply with security requirements as a Member',
-          slug: 'comply-with-sec-requirements-member',
-        },
-        {
           label: 'Create API keys',
           slug: 'create-api-keys',
         },
@@ -37,18 +29,6 @@ export const iamMenu = {
         {
           label: 'Manage Members',
           slug: 'manage-members',
-        },
-        {
-          label: 'Enforce security requirements for Members',
-          slug: 'enforce-security-requirements-members',
-        },
-        {
-          label: 'How to set up identity federation',
-          slug: 'set-up-identity-federation'
-        },
-        {
-          label: 'How to set up SSO with Authentik',
-          slug: 'set-up-sso-with-authentik'
         },
         {
           label: 'Create an application',

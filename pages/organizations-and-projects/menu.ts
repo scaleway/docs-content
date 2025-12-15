@@ -19,8 +19,8 @@ export const organizationsAndProjectsMenu = {
           slug: 'manage-quotas',
         },
         {
-          "label": "Set an Organization alias",
-          "slug": "set-organization-alias"
+          label: "Set an Organization alias",
+          slug: "set-organization-alias"
         },
         {
           label: 'Create a Project',

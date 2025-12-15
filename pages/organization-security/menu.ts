@@ -1,4 +1,4 @@
-export const OrganizationSecurityMenu = {
+export const organizationSecurityMenu = {
   items: [
     {
       label: 'Overview',

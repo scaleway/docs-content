@@ -47,7 +47,8 @@ import { managedMongodbDatabasesMenu } from "../pages/managed-mongodb-databases/
 import { natsMenu } from "../pages/nats/menu"
 import { objectStorageMenu } from "../pages/object-storage/menu"
 import { openSearchMenu } from "../pages/opensearch/menu"
-import { organizationsAndProjectsMenu } from '../pages/organizations-and-projects/menu'
+import { organizationsAndProjectsMenu } from "../pages/organizations-and-projects/menu"
+import { organizationSecurityMenu } from "../pages/organization-security/menu"
 import { partnerSpaceMenu } from "../pages/partner-space/menu"
 import { publicGatewaysMenu } from "../pages/public-gateways/menu"
 import { queuesMenu } from "../pages/queues/menu"
@@ -90,6 +91,7 @@ export default [
       {
         icon: 'SecurityCategoryIcon',
         items: [
+          organizationSecurityMenu,
           iamMenu,
           keyManagerMenu,
           secretManagerMenu,

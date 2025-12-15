@@ -2,19 +2,11 @@ export const organizationSecurityMenu = {
   items: [
     {
       label: 'Overview',
-      slug: '../iam',
+      slug: '../organization-security',
     },
     {
       label: 'Concepts',
       slug: 'concepts',
-    },
-    {
-      label: 'Quickstart',
-      slug: 'quickstart',
-    },
-    {
-      label: 'FAQ',
-      slug: 'faq',
     },
     {
       items: [
@@ -49,25 +41,6 @@ export const organizationSecurityMenu = {
       ],
       label: 'How to',
       slug: 'how-to',
-    },
- 
-    {
-      items: [
-        {
-          label: 'IAM API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/iam/',
-        },
-        {
-          label: 'Using IAM API keys with Object Storage',
-          slug: 'using-api-key-object-storage',
-        },
-      ],
-      label: 'API/CLI',
-      slug: 'api-cli',
-    },
-    {
-      label: 'Troubleshooting',
-      slug: 'troubleshooting',
     },
   ],
   label: 'Organization Security',

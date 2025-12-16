@@ -59,6 +59,10 @@ export const publicGatewaysMenu = {
     {
       items: [
         {
+          label: 'Understanding Public Gateways',
+          slug: 'understanding-public-gateways',
+        },
+        {
           label: 'Understanding v2',
           slug: 'understanding-v2',
         },

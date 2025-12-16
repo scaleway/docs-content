@@ -19,10 +19,6 @@ export const organizationsAndProjectsMenu = {
           slug: 'manage-quotas',
         },
         {
-          label: "Set an Organization alias",
-          slug: "set-organization-alias"
-        },
-        {
           label: 'Create a Project',
           slug: 'create-a-project',
         },
@@ -33,10 +29,6 @@ export const organizationsAndProjectsMenu = {
         {
           label: 'Generate an SSH key',
           slug: 'create-ssh-key',
-        },
-        {
-          label: 'Enforce multifactor authentication',
-          slug: 'enforce-mfa',
         },
         {
           label: 'Add resources to a Project',

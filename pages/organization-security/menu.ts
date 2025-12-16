@@ -22,7 +22,7 @@ export const organizationSecurityMenu = {
           label: 'Enforce security requirements for Members',
           slug: 'enforce-security-requirements-members',
         },
-                {
+        {
           label: "Set an Organization alias",
           slug: "set-organization-alias"
         },

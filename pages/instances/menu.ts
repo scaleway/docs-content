@@ -87,6 +87,10 @@ export const instancesMenu = {
           "slug": "use-boot-modes"
         },
         {
+          "label": "Use Cloud-init",
+          "slug": "use-cloud-init"
+        },
+        {
           "label": "Protect an Instance",
           "slug": "use-protected-instance"
         },

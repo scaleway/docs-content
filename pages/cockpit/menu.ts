@@ -27,6 +27,10 @@ export const cockpitMenu = {
           slug: 'access-grafana-and-managed-dashboards',
         },
         {
+          label: 'Access Grafana with Terraform',
+          slug: 'access-grafana-with-terraform',
+        },
+        {
           label: 'Create a Cockpit token',
           slug: 'create-token',
         },

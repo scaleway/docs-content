@@ -27,7 +27,7 @@ export const cockpitMenu = {
           slug: 'access-grafana-and-managed-dashboards',
         },
         {
-          label: 'Access Grafana with Terraform',
+          label: 'Use IAM auth for Cockpit Grafana with Terraform',
           slug: 'access-grafana-with-terraform',
         },
         {

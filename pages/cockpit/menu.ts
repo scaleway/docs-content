@@ -28,7 +28,7 @@ export const cockpitMenu = {
         },
         {
           label: 'Use IAM auth for Cockpit Grafana with Terraform',
-          slug: 'access-grafana-with-terraform',
+          slug: 'iam-auth-cockpit-grafana-terraform',
         },
         {
           label: 'Create a Cockpit token',

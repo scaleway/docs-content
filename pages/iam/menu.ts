@@ -51,7 +51,7 @@ export const iamMenu = {
           slug: 'set-up-sso-with-authentik'
         },
             {
-          label: 'Set credentials maximum duration',
+          label: 'Set and manage credential maximum duration',
           slug: 'set-credentials-maximum-duration'
         },
         {

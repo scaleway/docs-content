@@ -43,12 +43,16 @@ export const iamMenu = {
           slug: 'enforce-security-requirements-members',
         },
         {
-          label: 'How to set up identity federation',
-          slug: 'set-up-identity-federation'
+          label: 'Set up identity federation',
+          slug: 'Set-up-identity-federation'
         },
         {
-          label: 'How to set up SSO with Authentik',
+          label: 'Set up SSO with Authentik',
           slug: 'set-up-sso-with-authentik'
+        },
+            {
+          label: 'Set and manage credential maximum duration',
+          slug: 'set-credentials-maximum-duration'
         },
         {
           label: 'Create an application',

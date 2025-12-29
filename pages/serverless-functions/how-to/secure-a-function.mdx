@@ -3,7 +3,7 @@ title: How to secure a function
 description: How to secure your Scaleway Serverless Functions effectively.
 tags: functions secure private
 dates:
-  validation: 2025-09-01  
+  validation: 2025-09-01
   posted: 2023-02-01
 ---
 import Requirements from '@macros/iam/requirements.mdx'
@@ -102,6 +102,62 @@ Refer to the [How to manage authentication for private functions](/serverless-fu
 Set `privacy = "private"` in your Terraform/OpenTofu [resource description](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/function).
 
 You can generate access credentials to inject in other applications (containers, functions etc.) directly from Terraform/OpenTofu using the [function_token resource](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/function_token).
+
+## Advanced access control with IAM conditions
+
+When a container is set to **Private**, you can use Scaleway IAM policy conditions to define granular access rules.
+These conditions use **Common Expression Language (CEL)** to evaluate requests based on attributes like IP address, time, or user-agent.
+
+### Restrict access by specific IP addresses
+
+To ensure your container is only reachable from a specific office network or a trusted proxy, you can use the `inIpRange()` function.
+
+**Example expression:**
+
+```cel
+inIpRange(request.ip, "198.51.100.0/24")
+```
+
+**Result:** Only requests originating from the `198.51.100.0/24` subnet are authorized.
+
+### Restrict access to specific user-agents
+
+You can restrict calls to specific tools or internal clients by checking the `request.user_agent` attribute. This is useful for ensuring only authorized automation tools (like Terraform or a specific internal bot) can trigger the service.
+
+**Example expression:**
+
+```cel
+request.user_agent.contains("InternalAdminTool/1.0")
+```
+
+**Result:** Only requests with a User-Agent header containing "InternalAdminTool/1.0" are permitted.
+
+### Restrict access to specific time windows
+
+For sensitive workloads that should only be active during business hours or specific maintenance windows, you can use `request.time`.
+
+**Example expression (Working hours in Paris):**
+
+```cel
+request.time.getDayOfWeek() != 0 && request.time.getDayOfWeek() != 6
+&& request.time.getHours("Europe/Paris") >= 9
+&& request.time.getHours("Europe/Paris") < 18
+```
+
+**Result:** Access is granted only Monday through Friday, between 9:00 AM and 6:00 PM Paris time.
+
+### Combine multiple security layers
+
+You can use logical operators like && (AND) and || (OR) to build complex security requirements.
+
+**Example: Restrict to a specific IP OR a specific User-Agent during weekdays:**
+
+```cel
+(inIpRange(request.ip, "203.0.113.42/32") || request.user_agent.contains("TrustedCI"))
+&& request.time.getDayOfWeek() != 0 && request.time.getDayOfWeek() != 6
+```
+
+**Result:** The request is allowed if it comes from the trusted IP OR the trusted CI tool, but only on weekdays.
 
 ## Set up alerts in Observability Cockpit (upcoming feature)
 

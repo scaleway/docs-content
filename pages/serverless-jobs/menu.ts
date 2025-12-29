@@ -59,6 +59,10 @@ export const serverlessJobsMenu = {
           slug: 'configure-alerts-jobs',
         },
         {
+          label: 'Migrate from startup command to command and arguments',
+          slug: 'migrate-startup-command-to-command-args',
+        },
+        {
           label: 'Delete a job',
           slug: 'delete-job',
         },

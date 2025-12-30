@@ -79,8 +79,8 @@ export const kubernetesMenu = {
           slug: 'access-kubernetes-dashboard',
         },
         {
-          label: 'Upgrade a Kapsule cluster to the new node image system',
-          slug: 'upgrade-kapsule-new-node-image-system'
+          label: 'Upgrade the Kubernetes version on a Kapsule cluster',
+          slug: 'upgrade-kubernetes-version',
         },
         {
           label:

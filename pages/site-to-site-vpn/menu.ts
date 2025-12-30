@@ -55,12 +55,16 @@ export const siteToSiteVpnMenu = {
           slug: 'understanding-s2svpn',
         },
         {
-          label: 'Site-to-Site VPN Security proposals',
+          label: 'Security proposals',
           slug: 'security-proposals',
         },
         {
-          label: 'Site-to-Site VPN Statuses',
+          label: 'Statuses',
           slug: 'statuses',
+        },
+        {
+          label: 'Configuring a customer gateway device',
+          slug: 'configuring-customer-gateway-device',
         },
       ],
       label: 'Additional Content',

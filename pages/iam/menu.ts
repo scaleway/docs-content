@@ -44,7 +44,7 @@ export const iamMenu = {
         },
         {
           label: 'Set up identity federation',
-          slug: 'Set-up-identity-federation'
+          slug: 'set-up-identity-federation'
         },
         {
           label: 'Set up SSO with Authentik',

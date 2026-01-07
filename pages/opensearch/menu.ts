@@ -35,6 +35,10 @@ export const openSearchMenu = {
           slug: 'manage-users-opensearch-deployment',
         },
         {
+          label: 'Use Private Networks',
+          slug: 'use-private-networks',
+        },
+        {
           label: 'Delete a deployment',
           slug: 'delete-opensearch-deployment',
         },

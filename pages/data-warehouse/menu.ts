@@ -43,6 +43,10 @@ export const dataWarehouseMenu = {
           slug: 'connect-bi-tools',
         },
         {
+          label: 'Use Private Networks',
+          slug: 'use-private-networks',
+        },
+        {
           label: 'Import data into a deployment',
           slug: 'import-data',
         },

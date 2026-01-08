@@ -48,7 +48,7 @@ export const serverlessJobsMenu = {
         },
         {
           label: 'Execute complex startup commands',
-          slug: 'execute-complex-commands'
+          slug: 'execute-complex-commands',
         },
         {
           label: 'Reference secrets in a job',
@@ -101,6 +101,10 @@ export const serverlessJobsMenu = {
         {
           label: 'Cron schedules reference',
           slug: 'cron-schedules',
+        },
+        {
+          label: 'v1alpha1 to v1alpha2',
+          slug: 'v1alpha1-to-v1alpha2',
         },
       ],
       label: 'Additional Content',

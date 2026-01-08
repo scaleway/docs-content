@@ -95,6 +95,10 @@ export const domainsAndDnsMenu = {
     {
       items: [
         {
+          label: 'Domain registration requirements',
+          slug: 'registration-requirements',
+        },
+        {
           label: 'Understanding Domains and DNS',
           slug: 'understanding-domains-and-dns',
         },

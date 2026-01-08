@@ -1,0 +1,278 @@
+---
+title: How to use cloud-init with Scaleway Instances
+description: Learn how to use cloud-init to configure Scaleway Instances at boot time
+tags: cloud-init cloud init cloud-config scaleway-api cli user_data user-data meta-data vendor-data userdata metadata vendordata cidata cd-rom cdrom nocloud
+dates:
+  validation: 2025-12-16
+  posted: 2025-12-16
+categories:
+  - compute
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+Cloud-init is the _industry standard_ for cloud Instance customization. It enables the automation of many aspects at boot time, such as software installation and configuration, disk partitioning and formatting, or even custom commands execution.
+
+<Message type="note">
+  This documentation presents the basic usage of Cloud-init with Scaleway Instances. For a more detailed manual, refer to its [official documentation](https://cloudinit.readthedocs.io).
+</Message>
+
+## Installation
+
+Cloud-init is packaged for most GNU/Linux distributions and part of their default repositories. This means you can simply install the `cloud-init` package with your system's package manager. Some distributions may require you to manually enable the services after the package installation.
+
+Alternatively, you can grab the unpackaged source code of the latest release on [their GitHub repository](https://github.com/canonical/cloud-init/releases).
+
+<Message type="tip">
+  All the [Operating System and InstantApp images provided by Scaleway](/instances/reference-content/images-and-instantapps) come with Cloud-init pre-installed and enabled, except for Microsoft Windows images.
+</Message>
+
+## How Cloud-init operates
+
+Cloud-init consists of a series of system services that trigger at different [stages](https://cloudinit.readthedocs.io/en/latest/explanation/boot.html) of the Instance's boot. Each one of these stages will take part into customizing the system according to the operating system distribution at hand, the cloud provider as well as the user's requirements. To that end, Cloud-init will gather information about the current Instance, combining data from three main sources:
+
+- **meta-data**: These data represent the Instance's own introspection, as if it would query itself from the API.
+- **vendor-data**: These are configuration data exposed by the cloud provider — They can eventually be overridden by **user-data**.
+- **user-data**: These are optional data that can be injected by the Instance's owner before it boots.
+
+As a Scaleway Instance user, you will need to leverage **user-data** to specify the customizations you want to apply to your Instance. They can be specified in [a variety of formats](https://cloudinit.readthedocs.io/en/latest/explanation/format.html), among which the `cloud-config` one (YAML-based) is the most common. In the Scaleway Instances API, the **user-data** actually used by Cloud-init are stored under the `cloud-init` key of [the Instance's _User Data_](https://www.scaleway.com/en/developers/api/instances/#path-user-data-list-user-data). The [Scaleway datasource](https://cloudinit.readthedocs.io/en/latest/reference/datasources/scaleway.html) will be used by Cloud-init to interact with the Metadata API.
+
+<Message type="note">
+  The Scaleway Instances API only supports plain text representations of **user-data**. This means that any compressed format, like _gzip_, cannot be used.
+</Message>
+
+## Creating an Instance with user-data
+
+<Tabs>
+  <TabsTab label="Console">
+    <Requirements />
+
+    - A Scaleway account logged into the [console](https://console.scaleway.com)
+    - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+
+    1. During [the process of creating an Instance](/instances/how-to/create-an-instance), click **+ Cloud-init** (between _Network configuration_ and _SSH keys_) to unfold the Cloud-init configuration dialog.
+    2. Click on <Icon name="toggle" /> to unlock the text field.
+    3. Paste your **user-data** into the text field.
+    4. Proceed to the remainder of the Instance creation process. The Instance starts with your **user-data**.
+
+  </TabsTab>
+  <TabsTab label="CLI">
+    <Requirements />
+
+    - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+    - A valid [API key](/iam/how-to/create-api-keys/)
+    - The [Scaleway CLI](https://github.com/scaleway/scaleway-cli) installed and configured on your local machine
+
+    1. Choose the type of your new Instance, like `POP2-2C-8G` for example. You can list all available types by running the following command:
+        ```
+        scw instance server-type list
+        ```
+    2. Edit your **user-data** file and save it to a known location, like `user-data.yaml`.
+    3. Create your Instance by specifying its type and the path to your **user-data** file:
+        ```
+        scw instance server create type=POP2-2C-8G cloud-init=@/path/to/user-data.yaml
+        ```
+
+  </TabsTab>
+</Tabs>
+
+## Updating user-data of an existing Instance
+
+<Message type="important">
+  With the default configuration of Cloud-init, many of its modules are intended to only activate during the Instance's first boot, and not subsequent ones. Therefore, updating the **user-data** of an Instance may not have the expected outcome when the system reboots.
+
+  Consult the [official Module Reference](https://cloudinit.readthedocs.io/en/latest/reference/modules.html) to see which modules have a _Module frequency_ of **always**. These are the ones that will actually trigger during every boot, not only the first one.
+</Message>
+
+<Tabs>
+  <TabsTab label="Console">
+    <Requirements />
+
+    - A Scaleway account logged into the [console](https://console.scaleway.com)
+    - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+    - An [Instance](/instances/how-to/create-an-instance/)
+
+    1. Click **CPU & GPU Instances** in the **Compute** section of the side menu. The [Instance dashboard](https://console.scaleway.com/instance/servers) displays.
+    2. Select the Availability Zone (AZ) from the drop-down menu (e.g., `PAR1`) to view resources in the selected AZ.
+    3. Click the Instance for which you want to update **user-data**. Click on its **Name** or, at the end of the line, on <Icon name="seeMore" /> then **More info**. The Overview page for that Instance displays.
+    4. Click the **Settings** tab.
+    5. Scroll down to the **Cloud-init** section.
+    6. The <Icon name="toggle" /> icon next to **Use cloud-init** should already be slid to the right, meaning that **user-data** are already set for this Instance.
+    7. Edit the contents of the text fields to suit your needs.
+    8. Click **Save**.
+    9. Start your Instance by clicking **Actions** then **Power on**.
+        <Message type="note">
+          If your instance is already running, Cloud-init will not take your new **user-data** into account until you restart your Instance, either by clicking on **Actions** then **Reboot**, or by issuing a restart command like `reboot` from your guest system.
+        </Message>
+
+  </TabsTab>
+  <TabsTab label="CLI">
+    <Requirements />
+
+    - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+    - A valid [API key](/iam/how-to/create-api-keys/)
+    - An [Instance](/instances/how-to/create-an-instance/)
+    - The [Scaleway CLI](https://github.com/scaleway/scaleway-cli) installed and configured on your local machine
+
+    <Message type="note">
+      Using the CLI, it is not possible to edit the Instance's **user-data** in-place. The new data you provide will entirely replace any existing ones.
+
+      You can however use the [Instances API](https://www.scaleway.com/en/developers/api/instances/#path-user-data-get-user-data) to retrieve existing **user-data** into a file before editing it.
+    </Message>
+
+    1. Edit your **user-data** file and save it to a known location, like `user-data.yaml`.
+    2. Identify the ID (later referred to as `SERVER_ID`) of the Instance for which you want to update the **user-data**:
+        ```
+        scw instance server list
+        ```
+    3. Update the Instance by specifying its `SERVER_ID` and the path to your **user-data** file:
+        ```
+        scw instance server update SERVER_ID cloud-init=@/path/to/user-data.yaml
+        ```
+    4. Start your instance:
+        ```
+        scw instance server start SERVER_ID
+        ```
+       If your Instance is already running, you will need to reboot it for Cloud-init to parse your new **user-data**. You can do it either from within the guest with, for example, the `reboot` command, or with the Scaleway CLI:
+        ```
+        scw instance server reboot SERVER_ID
+        ```
+
+  </TabsTab>
+</Tabs>
+
+## Querying meta-data from within the Instance
+
+For any given Instance, it is possible to query its **meta-data** from the guest system. There are several methods at your disposal:
+
+- Running the `scw-metadata` command will output all **meta-data** related to this Instance:
+    ```
+    $ scw-metadata
+    ...
+    NAME=my-instance-name
+    ...
+    ```
+- Providing the name of a **meta-data** field as an argument to `scw-metadata` will output only the value of this specific field:
+    ```
+    $ scw-metadata NAME
+    my-instance-name
+    ```
+- You can avoid spending a network roundtrip to the Metadata API by querying previously cached values, if any:
+    ```
+    $ scw-metadata --cached
+    ...
+    NAME=my-instance-name
+    ...
+    $ scw-metadata --cached NAME
+    my-instance-name
+    ```
+  Keep in mind that cached values might be outdated.
+- You can request JSON output with the `scw-metadata-json` command:
+    ```
+    $ scw-metadata-json
+    {...,"name":"my-instance-name",...}
+    ```
+  <Message type="note">
+    There is no `--cached` option for `scw-metadata-json`, but you can still get a JSON representation of cached **meta-data** by using the `cloud-init query` command:
+      ```
+      $ cloud-init query ds.meta_data
+      $ cloud-init query ds.meta_data.name
+      ```
+  </Message>
+- Alternatively, you can send a raw HTTP request to `http://169.254.42.42/conf` (or `http://[fd00:42::42]/conf` for IPv6 connectivity):
+    ```
+    $ curl http://169.254.42.42/conf
+    ...
+    NAME=my-instance-name
+    ...
+    $ curl http://169.254.42.42/conf?format=json
+    {...,"name":"my-instance-name",...}
+    ```
+
+<Message type="note">
+  Because the `scw-metadata` tool is not available on Instances running a Microsoft Windows operating system, only the raw HTTP request method can be used.
+</Message>
+
+## Querying user-data from within the Instance
+
+<Message type="note">
+  On Linux systems, you need the `CAP_NET_BIND_SERVICE` capability (or superuser privileges) to query `user_data` from the Instance.
+</Message>
+
+For any given Instance, it is possible to query its **user-data** from the guest system. There are several methods at your disposal:
+
+- Running the `scw-userdata` command will output the available `user_data` keys (`USER_DATA_X=`) along with their total count (`USER_DATA=`):
+    ```
+    # scw-userdata
+    USER_DATA=2
+    USER_DATA_0=cloud-init
+    USER_DATA_1=ssh-host-fingerprints
+    ```
+- Passing a key name as an argument to the command will print the actual data it points to. The **user-data** consumed by Cloud-init are pointed by the `cloud-init` key:
+    ```
+    # scw-userdata cloud-init
+    ```
+  Keep in mind that the `cloud-init` key will not be visible from an Instance where no **user-data** has been configured.
+- If a second argument is passed, it is considered the new value to set for the given key:
+    ```
+    # scw-userdata cloud-init "$(cat my-new-userdata.yaml)"
+    ```
+- Alternatively, you can send a raw HTTP request to `http://169.254.42.42/user_data` (or `http://[fd00:42::42]/user_data` for IPv6 connectivity). The request **must** originate from a port below 1024:
+    ```
+    # curl --local-port 1-1023 http://169.254.42.42/user_data
+    USER_DATA=2
+    USER_DATA_0=cloud-init
+    USER_DATA_1=ssh-host-fingerprints
+    # curl --local-port 1-1023 http://169.254.42.42/user_data?format=json
+    {"user_data":["cloud-init","ssh-host-fingerprints"]}
+    # curl --local-port 1-1023 http://169.254.42.42/user_data/cloud-init
+    ```
+
+<Message type="note">
+  Because the `scw-userdata` tool is not available on Instances running a Microsoft Windows operating system, only the raw HTTP request method can be used.
+</Message>
+
+## Special case: Instances booting with no public IP address
+
+<Message type="note">
+  Because Cloud-init is not installed on Microsoft Windows images provided by Scaleway, Instances using them are not concerned by this section.
+</Message>
+
+Under normal circumstances, when running on a Scaleway Instance, Cloud-init will expect to be able to query the Metadata API on `http://169.254.42.42` (or `http://[fd00:42::42]` for IPv6) to retrieve [the data it needs](#how-cloud-init-operates) to apply system customizations. This requires the Instance to be provided with any available kind of public IP address, be it a [Flexible IP](/instances/concepts/#flexible-ip) or a [Dynamic IP](https://www.scaleway.com/en/docs/instances/concepts/#dynamic-ip).
+
+Consequently, Instances booting without any public IP address will not be able to access the Metadata API, preventing Cloud-init to take the expected actions. In order to circumvent this issue, such Instances are provided with an additional storage device containing static files for [the NoCloud datasource](https://cloudinit.readthedocs.io/en/latest/reference/datasources/nocloud.html) to take over.
+
+If the Instance has no public IP address when powered on, a CD-ROM drive is plugged to it. This drives serves [a medium containing the NoCloud configuration files](https://cloudinit.readthedocs.io/en/latest/reference/datasources/nocloud.html#source-2-drive-with-labeled-filesystem). The filesystem being labeled `cidata`, it is automatically detected and consumed by Cloud-init: no manual action is required.
+
+If you have a local shell on your Instance, you can easily notice the presence of the CD-ROM drive:
+
+```
+# grep -C1 'QEMU CD-ROM' /proc/scsi/scsi
+Host: scsi2 Channel: 00 Id: 00 Lun: 00
+  Vendor: QEMU     Model: QEMU CD-ROM      Rev: 2.5+
+  Type:   CD-ROM                           ANSI  SCSI revision: 05
+# blkid -L cidata
+/dev/sr0
+# mount LABEL=cidata /media
+mount: /media: WARNING: source write-protected, mounted read-only.
+# find /media/*
+/media/meta-data
+/media/network-config
+/media/user-data
+/media/vendor-data
+# umount /media
+```
+
+You can also confirm that your system was customized using the NoCloud datasource by running the following command:
+
+```
+# cloud-init query cloud_id
+nocloud
+```
+
+<Message type="important">
+  Beware of software reboot (i.e. any reboot command run from within the guest, like `reboot` or `shutdown -r now`): in this situation, the virtual machine hosting your Instance is not respawned. Therefore, you might fall into one of these situations:
+  
+  - **Attaching its first public IP address o an instance already running with none, then performing a software reboot**: Once rebooted, the system will still have the CD-ROM drive plugged in and de `cidata` medium available, despite using the usual Scaleway datasource instead of NoCloud. Yet, unless this is an issue for you, in which case you must either issue a `reboot` or a `poweroff` then `poweron` action to the API, this should cause no harm.
+  - **Detaching the last public IP address from an instance, then performing a software reboot**: Once rebooted, the CD-ROM drive will not be present, preventing the NoCloud datasource to trigger. The system falls back on [the None datasource](https://cloudinit.readthedocs.io/en/latest/reference/datasources/none.html).
+</Message>

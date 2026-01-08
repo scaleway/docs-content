@@ -60,6 +60,10 @@ export const environmentalFootprintMenu = {
         {
           label: 'Load Balancer footprint calculation',
           slug: 'load-balancer-env-footprint'
+        },
+        {
+          label: 'Kubernetes footprint calculation',
+          slug: 'kubernetes-env-footprint'
         }
       ],
       label: 'Additional Content',

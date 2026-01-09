@@ -123,6 +123,10 @@ export const generativeApisMenu = {
           slug: 'integrate-with-cursor'
         },
         {
+          label: 'Integrating Generative APIs with Claude Code',
+          slug: 'integrate-with-claude-code'
+        },
+        {
           label: 'Integrating Generative APIs with popular AI tools',
           slug: 'integrating-generative-apis-with-popular-tools',
         },

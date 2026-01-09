@@ -123,6 +123,10 @@ export const generativeApisMenu = {
           slug: 'integrate-with-cursor'
         },
         {
+          label: 'Integrating Generative APIs with Qwen Code',
+          slug: 'integrate-with-qwen-code'
+        },
+        {
           label: 'Integrating Generative APIs with popular AI tools',
           slug: 'integrating-generative-apis-with-popular-tools',
         },

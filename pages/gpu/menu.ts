@@ -67,6 +67,10 @@ export const gpuMenu = {
           slug: 'blackwell-vs-hopper-choosing-the-right-architecture',
         },
         {
+          "label": "Instances Shared Responsibility Model",
+          "slug": "../../instances/reference-content/instances-shared-responsibility-model"
+        },
+        {
           label:
             'GPU Instances internet and Block Storage bandwidth overview',
           slug: 'gpu-instances-bandwidth-overview',

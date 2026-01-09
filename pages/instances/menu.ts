@@ -167,6 +167,10 @@ export const instancesMenu = {
           "slug": "instances-datasheet"
         },
         {
+          "label": "Instances Shared Responsibility Model",
+          "slug": "instances-shared-responsibility-model"
+        },
+        {
           "label": "Instances internet and Block Storage bandwidth overview",
           "slug": "instances-bandwidth-overview"
         },

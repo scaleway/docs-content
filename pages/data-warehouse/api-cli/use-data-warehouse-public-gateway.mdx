@@ -1,0 +1,114 @@
+---
+title: Using a Public Gateway to connect to a deployment in a Private Network
+description: This page explains how to connect using a Public Gateway to a Data Warehouse for ClickHouse® deployment located in a Private Network.
+tags: data warehouse public gateway bastion ssh tunnel pn vpc
+dates:
+  validation: 2026-01-12
+  posted: 2026-01-12
+---
+
+import Requirements from '@macros/iam/requirements.mdx'
+
+[Private Networks](/vpc/) allow your resources to interact securely in an environment isolated from the public internet. You can access a Private Network by adding a [Public Gateway](/public-gateways/) to it, which allows you to connect to your resources via [SSH Bastion](/public-gateways/how-to/use-ssh-bastion/).
+
+This page explains how to connect to a Data Warehouse for ClickHouse® deployment located in a Private Network using SSH Bastion. This can be achieved using two methods:
+
+- By using a direct tunnel between your local machine and the Data Warehouse deployment
+- By connecting to an Instance located in the same Private Network as your Data Warehouse deployment
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Created a [Private Network](/vpc/how-to/create-private-network/)
+- [Created a Data Warehouse deployment](/data-warehouse/how-to/create-deployment/), and [attached it to the Private Network](/data-warehouse/how-to/use-private-networks/)
+- [Created a Public Gateway](/public-gateways/how-to/create-a-public-gateway/) attached to the Private Network and [enabled ]
+
+attach the DTWH to a PN, detach the public endpoint
+
+## Connecting your local machine to your deployment via SSH bastion
+
+On your local machine, open a first terminal, and run the command below to create an SSH tunnel to map your machine's 9440 port to the deployment's 9440 port, through the SSH bastion. Do not forget to replace the placeholders with the appropriate values:
+
+    ```sh
+    ssh -L 9440:<dtwh_id>.<pn_id>.internal:9440 bastion@<bastion_ip> -p <bastion_port> -N
+    ```
+
+3. Download the TLS certificate from your deployment's **Overview** page and store it in the desired folder.
+
+
+4. In a second terminal, run the command below in the folder where you stored the certificate (assuming it is named certificate.pem) to create a `clickhouse-client.xml` config file:
+
+    ```sh
+    cat <<EOF >clickhouse-client.xml
+    <config>
+        <user>scwadmin</user>
+        <password>PASSWORD</password>
+        <secure>true</secure>
+        <openSSL>
+        <client>
+          <caConfig>certificate.pem</caConfig>
+        </client>
+        </openSSL>
+    </config>
+    EOF
+    ```
+
+Finally, connect to the clickhouse-client using the clichouse-client.xml config file, to the host localhost (because you mapped the ports):
+clickhouse-client --host localhost \
+  --port 9440 \
+  --config clickhouse-client.xml \
+  --database default
+you are connected to the isolated DTWH through the SSH bastion of the Public Gateway
+Second method: connect via an instance that is also in the same PN
+
+
+
+ external machine -> instance in the PN -> DTWH
+
+create an instance (in this example ubuntu) and attach it to the same PN as the DTWH and the Public Gateway
+ssh into the instance
+ssh root@instance_public_ip
+install clickhouse-client
+apt install clickhouse-client
+close the SSH shell and remove the public IP of the insance for security
+copy the certifiate previously downloaded into the instance via scp, through the SSH bastion of the Public Gateway
+
+```sh
+scp -J bastion@bastion_id:bastion_port certificate.pem root@instance_private_ip:~/certificate.pem
+ssh into the instance, via the Public Gateway:
+ssh -J bastion@<bastion_id>:<bastion_port> root@<instance_private_ip>
+```
+
+In the same folder where the certificate previously downloaded is, create a clichouse-client.xml config file:
+
+```xml
+cat <<EOF >clickhouse-client.xml
+<config>
+    <user>scwadmin</user>
+    <password>PASSWORD</password>
+    <secure>true</secure>
+    <openSSL>
+    <client>
+      <caConfig>certificate.pem</caConfig>
+    </client>
+    </openSSL>
+</config>
+EOF
+```
+
+finally, connect to the ClickHouse® Client using the `clickhouse-client.xml` configuration file:
+
+```sh
+clickhouse-client --host <deployment_id>.<pn_id>.internal \
+  --port 9440 \
+  --config clickhouse-client.xml \
+  --database default
+```
+
+You are now connected to the isolated Data Warehouse deployment through the Instance, via the SSH bastion of the Public Gateway.
+
+<Message type="tip">
+set IP restrictions for the SSH bastion
+Once you are done, disable the SSH bastion of the Public Gateway afterward for maximum security.
+</Message>

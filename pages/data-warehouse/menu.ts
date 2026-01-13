@@ -65,6 +65,16 @@ export const dataWarehouseMenu = {
     {
       items: [
         {
+          label: 'Using a Public Gateway to connect to a deployment in a Private Network',
+          slug: 'use-data-warehouse-public-gateway',
+        },
+      ],
+      label: 'API/CLI',
+      slug: 'api-cli',
+    },
+    {
+      items: [
+        {
           label: 'Example datasets',
           slug: 'example-datasets',
         },

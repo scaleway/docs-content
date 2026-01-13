@@ -41,7 +41,7 @@ This page explains how to connect to a Data Warehouse for ClickHouse® deploymen
     - You can find the private endpoint URL in the **Network** section of your deployment's **Overivew** page.
     - You can find the Public Gateway IP and SSH bastion port in the **Overview** page of the Public Gateway.
 
-4. In a second terminal, run the command below in the folder where you stored the certificate (assuming it is named `certificate.pem`) to create a `clickhouse-client.xml` config file:
+4. In a second terminal, run the command below in the folder where you stored the certificate (assuming it is named `certificate.pem`) to create a `clickhouse-client.xml` config file. Make sure to add the password to log in to your deployment:
 
     ```sh
     cat <<EOF >clickhouse-client.xml
@@ -75,50 +75,58 @@ This section explains how to connect to a Data Warehouse for ClickHouse® deploy
 
 1. If you have not done it yet, [create an Instance](/instances/how-to/create-an-instance/) and attach it to the same Private Network as the Data Warehouse deployment and Public Gateway.
 
-1. Log into you instance via SSH:
+2. From the **Overview** page of your Instance, detach the Flexible IP to isolate it from the public internet.
 
-ssh root@instance_public_ip
+3. Download the TLS certificate from the **Frameworks** section of the **Overview** page of your [Data Warehouse deployment](https://console.scaleway.com/data-warehouse/fr-par/deployments) and store it in the desired folder.
 
-install clickhouse-client
-apt install clickhouse-client
-close the SSH shell and remove the public IP of the insance for security
-copy the certifiate previously downloaded into the instance via scp, through the SSH bastion of the Public Gateway
+4. Copy the certificate previously downloaded into the instance using the [scp](https://man7.org/linux/man-pages/man1/scp.1.html) command, via the SSH bastion of the Public Gateway:
 
-```sh
-scp -J bastion@bastion_id:bastion_port certificate.pem root@instance_private_ip:~/certificate.pem
-ssh into the instance, via the Public Gateway:
-ssh -J bastion@<bastion_id>:<bastion_port> root@<instance_private_ip>
-```
+    ```sh
+    scp -J bastion@<PUBLIC_GATEWAY_IP>:<BASTION_PORT> certificate.pem root@<INSTANCE_PRIVATE_IP>:~/certificate.pem
+    ```
 
-In the same folder where the certificate previously downloaded is, create a clichouse-client.xml config file:
+5. Log in to your Instance via the SSH bastion of the Public Gateway:
 
-```xml
-cat <<EOF >clickhouse-client.xml
-<config>
-    <user>scwadmin</user>
-    <password>PASSWORD</password>
-    <secure>true</secure>
-    <openSSL>
-    <client>
-      <caConfig>certificate.pem</caConfig>
-    </client>
-    </openSSL>
-</config>
-EOF
-```
+    ```sh
+    ssh -J bastion@<PUBLIC_GATEWAY_IP>:<BASTION_PORT> root@<INSTANCE_PRIVATE_IP>
+    ```
 
-finally, connect to the ClickHouse® Client using the `clickhouse-client.xml` configuration file:
+6. Update the package manager and install the ClickHouse® client:
 
-```sh
-clickhouse-client --host <deployment_id>.<pn_id>.internal \
-  --port 9440 \
-  --config clickhouse-client.xml \
-  --database default
-```
+    ```sh
+    apt-get update
+    apt install clickhouse-client
+    ```
+
+7. Create a `clickhouse-client.xml` configuration file at the location where you copied the TLS certificate. Make sure to add the password to log in to your deployment:
+
+    ```sh
+    cat <<EOF >clickhouse-client.xml
+    <config>
+        <user>scwadmin</user>
+        <password>PASSWORD</password>
+        <secure>true</secure>
+        <openSSL>
+        <client>
+          <caConfig>certificate.pem</caConfig>
+        </client>
+        </openSSL>
+    </config>
+    EOF
+    ```
+
+8. Connect to the ClickHouse® Client using the `clickhouse-client.xml` configuration file:
+
+    ```sh
+    clickhouse-client --host <DEPLOYMENT_PRIVATE_ENDPOINT_URL> \
+      --port 9440 \
+      --config clickhouse-client.xml \
+      --database default
+    ```
 
 You are now connected to the isolated Data Warehouse deployment through the Instance, via the SSH bastion of the Public Gateway.
 
 <Message type="tip">
-set IP restrictions for the SSH bastion
-Once you are done, disable the SSH bastion of the Public Gateway afterward for maximum security.
+- For enhanced security [set IP restrictions](/public-gateways/how-to/use-ssh-bastion/#how-to-configure-allowed-ips) for the SSH bastion of your Public Gateway.
+- Once you are done, disable the SSH bastion of the Public Gateway afterward for maximum security.
 </Message>

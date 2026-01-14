@@ -176,8 +176,8 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
    In PowerShell (on the Windows VM):
 
    ```powershell
+   Install-PackageProvider -Force -Name NuGet
    Install-Module -Force powershell-yaml
-   schtasks /create /SC ONSTART /RU System /RP "" /TN set_static_ip /TR "powershell c:\Scaleway\set_if.ps1"
    Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
    Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
    Register-PSRepository -Name NuGet -SourceLocation https://api.nuget.org/v3/index.json -PublishLocation https://api.nuget.org/v3/index.json -InstallationPolicy Trusted
@@ -188,8 +188,6 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
     If it is not possible to modify the VM using VMware, you can do this setup at a later stage of the procedure.
    </Message>
 
-
-   Download and place the `set_if.ps1` script in `C:\Scaleway\` on the VM. This script configures static IP addresses to address DHCP limitations in Windows with /32 subnets. The script is available in [Scaleway’s migration repository](https://github.com/scaleway/migration-tools).
 
 #### Converting the VM on the converter Instance
 
@@ -224,39 +222,29 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
      virt-v2v -i disk vmware-to-migrate/vmware-to-migrate.qcow2 -block-driver virtio-scsi -o qemu -os ./out
      ```
 
-3. Upload and apply the static IP script:
-   - Upload `set_if.ps1` to the converter Instance (e.g., via `scp`).
-   - Copy the script to the VM image:
-
-     ```shell
-     guestfish -a out/vmware-to-migrate-sda -i << EOF
-     mkdir /Scaleway
-     upload set_if.ps1 /Scaleway/set_if.ps1
-     EOF
-     ```
-
-4. Apply additional configurations:
+3. Apply additional configurations:
    - Create a `script-init.ps1` file on the converter Instance:
 
      ```powershell
+     Install-PackageProvider -Force -Name NuGet
      Install-Module -Force powershell-yaml
      Set-ItemProperty -Path "HKLM:\System\CurrentControlSet\Control\Terminal Server" -Name "fDenyTSConnections" -Value 0
      Enable-NetFirewallRule -DisplayGroup "Remote Desktop"
      Register-PSRepository -Name NuGet -SourceLocation https://api.nuget.org/v3/index.json -PublishLocation https://api.nuget.org/v3/index.json -InstallationPolicy Trusted
      Register-PSRepository -Name NuGetv2 -SourceLocation https://www.nuget.org/api/v2 -PublishLocation https://www.nuget.org/api/v2 -InstallationPolicy Trusted
      Install-Module -Force ScalewayEcosystem
-     schtasks /create /SC ONSTART /RU System /RP "" /TN set_static_ip /TR "powershell c:\Scaleway\set_if.ps1"
      ```
 
    - Upload it to the VM image:
 
      ```shell
      guestfish -a out/vmware-to-migrate-sda -i << EOF
+     mkdir /Scaleway
      upload script-init.ps1 /Scaleway/script-init.ps1
      EOF
      ```
 
-5. Optional: Verify the QEMU Guest Agent and remove VMware Tools:
+4. Optional: Verify the QEMU Guest Agent and remove VMware Tools:
    - Launch the VM locally on the converter Instance using noVNC:
 
      ```shell
@@ -268,7 +256,7 @@ This section outlines the migration of a Windows 2019 or 2022 VM with a single v
    - Edit `out/vmware-to-migrate.sh`, replacing `-display gtk` with:
 
      ```shell
-     -vnc :1,websocket=5700,password=off
+     -vnc :1,websocket=5700,password=off \
      ```
 
    - Add CPU and RAM:

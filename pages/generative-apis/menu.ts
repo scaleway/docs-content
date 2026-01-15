@@ -123,6 +123,10 @@ export const generativeApisMenu = {
           slug: 'integrate-with-cursor'
         },
         {
+          label: 'Integrating Generative APIs with OpenCode',
+          slug: 'integrate-with-opencode'
+        },
+        {
           label: 'Integrating Generative APIs with Claude Code',
           slug: 'integrate-with-claude-code'
         },

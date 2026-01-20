@@ -96,6 +96,10 @@ export const appleSiliconMenu = {
           label: 'Apple silicon API Reference',
           slug: 'https://www.scaleway.com/en/developers/api/apple-silicon/',
         },
+        {
+          label: 'Creating a server with kernel extensions enabled via API',
+          slug: 'create-server-kexts-enabled-via-api',
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',

@@ -73,6 +73,10 @@ export const cockpitMenu = {
         {
           label: 'Configure alerts for Scaleway resources',
           slug: 'configure-alerts-for-scw-resources',
+        },
+        {
+          label: 'Manage data exports',
+          slug: 'manage-data-exports',
         }
       ],
       label: 'How to',
@@ -102,6 +106,10 @@ export const cockpitMenu = {
         {
           label: 'Cockpit capabilities and limits',
           slug: 'cockpit-limitations',
+        },
+        {
+          label: 'Cockpit pricing information',
+          slug: 'cockpit-pricing',
         },
         {
           label:

@@ -30,7 +30,7 @@ export const vpcPeeringMenu = {
       items: [
         {
           label: 'Understanding VPC Peering',
-          slug: 'understanding-svpc-peering',
+          slug: 'understanding-vpc-peering',
         },
         {
           label: 'VPC Peering statuses',
@@ -39,7 +39,7 @@ export const vpcPeeringMenu = {
       ],
       label: 'Additional Content',
       slug: 'reference-content',
-    }
+    },
     {
       label: 'Troubleshooting',
       slug: 'troubleshooting',

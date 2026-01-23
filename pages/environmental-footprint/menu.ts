@@ -14,6 +14,10 @@ export const environmentalFootprintMenu = {
     },
     {
       items: [
+         {
+          label: 'Use the Environmental Footprint dashboard',
+          slug: 'environmental-footprint-dashboard',
+        },
         {
           label: 'Track your monthly environmental footprint report',
           slug: 'track-monthly-footprint',

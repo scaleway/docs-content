@@ -47,6 +47,10 @@ export const dataWarehouseMenu = {
           slug: 'use-private-networks',
         },
         {
+          label: 'Start/stop a deployment',
+          slug: 'start-stop-deployment',
+        },
+        {
           label: 'Monitor a deployment',
           slug: 'monitor-deployment',
         },

@@ -50,6 +50,16 @@ export const fileStorageMenu = {
       label: 'How to',
       slug: 'how-to',
     },
+    {
+      items: [
+        {
+          label:'File Storage limitations',
+          slug:'limitations'
+        },
+      ],
+      label:'Additional content',
+      slug:'reference-content'
+    }
   ],
   label: 'File Storage',
   slug: 'file-storage',

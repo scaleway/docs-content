@@ -184,47 +184,18 @@ The `proxy_protocol` parameter must be set within the `http {}` block of the lis
       Once Proxy Protocol is enabled the Nginx virtual host will no longer accept direct connections. See the [NGINX Proxy Protocol documentation](https://docs.nginx.com/nginx/admin-guide/load-balancer/using-proxy-protocol/) for full details.
     </Message>
 
-### Configuring Proxy Protocol in Apache Web Server
+### Configuring Proxy Protocol in Apache web server
 
-The Proxy Protocol support in Apache is still in an early stage. It is currently not natively supported with the Apache version provided by Ubuntu. An unofficial plugin [is available](https://github.com/roadrunner2/mod-proxy-protocol) for Apache versions prior to 2.4.30. To use it, follow these steps:
 
-1. Download and install the required software components:
+- For Apache < 2.4.30, install [mod-proxy-protocol](https://github.com/roadrunner2/mod-proxy-protocol)  
+- For Apache >=2.4.30, use `mod_remoteip`:
     ```
-    apt install git apache2-dev
+    a2enmod remoteip
+    RemoteIPProxyProtocol On
+    systemctl restart apache2
     ```
-2. Download the sources of the plugin and enter their directory:
-    ```
-    git clone https://github.com/roadrunner2/mod-proxy-protocol.git
-    cd mod-proxy-protocol
-    ```
-3. Build the plugin:
-    ```
-    apxs -i -a -c mod_proxy_protocol.c
-    ```
-4. Activate the module in the configuration of the virtual host:
-    ```
-    <VirtualHost *:80>
-        ...
-        ProxyProtocol On
-        ...
-    </VirtualHost>
-    ```
-5. Replace all `%h` by `%a` of the `LogFormat` directives in the Apache configuration file (`/etc/apache2/apache2.conf`):
-    ```
-    LogFormat "%v:%p %h %l %u %t \"%r\" %>s %O \"%{Referer}i\" \"%{User-Agent}i\"" vhost_combined
-    LogFormat "%a %l %u %t \"%r\" %>s %O \"%{Referer}i\" \"%{User-Agent}i\"" combined
-    LogFormat "%a %l %u %t \"%r\" %>s %O" common
-    LogFormat "%{Referer}i -> %U" referer
-    LogFormat "%{User-agent}i" agent
-    ```
-6. Restart Apache to activate the new configuration:
-    ```
-    apache2ctl restart
-    ```
+<Message type="important">Once Proxy Protocol is enabled, Apache will no longer accept direct connections.</Message>
 
-    <Message type="important">
-      Once ProxyProtocol is enabled, the Apache virtual host will no longer accept direct connections.
-    </Message>
 
 ### Configuring Proxy Protocol in Apache with mod_remoteip
 
@@ -253,63 +224,49 @@ The Proxy Protocol support in Apache is still in an early stage. It is currently
   Once ProxyProtocol is enabled the Apache virtual host will no longer accept direct connections.
 </Message>
 
-### Configuring Proxy protocol for ingress-nginx
 
-#### Deployed through kubectl
+### Confiuring Kubernetes Ingress
 
-1. Add the two annotations below to your ingress controller `service`:
-    - [`service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2: "true"`](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-annotations.md)
-    - [`service.beta.kubernetes.io/scw-loadbalancer-use-hostname: "true"`](https://github.com/scaleway/scaleway-cloud-controller-manager/blob/master/docs/loadbalancer-annotations.md)
+<Message type="important">
+  The legacy `ingress-nginx` project is deprecated and will receive no updates after March 2026. Use the **official NGINX Ingress Controller** (`oci://ghcr.io/nginx/charts/nginx-ingress`). ([Docs](https://docs.nginx.com/nginx-ingress-controller/overview/about/))
+</Message>
 
+#### Deploying via `kubectl`
+
+1. Annotate the ingress controller service:
     ```bash
-    kubectl annotate -n ingress-nginx services ingress-nginx-controller "service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2=true"
-    kubectl annotate -n ingress-nginx services ingress-nginx-controller "service.beta.kubernetes.io/scw-loadbalancer-use-hostname=true"
+    kubectl annotate -n ingress-nginx services ingress-nginx-controller \
+      "service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2=true"
+    kubectl annotate -n ingress-nginx services ingress-nginx-controller \
+      "service.beta.kubernetes.io/scw-loadbalancer-use-hostname=true"
     ```
 
-2. Add the configuration below to the ingress controller `configmap`:
-    - [`use-forwarded-headers: "true"`](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/#use-forwarded-headers)
-    - [`compute-full-forwarded-for: "true"`](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/#compute-full-forwarded-for)
-    - [`use-proxy-protocol: "true"`](https://kubernetes.github.io/ingress-nginx/user-guide/nginx-configuration/configmap/#use-proxy-protocol)
-
+2. Patch the ConfigMap:
     ```bash
     kubectl patch -n ingress-nginx configmaps ingress-nginx-controller \
-    -p '{"data":{"use-forwarded-headers": "true", "compute-full-forwarded-for": "true", "use-proxy-protocol": "true"}}'
+      -p '{"data":{"use-forwarded-headers":"true","compute-full-forwarded-for":"true","use-proxy-protocol":"true"}}'
     ```
 
-#### Deployed through helm
+#### Deploying via Helm
 
-If you are using the [`ingress-nginx`](https://kubernetes.github.io/ingress-nginx/deploy/) Helm chart, find below a custom values file that will automatically create a load balancer resource and configure it to use `proxy-protocol-v2`, and add the required ingress controller configuration to support this new communication protocol:
-
-1. Create the file below (e.g. `ingress-nginx-scw.yaml`) using a text editor.
+1. Create `nginx-ingress-scw.yaml`:
     ```yaml
     controller:
-      # Do not use Deployment if using `externalTrafficPolicy: "Local"`
       kind: DaemonSet
       service:
-        # Your LB IP here if you want (optional)
-        #loadBalancerIP: "X.X.X.X"
-
-        # This means that each node will deliver traffic only to the node-local endpoints of the service,
-        # without masquerading the client source IP. (Traffic mistakenly sent to a node with no endpoints will be dropped.)
         externalTrafficPolicy: "Local"
         annotations:
-          # Configure the Scaleway LB to use Proxy-Protocol
           service.beta.kubernetes.io/scw-loadbalancer-proxy-protocol-v2: "true"
           service.beta.kubernetes.io/scw-loadbalancer-use-hostname: "true"
       config:
-        # Configure the ingress controller to use Proxy-Protocol
         use-forwarded-headers: "true"
         compute-full-forwarded-for: "true"
         use-proxy-protocol: "true"
     ```
 
-2. Apply the above, on a new or an existing `ingress-nginx` installation:
-
+2. Install or upgrade the official chart:
     ```bash
-    # Once the above file is created, you can run the below
-    # https://kubernetes.github.io/ingress-nginx/deploy/#quick-start
-    helm upgrade --install ingress-nginx ingress-nginx \
-      --repo https://kubernetes.github.io/ingress-nginx \
+    helm upgrade --install nginx-ingress oci://ghcr.io/nginx/charts/nginx-ingress \
       --namespace ingress-nginx --create-namespace \
-      -f ingress-nginx-scw.yaml
+      -f nginx-ingress-scw.yaml
     ```

@@ -55,7 +55,7 @@ export const dataWarehouseMenu = {
           slug: 'import-data',
         },
         {
-          label: 'Edit the autoscaling and nodes settings',
+          label: 'Edit the autoscaling of a deployment',
           slug: 'edit-autoscaling',
         },
         {

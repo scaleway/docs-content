@@ -20,7 +20,7 @@ export const vpcPeeringMenu = {
       items: [
         {
           label: 'VPC Peering API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/vpc-peering/',
+          slug: 'https://www.scaleway.com/en/developers/api/TODOLINK/',
         }
       ],
       label: 'API/CLI',

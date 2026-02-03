@@ -167,6 +167,10 @@ export const serverlessFunctionsMenu = {
           label: 'DNS query rate limiting',
           slug: 'dns-query-rate-limit',
         },
+        {
+          label: 'Available vCPU and memory tiers',
+          slug: 'available-vcpu-and-memory-tiers',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

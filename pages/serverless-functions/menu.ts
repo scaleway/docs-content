@@ -160,8 +160,8 @@ export const serverlessFunctionsMenu = {
           slug: 'difference-jobs-functions-containers',
         },
         {
-          label: 'Available vCPU and memory tiers',
-          slug: 'available-vcpu-and-memory-tiers',
+          label: 'Available memory and CPU tiers',
+          slug: 'available-memory-and-cpu-tiers',
         },
         {
           label: 'Cron schedules reference',

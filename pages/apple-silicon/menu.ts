@@ -115,7 +115,7 @@ export const appleSiliconMenu = {
           slug: 'apple-silicon-datasheet',
         },
         {
-          label: 'Scaleway Dev OS for Apple silcion',
+          label: 'Scaleway Dev OS for Apple silicon',
           slug: 'scaleway-dev-os',
         },
       ],

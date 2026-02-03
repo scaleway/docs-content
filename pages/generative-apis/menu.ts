@@ -119,6 +119,10 @@ export const generativeApisMenu = {
           slug: 'integrate-with-n8n'
         },
         {
+          label: 'Integrating Generative APIs with Openclaw',
+          slug: 'integrate-with-openclaw'
+        },
+        {
           label: 'Integrating Generative APIs with Cursor',
           slug: 'integrate-with-cursor'
         },

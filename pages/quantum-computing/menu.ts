@@ -31,6 +31,10 @@ export const quantumComputingMenu = {
           slug: 'use-aqt-qpus',
         },
         {
+          label: 'Use remote CUDA-Q emulators',
+          slug: 'use-cudaq-emulators',
+        },
+        {
           label: 'Use remote Aer emulators',
           slug: 'use-aer-emulators',
         },
@@ -61,6 +65,10 @@ export const quantumComputingMenu = {
         {
           label: 'Quantum Computing Information',
           slug: 'quantum-computing-information',
+        },
+        {
+          label: 'SDK & backend compatibility',
+          slug: 'sdk-backend-compatibility',
         },
         {
           label: 'AQT QPUs Information',

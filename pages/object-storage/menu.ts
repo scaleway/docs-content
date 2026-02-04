@@ -130,7 +130,7 @@ export const objectStorageMenu = {
         },
         {
           label:
-            'Managing an Object Storage Lifecycle using CLI (v2)',
+            'Managing Object Storage using using CLI tools',
           slug: 'managing-lifecycle-cliv2',
         },
         {

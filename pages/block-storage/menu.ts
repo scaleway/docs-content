@@ -84,10 +84,6 @@ export const blockStorageMenu = {
           label: 'Increasing volume size via the API',
           slug: 'increasing-volume-size',
         },
-        {
-          label: 'Unmounting a volume',
-          slug: 'unmounting-a-volume',
-        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',

@@ -1,0 +1,52 @@
+---
+title: Fix trixie warning "An error occurred during the signature verification."
+description: This page guides you through removing the warning that occurs when executing apt-get update on Debian Trixie.
+tags: debian trixie ppa apt-get
+dates:
+  validation: 2026-02-03
+  posted: 2026-02-03
+---
+
+When running `apt-get update` on Debian Trixie the following message may appear:
+
+```
+Warning: An error occurred during the signature verification. The repository is not updated and the previous index files will be used. OpenPGP signature verification failed: http://ppa.launchpad.net/scaleway/debian-stable/ubuntu focal InR
+elease: Sub-process /usr/bin/sqv returned an error code (1), error message is: Signing key on 15061C3CA651AD8DF110A37BFEC8C91445F9E441 is not bound:            No binding signature at time 2025-11-05T09:40:15Z   because: Policy rejected n
+on-revocation signature (PositiveCertification) requiring second pre-image resistance   because: SHA1 is not considered secure since 2026-02-01T00:00:00Z                                                                                     
+Warning: Failed to fetch http://ppa.launchpad.net/scaleway/debian-stable/ubuntu/dists/focal/InRelease  Sub-process /usr/bin/sqv returned an error code (1), error message is: Signing key on 15061C3CA651AD8DF110A37BFEC8C91445F9E441 is not b
+ound:            No binding signature at time 2025-11-05T09:40:15Z   because: Policy rejected non-revocation signature (PositiveCertification) requiring second pre-image resistance   because: SHA1 is not considered secure since 2026-02-01
+T00:00:00Z                                                                                                             
+Warning: Some index files failed to download. They have been ignored, or old ones used instead.                        
+```
+On Debian Trixie, the Debian project has started to use `sqv` for the signature verification instead of `gpgv` as it was done previously. This tool allows for the verification of the SHA1 signature date. As of February 1st 2026, the signatures for the Ubuntu PPA are considered insecured and, hence, rejected by the verification tool.
+
+The Ubuntu project still uses `gpgv` for the verification up to its upcoming LTS release Ubuntu 26.04 Resolute Raccoon. This explains why the PPA signatures have not been re-signed with safer algorithms.
+
+Scaleway plans to release its own package archive later this year to avoid such situations where we have no control over archive signatures. Until then, the verification date has been overriden to 01-02-2028 to avoid those messages.
+
+If you are facing this situation, you can apply the fix that has been deployed in recent Debian Trixie images and which is present in the latest `scaleway-ecosystem` package (version 0.0.13-1). To apply the workaround, execute the following commands:
+```
+mkdir -p /etc/crypto-policies/back-ends
+cat << EOF > /etc/crypto-policies/back-ends/apt-sequoia.config
+# THIS FILE IS MAINTAINED BY scaleway-ecosystem
+#
+# This override file is added by Scaleway to avoid warning messages caused
+# by the use of PPA for delivering Scaleway specific packages.
+# This will be removed when we implement our own package distribution method
+# later this year
+[hash_algorithms]
+sha1.second_preimage_resistance = 2028-02-01    # Extend the expiry for legacy repositories
+EOF
+```
+
+On recent Debian Trixie images, the following message may appear:
+```
+Warning: http://ppa.launchpad.net/scaleway/debian-stable/ubuntu/dists/focal/InRelease: Policy will reject signature within a year, see --audit for details
+Warning: http://ppa.launchpad.net/scaleway/debian-stable/ubuntu/dists/jammy/InRelease: Policy will reject signature within a year, see --audit for details
+```
+In this case the solution is to remove the override file that was added to the image and install the latest `scaleway-ecosystem` package:
+
+```
+rm -f /etc/crypto-policies/back-ends/apt-sequoia.config
+apt -y install scaleway-ecosystem
+```

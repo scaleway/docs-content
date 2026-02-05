@@ -45,7 +45,7 @@ routines:ss3_get_record:wrong version number:../ssl/record/ssl3_record.c:331
 
 The Load Balancer is not properly configured to handle requests from within the cluster. Specifically, it is not using the hostname to route requests.
 
-## Solution:
+### Solution
 
 Add an [annotation](/kubernetes/reference-content/kubernetes-load-balancer/#defining-your-load-balancers-configuration-via-annotations) to the Load Balancer configuration, to use the hostname to route requests:
 
@@ -55,6 +55,49 @@ service.beta.kubernetes.io/scw-loadbalancer-use-hostname: "true"
 
 By adding this annotation, the Load Balancer will use the hostname to route requests from within the cluster.
 
+## I'm getting a 400 Bad Request error when accessing my service over HTTPS 
+
+You may encounter a `400 Bad Request - The plain HTTP request was sent to HTTPS port` error when trying to access your Kubernetes service via HTTPS, even though the setup works correctly over HTTP. 
+
+### Cause
+
+This issue occurs when using Scaleway Load Balancers with SSL offloading. The Load Balancer terminates the HTTPS connection and forwards traffic as plain HTTP to your backend service on port 443. However, if your backend (e.g., NGINX Ingress) expects HTTPS traffic on port 443, it rejects the unencrypted HTTP request, resulting in the 400 error. 
+
+### Solutions
+
+- Never attempt to manage the Load Balancer via the Scaleway console. Ensure you always provision and configure it through Kubernetes manifests for consistent behavior.
+- Ensure your backend service is configured to accept HTTP traffic on port 443 when using SSL offload through the Load Balancer.
+- Consider using Traefik as an alternative ingress controller, which handles this setup more seamlessly. Our [Traefik v2 and Cert-Manager tutorial](/tutorials/traefik-v2-cert-manager/) provides a working example for secure ingress.
+
+Review the [Kubernetes Load Balancer documentation](/kubernetes/reference-content/kubernetes-load-balancer/) for details on SSL offload and supported configurations.
+
+## My Load Balancer is failing to update when a node is initializing or unavailable 
+
+You may experience transient failures or delays in your Scaleway Load Balancer syncing its backend nodes, with error messages like `Error updating load balancer: node <name> is not yet initialized` or `SyncLoadBalancerFailed`. This can result in temporary service unavailability, even though your Kubernetes workloads appear to be running correctly. 
+
+### Cause 
+
+By default, a Scaleway Load Balancer targets all nodes in the cluster, regardless of whether your application (e.g., Traefik, NGINX Ingress) is scheduled on them. When a new node is being provisioned or an existing one becomes temporarily unreachable (e.g., due to OOM, initialization delays, or autoscaling), the Load Balancer controller attempts to register it. If that node is not ready, the update process can stall or fail, affecting the entire backend configuration, even for healthy nodes. 
+
+### Solutions 
+
+**Use targeted node selection**: Annotate your LoadBalancer service with `service.beta.kubernetes.io/scw-loadbalancer-target-node-labels` to restrict backend registration to only the nodes running your ingress controller. For example: 
+
+    ```yaml
+    service.beta.kubernetes.io/scw-loadbalancer-target-node-labels: "role=ingress"
+    ```
+
+This ensures the Load Balancer only tracks nodes you control, avoiding disruptions from unrelated node changes. 
+
+**Label your ingress nodes**: Ensure your ingress pods (e.g., Traefik) run on dedicated nodes with a specific label (e.g., `role=ingress`), and configure node affinity or taints accordingly. 
+
+**Monitor node health**: High memory or CPU pressure can delay node readiness. Ensure sufficient headroom on your nodes to avoid initialization issues. 
+
+**Review logs**: Check the `service-controller` logs in your `kube-controller-manager` for Load Balancer sync errors and failed node registrations. 
+     
+
+For more details on supported annotations, see the Scaleway Cloud Controller Manager documentation . 
+     
 ## I am experiencing a different problem
 
 - Check the Load Balancer troubleshooting in the [Kubernetes Kapsule documentation](/kubernetes/reference-content/kubernetes-load-balancer/#troubleshooting-kubernetes-load-balancers)

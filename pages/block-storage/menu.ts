@@ -77,6 +77,10 @@ export const blockStorageMenu = {
           slug: 'https://www.scaleway.com/en/developers/api/block-storage/',
         },
         {
+          label: 'Using Block Storage with the Scaleway CLI',
+          slug: 'use-block-storage-cli',
+        },
+        {
           label: 'Increasing the size of a partition',
           slug: 'increasing-partition-size',
         },

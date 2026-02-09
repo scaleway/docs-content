@@ -73,6 +73,10 @@ export const cockpitMenu = {
         {
           label: 'Manage data exports',
           slug: 'manage-data-exports',
+        },
+        {
+          label: 'Use IAM authentication for Cockpit with Terraform/OpenTofu',
+          slug: 'iam-auth-cockpit-terraform',
         }
       ],
       label: 'How to',

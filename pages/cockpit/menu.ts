@@ -19,10 +19,6 @@ export const cockpitMenu = {
     {
       items: [
         {
-          label: 'Retrieve your Grafana credentials',
-          slug: 'retrieve-grafana-credentials',
-        },
-        {
           label: 'Access Grafana and preconfigured dashboards',
           slug: 'access-grafana-and-managed-dashboards',
         },

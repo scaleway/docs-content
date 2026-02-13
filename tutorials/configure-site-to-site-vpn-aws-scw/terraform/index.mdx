@@ -1,0 +1,118 @@
+Here is a step-by-step guide to setting up a Site-to-Site VPN between AWS and Scaleway using Terraform, based on the architecture discussed.
+
+This guide assumes you have Terraform installed and valid API credentials for both cloud providers.
+
+### 📑 Architecture Overview
+
+We are building a VPN connection between AWS and Scaleway using **BGP (Border Gateway Protocol)** for dynamic routing.
+
+* **Scaleway:** VPC, Private Network, Kapsule Cluster, and a VPN Gateway (`VGW-S`).
+* **AWS:** VPC, Subnets, RDS, and a Virtual Private Gateway (`VPG`), Compute instances
+* **Protocol:** IKEv2 with Pre-Shared Key (PSK) authentication.
+
+---
+
+### Step 1: Scaleway Network Initialization
+
+First, establish the networking foundation on Scaleway to generate the public IP address required by AWS.
+
+**Terraform Resources:**
+
+* `scaleway_vpc` & `scaleway_vpc_private_network`
+* `scaleway_s2s_vpn_gateway` (Type: `VGW-S`)
+
+**Key Configuration:**
+Ensure you output the Public IP of the gateway, as AWS will need this to create the "Customer Gateway" object.
+
+```hcl
+# Output to use in AWS configuration
+output "vpn_gateway_public_ip" {
+  value = data.scaleway_ipam_ip.vpn_gw_public_ip.address
+}
+
+```
+
+### Step 2: AWS Network & Customer Gateway
+
+Configure the AWS side. You must use the Public IP obtained from Step 1.
+
+**Terraform Resources:**
+
+* `aws_vpc`, `aws_subnet`
+* `aws_vpn_gateway` (The AWS side of the VPN)
+* `aws_customer_gateway` (The representation of the Scaleway side)
+
+**Crucial Settings:**
+
+* **BGP ASN for Scaleway:** `12876` (Set this in the `aws_customer_gateway` resource).
+* **BGP ASN for AWS:** `65000` (Default for AWS VPG).
+
+### Step 3: Configuring the VPN Tunnel (IPSec & BGP)
+
+This is the most critical step. Mismatched settings will result in a `DOWN` status.
+
+**1. Encryption Alignment (IKEv2)**
+Both `aws_vpn_connection` and `scaleway_s2s_vpn_connection` must match exactly:
+
+* **Encryption:** `AES-256`
+* **Integrity:** `SHA2-256`
+* **DH Group:** `14` (MODP2048)
+
+**2. BGP Peering (Inside IPs)**
+You must define a `/30` Link-Local subnet (e.g., `169.254.131.116/30`).
+
+* **AWS Side:** Usually takes the first available IP (e.g., `.117`).
+* **Scaleway Side:** Must take the second available IP (e.g., `.118`).
+* *Warning:* If you swap these, BGP will not establish.
+
+### Step 4: Handling the Pre-Shared Key (PSK)
+
+Scaleway generates the PSK automatically. You cannot define your own custom key on the Scaleway side.
+
+1. Apply the Scaleway Terraform code first.
+2. Retrieve the generated key using the output defined in your code:
+```bash
+terraform output -json scw_vpn_psk
+
+```
+
+
+3. Pass this key to your AWS Terraform configuration under the `tunnel1_preshared_key` argument.
+
+### Step 5: Route Propagation
+
+For your EC2 instances and RDS databases to reach the Scaleway Kapsule cluster, you must enable route propagation on AWS.
+
+```hcl
+resource "aws_vpn_gateway_route_propagation" "hybrid_routes" {
+  vpn_gateway_id = aws_vpn_gateway.vpn_gw.id
+  route_table_id = aws_vpc.main.main_route_table_id
+}
+
+```
+
+On the Scaleway side, ensure `enable_route_propagation = true` is set in the `scaleway_s2s_vpn_connection` resource.
+
+### Step 6: Verify the Connection
+
+Once `terraform apply` is complete on both sides, verify the connection status.
+
+**1. Check via Scaleway CLI:**
+Retrieve your connection ID and check the status:
+
+```bash
+scw s2s-vpn connection list
+scw s2s-vpn connection get <YOUR_CONNECTION_ID>
+
+```
+
+* **TunnelStatus:** Must be `up`
+* **BgpStatusIPv4:** Must be `up`
+
+**2. Check via AWS Console:**
+Go to **VPC** -> **Site-to-Site VPN Connections**. The Tunnel State should be `UP` and Details should show `1 BGP ROUTE`.
+
+---
+
+**Get the full source code here:**
+[https://github.com/ysow/site-to-site-vpn-aws-scw](https://github.com/ysow/site-to-site-vpn-aws-scw)

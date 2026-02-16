@@ -1,0 +1,212 @@
+---
+title: Establishing a Site-to-Site VPN between Scaleway and AWS
+description: Learn how to configure a dynamic Site-to-Site VPN between Scaleway and AWS using Scaleway Managed VPN Gateway and BGP
+products:
+  - vpc
+  - s2s-vpn
+  - secret-manager
+tags: vpn ipsec bgp aws hybrid-cloud
+dates:
+  validation: 2026-02-16
+  posted: 2026-02-16
+  validation_frequency: 12
+difficulty: advanced
+usecase:
+  - hybrid-connectivity
+ecosystem:
+  - third-party
+---
+
+import Requirements from '@macros/iam/requirements.mdx'
+
+This tutorial explains how to establish a dynamic Site-to-Site (S2S) VPN between Scaleway and AWS using the Scaleway Managed VPN Gateway.
+
+The configuration uses:
+
+- IPsec over IKEv2
+- BGP for dynamic routing
+- Route propagation between both environments
+
+---
+
+<Requirements />
+
+- A Scaleway account with permissions to manage VPC and VPN resources
+- An AWS account with permissions to manage VPC and VPN resources
+- A VPC in both Scaleway and AWS
+- Administrative access to configure both environments
+
+---
+
+## Architecture Overview
+
+The connection is established between:
+
+- A **Scaleway Managed VPN Gateway**
+- An **AWS Virtual Private Gateway**
+- A **BGP session over an IPsec tunnel**
+
+Routes are dynamically exchanged between:
+
+- Scaleway Private Network CIDR (example: `172.16.64.0/22`)
+- AWS VPC CIDR (example: `172.31.0.0/16`)
+
+---
+
+## Step 1 – Create the Scaleway VPN Gateway
+
+In Scaleway:
+
+1. Create or select a VPC.
+2. Attach a Private Network.
+3. Deploy a Managed VPN Gateway attached to that Private Network.
+
+You will need:
+
+- The public IPv4 address of the Scaleway VPN Gateway.
+- Scaleway ASN: **12876**
+
+This information will be used on the AWS side.
+
+---
+
+## Step 2 – Configure AWS
+
+### Create the AWS Customer Gateway
+
+Configure:
+
+- Type: IPsec
+- IP address: Public IP of the Scaleway VPN Gateway
+- BGP ASN: `12876`
+
+---
+
+### Create the AWS Virtual Private Gateway
+
+- Attach it to your AWS VPC.
+- Configure ASN (example: `65000`).
+
+The ASN must match the value that will be configured in Scaleway for the AWS side.
+
+---
+
+### Create the AWS VPN Connection
+
+When creating the VPN connection:
+
+- Use dynamic routing (BGP).
+- Associate it with the Virtual Private Gateway.
+- Select the previously created Customer Gateway.
+
+After creation, collect the following information from the tunnel details:
+
+- Tunnel public IP
+- Inside IPv4 CIDR (example: `169.254.81.148/30`)
+- BGP peer IP
+- Pre-shared key (if manually configured)
+
+Download the generic configuration file for reference.
+
+---
+
+## Step 3 – Create the Scaleway Customer Gateway
+
+In Scaleway, configure a Customer Gateway using:
+
+- Public IP: AWS tunnel public IP
+- ASN: The ASN defined on the AWS Virtual Private Gateway (for example `65000`)
+
+This defines AWS as the remote BGP peer.
+
+---
+
+## Step 4 – Configure BGP Routing Policy
+
+Define the routing policy in Scaleway:
+
+- `prefix_filter_in`: AWS VPC CIDR
+- `prefix_filter_out`: Scaleway Private Network CIDR
+
+This ensures only expected routes are exchanged.
+
+---
+
+## Step 5 – Configure the VPN Connection in Scaleway
+
+When creating the VPN connection:
+
+- Attach the Scaleway VPN Gateway.
+- Attach the AWS Customer Gateway.
+- Enable route propagation.
+- Set initiation policy as required (commonly `customer_gateway`).
+
+Configure BGP using:
+
+- A private IP within the AWS inside CIDR range.
+- The AWS BGP peer private IP.
+
+Both IP addresses must belong to the same `/30` subnet provided by AWS.
+
+---
+
+## Step 6 – Configure the Pre-Shared Key (PSK)
+
+Scaleway automatically generates a PSK stored in Secret Manager.
+
+Retrieve and decode the PSK, then configure the same value in the AWS tunnel configuration.
+
+<Message type="note">
+The PSK must match on both sides or the IPsec tunnel will not establish.
+</Message>
+
+---
+
+## Step 7 – Align IPsec Parameters
+
+Both sides must use identical IPsec settings:
+
+| Parameter | Value |
+|------------|--------|
+| IKE Version | IKEv2 |
+| Phase 1 Encryption | AES-256 |
+| Phase 1 Integrity | SHA2-256 |
+| Phase 1 DH Group | 14 (MODP2048) |
+| Phase 2 Encryption | AES-256 |
+| Phase 2 Integrity | SHA2-256 |
+| Phase 2 DH Group | 14 |
+| DPD Timeout | 30 seconds |
+
+Any mismatch will prevent tunnel establishment.
+
+---
+
+## Step 8 – Verify the Connection
+
+### On AWS
+
+- Verify tunnel state is **UP**
+- Confirm BGP session is **Established**
+- Check CloudWatch logs if needed
+
+---
+
+### On Scaleway
+
+Verify:
+
+- `TunnelStatus = up`
+- `BgpStatusIPv4 = up`
+
+Both IPsec and BGP must be operational for routing to work.
+
+---
+
+## Result
+
+You have successfully established a dynamic Site-to-Site VPN between Scaleway and AWS using:
+
+- Managed VPN Gateway
+- BGP route exchange
+- Secure IPsec encryption
+- Dynamic route propagation between VPCs

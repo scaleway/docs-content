@@ -142,8 +142,8 @@ export const objectStorageMenu = {
           slug: 'enable-sse-c',
         },
         {
-          label: 'Enabling SSE-SCW',
-          slug: 'enable-sse-scw',
+          label: 'Enabling SSE-ONE',
+          slug: 'enable-sse-one',
         },
         {
           label: 'Setting CORS rules',

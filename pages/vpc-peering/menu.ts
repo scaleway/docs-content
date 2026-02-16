@@ -33,6 +33,10 @@ export const vpcPeeringMenu = {
           slug: 'understanding-vpc-peering',
         },
         {
+          label: 'Understanding transitive peering',
+          slug: 'understanding-transitive-peering',
+        },
+        {
           label: 'VPC Peering statuses',
           slug: 'statuses',
         },

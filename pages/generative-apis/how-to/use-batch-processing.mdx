@@ -1,0 +1,223 @@
+---
+title: How to use batch processing
+description: Learn how to submit large volumes of requests to Generative APIs asynchronously.
+tags: generative-apis ai-data batch-processing
+dates:
+  validation: 2026-02-17
+  posted: 2026-02-17
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+Batch processing allows you to submit large volumes of requests to Generative APIs asynchronously.
+Instead of sending requests one by one, you upload an input file to Object Storage and create a batch job. The service processes the requests in the background and writes the results to an output file.
+
+Batch processing is designed for:
+
+* Large-scale content generation
+* Dataset enrichment
+* Offline inference workloads
+* Cost-optimized asynchronous Processing
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/iam/how-to/create-api-keys/) for API authentication
+- Python 3.7+ installed on your system
+- The following IAM permissions: `s3:GetObject`,`s3:PutObject`
+
+## How batch processing works
+
+1. Upload a JSONL input file to an Object Storage bucket.
+2. Create a batch job referencing this file.
+3. The service processes each line as an individual request.
+4. The results are written to an output file in the same bucket, and named `{filename}-output.jsonl` and `{filename}-error.jsonl`
+5. Retrieve the output file once the job status is `completed`.
+
+Each line of the input file must be a valid JSON object representing a request to the Generative API.
+
+Example `input.jsonl`:
+
+```json
+{"custom_id": "request-1", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "voxtral-small-24b-2507", "messages": [{"role": "system", "content": "You are a helpful assistant."},{"role": "user", "content": "Translate this into French: Hello world!"}],"max_completion_tokens": 500}}
+{"custom_id": "request-2", "method": "POST", "url": "/v1/chat/completions", "body": {"model": "voxtral-small-24b-2507", "messages": [{"role": "system", "content": "You are an unhelpful assistant."},{"role": "user", "content": "Write a poem about the ocean."}],"max_completion_tokens": 500}}
+```
+
+<Message type="note">
+  Batch processing can take up to 24 hours. After this timeframe, the batch job will be terminated. Any remaining requests will not be processed. You will only be billed for processed requests.
+</Message>
+
+### Object Storage bucket permissions
+
+Batch processing relies on an Object Storage bucket. You can use any of your existing Object Storage buckets for batch processing or create a new one.
+
+To use your bucket with batch procession, you must configure a bucket policy allowing the Generative APIs application principal to:
+
+* `s3:GetObject`
+* `s3:PutObject`
+
+Below is an example bucket policy:
+
+```json
+{
+  "Version": "2023-04-17",
+  "Id": "allow-only-bucket",
+  "Statement": [
+    {
+      "Sid": "scw-managed",
+      "Effect": "Allow",
+      "Principal": {
+        "SCW": "application_id:c31bd445-9017-4096-adea-b6e03b44a99d"
+      },
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "my-readonly-bucket/*"
+    },
+    {
+      "Sid": "Scaleway secure statement",
+      "Effect": "Allow",
+      "Principal": {
+        "SCW": "user_id:8c0ef0eb-9f9c-46b1-b2e0-ed883a6c54ce"
+        },
+      "Action": "*",
+      "Resource": [
+        "my-readonly-bucket",
+        "my-readonly-bucket/*"
+      ]
+    }
+  ]
+}
+```
+
+<Message type="tip">
+  The `Scaleway secure statement` ensures that you retain full access to your bucket and do not accidentally lock yourself out.
+</Message>
+
+
+## Creating a batch using the Console
+
+### Uploading your input file
+
+1. Log in to the Scaleway Console.
+2. Go to **Object Storage**.
+3. Open the the bucket you want to use or create a bucket.
+4. Upload your `input.jsonl` file.
+
+### Creating the batch job
+
+1. 1. Click **Generative APIs* in the **AI** section of the side menu. The Generative APIs overview displays.
+In the Console, go to **Generative APIs**.
+
+2. Click the **Batches** tab.
+
+3. Click **Create batch**.
+
+4. Provide:
+
+   * The input file path (for example: `s3://scw-managed-genapi-batch/input.jsonl`)
+        <Message type="tip">
+          You can also upload your `input.jsonl` file during this step, by clicking **+ Add file**.
+        </Message>
+   * The output prefix (optional)
+
+5. Click **Create batch**. The batch enters the `Validating` state.
+
+
+### Monitoring the job
+
+You can monitor:
+
+* Status (`Validating`, `In progress`, `Completed`, `Failed`)
+* Number of processed requests
+* Error count
+
+Once completed, download the generated output file from Object Storage.
+
+### Output format
+
+Each line of the output file corresponds to one input request.
+
+Example:
+
+```json
+{"id":"93807e44-09fa-4a9f-baa3-574164651535","custom_id":"request-1","error":null,"response":{"request_id":"7a38ba8c-0fad-4923-9214-9b218a416b50","status_code":200,"body":{"id":"chatcmpl-7a38ba8c-0fad-4923-9214-9b218a416b50","object":"chat.completion","created":1771335694,"model":"voxtral-small-24b-2507","choices":[{"index":0,"message":{"role":"assistant","content":"Bonjour le monde!","refusal":null,"annotations":null,"audio":null,"function_call":null,"tool_calls":[],"reasoning_content":null},"logprobs":null,"finish_reason":"stop","stop_reason":null,"token_ids":null}],"service_tier":null,"system_fingerprint":null,"usage":{"prompt_tokens":19,"total_tokens":25,"completion_tokens":6,"prompt_tokens_details":null},"prompt_logprobs":null,"prompt_token_ids":null,"kv_transfer_params":null}}}
+{"id":"93807e44-09fa-4a9f-baa3-574164651535","custom_id":"request-2","error":null,"response":{"request_id":"01c2cc2c-b072-45fb-9031-2b10b75f1b2f","status_code":200,"body":{"id":"chatcmpl-01c2cc2c-b072-45fb-9031-2b10b75f1b2f","object":"chat.completion","created":1771335694,"model":"voxtral-small-24b-2507","choices":[{"index":0,"message":{"role":"assistant","content":"Oh, the ocean, so vast and so wide,\nA shimmering expanse of blue tide.\nIt whispers and roars, in a rhythm so grand,\nA symphony of waves, in the ocean's band.\n\nIt's a mystery, deep and profound,\nWith secrets untold, in its watery ground.\nCreatures unseen, in its depths they reside,\nIn the ocean's embrace, they confide.\n\nIt's a force to be reckoned with, a power so great,\nA tempestuous beast, that can't be tamed, can't be sate.\nYet, it's also a cradle, a gentle, soothing song,\nA lullaby sung, to the weary and strong.\n\nSo here's to the ocean, in all its might and grace,\nA wonder of nature, in its own special place.\nMay it continue to inspire, to captivate and to amaze,\nThe ocean, the ocean, in all its ways.","refusal":null,"annotations":null,"audio":null,"function_call":null,"tool_calls":[],"reasoning_content":null},"logprobs":null,"finish_reason":"stop","stop_reason":null,"token_ids":null}],"service_tier":null,"system_fingerprint":null,"usage":{"prompt_tokens":20,"total_tokens":218,"completion_tokens":198,"prompt_tokens_details":null},"prompt_logprobs":null,"prompt_token_ids":null,"kv_transfer_params":null}}}
+```
+
+## Creating a batch using the OpenAI Python SDK
+
+You can also create and manage batches programmatically using the OpenAI-compatible SDK.
+
+```py
+import os
+import time
+import logging
+from openai import OpenAI
+
+# Enable debug logging to see HTTP requests
+logging.basicConfig(
+    format="%(levelname)s [%(asctime)s] %(name)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+    level=logging.INFO  # Set to DEBUG if you want more detail
+)
+
+# Initialize client with staging base URL
+client = OpenAI(
+    api_key=os.getenv("SCW_SECRET_KEY"),
+    base_url="https://api.scaleway.ai/v1"  # No "/batches" needed
+)
+
+# Your pre-signed or public S3 input file URL
+input_file_url = "https://<my-bucket>/input.jsonl"
+
+# Submit the batch job
+print("Submitting batch job...")
+batch = client.batches.create(
+    input_file_id=input_file_url,
+    endpoint="/v1/chat/completions",
+    completion_window="24h"
+)
+
+print(f"Batch created: {batch.id}")
+print(f"Initial status: {batch.status}")
+
+# Polling function
+def wait_for_completion(batch_id, check_interval=30):
+    print(f"Polling every {check_interval}s for completion...\n")
+
+    while True:
+        status = client.batches.retrieve(batch_id)
+        print(f"Status: {status.status.upper()} (Updated: {status.completed_at or 'N/A'})")
+
+        if status.status == "completed":
+            print(f"\n Batch completed successfully!")
+            if hasattr(status, 'output_file_id') and status.output_file_id:
+                print(f"Output File ID: {status.output_file_id}")
+
+            # Most important: get the download URL
+            if hasattr(status, 'output_file_url') and status.output_file_url:
+                print(f"Download results: {status.output_file_url}")
+                return status.output_file_url
+            else:
+                print("Error! No download link provided.")
+                return None
+
+        elif status.status == "failed":
+            print(f"Batch failed: {getattr(status, 'error', 'Unknown error')}")
+            return None
+
+        elif status.status in ["in_progress", "validating"]:
+            time.sleep(check_interval)
+        else:
+            print(f"Unexpected status: {status.status}")
+            return None
+
+# Start polling
+download_url = wait_for_completion(batch.id)
+
+if download_url:
+    print(f"\nDone! You can download the results using:")
+    print(download_url)
+```

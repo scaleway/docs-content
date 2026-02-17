@@ -91,6 +91,10 @@ export const serverlessJobsMenu = {
           slug: 'jobs-limitations',
         },
         {
+          label: 'Injected environment variables',
+          slug: 'injected-environment-variables',
+        },
+        {
           label: 'Differences between Jobs, Functions and Containers',
           slug: 'difference-jobs-functions-containers',
         },

@@ -63,7 +63,6 @@ import { terraformMenu } from "../pages/terraform/menu"
 import { topicsAndEventsMenu } from "../pages/topics-and-events/menu"
 import { transactionalEmailMenu } from "../pages/transactional-email/menu"
 import { vpcMenu } from "../pages/vpc/menu"
-import { vpcPeeringMenu } from "../pages/vpc-peering/menu"
 import { webhostingMenu } from "../pages/webhosting/menu"
 import { quantumComputingMenu } from "../pages/quantum-computing/menu"
 
@@ -212,7 +211,6 @@ export default [
           publicGatewaysMenu,
           siteToSiteVpnMenu,
           vpcMenu,
-          vpcPeeringMenu,
         ],
         label: 'Network',
         category: 'network',

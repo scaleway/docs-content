@@ -169,6 +169,10 @@ export const serverlessContainersMenu = {
           label: 'DNS query rate limiting',
           slug: 'dns-query-rate-limit',
         },
+        {
+          label: 'v1 migration guide',
+          slug: 'v1-migration-guide',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

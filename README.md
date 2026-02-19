@@ -19,7 +19,7 @@ You will find several types of content:
 
 - **Tutorials**: we explain how to use your Scaleway resources with third-party tools.
 
-- **CLI documentation**: we explain how to manage your Scaleway resources in your code or command line.
+- **CLI documentation**: we explain how to manage your Scaleway resources using the Scaleway command line.
 
 - **Additional content**: we provide pertinent details about a specific subject.
 

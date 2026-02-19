@@ -139,6 +139,10 @@ export const generativeApisMenu = {
           slug: 'integrate-with-qwen-code'
         },
         {
+          label: 'Integrating Generative APIs with LiteLLM',
+          slug: 'integrate-with-litellm'
+        },
+        {
           label: 'Integrating Generative APIs with popular AI tools',
           slug: 'integrating-generative-apis-with-popular-tools',
         },

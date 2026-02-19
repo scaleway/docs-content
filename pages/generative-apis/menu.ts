@@ -50,6 +50,10 @@ export const generativeApisMenu = {
           label: 'Use function calling',
           slug: 'use-function-calling',
         },
+        {
+          label: 'Use batch processing',
+          slug: 'use-batch-processing',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

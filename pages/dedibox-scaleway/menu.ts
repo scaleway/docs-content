@@ -96,7 +96,7 @@ export const dediboxScalewayMenu = {
         },
         {
           label: 'Dedibox datasheet',
-          slug: 'dedibox-datasheet',
+          slug: '../../dedibox/reference-content/dedibox-datasheet',
         },
         {
           label: 'Mounting filesystems in rescue mode',

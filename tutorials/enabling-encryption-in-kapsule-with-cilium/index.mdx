@@ -1,5 +1,5 @@
 ---
-title: Enabling encryption in Kapsule (Kubernetes 1.31) with Cilium
+title: Enabling encryption in Kapsule with Cilium
 description: Learn how to enable WireGuard encryption in Scaleway’s Kapsule Managed Kubernetes service using Cilium. This guide covers configuration steps, verification, and testing encryption for secure network traffic.
 tags: encryption cilium kapsule wireguard
 products:
@@ -22,7 +22,7 @@ By default, Cilium is selected as the CNI when creating a cluster. We will confi
 <Requirements />
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- A functional [Kubernetes Kapsule](/kubernetes/concepts/#kubernetes-kapsule) cluster running **version 1.31**.-
+- A functional [Kubernetes Kapsule](/kubernetes/concepts/#kubernetes-kapsule) cluster.
 - `kubectl` installed and configured for your cluster.
 - Cilium is selected as the [CNI](/kubernetes/concepts/#container-network-interface-cni) in your cluster (default in Kapsule).
 
@@ -35,16 +35,15 @@ The `CiliumNodeConfig` resource defines encryption settings for Cilium. It enabl
     apiVersion: cilium.io/v2
     kind: CiliumNodeConfig
     metadata:
-    namespace: kube-system
-    name: enable-encryption
+      namespace: kube-system
+      name: enable-encryption
     spec:
-    nodeSelector:
-        matchLabels: {}
-    defaults:
-        enable-wireguard: "true"
-        enable-wireguard-userspace-fallback: "false"
-        wireguard-persistent-keepalive: "0s"
-        encrypt-node: "false"
+      nodeSelector:
+          matchLabels: {}
+      defaults:
+          enable-wireguard: "true"
+          wireguard-persistent-keepalive: "0s"
+          encrypt-node: "false"
     ```
     <Message type="note">
     * `matchLabels: {}` applies encryption to **all nodes** in the cluster.
@@ -85,135 +84,141 @@ Below is an example YAML manifest that deploys:
 
 * An **nginx** Deployment and a corresponding **Service**.
 * A **curl** Deployment that continuously makes requests to **nginx**.
-* A **tcpdump** DaemonSet to capture traffic on each node’s `kapsule0` interface.
+* A **tcpdump** DaemonSet to capture traffic on each node’s default interface.
 
 1. Save the following template in a `test-and-tcpdump.yaml` file:
+    <Message type="note">
+    Change the `enp1s0` interface of the `tcpdump` DaemonSet by the default provided interface:
+    ```
+    kubectl -n kube-system exec ds/cilium -- ip a | grep -B2 "172.16"
+    ```
+    </Message>
+
     ```
     apiVersion: apps/v1
     kind: Deployment
     metadata:
-    name: nginx
+      name: nginx
     spec:
-    replicas: 1
-    selector:
+      replicas: 1
+      selector:
         matchLabels:
-        k8s-app: nginx
-    template:
+          k8s-app: nginx
+      template:
         metadata:
-        labels:
+          labels:
             k8s-app: nginx
         spec:
-        terminationGracePeriodSeconds: 1
-        containers:
+          terminationGracePeriodSeconds: 1
+          containers:
             - name: nginx
-            image: nginx:1.21.6
-            ports:
+              image: nginx:1.21.6
+              ports:
                 - containerPort: 80
-            resources:
+              resources:
                 limits:
-                cpu: 100m
-                memory: 100Mi
-        affinity:
+                  cpu: 100m
+                  memory: 100Mi
+          affinity:
             podAntiAffinity:
-            requiredDuringSchedulingIgnoredDuringExecution:
+              requiredDuringSchedulingIgnoredDuringExecution:
                 - topologyKey: "kubernetes.io/hostname"
-                labelSelector:
+                  labelSelector:
                     matchExpressions:
                     - key: k8s-app
-                        operator: In
-                        values:
-                        - nginx
+                      operator: In
+                      values:
+                      - nginx
     ---
     apiVersion: v1
     kind: Service
     metadata:
-    name: nginx
+      name: nginx
     spec:
-    selector:
+      selector:
         k8s-app: nginx
-    ports:
+      ports:
         - protocol: TCP
-        port: 80
-        targetPort: 80
-    type: ClusterIP
+          port: 80
+          targetPort: 80
+      type: ClusterIP
     ---
     apiVersion: apps/v1
     kind: Deployment
     metadata:
-    name: curl
+      name: curl
     spec:
-    replicas: 1
-    selector:
+      replicas: 1
+      selector:
         matchLabels:
-        k8s-app: curl
-    template:
+          k8s-app: curl
+      template:
         metadata:
-        labels:
+          labels:
             k8s-app: curl
         spec:
-        terminationGracePeriodSeconds: 1
-        containers:
+          terminationGracePeriodSeconds: 1
+          containers:
             - name: curl
-            image: curlimages/curl:7.78.0
-            command: ["/bin/sh", "-c"]
-            args:
+              image: curlimages/curl:7.78.0
+              command: ["/bin/sh", "-c"]
+              args:
                 - |
-                while sleep 2; do
+                  while sleep 2; do
                     date && curl -fsSL http://nginx
-                done
-            resources:
+                  done
+              resources:
                 limits:
-                cpu: 100m
-                memory: 100Mi
-        affinity:
+                  cpu: 100m
+                  memory: 100Mi
+          affinity:
             podAntiAffinity:
-            preferredDuringSchedulingIgnoredDuringExecution:
+              preferredDuringSchedulingIgnoredDuringExecution:
                 - weight: 50
-                podAffinityTerm:
+                  podAffinityTerm:
                     topologyKey: "kubernetes.io/hostname"
                     labelSelector:
-                    matchExpressions:
+                      matchExpressions:
                         - key: k8s-app
-                        operator: In
-                        values:
+                          operator: In
+                          values:
                             - nginx
     ---
     apiVersion: apps/v1
     kind: DaemonSet
     metadata:
-    name: tcpdump
+      name: tcpdump
     spec:
-    selector:
+      selector:
         matchLabels:
-        k8s-app: tcpdump
-    template:
+          k8s-app: tcpdump
+      template:
         metadata:
-        labels:
+          labels:
             k8s-app: tcpdump
         spec:
-        hostNetwork: true
-        terminationGracePeriodSeconds: 1
-        containers:
+          hostNetwork: true
+          terminationGracePeriodSeconds: 1
+          containers:
             - name: tcpdump
-            image: alpine:latest
-            securityContext:
+              image: alpine:latest
+              securityContext:
                 privileged: true
-            command: ["sh"]
-            args:
+              command: ["sh"]
+              args:
                 - -c
                 - |
-                apk add --no-cache tcpdump
-                # Verify the Kapsule interface
-                if ! ip link show kapsule0; then
-                    echo "kapsule0 not found"
+                  apk add --no-cache tcpdump
+                  if ! ip link show enp1s0; then
+                    echo "enp1s0 not found"
                     exit 1
-                fi
-                # Capture traffic on kapsule0 for ports 80 or 51871 (WireGuard)
-                tcpdump -Anevi kapsule0 -T vxlan 2>&1 | grep -E '(([0-9]+\.){3}[0-9]+\.(80|51871))'
-            resources:
+                  fi
+                  # Capture traffic on enp1s0 for ports 80 or 51871 (WireGuard)
+                  tcpdump -Anevi enp1s0 -T vxlan 2>&1 | grep -E '(([0-9]+\.){3}[0-9]+\.(80|51871))'
+              resources:
                 limits:
-                cpu: 100m
-                memory: 100Mi
+                  cpu: 100m
+                  memory: 100Mi
     ```
 
 2. Apply the manifest using `kubectl`:

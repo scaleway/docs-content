@@ -19,16 +19,8 @@ export const cockpitMenu = {
     {
       items: [
         {
-          label: 'Retrieve your Grafana credentials',
-          slug: 'retrieve-grafana-credentials',
-        },
-        {
           label: 'Access Grafana and preconfigured dashboards',
           slug: 'access-grafana-and-managed-dashboards',
-        },
-        {
-          label: 'Use IAM authentication for Cockpit Grafana with Terraform/OpenTofu',
-          slug: 'iam-auth-cockpit-grafana-terraform',
         },
         {
           label: 'Create a Cockpit token',
@@ -73,6 +65,14 @@ export const cockpitMenu = {
         {
           label: 'Configure alerts for Scaleway resources',
           slug: 'configure-alerts-for-scw-resources',
+        },
+        {
+          label: 'Manage data exports',
+          slug: 'manage-data-exports',
+        },
+        {
+          label: 'Use IAM authentication for Cockpit with Terraform/OpenTofu',
+          slug: 'iam-auth-cockpit-terraform',
         }
       ],
       label: 'How to',
@@ -102,6 +102,10 @@ export const cockpitMenu = {
         {
           label: 'Cockpit capabilities and limits',
           slug: 'cockpit-limitations',
+        },
+        {
+          label: 'Cockpit pricing information',
+          slug: 'cockpit-pricing',
         },
         {
           label:

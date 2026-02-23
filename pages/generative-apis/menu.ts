@@ -119,8 +119,28 @@ export const generativeApisMenu = {
           slug: 'integrate-with-n8n'
         },
         {
+          label: 'Integrating Generative APIs with Openclaw',
+          slug: 'integrate-with-openclaw'
+        },
+        {
           label: 'Integrating Generative APIs with Cursor',
           slug: 'integrate-with-cursor'
+        },
+        {
+          label: 'Integrating Generative APIs with OpenCode',
+          slug: 'integrate-with-opencode'
+        },
+        {
+          label: 'Integrating Generative APIs with Claude Code',
+          slug: 'integrate-with-claude-code'
+        },
+        {
+          label: 'Integrating Generative APIs with Qwen Code',
+          slug: 'integrate-with-qwen-code'
+        },
+        {
+          label: 'Integrating Generative APIs with LiteLLM',
+          slug: 'integrate-with-litellm'
         },
         {
           label: 'Integrating Generative APIs with popular AI tools',

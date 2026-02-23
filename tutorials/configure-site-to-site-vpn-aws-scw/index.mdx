@@ -39,245 +39,148 @@ import scwVPNpsk1 from './assets/Scaleway-vpn-psk-1.webp'
 This tutorial explains how to establish a dynamic Site-to-Site (S2S) VPN between Scaleway and AWS using the Scaleway Managed VPN Gateway.
 
 The configuration uses:
-
-- IPsec over IKEv2
-- BGP for dynamic routing
-- Route propagation between both environments
-
----
+- **IPsec over IKEv2**
+- **BGP** for dynamic routing
+- **Route propagation** between both environments
 
 <Requirements />
 
 - A Scaleway account with permissions to manage VPC and VPN resources
 - An AWS account with permissions to manage VPC and VPN resources
-- A VPC in both Scaleway and AWS
+- A VPC configured in both Scaleway and AWS
 - Administrative access to configure both environments
 
----
-
-## Architecture Overview
+## Architecture overview
 
 The connection is established between:
-
-- A Scaleway Managed VPN Gateway
-- An AWS Virtual Private Gateway
-- A BGP session over an IPsec tunnel
+- A Scaleway **Managed VPN Gateway**
+- An AWS **Virtual Private Gateway**
+- A **BGP session** over an IPsec tunnel
 
 Routes are dynamically exchanged between:
-
-- Scaleway Private Network CIDR (example: `172.16.64.0/22`)
-- AWS VPC CIDR (example: `172.31.0.0/16`)
-
----
+- **Scaleway Private Network CIDR** (example: `172.16.64.0/22`)
+- **AWS VPC CIDR** (example: `172.31.0.0/16`)
 
 ## Step 1 – Create the Scaleway VPN Gateway
 
-In Scaleway:
-
-1. Create or select a VPC.
-2. Attach a Private Network.
-3. Deploy a Managed VPN Gateway attached to that Private Network.
-
-You will need:
-
-- The public IPv4 address of the Scaleway VPN Gateway (example: `163.172.175.212`)
+1. Create or select a **VPC** in the Scaleway console.
+2. Attach a **Private Network** to the VPC.
+3. Deploy a **Managed VPN Gateway** attached to that Private Network.
+4. Note the following information:
+    - The **public IPv4 address** of the Scaleway VPN Gateway (e.g., `163.172.175.212`).
+    - The **Scaleway ASN**: `12876`.
 
 <Lightbox image={scwVirtualPrivateGatewayCreation} alt="Creation of a Managed VPN Gateway on Scaleway" />
-
-- Scaleway ASN: **12876**
-
-This information is required when configuring AWS.
-
----
 
 ## Step 2 – Configure AWS
 
 ### Create the AWS Customer Gateway
 
-Configure:
-
-- Type: IPsec
-- IP address: Public IP of the Scaleway VPN Gateway
-- BGP ASN: `12876`
+1. Create a **Customer Gateway** in the AWS console.
+2. Configure the following parameters:
+    - **Type**: IPsec
+    - **IP address**: The public IP of your Scaleway VPN Gateway.
+    - **BGP ASN**: `12876`.
 
 <Lightbox image={awsCustomerGatewayCreation} alt="Creation of AWS Customer Gateway referencing the Scaleway VPN Gateway" />
 
----
-
 ### Create the AWS Virtual Private Gateway
 
-- Attach it to your AWS VPC.
-- Configure an ASN (example: `65000`).
+1. Create a **Virtual Private Gateway** and attach it to your AWS VPC.
+2. Configure an **ASN** (e.g., `65000`).
 
 <Lightbox image={awsVirtualPrivateGatewayCreation} alt="Creation of AWS Virtual Private Gateway" />
 
 <Message type="note">
-The ASN configured here must match the ASN defined later in the Scaleway Customer Gateway.
+The ASN configured here must match the ASN defined later in the Scaleway Customer Gateway configuration.
 </Message>
 
----
+### Create the AWS VPN connection
 
-### Create the AWS VPN Connection
-
-When creating the VPN connection:
-
-- Use dynamic routing (BGP).
-- Associate it with the Virtual Private Gateway.
-- Select the previously created Customer Gateway.
+1. Create a new **VPN Connection** using the following settings:
+    - **Routing Priority**: Dynamic (requires BGP).
+    - **Virtual Private Gateway**: Select the gateway created above.
+    - **Customer Gateway**: Select the gateway created in the previous step.
 
 <Lightbox image={awsVPNConnection} alt="Creation of VPN Connection on AWS" />
 
-After creation, collect the following information:
+2. After the connection is created, collect the following details:
+    - **Tunnel public IP** (e.g., `13.37.176.32`).
+    - **BGP peer private IP** (e.g., `169.254.162.101`).
+    - Download the **Generic configuration file** for reference.
 
-- Tunnel public IP (example: `13.37.176.32`)
-<Lightbox image={awsVPNTunnelIP} alt="AWS tunnel public IP displayed in the console" />
-
-- Download the generic configuration file for reference
 <Lightbox image={awsVPNConfiguration1} alt="Downloading the AWS VPN connection configuration file" />
-
-- BGP peer private IP (example: `169.254.162.101`)
-<Lightbox image={awsVPNConfiguration2} alt="AWS tunnel configuration details including BGP peer private IP" />
-
----
 
 ## Step 3 – Create the Scaleway Customer Gateway
 
-In Scaleway, configure a Customer Gateway using:
-
-- Public IP: AWS tunnel public IP
-- ASN: The ASN defined on the AWS Virtual Private Gateway (for example `65000`)
+In the Scaleway console, create a **Customer Gateway** using:
+- **Public IP**: The AWS tunnel public IP.
+- **ASN**: The ASN defined on the AWS Virtual Private Gateway (e.g., `65000`).
 
 <Lightbox image={scwCustomerGatewayCreation} alt="Creation of Customer Gateway on Scaleway referencing AWS" />
+p
+## Step 4 – Configure BGP routing p‡olicy
 
-This defines AWS as the remote BGP peer.
-
----
-
-## Step 4 – Configure BGP Routing Policy
-
-Define the routing policy in Scaleway:
-
-- `prefix_filter_in`: AWS VPC CIDR
-- `prefix_filter_out`: Scaleway Private Network CIDR
+Define a routing policy in Scaleway to control traffic:
+- **Prefix filter in**: Enter your AWS VPC CIDR.
+- **Prefix filter out**: Enter your Scaleway Private Network CIDR.
 
 <Lightbox image={scwVPNRoute} alt="Creation of VPN routing policy on Scaleway" />
 
-This ensures that only the expected routes are exchanged.
+This ensures that only authorized routes are exchanged.
 
----
+## Step 5 – Configure the VPN connection in Scaleway
 
-## Step 5 – Configure the VPN Connection in Scaleway
-
-When creating the VPN connection:
-
-- Attach the Scaleway VPN Gateway.
-- Attach the AWS Customer Gateway.
-- Enable route propagation.
-- Select the routing policy created in Step 4.
+Create the **VPN Connection** in the Scaleway console:
+1. Attach the **Scaleway VPN Gateway**.
+2. Attach the **AWS Customer Gateway**.
+3. Enable **Route propagation**.
+4. Select the **Routing policy** created in Step 4.
 
 <Lightbox image={scwVPNConnection1} alt="Creation of VPN connection on Scaleway" />
 
-Configure BGP using:
+5. Configure **BGP** settings:
+    - Provide a private IP within the AWS inside CIDR range.
+    - Provide the AWS BGP peer private IP.
 
-- A private IP within the AWS inside CIDR range.
-- The AWS BGP peer private IP.
-
-Both IP addresses must belong to the same `/30` subnet provided by AWS.
-
----
+<Message type="important">
+  Both IP addresses must belong to the same `/30` subnet provided by AWS in the configuration file.
+</Message>
 
 ## Step 6 – Retrieve and Configure the Pre-Shared Key (PSK)
 
-Scaleway automatically generates a PSK in Secret Manager when the VPN connection is created.
-
-<Lightbox image={scwVPNpsk1} alt="Scaleway generating the PSK for the VPN connection" />
+Scaleway automatically generates a PSK and stores it in **Secret Manager** when the VPN connection is created.
 
 ### 1. List the generated VPN secret
-
+Use the Scaleway CLI to find your secret:
 ```bash
 scw secret secret list region=fr-par -o json | jq .
 
 ```
-Example output: 
-```json
-[
-  {
-    "id": "<SECRET_ID>",
-    "project_id": "<PROJECT_ID>",
-    "name": "connection_<VPN_CONNECTION_ID>",
-    "status": "ready",
-    "created_at": "<TIMESTAMP>",
-    "updated_at": "<TIMESTAMP>",
-    "tags": ["S2S VPN"],
-    "description": "Generated by Scaleway",
-    "protected": true,
-    "type": "opaque",
-    "path": "/s2s_vpn",
-    "used_by": ["s2s_vpn"],
-    "region": "fr-par"
-  }
-]
-```
 
-Copy the `id` value of the secret.
+### 2. Access and decode the PSK
 
-### 2. List the secret revisions
-
-Retrieve the available secret versions:
-```bash
-scw secret version list <SECRET_ID> region=fr-par
-
-```
-
-Example of output:
-
-```json
-REVISION  SECRET ID     STATUS   CREATED AT     UPDATED AT     REGION
-1         <SECRET_ID>   enabled  1 minutes ago  1 minutes ago  fr-par
-```
-
-Copy the latest REVISION value.
-
-### 3. Access and decode the PSK
-
-Retrieve the Base64-encoded secret value:
+Retrieve the Base64-encoded secret value using the `id` from the previous step:
 
 ```bash
-scw secret version access <SECRET_ID> revision=<REVISION> region=fr-par
+scw secret version access <SECRET_ID> revision=latest region=fr-par
 
 ```
 
-Example of output:
-
-```json
-SecretID  <SECRET_ID>
-Revision  <REVISION>
-Data      <BASE64_PSK>
-Type      opaque
-```
-
-Decode the Base64 value to obtain the PSK:
+Decode the value to obtain your cleartext PSK:
 
 ```bash
 echo '<BASE64_PSK>' | base64 -d
 
 ```
 
-Configure the decoded value in AWS Tunnel 1 under Pre-shared key
+3. Navigate to your VPN Tunnel settings in the **AWS Console** and update the **Pre-shared key** with the decoded value.
 
-<Lightbox image={awsVPNReconfig2} alt="Updating the AWS tunnel pre-shared key with the value generated by Scaleway" /> 
+<Lightbox image={awsVPNReconfig2} alt="Updating the AWS tunnel pre-shared key" />
 
-<Message type="note">
-Never expose real PSK values in public documentation. Always replace them with placeholders.
-</Message>
+## Step 7 – Align IPsec parameters
 
-
----
-
-
-## Step 7 – Align IPsec Parameters
-
-Both sides must use identical IPsec settings:
+Both environments must use identical IPsec settings for the tunnel to establish.
 
 | Parameter             | Value                |
 |-----------------------|----------------------|
@@ -290,35 +193,22 @@ Both sides must use identical IPsec settings:
 | Phase 2 DH Group      | 14                   |
 | Startup Action (AWS)  | Start                |
 
-Any mismatch prevents the tunnel from establishing.
 
-<Lightbox image={awsVPNReconfig1} alt="AWS tunnel IPsec configuration parameters" />
 
----
-
-## Step 8 – Verify the Connection
+## Step 8 – Verify the connection
 
 ### On AWS
 
-- Verify tunnel state is **UP**
-- Confirm BGP session is **Established**
-- Check CloudWatch logs if needed
-
-<Lightbox image={awsVPNVerification} alt="AWS VPN connection status showing tunnel and BGP established" />
-
----
+Check the **Tunnel Details** tab. The state should show as **UP** and the BGP status as **Established**.
 
 ### On Scaleway
 
-Verify:
+In the VPN connection dashboard, verify the following statuses:
 
-- `TunnelStatus = up`
-- `BgpStatusIPv4 = up`
+* `TunnelStatus`: **up**
+* `BgpStatusIPv4`: **up**
 
-<Lightbox image={scwVPNConnection2} alt="Scaleway VPN connection status showing tunnel and BGP up" />
-
-Both IPsec and BGP must be operational for routing to function correctly.
----
+<Lightbox image={scwVPNConnection2} alt="Scaleway VPN connection status" />
 
 ## Result
 
@@ -328,3 +218,5 @@ You have successfully established a dynamic Site-to-Site VPN between Scaleway an
 - BGP route exchange
 - Secure IPsec encryption
 - Dynamic route propagation between VPCs
+
+Your VPCs can now communicate securely using BGP for automated route management.

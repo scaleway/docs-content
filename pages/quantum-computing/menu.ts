@@ -43,8 +43,12 @@ export const quantumComputingMenu = {
           slug: 'use-qsim-emulators',
         },
         {
-          label: 'Run Quantum Machine Learning with Pennylane',
+          label: 'Use Pennylane for Quantum Machine Learning',
           slug: 'use-pennylane',
+        },
+        {
+          label: 'Use MerLin for Photonic Quantum Machine Learning',
+          slug: 'use-merlin',
         },
       ],
       label: 'How to',

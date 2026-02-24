@@ -42,6 +42,10 @@ export const generativeApisMenu = {
           label: 'Query audio models',
           slug: 'query-audio-models'
         },
+                {
+          label: 'Query reranking models',
+          slug: 'query-reranking-models'
+        },
         {
           label: 'Use structured outputs',
           slug: 'use-structured-outputs',

@@ -59,6 +59,10 @@ export const objectStorageMenu = {
           slug: 'manage-lifecycle-rules',
         },
         {
+          label: 'Enable SSE-ONE',
+          slug: 'enable-sse-one',
+        },
+        {
           label: 'Host healthcare data (HDS)',
           slug: 'host-healthcare-data',
         },

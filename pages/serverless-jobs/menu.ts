@@ -60,7 +60,7 @@ export const serverlessJobsMenu = {
         },
         {
           label: 'Migrate from command to startup command and arguments',
-          slug: 'migrate-command-to-startup-command-args',
+          slug: 'migrate-command-to-startup-command',
         },
         {
           label: 'Delete a job',

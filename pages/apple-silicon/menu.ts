@@ -76,7 +76,7 @@ export const appleSiliconMenu = {
         },
         {
           label: 'Adjust the available bandwidth',
-          slug: 'adjust-available-bandwidth'
+          slug: 'adjust-available-bandwidth',
         },
         {
           label: 'Manage your commitment plan',

@@ -21,7 +21,7 @@ export const siteToSiteVpnMenu = {
         {
           label: 'Site-to-Site VPN API Reference',
           slug: 'https://www.scaleway.com/en/developers/api/site-to-site-vpn/',
-        }
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',
@@ -43,7 +43,7 @@ export const siteToSiteVpnMenu = {
       ],
       label: 'Additional Content',
       slug: 'reference-content',
-    }
+    },
   ],
   label: 'Site-to-Site VPN',
   slug: 'site-to-site-vpn',

@@ -69,7 +69,8 @@ export const dataWarehouseMenu = {
     {
       items: [
         {
-          label: 'Using a Public Gateway to connect to a deployment in a Private Network',
+          label:
+            'Using a Public Gateway to connect to a deployment in a Private Network',
           slug: 'use-data-warehouse-public-gateway',
         },
       ],

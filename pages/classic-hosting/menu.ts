@@ -55,8 +55,7 @@ export const classicHostingMenu = {
           slug: 'create-alias',
         },
         {
-          label:
-            'Encrypt your emails with PGP using the Scaleway webmail',
+          label: 'Encrypt your emails with PGP using the Scaleway webmail',
           slug: 'encrypt-emails-with-pgp-using-webmail',
         },
         {

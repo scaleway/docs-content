@@ -1,0 +1,173 @@
+---
+title: Use MerLin for Photonic Quantum Machine Learning
+description: Explore QML capabilities on a Quandela's QPUS or emulators.
+tags: quantum quandela photonic merlin perceval pennylane qaas qml ml
+dates:
+  validation: 2026-02-24
+  posted: 2026-02-24
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+**[MerLin](https://merlinquantum.ai/)** is a Photonic Quantum Machine Learning Framework developed by Quandela. It brings quantum computing capabilities to AI practitioners through easy-to-use PyTorch integrations, adding quantum wizardry to your AI toolkit with no extensive quantum expertise required.
+
+It is designed to feel familiar to PyTorch users while unlocking the potential of quantum computing. Under the hood, it leverages photonic quantum computing—a cutting-edge approach using single-photons that's hardware-aware and prepares your models for real quantum processors.
+
+Scaleway offers access to [Quandela's QPUs and emulated QPUs](https://www.scaleway.com/en/docs/quantum-computing/additional-content/quandela-qpus/) via its Quantum as a Service (QaaS) offer. This allows you to run your MerLin-based quantum circuits on real photonic quantum processors or emulators directly from your Python code.
+
+## How to use MerLin with Scaleway
+
+<Requirements />
+
+* A Scaleway account with a valid **Project ID**
+* A Scaleway **API Key** (Secret Key)
+* Python, `torch`, `perceval-quandela` and `merlinquantum` installed on your machine (`pip install merlinquantum`)
+
+1. Select one of the Quandela platforms to use as your backend target. You can choose between emulators and real QPUs:
+* `QPU-ASCELLA-6PQ`
+* `QPU-ALTAIR-10PQ`
+* `QPU-BELENOS-12PQ`
+* `EMU-SAMPLING-L4`
+* `EMU-SAMPLING-2L4`
+* `EMU-SAMPLING-4L4`
+* `EMU-SAMPLING-4H100SXM`
+* `EMU-SAMPLING-8H100SXM`
+
+2. Refer to the detailed list of [Scaleway Quantum Computing offers](https://www.scaleway.com/en/quantum-as-a-service/) on the Scaleway website to find a complete list of the available backend platforms.
+
+3. Create a file with the following computation script. Replace `$SCW_PROJECT_ID` and `$SCW_SECRET_KEY` with your Scaleway Project ID and secret key (or set them as environment variables). Also replace the `PLATFORM_NAME` with the emulator or QPU of your choice.
+```python
+import os
+import torch
+import perceval.providers.scaleway as scw
+
+from merlin.builder.circuit_builder import CircuitBuilder
+from merlin.algorithms import QuantumLayer
+from merlin.core.merlin_processor import MerlinProcessor
+
+# Credentials
+PROJECT_ID = os.environ.get("SCW_PROJECT_ID", "your_project_id")
+SECRET_KEY = os.environ.get("SCW_SECRET_KEY", "your_secret_key")
+PLATFORM_NAME = "EMU-SAMPLING-L4"
+
+# Define a simple circuit builder
+b = CircuitBuilder(n_modes=4)
+b.add_rotations(trainable=True, name="theta")
+b.add_angle_encoding(modes=[0, 1], name="px")
+
+# 1. Open a Scaleway session
+with scw.Session(platform_name=PLATFORM_NAME, project_id=PROJECT_ID, token=SECRET_KEY) as session:
+
+    # 2. Bind the session to the MerlinProcessor
+    proc = MerlinProcessor(session=session)
+
+    # 3. Create a Quantum Layer
+    q_layer = QuantumLayer(
+        input_size=2,
+        builder=b,
+        n_photons=2
+    ).eval()
+
+    # 4. Run inference
+    X = torch.rand(4, 2)
+    result = proc.forward(q_layer, X, nsample=100)
+
+    print(f"Input shape: {X.shape}")
+    print(f"Output shape: {result.shape}")
+
+```
+4. Save the script. In this example we save it as `merlin_quickstart.py`.
+5. Run the script.
+```bash
+python ~/merlin_quickstart.py
+
+```
+
+## How to manage a session
+
+A session is required to communicate with Scaleway's QaaS infrastructure. The recommended way to handle your session is to use a context manager (`with scw.Session(...) as session:`), ensuring that the connection is cleanly closed when you exit the block.
+
+When initializing the `MerlinProcessor` with your session, you can pass additional keyword arguments to fine-tune how cloud calls are batched and managed:
+
+```python
+import perceval.providers.scaleway as scw
+from merlin.core.merlin_processor import MerlinProcessor
+
+with scw.Session(platform_name="EMU-SAMPLING-L4", project_id="$SCW_PROJECT_ID", token="$SCW_SECRET_KEY") as session:
+    
+    proc = MerlinProcessor(
+        session=session,
+        microbatch_size=32,      # Batch chunk size per cloud call (<=32)
+        timeout=300.0,           # Default wall-time per forward (seconds)
+        max_shots_per_call=100,  # Optional cap per cloud call
+        chunk_concurrency=1,     # Parallel chunk jobs within a quantum leaf
+    )
+    # Your quantum layer and model logic here...
+
+```
+
+## Examples
+
+Below is a complete example of building a hybrid Quantum-Classical neural network using PyTorch and MerLin. We define a PyTorch `nn.Sequential` model where a photonic quantum circuit acts as a hidden layer, seamlessly interacting with classical linear layers.
+
+```python
+import os
+import torch
+import torch.nn as nn
+
+import perceval.providers.scaleway as scw
+from merlin.algorithms import QuantumLayer
+from merlin.builder.circuit_builder import CircuitBuilder
+from merlin.core.merlin_processor import MerlinProcessor
+from merlin.measurement.strategies import MeasurementStrategy
+
+### Scaleway session ###
+PROJECT_ID = os.environ.get("SCW_PROJECT_ID", "<YOUR_SCW_PROJECT_ID>")
+SECRET_KEY = os.environ.get("SCW_SECRET_KEY", "<YOUR_SCW_SECRET_KEY>")
+PLATFORM_NAME = "EMU-SAMPLING-L4"   # could be "QPU-BELENOS-12PQ", or any other Quandela backend running on Scaleway QaaS 
+
+with scw.Session(platform_name=PLATFORM_NAME, project_id=PROJECT_ID, token=SECRET_KEY) as session:
+
+    # Create the processor using the session and configuration parameters
+    proc = MerlinProcessor(
+        session=session,
+        microbatch_size=32,
+        timeout=300.0,
+    )
+
+    # Build a simple circuit with 6 modes and 2 photons
+    b = CircuitBuilder(n_modes=6)
+    b.add_rotations(trainable=True, name="theta")
+    b.add_angle_encoding(modes=[0, 1], name="px")
+    b.add_entangling_layer()
+
+    # Instantiate the quantum layer, pytorch module-compatible
+    q_layer = QuantumLayer(
+        input_size=2,
+        builder=b,
+        n_photons=2,
+        measurement_strategy=MeasurementStrategy.probs(),  # Extract raw probability vector
+    ).eval()
+
+    # Combine with classical layers to make a full model
+    model = nn.Sequential(
+        nn.Linear(3, 2, bias=False),
+        q_layer,
+        nn.Linear(15, 4, bias=False),  # 15 = Combinations(6,2) from the chosen circuit
+        nn.Softmax(dim=-1),
+    ).eval()
+
+    # Generate dummy data for inference
+    X = torch.rand(8, 3)
+    
+    print("Sending hybrid model to Scaleway QaaS...")
+    # Execute forward pass
+    y = proc.forward(model, X, nsample=100)
+
+print("Inference successful!")
+print(f"Final output shape: {y.shape}")
+
+```
+
+<Message type="note">
+Refer to the [MerLin Reproduced Papers repository](https://github.com/merlinquantum/reproduced_papers) or the [MerLin Documentation](https://merlinquantum.ai/) for more examples and advanced tutorials.
+</Message>

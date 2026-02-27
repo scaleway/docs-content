@@ -15,8 +15,7 @@ export const dediboxKvmOverIpMenu = {
     {
       items: [
         {
-          label:
-            'Understanding the Baseboard Management Controller (BMC)',
+          label: 'Understanding the Baseboard Management Controller (BMC)',
           slug: 'understanding-bmc',
         },
         {
@@ -62,7 +61,7 @@ export const dediboxKvmOverIpMenu = {
     {
       label: 'Troubleshooting',
       slug: 'troubleshooting',
-    }
+    },
   ],
   label: 'KVM-over-IP',
   slug: 'dedibox-kvm-over-ip',

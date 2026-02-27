@@ -27,8 +27,7 @@ export const transactionalEmailMenu = {
           slug: 'manage-tem-plans',
         },
         {
-          label:
-            'Autoconfigure a Scaleway domain with Transactional Email',
+          label: 'Autoconfigure a Scaleway domain with Transactional Email',
           slug: 'autoconfigure-domain',
         },
         {
@@ -48,8 +47,7 @@ export const transactionalEmailMenu = {
           slug: 'monitor-transactional-email-cockpit',
         },
         {
-          label:
-            'Generate API keys for API and SMTP sending with IAM',
+          label: 'Generate API keys for API and SMTP sending with IAM',
           slug: 'generate-api-keys-for-tem-with-iam',
         },
         {
@@ -79,8 +77,7 @@ export const transactionalEmailMenu = {
           slug: 'send-emails-with-api',
         },
         {
-          label:
-            'Setting up and using TEM webhooks with Topics and Events',
+          label: 'Setting up and using TEM webhooks with Topics and Events',
           slug: 'use-webhooks-with-sns-topics',
         },
       ],
@@ -103,8 +100,7 @@ export const transactionalEmailMenu = {
           slug: 'protecting-your-domain-reputation',
         },
         {
-          label:
-            'Understanding your reputation score with Transactional Email',
+          label: 'Understanding your reputation score with Transactional Email',
           slug: 'understanding-tem-reputation-score',
         },
         {

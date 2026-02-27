@@ -63,16 +63,16 @@ export const gpuMenu = {
           slug: 'choosing-gpu-instance-type',
         },
         {
-          label: 'Blackwell vs Hopper - Choosing the right NVIDIA GPU architecture',
+          label:
+            'Blackwell vs Hopper - Choosing the right NVIDIA GPU architecture',
           slug: 'blackwell-vs-hopper-choosing-the-right-architecture',
         },
         {
-          "label": "Instances Shared Responsibility Model",
-          "slug": "../../instances/reference-content/instances-shared-responsibility-model"
+          label: 'Instances Shared Responsibility Model',
+          slug: '../../instances/reference-content/instances-shared-responsibility-model',
         },
         {
-          label:
-            'GPU Instances internet and Block Storage bandwidth overview',
+          label: 'GPU Instances internet and Block Storage bandwidth overview',
           slug: 'gpu-instances-bandwidth-overview',
         },
         {

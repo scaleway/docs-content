@@ -27,9 +27,9 @@ export const productnameMenu = {
           slug: 'manage-x',
         },
         {
-          label: "Delete a <product-name>",
-          slug: "delete-a-<product-name>"
-        }
+          label: 'Delete a <product-name>',
+          slug: 'delete-a-<product-name>',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

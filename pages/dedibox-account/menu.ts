@@ -77,8 +77,7 @@ export const dediboxAccountMenu = {
           slug: 'manage-data-settings',
         },
         {
-          label:
-            'Recover the password in case of a lost email account',
+          label: 'Recover the password in case of a lost email account',
           slug: 'recover-password-lost-email',
         },
       ],

@@ -29,13 +29,11 @@ export const dediboxHardwareMenu = {
           slug: 'configure-hp-smart-array',
         },
         {
-          label:
-            'Configure the DELL PERC H200 RAID controller from the KVM',
+          label: 'Configure the DELL PERC H200 RAID controller from the KVM',
           slug: 'configure-raid-kvm-h200',
         },
         {
-          label:
-            'Configure the DELL PERC H310 RAID controller from the KVM',
+          label: 'Configure the DELL PERC H310 RAID controller from the KVM',
           slug: 'configure-raid-kvm-h310',
         },
         {

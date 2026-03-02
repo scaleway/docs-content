@@ -52,7 +52,7 @@ export const auditTrailMenu = {
         },
         {
           label: 'IAM authentication events in Audit Trail',
-          slug: 'iam-authentication-events'
+          slug: 'iam-authentication-events',
         },
         {
           label: 'Supported endpoints for Audit Trail',

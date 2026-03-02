@@ -73,7 +73,7 @@ export const cockpitMenu = {
         {
           label: 'Use IAM authentication for Cockpit with Terraform/OpenTofu',
           slug: 'iam-auth-cockpit-terraform',
-        }
+        },
       ],
       label: 'How to',
       slug: 'how-to',
@@ -95,8 +95,7 @@ export const cockpitMenu = {
     {
       items: [
         {
-          label:
-            'Understanding and managing Cockpit ingestion to reduce costs',
+          label: 'Understanding and managing Cockpit ingestion to reduce costs',
           slug: 'understanding-cockpit-usage',
         },
         {
@@ -108,13 +107,11 @@ export const cockpitMenu = {
           slug: 'cockpit-pricing',
         },
         {
-          label:
-            'Cockpit supported API endpoints for data source management',
+          label: 'Cockpit supported API endpoints for data source management',
           slug: 'cockpit-supported-endpoints',
         },
         {
-          label:
-            'Cockpit product integration',
+          label: 'Cockpit product integration',
           slug: 'cockpit-product-integration',
         },
       ],

@@ -31,8 +31,8 @@ export const accountMenu = {
           slug: 'log-in-to-the-console',
         },
         {
-          label: "Change account ownership",
-          slug: "change-ownership-organization"
+          label: 'Change account ownership',
+          slug: 'change-ownership-organization',
         },
         {
           label: 'Change the language',

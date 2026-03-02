@@ -27,8 +27,7 @@ export const keyManagerMenu = {
           slug: 'retrieve-km-key-id',
         },
         {
-          label:
-            'Create and manage a Key Manager data encryption key',
+          label: 'Create and manage a Key Manager data encryption key',
           slug: 'create-manage-dek',
         },
         {
@@ -54,8 +53,7 @@ export const keyManagerMenu = {
     {
       items: [
         {
-          label:
-            'Understanding security measures when using Key Manager',
+          label: 'Understanding security measures when using Key Manager',
           slug: 'security-recommendations',
         },
         {
@@ -109,12 +107,13 @@ export const keyManagerMenu = {
         },
         {
           label: 'Encrypting and decrypting data with an asymmetric key',
-          slug: 'encrypt-decrypt-asymmetric-key-with-go-sdk'
+          slug: 'encrypt-decrypt-asymmetric-key-with-go-sdk',
         },
         {
-          label: 'Managing signatures using the Scaleway Go SDK and Key Manager',
-          slug: 'sign-verify-key-with-go-sdk'
-        }
+          label:
+            'Managing signatures using the Scaleway Go SDK and Key Manager',
+          slug: 'sign-verify-key-with-go-sdk',
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',

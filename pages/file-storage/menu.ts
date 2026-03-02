@@ -53,23 +53,23 @@ export const fileStorageMenu = {
     {
       items: [
         {
-          label:'Using File Storage with the Scaleway CLI',
-          slug:'use-file-storage-cli'
+          label: 'Using File Storage with the Scaleway CLI',
+          slug: 'use-file-storage-cli',
         },
       ],
-      label:'API/CLI',
-      slug:'api-cli'
+      label: 'API/CLI',
+      slug: 'api-cli',
     },
     {
       items: [
         {
-          label:'File Storage limitations',
-          slug:'limitations'
+          label: 'File Storage limitations',
+          slug: 'limitations',
         },
       ],
-      label:'Additional content',
-      slug:'reference-content'
-    }
+      label: 'Additional content',
+      slug: 'reference-content',
+    },
   ],
   label: 'File Storage',
   slug: 'file-storage',

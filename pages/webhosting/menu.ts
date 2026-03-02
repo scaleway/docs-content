@@ -67,8 +67,7 @@ export const webhostingMenu = {
           slug: 'terminate-webhosting',
         },
         {
-          label:
-            'Migrate an Online.net/Dedibox web hosting plan to Scaleway',
+          label: 'Migrate an Online.net/Dedibox web hosting plan to Scaleway',
           slug: 'migrate-webhosting-plan',
         },
       ],
@@ -96,8 +95,7 @@ export const webhostingMenu = {
           slug: 'php-version-overview',
         },
         {
-          label:
-            'Web Hosting Classic migration - Technical information',
+          label: 'Web Hosting Classic migration - Technical information',
           slug: 'classic-hosting-migration-information',
         },
         {
@@ -105,8 +103,7 @@ export const webhostingMenu = {
           slug: 'understanding-differences-cpanel-plesk',
         },
         {
-          label:
-            'Understanding security measures on a shared hosting',
+          label: 'Understanding security measures on a shared hosting',
           slug: 'shared-hosting-best-practices',
         },
       ],

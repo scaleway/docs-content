@@ -75,7 +75,7 @@ export const edgeServicesMenu = {
         {
           label: 'Understanding pricing',
           slug: 'understanding-pricing',
-        }
+        },
       ],
       label: 'Additional content',
       slug: 'reference-content',

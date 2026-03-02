@@ -23,8 +23,8 @@ export const generativeApisMenu = {
           slug: 'query-language-models',
         },
         {
-          label: "Query reasoning models",
-          slug: "query-reasoning-models"
+          label: 'Query reasoning models',
+          slug: 'query-reasoning-models',
         },
         {
           label: 'Query vision models',
@@ -40,7 +40,7 @@ export const generativeApisMenu = {
         },
         {
           label: 'Query audio models',
-          slug: 'query-audio-models'
+          slug: 'query-audio-models',
         },
         {
           label: 'Use structured outputs',
@@ -120,31 +120,31 @@ export const generativeApisMenu = {
         },
         {
           label: 'Integrating Generative APIs with n8n',
-          slug: 'integrate-with-n8n'
+          slug: 'integrate-with-n8n',
         },
         {
           label: 'Integrating Generative APIs with Openclaw',
-          slug: 'integrate-with-openclaw'
+          slug: 'integrate-with-openclaw',
         },
         {
           label: 'Integrating Generative APIs with Cursor',
-          slug: 'integrate-with-cursor'
+          slug: 'integrate-with-cursor',
         },
         {
           label: 'Integrating Generative APIs with OpenCode',
-          slug: 'integrate-with-opencode'
+          slug: 'integrate-with-opencode',
         },
         {
           label: 'Integrating Generative APIs with Claude Code',
-          slug: 'integrate-with-claude-code'
+          slug: 'integrate-with-claude-code',
         },
         {
           label: 'Integrating Generative APIs with Qwen Code',
-          slug: 'integrate-with-qwen-code'
+          slug: 'integrate-with-qwen-code',
         },
         {
           label: 'Integrating Generative APIs with LiteLLM',
-          slug: 'integrate-with-litellm'
+          slug: 'integrate-with-litellm',
         },
         {
           label: 'Integrating Generative APIs with popular AI tools',

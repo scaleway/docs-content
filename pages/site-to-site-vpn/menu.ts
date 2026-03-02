@@ -33,7 +33,7 @@ export const siteToSiteVpnMenu = {
           slug: 'understanding-s2svpn',
         },
         {
-          label: 'Establishing a Site-to-Site VPN between Scaleway and AWS using the console',
+          label: 'Establishing a Site-to-Site VPN between Scaleway and AWS with the console',
           slug: 'configure-site-to-site-vpn-aws-scw',
         },
         {

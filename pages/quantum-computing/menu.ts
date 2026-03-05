@@ -31,6 +31,10 @@ export const quantumComputingMenu = {
           slug: 'use-aqt-qpus',
         },
         {
+          label: 'Use remote CUDA-Q emulators',
+          slug: 'use-cudaq-emulators',
+        },
+        {
           label: 'Use remote Aer emulators',
           slug: 'use-aer-emulators',
         },
@@ -39,8 +43,12 @@ export const quantumComputingMenu = {
           slug: 'use-qsim-emulators',
         },
         {
-          label: 'Run Quantum Machine Learning with Pennylane',
+          label: 'Use Pennylane for Quantum Machine Learning',
           slug: 'use-pennylane',
+        },
+        {
+          label: 'Use MerLin for Photonic Quantum Machine Learning',
+          slug: 'use-merlin',
         },
       ],
       label: 'How to',
@@ -61,6 +69,10 @@ export const quantumComputingMenu = {
         {
           label: 'Quantum Computing Information',
           slug: 'quantum-computing-information',
+        },
+        {
+          label: 'SDK & backend compatibility',
+          slug: 'sdk-backend-compatibility',
         },
         {
           label: 'AQT QPUs Information',

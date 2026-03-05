@@ -55,7 +55,15 @@ export const siteToSiteVpnMenu = {
           slug: 'understanding-s2svpn',
         },
         {
-          label: 'Security proposals',
+          label: 'Establishing a Site-to-Site VPN between Scaleway and AWS with the console',
+          slug: 'configure-site-to-site-vpn-aws-scw',
+        },
+        {
+          label: 'Establishing a Site-to-Site VPN between Scaleway and AWS with Terraform',
+          slug: 'configure-site-to-site-vpn-aws-scw-terraform',
+        },
+        {
+          label: 'Site-to-Site VPN Security proposals',
           slug: 'security-proposals',
         },
         {

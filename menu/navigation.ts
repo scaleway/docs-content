@@ -40,6 +40,7 @@ import { keyManagerMenu } from '../pages/key-manager/menu'
 import { kubernetesMenu } from "../pages/kubernetes/menu"
 import { loadBalancerMenu } from "../pages/load-balancer/menu"
 import { localStorageMenu } from "../pages/local-storage/menu"
+import { mailboxMenu } from "../pages/mailbox/menu"
 import { managedDatabasesForPostgresqlAndMysqlMenu } from "../pages/managed-databases-for-postgresql-and-mysql/menu"
 import { managedDatabasesForRedisMenu } from "../pages/managed-databases-for-redis/menu"
 import { managedInferenceMenu } from "../pages/managed-inference/menu"
@@ -176,6 +177,7 @@ export default [
         icon: 'DomainsAndWebHostingCategoryIcon',
         items: [
           domainsAndDnsMenu,
+          mailboxMenu,
           transactionalEmailMenu,
           webhostingMenu,
         ],

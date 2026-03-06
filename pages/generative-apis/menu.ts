@@ -42,6 +42,10 @@ export const generativeApisMenu = {
           label: 'Query audio models',
           slug: 'query-audio-models'
         },
+                {
+          label: 'Query reranking models',
+          slug: 'query-reranking-models'
+        },
         {
           label: 'Use structured outputs',
           slug: 'use-structured-outputs',
@@ -49,6 +53,10 @@ export const generativeApisMenu = {
         {
           label: 'Use function calling',
           slug: 'use-function-calling',
+        },
+        {
+          label: 'Use batch processing',
+          slug: 'use-batch-processing',
         },
       ],
       label: 'How to',
@@ -119,6 +127,10 @@ export const generativeApisMenu = {
           slug: 'integrate-with-n8n'
         },
         {
+          label: 'Integrating Generative APIs with Openclaw',
+          slug: 'integrate-with-openclaw'
+        },
+        {
           label: 'Integrating Generative APIs with Cursor',
           slug: 'integrate-with-cursor'
         },
@@ -133,6 +145,10 @@ export const generativeApisMenu = {
         {
           label: 'Integrating Generative APIs with Qwen Code',
           slug: 'integrate-with-qwen-code'
+        },
+        {
+          label: 'Integrating Generative APIs with LiteLLM',
+          slug: 'integrate-with-litellm'
         },
         {
           label: 'Integrating Generative APIs with popular AI tools',

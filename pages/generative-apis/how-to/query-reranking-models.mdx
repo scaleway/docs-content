@@ -1,0 +1,110 @@
+---
+title: How to query reranking models
+description: Learn how to interact with powerful reranking models using Scaleway's Generative APIs service.
+tags: generative-apis ai-data reranking-models
+dates:
+  validation: 2025-11-25
+  posted: 2025-11-25
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+Scaleway's Generative APIs service allows users to interact with powerful reranking models hosted on the platform.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/iam/how-to/create-api-keys/) for API authentication
+
+## Understanding reranking models
+
+Reranking models are designed to be used in **retrieval** pipelines, e.g. RAG, retrieval of previous conversations, or agents needing to choose the best tool call or search result from multiple results. Reranking models filter all the results retrieved, score their relevance, and keep only those that are the most pertinent to the initial query.
+
+For example: a query to a fast (but imprecise) model may return a list of 100 documents. A specialized reranking model can then evaluate these documents more deeply, score each on how well it matches the query, and return only the 10 most relevant documents to the first model to be used in answering the query.
+
+This approach takes advantage of the strengths of each model: one that is fast but not specialized, which can generate candidates quickly, and another that is slow but specialized, to refine these candidates. It can result in reduced context windows with therefore improved relevance, and faster overall query processing time.
+
+## Using embedding models for reranking
+
+In the case of using an embedding model such as `qwen3-embedding` for reranking, note that the [Embedding API](https://www.scaleway.com/en/developers/api/generative-apis/#path-embeddings-create-an-embedding) and [Rereanking API](https://www.scaleway.com/en/developers/api/generative-apis/#path-rerank-create-a-reranking) are functionally equivalent. This is because the generated embedding vectors are normalized - meaning that the reranking score corresponds directly to the **cosine similarity** between vectors, which, for normalized vectors, is identical to the **dot product**.
+
+In practical terms:
+
+- Query vector: `qv = embedding` (query)
+- Document vector: `dv = embedding` (document content)
+- Relevance score: `score = (qv, dv)` (dot product)
+
+Therefore, if you are performing repeated relevance scoring, you can streamline your workflow as follows:
+
+- Use the **Embeddings API** to generate and store document vectors in a vector database (e.g. **pgvector**).
+- At query time, compute the query vector and retrieve the most relevant documents using **dot product or cosine similarity** directly in the vector database, rather than using the Rerank API.
+
+This approach is particularly effective when **reranking results from non-embedding retrieval systems** such as:
+- Full-text search (e.g., using **BM25** in OpenSearch)
+- Graph-based search
+- Hybrid search pipelines combining multiple retrieval strategies
+
+## How to query reranking models via the API
+
+The example below sends a cURL request to the Rerank API to generate a reranking of a given set of documents.
+
+Ensure you have saved your [API key](/iam/how-to/create-api-keys/) in a `$SCW_SECRET_KEY` environment variable. 
+
+<Message type="note">
+As the Rerank API is not an OpenAI API, it cannot be used with the Python `openai` client.
+</Message>
+    
+```json
+curl https://api.scaleway.ai/v1/rerank \
+  -H "Authorization: Bearer $SCW_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "qwen3-embedding-8b",
+    "query": "What is the biggest area of water on earth ?",
+    "documents": [
+      "The Pacific is approximately 165 million km²",
+      "Oceans can be sorted by size: Pacific, Atlantic, Indian",
+      "The Atlantic is a very large ocean.",
+      "The deepest pool on earth is 96 000 m²"
+    ],
+    "top_n": 3
+  }'
+```
+
+The response should be similar to the following:
+
+```json
+{
+  "id": "rerank-a89e6d7b8b97492ea81569c65fbfff49",
+  "model": "qwen3-embedding-8b",
+  "usage": {
+    "total_tokens": 99
+  },
+  "results": [
+    {
+      "index": 1,
+      "document": {
+        "text": "Oceans can be sorted by size: Pacific, Atlantic, Indian",
+        "multi_modal": null
+      },
+      "relevance_score": 0.6456239223480225
+    },
+    {
+      "index": 2,
+      "document": {
+        "text": "The Atlantic is a very large ocean.",
+        "multi_modal": null
+      },
+      "relevance_score": 0.6264235377311707
+    },
+    {
+      "index": 0,
+      "document": {
+        "text": "The Pacific is approximately 165 million km²",
+        "multi_modal": null
+      },
+      "relevance_score": 0.6059925556182861
+    }
+  ]
+}
+```

@@ -111,7 +111,11 @@ export const appleSiliconMenu = {
           slug: '../../elastic-metal/reference-content/shared-responsibility-model',
         },
         {
-          label: 'Scaleway Dev OS for Apple silcion',
+          label: 'Apple silicon datasheet',
+          slug: 'apple-silicon-datasheet',
+        },
+        {
+          label: 'Scaleway Dev OS for Apple silicon',
           slug: 'scaleway-dev-os',
         },
       ],

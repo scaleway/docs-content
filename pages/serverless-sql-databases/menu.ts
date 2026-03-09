@@ -31,9 +31,12 @@ export const serverlessSqlDatabasesMenu = {
           slug: 'add-users',
         },
         {
-          label:
-            'Manage user permissions for Serverless SQL Databases',
+          label: 'Manage user permissions for Serverless SQL Databases',
           slug: 'manage-permissions',
+        },
+        {
+          label: 'Monitor a Serverless SQL Database',
+          slug: 'monitor-database',
         },
         {
           label: 'Use Row-Level Security on a database',

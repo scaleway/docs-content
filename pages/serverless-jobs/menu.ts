@@ -59,6 +59,10 @@ export const serverlessJobsMenu = {
           slug: 'configure-alerts-jobs',
         },
         {
+          label: 'Migrate from command to startup command and arguments',
+          slug: 'migrate-command-to-startup-command',
+        },
+        {
           label: 'Delete a job',
           slug: 'delete-job',
         },
@@ -89,6 +93,10 @@ export const serverlessJobsMenu = {
         {
           label: 'Jobs limitations',
           slug: 'jobs-limitations',
+        },
+        {
+          label: 'Injected environment variables',
+          slug: 'injected-environment-variables',
         },
         {
           label: 'Differences between Jobs, Functions and Containers',

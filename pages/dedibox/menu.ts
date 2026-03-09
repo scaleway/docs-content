@@ -93,6 +93,10 @@ export const dediboxMenu = {
     {
       items: [
         {
+          label: 'Dedibox server datasheet',
+          slug: 'dedibox-datasheet',
+        },
+        {
           label: 'Basic Linux commands',
           slug: 'basic-linux-commands',
         },

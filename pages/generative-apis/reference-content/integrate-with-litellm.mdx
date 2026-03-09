@@ -1,0 +1,148 @@
+---
+title: Integrating LiteLLM with Generative APIs
+description: Learn how to integrate LiteLLM with Scaleway's Generative APIs to monitor and route LLM Inference traffic
+tags: generative-apis ai language-models liteLLM machine-learning routing observability ai-gateway
+dates:
+  validation: 2026-02-19
+  posted: 2026-02-19
+---
+
+import Requirements from '@macros/iam/requirements.mdx'
+
+LiteLLM is an AI API gateway helping managing LLM inference in production. It provides features such as:
+- Custom routing (to different models and/or inference providers)
+- End user authentication
+- Per user consumption and cost tracking
+
+You can integrate Generative APIs as a [LiteLLM-compatible inference provider](https://docs.litellm.ai/docs/providers/scaleway).
+
+## Prerequisites
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/iam/how-to/create-api-keys/) for API authentication
+- Installed [Python 3.13 or newer](https://www.python.org/downloads/)
+
+## Install LiteLLM
+
+You can install LiteLLM using `pip`:
+
+```bash
+pip install litellm litellm[proxy]
+```
+
+This will install:
+- [LiteLLM SDKs](#configure-litellm-sdks-to-use-scaleways-generative-apis): Enables to perform queries using Python library
+- [LiteLLM Proxy Server](#configure-litellm-proxy-server-ai-gateway-to-use-scaleways-generative-apis): Enables to run an AI Gateway with routing and authentication features
+
+Ensure you have LiteLLM version 1.81.12 or newer correctly installed:
+```bash
+litellm --version
+```
+
+## Configure LiteLLM SDKs to use Scaleway’s Generative APIs
+
+1. Create a `main.py` file with the following content:
+
+```python
+from litellm import completion
+import os
+os.environ["SCW_SECRET_KEY"] = "YOUR_SCW_SECRET_KEY"
+
+messages = [{"role": "user", "content": "Write me a poem about the blue sky"}]
+response = completion(model="scaleway/mistral-small-3.2-24b-instruct-2506", messages=messages)
+print(response)
+```
+
+2. Run `main.py` python script:
+```bash
+python main.py
+```
+
+The model response should display.
+
+Alternatively, you can also configure LiteLLM SDK to use `openai` namespace and environment variables:
+
+```python
+from litellm import completion
+import os
+
+os.environ["OPENAI_API_KEY"] = "YOUR_SCW_SECRET_KEY"
+os.environ["OPENAI_BASE_URL"] = "https://api.scaleway.ai/v1"
+
+messages = [{"role": "user", "content": "Write me a poem about the blue sky"}]
+response = completion(model="openai/mistral-small-3.2-24b-instruct-2506", messages=messages)
+print(response)
+```
+
+This may be required for endpoints not yet supported by LiteLLM Scaleway provider, such as `/v1/embeddings`.
+
+## Configure LiteLLM Proxy Server (AI Gateway) to use Scaleway’s Generative APIs
+
+1. Create a configuration file `config.yaml` in your current directory:
+```yaml
+model_list:
+  - model_name: ai-agent ### RECEIVED MODEL NAME ###
+    litellm_params: # all params accepted by litellm.completion() - https://docs.litellm.ai/docs/completion/input
+      model: scaleway/mistral-small-3.2-24b-instruct-2506 ### MODEL NAME sent to `litellm.completion()` ###
+      rpm: 10      # [OPTIONAL] Rate limit for this deployment: in requests per minute (rpm)
+  - model_name: ai-agent
+    litellm_params:
+      model: scaleway/qwen3-235b-a22b-instruct-2507
+      rpm: 10
+```
+
+2. Run litellm proxy server with this configuration:
+```bash
+SCW_SECRET_KEY="YOUR_SCW_SECRET_KEY" \
+litellm --config ./config.yaml
+```
+
+3. Perform a query to `ai-agent` model on `localhost:4000`, asking about the model's identity:
+```bash
+curl http://localhost:4000/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "ai-agent",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant."
+      },
+      {
+        "role": "user",
+        "content": "Who are you ?"
+      }
+    ]
+  }'
+```
+If you perform multiple queries, model answers should display, either stating the model is Mistral or Qwen depending on where the query was routed by LiteLLM.
+
+Alternatively, you can configure `config.yaml` to use `openai` namespace and environment variables:
+
+```yaml
+model_list:
+  - model_name: ai-agent
+    litellm_params:
+      model: openai/devstral-2-123b-instruct-2512
+      api_base: https://api.scaleway.ai/v1
+      api_key: "os.environ/SCW_SECRET_KEY"
+      rpm: 10
+  - model_name: ai-agent
+    litellm_params:
+      model: openai/qwen3-235b-a22b-instruct-2507
+      api_base: https://api.scaleway.ai/v1
+      api_key: "os.environ/SCW_SECRET_KEY"
+      rpm: 10
+```
+
+This may be required for endpoints not yet supported by the LiteLLM Scaleway provider, such as `/v1/embeddings`.
+
+## Going further
+
+- Add other models
+- Deploy LiteLLM on an [Instance](https://console.scaleway.com/instance) or [Serverless Container](https://console.scaleway.com/containers) 
+- Define different rate limits and adjust load balancing strategy
+- Set up user accounts and access UI dashboard. This require a PostgreSQL compatible database, such as [Managed Databases for PostgreSQL](https://console.scaleway.com/rdb/fr-par/instances) or [Serverless SQL Database](https://console.scaleway.com/serverless-db/fr-par/databases).

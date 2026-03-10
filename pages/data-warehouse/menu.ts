@@ -43,11 +43,23 @@ export const dataWarehouseMenu = {
           slug: 'connect-bi-tools',
         },
         {
+          label: 'Use Private Networks',
+          slug: 'use-private-networks',
+        },
+        {
+          label: 'Start/stop a deployment',
+          slug: 'start-stop-deployment',
+        },
+        {
+          label: 'Monitor a deployment',
+          slug: 'monitor-deployment',
+        },
+        {
           label: 'Import data into a deployment',
           slug: 'import-data',
         },
         {
-          label: 'Edit the autoscaling of a deployment',
+          label: 'Edit the autoscaling and nodes settings',
           slug: 'edit-autoscaling',
         },
         {
@@ -57,6 +69,16 @@ export const dataWarehouseMenu = {
       ],
       label: 'How to',
       slug: 'how-to',
+    },
+    {
+      items: [
+        {
+          label: 'Using a Public Gateway to connect to a deployment in a Private Network',
+          slug: 'use-data-warehouse-public-gateway',
+        },
+      ],
+      label: 'API/CLI',
+      slug: 'api-cli',
     },
     {
       items: [

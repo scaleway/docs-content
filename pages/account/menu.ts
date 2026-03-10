@@ -43,7 +43,7 @@ export const accountMenu = {
           slug: 'switch-account-to-corporate',
         },
         {
-          label: 'Switch the color scheme of the console',
+          label: 'Change the color theme of the console',
           slug: 'change-console-appearance',
         },
         {

@@ -44,13 +44,17 @@ export const iamMenu = {
         },
         {
           label: 'Set up identity federation',
-          slug: 'Set-up-identity-federation'
+          slug: 'set-up-identity-federation'
         },
         {
           label: 'Set up SSO with Authentik',
           slug: 'set-up-sso-with-authentik'
         },
-            {
+        {
+          label: 'Set up automatic user provisioning with SCIM',
+          slug: 'manage-users-with-scim'
+        },
+        {
           label: 'Set and manage credential maximum duration',
           slug: 'set-credentials-maximum-duration'
         },

@@ -19,8 +19,16 @@ export const mailboxMenu = {
     {
       items: [
         {
-          label: 'Configure your domain with Mailbox',
-          slug: 'configure-domain-with-mailbox',
+          label: 'Create your Mailbox domain',
+          slug: 'create-mailbox-domain',
+        },
+        {
+          label: 'Configure your Mailbox domain',
+          slug: 'configure-mailbox',
+        },
+        {
+          label: 'Delete your Mailbox domain',
+          slug: 'delete-mailbox-domain',
         },
       ],
       label: 'How to',

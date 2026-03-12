@@ -43,6 +43,10 @@ export const dataWarehouseMenu = {
           slug: 'connect-bi-tools',
         },
         {
+          label: 'Connect a deployment with PowerBI in a Private Network',
+          slug: 'connect-powerbi-vpc'
+        },
+        {
           label: 'Use Private Networks',
           slug: 'use-private-networks',
         },

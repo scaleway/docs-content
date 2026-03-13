@@ -100,7 +100,7 @@ export const dediboxScalewayMenu = {
         },
         {
           label: 'Mounting filesystems in rescue mode',
-          slug: 'mount-fs-in-resuce-mode',
+          slug: 'mount-fs-in-rescue-mode',
         },
       ],
       label: 'Additional Content',

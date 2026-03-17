@@ -81,7 +81,7 @@ export const billingMenu = {
         {
           label: 'Understanding savings plans',
           slug: 'understanding-savings-plans',
-        }
+        },
       ],
       label: 'Additional Content',
       slug: 'additional-content',

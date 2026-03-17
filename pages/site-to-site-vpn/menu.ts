@@ -21,7 +21,7 @@ export const siteToSiteVpnMenu = {
         {
           label: 'Site-to-Site VPN API Reference',
           slug: 'https://www.scaleway.com/en/developers/api/site-to-site-vpn/',
-        }
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',
@@ -33,11 +33,13 @@ export const siteToSiteVpnMenu = {
           slug: 'understanding-s2svpn',
         },
         {
-          label: 'Establishing a Site-to-Site VPN between Scaleway and AWS with the console',
+          label:
+            'Establishing a Site-to-Site VPN between Scaleway and AWS with the console',
           slug: 'configure-site-to-site-vpn-aws-scw',
         },
         {
-          label: 'Establishing a Site-to-Site VPN between Scaleway and AWS with Terraform',
+          label:
+            'Establishing a Site-to-Site VPN between Scaleway and AWS with Terraform',
           slug: 'configure-site-to-site-vpn-aws-scw-terraform',
         },
         {
@@ -51,7 +53,7 @@ export const siteToSiteVpnMenu = {
       ],
       label: 'Additional Content',
       slug: 'reference-content',
-    }
+    },
   ],
   label: 'Site-to-Site VPN',
   slug: 'site-to-site-vpn',

@@ -43,8 +43,7 @@ export const managedInferenceMenu = {
           slug: 'manage-allowed-ips',
         },
         {
-          label:
-            'Use your Managed Inference deployment with a Private Network',
+          label: 'Use your Managed Inference deployment with a Private Network',
           slug: 'managed-inference-with-private-network',
         },
         {
@@ -68,8 +67,7 @@ export const managedInferenceMenu = {
     {
       items: [
         {
-          label:
-            "Data, privacy, and security for Scaleway's AI services",
+          label: "Data, privacy, and security for Scaleway's AI services",
           slug: 'data-privacy-security-scaleway-ai-services',
         },
         {
@@ -81,8 +79,7 @@ export const managedInferenceMenu = {
           slug: 'supported-models',
         },
         {
-          label:
-            'Support for function calling in Scaleway Managed Inference',
+          label: 'Support for function calling in Scaleway Managed Inference',
           slug: 'function-calling-support',
         },
         {

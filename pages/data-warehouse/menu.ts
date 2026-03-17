@@ -44,7 +44,7 @@ export const dataWarehouseMenu = {
         },
         {
           label: 'Connect a deployment with PowerBI in a Private Network',
-          slug: 'connect-powerbi-vpc'
+          slug: 'connect-powerbi-vpc',
         },
         {
           label: 'Use Private Networks',
@@ -77,7 +77,8 @@ export const dataWarehouseMenu = {
     {
       items: [
         {
-          label: 'Using a Public Gateway to connect to a deployment in a Private Network',
+          label:
+            'Using a Public Gateway to connect to a deployment in a Private Network',
           slug: 'use-data-warehouse-public-gateway',
         },
       ],

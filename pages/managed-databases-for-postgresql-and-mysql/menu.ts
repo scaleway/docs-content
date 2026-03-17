@@ -131,8 +131,7 @@ export const managedDatabasesForPostgresqlAndMysqlMenu = {
     {
       items: [
         {
-          label:
-            'Managed Database for PostgreSQL and MySQL API Reference',
+          label: 'Managed Database for PostgreSQL and MySQL API Reference',
           slug: 'https://www.scaleway.com/en/developers/api/managed-databases-for-postgresql-and-mysql/',
         },
         {
@@ -148,13 +147,11 @@ export const managedDatabasesForPostgresqlAndMysqlMenu = {
           slug: 'using-pgcron',
         },
         {
-          label:
-            "Verifying Servers' Certificate Authority on PostgreSQL",
+          label: "Verifying Servers' Certificate Authority on PostgreSQL",
           slug: 'verify-ca-postgresql',
         },
         {
-          label:
-            'Migrating Database Instance endpoints via the Scaleway CLI',
+          label: 'Migrating Database Instance endpoints via the Scaleway CLI',
           slug: 'migrating-endpoints',
         },
         {
@@ -170,8 +167,7 @@ export const managedDatabasesForPostgresqlAndMysqlMenu = {
           slug: 'logical-replication-as-publisher',
         },
         {
-          label:
-            'Connecting Managed Databases to Kubernetes clusters',
+          label: 'Connecting Managed Databases to Kubernetes clusters',
           slug: 'connecting-managed-databases-to-kubernetes-clusters',
         },
       ],

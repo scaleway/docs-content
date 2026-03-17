@@ -33,7 +33,7 @@ export const clustersForKafkaMenu = {
         {
           label: 'Delete a cluster',
           slug: 'delete-cluster',
-        }
+        },
       ],
       label: 'How to',
       slug: 'how-to',
@@ -43,7 +43,7 @@ export const clustersForKafkaMenu = {
         {
           label: 'Clusters for Apache Kafka® API Reference',
           slug: 'https://www.scaleway.com/en/developers/api/clusters-for-kafka/',
-        }
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',

@@ -29,8 +29,7 @@ export const scalewayCliMenu = {
     {
       items: [
         {
-          label:
-            'Automate resources management with the CLI and Jobs',
+          label: 'Automate resources management with the CLI and Jobs',
           slug: 'automate-resources-management',
         },
       ],

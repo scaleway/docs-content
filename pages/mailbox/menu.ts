@@ -27,6 +27,14 @@ export const mailboxMenu = {
           slug: 'configure-mailbox',
         },
         {
+          label: 'Manage a Mailbox subscription',
+          slug: 'manage-mailbox-subscription',
+        },
+        {
+          label: 'Delete a Mailbox email account',
+          slug: 'delete-mailbox-email-account',
+        },
+        {
           label: 'Delete your Mailbox domain',
           slug: 'delete-mailbox-domain',
         },

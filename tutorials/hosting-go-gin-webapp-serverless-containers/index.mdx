@@ -101,9 +101,10 @@ Gin is a lightweight, high-performance web framework for Go, ideal for building 
     </html>
     ```
 
-6. Run the following command to install the Gin package:
+6. Run the following command to install the Gin package and tidy dependencies:
     ```bash
     go get -u github.com/gin-gonic/gin
+    go mod tidy
     ```
 
 7. Test the app locally:
@@ -118,7 +119,7 @@ Before building and pushing your image, ensure you have [created a Scaleway Cont
 
 1. Create a `Dockerfile` at the root of your project:
     ```dockerfile
-    # Use a lightweight Go image for building
+    # Build stage
     FROM golang:1.25-alpine AS builder
 
     # Set working directory
@@ -131,14 +132,11 @@ Before building and pushing your image, ensure you have [created a Scaleway Cont
     # Copy source code
     COPY . .
 
-    # Build the Go binary
-    RUN go build -o main .
+    # Build the Go binary (statically linked)
+    RUN CGO_ENABLED=0 GOOS=linux go build -o main .
 
     # Final stage: minimal image
-    FROM alpine:latest
-
-    # Install CA certificates
-    RUN apk --no-cache add ca-certificates
+    FROM scratch
 
     # Set working directory
     WORKDIR /root/
@@ -146,12 +144,19 @@ Before building and pushing your image, ensure you have [created a Scaleway Cont
     # Copy binary from builder stage
     COPY --from=builder /app/main .
 
+    # Copy templates folder
+    COPY templates/ ./templates/
+
     # Expose port
     EXPOSE 8080
 
     # Run the binary
     CMD ["./main"]
     ```
+
+    <Message type="note">
+    **Why multi-stage builds?** Multi-stage builds create smaller, more secure images by separating the build environment from the runtime image. The final image only contains your compiled binary and templates, no Go compiler, build tools, or unnecessary dependencies. Using `scratch` (an empty base image) resulting in faster deployments (lower cold starts), lower storage costs, and a reduced attack surface.
+    </Message>
 
 2. Build, tag, and push the image to Scaleway Container Registry:
     ```bash
@@ -182,4 +187,3 @@ Before building and pushing your image, ensure you have [created a Scaleway Cont
 
 - You can deploy an existing Go Gin project by building and pushing its container image as shown above.
 - [Add a custom domain](/serverless-containers/how-to/add-a-custom-domain-to-a-container/) to your deployed app.
-- Secure your app with HTTPS — Scaleway automatically provides TLS for container endpoints.

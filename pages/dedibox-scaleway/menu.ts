@@ -52,7 +52,7 @@ export const dediboxScalewayMenu = {
         },
         {
           label: 'Configure IPv6',
-          slug: 'configure-ipv6-dedibox'
+          slug: 'configure-ipv6-dedibox',
         },
         {
           label: 'Modify Dedibox options',

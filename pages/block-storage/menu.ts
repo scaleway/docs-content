@@ -56,7 +56,7 @@ export const blockStorageMenu = {
         },
         {
           label: 'Unmount a volume',
-          slug: 'unmount-a-volume'
+          slug: 'unmount-a-volume',
         },
         {
           label: 'Delete a snapshot',
@@ -99,8 +99,7 @@ export const blockStorageMenu = {
           slug: 'storage-shared-responsibility-model',
         },
         {
-          label:
-            'Differences between Block Storage volumes',
+          label: 'Differences between Block Storage volumes',
           slug: 'differences-between-5kiops-volumes',
         },
         {

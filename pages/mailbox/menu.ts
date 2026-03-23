@@ -32,7 +32,7 @@ export const mailboxMenu = {
         },
         {
           label: 'Delete a Mailbox email account',
-          slug: 'delete-mailbox-email-account',
+          slug: 'delete-email-account',
         },
         {
           label: 'Delete your Mailbox domain',

@@ -191,6 +191,10 @@ export const instancesMenu = {
           "slug": "images-and-instantapps"
         },
         {
+          "label": "Using Red Hat Enterprise Linux with BYOS on Scaleway",
+          "slug": "use-red-hat-license"
+        },
+        {
           "label": "Understanding the differences between ARM and x86 Instances",
           "slug": "understanding-differences-x86-arm"
         },

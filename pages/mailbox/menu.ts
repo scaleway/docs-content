@@ -34,6 +34,16 @@ export const mailboxMenu = {
       label: 'How to',
       slug: 'how-to',
     }
+    {
+      items: [
+        {
+          label: 'Mailbox capabilities and limits',
+          slug: 'mailbox-capabilities-and-limits',
+        },
+      ],
+      label: 'Additional Content',
+      slug: 'reference-content',
+    },
   ],
   label: 'Mailbox',
   slug: 'mailbox',

@@ -51,6 +51,10 @@ export const cockpitMenu = {
           slug: 'send-metrics-from-k8s-to-cockpit',
         },
         {
+          label: 'Monitor your Kubernetes cluster with Cockpit',
+          slug: 'monitor-k8s-cluster-with-cockpit',
+        },
+        {
           label: 'Create and push and traces to your Cockpit',
           slug: 'activate-push-traces',
         },

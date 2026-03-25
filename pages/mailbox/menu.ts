@@ -33,7 +33,7 @@ export const mailboxMenu = {
       ],
       label: 'How to',
       slug: 'how-to',
-    }
+    },
     {
       items: [
         {

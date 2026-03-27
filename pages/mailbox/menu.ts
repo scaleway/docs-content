@@ -19,6 +19,10 @@ export const mailboxMenu = {
           slug: 'configure-mailbox',
         },
         {
+          label: 'Reset a Mailbox email account password',
+          slug: 'reset-mailbox-password',
+        },
+        {
           label: 'Manage a Mailbox subscription',
           slug: 'manage-mailbox-subscription',
         },

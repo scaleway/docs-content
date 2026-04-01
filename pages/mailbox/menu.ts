@@ -9,6 +9,10 @@ export const mailboxMenu = {
       slug: 'concepts',
     },
     {
+      label: 'Quickstart',
+      slug: 'quickstart',
+    },
+    {
       items: [
         {
           label: 'Create your Mailbox domain',
@@ -17,6 +21,10 @@ export const mailboxMenu = {
         {
           label: 'Configure your Mailbox domain',
           slug: 'configure-mailbox',
+        },
+        {
+          label: 'Reset a Mailbox email account password',
+          slug: 'reset-mailbox-password',
         },
         {
           label: 'Manage a Mailbox subscription',

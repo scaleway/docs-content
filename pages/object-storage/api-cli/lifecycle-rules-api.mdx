@@ -3,31 +3,75 @@ title: Managing the lifecycle of objects
 description: Use the API to manage lifecycle rules in Scaleway Object Storage.
 tags: object storage object-storage lifecycle
 dates:
-  validation: 2025-07-31
+  validation: 2026-03-31
   posted: 2019-05-14
 ---
 import Requirements from '@macros/iam/requirements.mdx'
 import LifecycleMinimalDurationMessage from '@macros/object-storage/lifecycle-minimal-duration-message.mdx'
 
+You can configure the lifecycle of a group of objects to manage their storage costs effectively. A lifecycle configuration is a set of rules that defines actions applied to a group of objects stored on Object Storage.
+
+The Amazon S3 API allows you to automatically manage the lifecycle of your object by setting lifecycle rules. These rules allow you to automatically:
+  - Delete your objects and their versions by setting expiration durations
+  - Transition objects and their versions to a colder storage class
+  - Abort incomplete [multipart uploads](/object-storage/api-cli/multipart-uploads/)
+
+<LifecycleMinimalDurationMessage />
+
+Lifecycle management on Object Storage is available on every Amazon S3 compliant tool (sdk, aws-cli, boto, etc), as well as from the Scaleway [console](/object-storage/how-to/manage-lifecycle-rules/).
 
 <Requirements />
 
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - An [Object Storage bucket](/object-storage/how-to/create-a-bucket/)
+- Installed and initialized the [AWS CLI](/object-storage/api-cli/object-storage-aws-cli/)
 
-You can configure the lifecycle of a group of objects so that their storage costs can be effectively managed. A lifecycle configuration is a set of rules that defines actions applied to a group of objects stored on Object Storage.
+## Creating a lifecycle rule using the AWS CLI
 
-Currently, the **expiration**, **transition**, and **incomplete multipart uploads** actions are supported on the platform:
-  * **Expiration** defines when objects expire. Expired objects are automatically deleted.
-  * **Transition** defines when objects change storage classes.
-  * **Incomplete Multipart Uploads** allows you to stop uploads automatically if they are not completed.
+1. Create a new `my-lifecycle-rule.json` file.
 
-<LifecycleMinimalDurationMessage />
+2. Add the required rules to it using the rule elements detailed in the [section about XML tokens](#available-xml-tokens).
 
-There might, for example, be a need to store log files for a week or a month, after which they become obsolete. It is possible to set a lifecycle rule to delete them automatically when they become obsolete. If you consider that a 3-month-old object is rarely used but still has a value, you might want to configure a rule to send it automatically to [Scaleway Glacier](/object-storage/faq/#what-is-the-cold-storage-glacier-class), for example.
+    ```json
+    {
+      "Rules": [
+        {
+          "ID": "TransitionToGlacierAfter90Days",
+          "Status": "Enabled",
+          "Filter": { "Prefix": "" },
+          "Transitions": [
+            {
+              "Days": 90,
+              "StorageClass": "GLACIER"
+            }
+          ]
+        }
+      ]
+    }
+    ```
 
-Lifecycle management on Object Storage is available on every Amazon S3 compliant tool (sdk, aws-cli, boto, etc), as well as from the Scaleway [console](https://console.scaleway.com/organization).
+3. Run the following command to apply the lifecycle rule to the specified bucket. Do not forget to replace the placeholders with the appropriate values.
 
+    ```bash
+    aws s3api put-bucket-lifecycle-configuration \
+    --bucket my-bucket \
+    --lifecycle-configuration file://my-lifecycle-rule.json
+    ```
+
+    No output is returned.
+
+4. Run the following command to make sure the rule was properly applied:
+
+    ```bash
+    aws s3api get-bucket-lifecycle-configuration \
+    --bucket my-bucket \
+    ```
+
+    The content of your rules displays.
+
+<Message type="note">
+You can view active rules in the **Lifecycle rules** tab of your bucket in the [Scaleway console](https://console.scaleway.com/).
+</Message>
 
 ## Lifecycle specification
 
@@ -160,6 +204,30 @@ Lifecycle rules only allow the following transitions:
 **Parent**
 : `Rule`
 
+### NoncurrentVersionExpiration
+
+**Description**
+: Describes the lifetime of non-current versions before they expire. Expired objects are deleted automatically.
+
+**Parent**
+: `Rule`
+
+### NoncurrentVersionTransitions
+
+**Description**
+: Describes the lifetime of non-current versions before being transitioned to the specified storage class. See [Transition](#transition) for allowed transitions.
+
+**Parent**
+: `Rule`
+
+### NoncurrentDays
+
+**Description**
+The number of days after which non-current versions are expired or transitioned.
+
+**Parent**
+: `NoncurrentVersionTransitions`, `NoncurrentVersionExpiration`
+
 **Configuration example**
 
 ```xml
@@ -221,7 +289,7 @@ Send a [PutBucketLifecycleConfiguration](/object-storage/api-cli/bucket-operatio
 </LifecycleConfiguration>
 ```
 <Message type="note">
-  In this example, the multipart upload timeframe is of one day. You may change the number of `DaysAfterInitiation` according to your preference by replacing `1` in the XML payload.
+  In this example, the multipart upload timeframe is one day. You may change the number of `DaysAfterInitiation` according to your preference by replacing `1` in the XML payload.
 </Message>
 
 **CLI command**
@@ -230,7 +298,7 @@ Send a [PutBucketLifecycleConfiguration](/object-storage/api-cli/bucket-operatio
     ```json
     {
       "Rules": [{
-        "ID": "Remove uncompleted uploads",
+        "ID": "Remove incomplete multipart uploads",
         "Status": "Enabled",
         "Filter": {
           "Prefix": ""

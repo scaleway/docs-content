@@ -9,6 +9,10 @@ export const mailboxMenu = {
       slug: 'concepts',
     },
     {
+      label: 'Quickstart',
+      slug: 'quickstart',
+    },
+    {
       items: [
         {
           label: 'Create your Mailbox domain',

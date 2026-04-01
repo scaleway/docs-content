@@ -1,6 +1,6 @@
 ---
 title: Connecting Private Networks using Site-to-Site VPN and strongSwan
-description: 
+description: Learn how to establish a secure connection between private networks using Site-to-Site VPN with strongSwan on Scaleway.
 tags: vpn strongswan public gateway customer gateway secure tunnel
 products:
   - site-to-site-vpn
@@ -15,3 +15,249 @@ ecosystem:
   - third-party
 ---
 
+In this tutorial, you will learn how to establish a secure connection between two private networks using Site-to-Site VPN with strongSwan on Scaleway. You will create a connection between a Scaleway VPC and a customer network, enabling communication between private servers in each network.
+
+## Requirements
+
+To complete the actions presented below, you must have:
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Two separate Scaleway Projects (one for Scaleway side, one for customer side)
+- Basic knowledge of VPC and Private Network concepts
+
+## Overview of the setup
+
+### Network 1 (Scaleway side)
+
+- Private Network: 176.16.0.0/22
+- S2S VPN configured via Scaleway console
+- Private server instance (without public IP address): scw-srv
+
+### Network 2 (Customer side)
+
+- Private Network: 176.16.16.0/22
+- Gateway instance (Debian running strongSwan): customer-gw
+- Private server instance (without public IP address): customer-srv
+
+## Goal
+
+Be able to ping scw-srv from customer-srv.
+
+## About ASNs
+
+Both networks are created as different projects in the Scaleway console. The documentation and interface warn about it not being possible due to BGP limitation to route between different ASs. This limitation is worked around by attributing a private ASN (65000) to the customer's gateway.
+
+## Step-by-step procedure
+
+### Setup the "customer" project
+
+1. Create a VPC containing only one Private Network (Advanced -> custom IP block: 172.16.16.0/22)
+
+2. Create the instance customer-gw:
+   - Debian OS
+   - Public IP address (51.15.82.244 in this example, adapt to your IP)
+   - Attached to the Private Network with IP 172.16.16.2/22
+
+3. Create the instance customer-srv:
+   - Debian OS
+   - No public IP address
+   - Attached to the Private Network with IP 172.16.16.3/22
+
+### Setup the "scw" project
+
+1. Create a VPC containing only one Private Network (Advanced -> custom IP block: 172.16.0.0/22)
+
+2. Create the instance scw-srv:
+   - Debian OS
+   - No public IP address
+   - Attached to the Private Network with IP 172.16.0.2/22
+
+3. Create the VPN gateway scw-gw:
+   - Public IP address (212.47.229.0 in this example, adapt to your IP)
+   - Attached to the Private Network with IP 172.16.0.3/22
+
+4. Create the customer gateway:
+   - IP address: customer-gw's IP (51.15.82.244/32 in this example)
+   - ASN: 65000
+
+5. Create the routing policy:
+   - IPv4
+   - Incoming whitelist: 172.16.16.0/22
+   - Outgoing whitelist: 172.16.0.0/22 (or set both to 0.0.0.0/0 for maximum flexibility)
+
+6. Create the connection linking everything together:
+   - Configure with "connection Initiated by the customer gateway"
+   - Select recommended "Security proposal": "IKE2: aes256gcm16-sha384-curve25519 - ESP: aes256gcm16"
+
+### Setup BGP service on customer-gw
+
+1. Install required packages:
+   ```bash
+   apt-get install frr frr-pythontools
+   ```
+
+2. In `/etc/frr/daemons`, set `bgpd=yes`
+
+3. Create `/etc/frr/frr.conf` with the following content:
+   ```
+   log syslog informational
+
+   !
+   router bgp 65000
+    # Example values:
+    #  169.254.0.7: "Interconnection subnet" IP in Scaleway console -> connection overview -> BGP session
+    #  169.254.0.6: The other IP in the same subnet as above
+    #  172.16.16.0/22: The subnet this server (customer-gw) serves
+    bgp router-id 169.254.0.7
+    neighbor 169.254.0.6 remote-as 12876
+    neighbor 169.254.0.6 description TransitProvider
+    !
+    address-family ipv4 unicast
+     #network 172.16.16.0/22 # let commented to announce all your routes, uncomment to select the routes to announce
+     redistribute connected
+    exit-address-family
+   !
+   ```
+
+4. Restart FRR service:
+   ```bash
+   systemctl restart frr
+   ```
+
+### Setup strongSwan on customer-gw
+
+1. Create an XFRM interface to tag BGP session's packets:
+   ```bash
+   ip link add type xfrm if_id 1 dev ens2
+   ip addr add 169.254.0.7/31 dev xfrm0
+   ip link set xfrm0 up
+   ```
+
+2. Install strongSwan packages:
+   ```bash
+   apt-get install strongswan strongswan-pki libstrongswan-standard-plugins libstrongswan-extra-plugins strongswan-libcharon
+   ```
+
+3. Create `/etc/swanctl/conf.d/moon.conf`:
+   ```
+   connections {
+      gw-gw {
+         local_addrs  = 51.15.82.244 # customer-gw's IP
+         remote_addrs = 212.47.229.0 # scw-gw's IP
+
+         local {
+            auth = psk
+            id = 51.15.82.244
+         }
+         remote {
+            auth = psk
+            id = 51.15.82.244
+         }
+         children {
+            net-net {
+               local_ts  = 0.0.0.0/0
+               remote_ts = 0.0.0.0/0
+
+               if_id_in = 1
+               if_id_out = 1
+
+               updown = /usr/lib/ipsec/_updown
+               rekey_time = 5400
+               rekey_bytes = 500000000
+               rekey_packets = 1000000
+               esp_proposals = aes256gcm16 # Copy the ESP part of your connection's "Security proposal"
+            }
+         }
+         version = 2
+         mobike = no
+         reauth_time = 10800
+         proposals = aes256gcm16-sha384-curve25519 # Copy the IKE part of your connection's "Security proposal"
+      }
+   }
+
+   secrets {
+      ike-scaleway-psk {
+         id = 51.15.82.244
+         secret = "*****" # PSK available from Scaleway's console, in "Security & Identity -> Secret Manager"
+      }
+   }
+   ```
+
+4. Load configurations and initiate connection:
+   ```bash
+   swanctl --load-conns
+   swanctl --load-creds
+   swanctl --initiate --child net-net
+   ```
+
+At this point:
+- The S2S VPN connection should have a green status in Scaleway console
+- Both the "Tunnel via IPv4" and the BGP session should be OK
+- From customer-gw, you can ping scw-gw using its BGP session's IP (169.254.0.6 in this case)
+- We cannot ping scw-gw using its private IP (172.16.0.3) because BGP routes are not yet exchanged
+
+### Exchange routes via BGP
+
+1. In the Scaleway console, activate "Route propagation" in the S2S VPN connection
+
+2. Modify `/etc/frr/frr.conf` to add prefix lists and route maps:
+   ```
+   log syslog informational
+
+   !
+   ip prefix-list PROV_1_IN seq 10 permit 172.16.0.0/22
+   ip prefix-list PROV_1_OUT seq 10 permit any
+   !
+   route-map PROV_1_IN permit 10
+    match ip address prefix-list PROV_1_IN
+   exit
+   !
+   route-map PROV_1_OUT permit 10
+    match ip address prefix-list PROV_1_OUT
+   exit
+   !
+   router bgp 65000
+    # Example values:
+    #  169.254.0.7: "Interconnection subnet" IP in Scaleway console -> connection overview -> BGP session
+    #  169.254.0.6: The other IP in the same subnet as above
+    #  172.16.16.0/22: The subnet this server (customer-gw) serves
+    bgp router-id 169.254.0.7
+    neighbor 169.254.0.6 remote-as 12876
+    neighbor 169.254.0.6 description TransitProvider
+    !
+    address-family ipv4 unicast
+     #network 172.16.16.0/22 # let commented to announce all your routes, uncomment to select the routes to announce
+     redistribute connected
+     neighbor 169.254.0.6 route-map PROV_1_IN in
+     neighbor 169.254.0.6 route-map PROV_1_OUT out
+    exit-address-family
+   !
+   ```
+
+3. Restart FRR service:
+   ```bash
+   systemctl restart frr
+   ```
+
+At this point:
+- On customer-gw, `ip route` shows the new route for 172.16.0.0/22 subnet
+- We can ping scw-gw and scw-srv from customer-gw
+- We cannot ping scw-* from customer-srv because it is missing gateway configuration
+
+### Setup a gateway in customer network
+
+1. On customer-gw, activate packet forwarding:
+   ```bash
+   sysctl -w net.ipv4.ip_forward=1
+   ```
+
+2. On customer-srv, add the route using the gateway:
+   ```bash
+   ip route add 172.16.0.0/22 via 172.16.16.2
+   ```
+
+At this point:
+- Everything works as expected, we can ping a private server from the other
+- Test it by connecting to customer-srv and issuing `ping 172.16.0.2`
+- Congratulations!

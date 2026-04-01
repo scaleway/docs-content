@@ -75,7 +75,11 @@ export const edgeServicesMenu = {
         {
           label: 'Understanding pricing',
           slug: 'understanding-pricing',
-        }
+        },
+        {
+          label: 'Understanding routing and multi-backend',
+          slug: 'understanding-multi-backend',
+        },
       ],
       label: 'Additional content',
       slug: 'reference-content',

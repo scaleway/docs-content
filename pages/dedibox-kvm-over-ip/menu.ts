@@ -24,6 +24,10 @@ export const dediboxKvmOverIpMenu = {
           slug: 'hp-ilo',
         },
         {
+          label: 'Use HP iLO 5',
+          slug: 'hp-ilo5',
+        },
+        {
           label: 'Use DELL iDRAC 6',
           slug: 'dell-idrac6',
         },

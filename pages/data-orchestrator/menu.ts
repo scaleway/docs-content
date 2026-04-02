@@ -4,6 +4,10 @@ export const dataOrchestratorMenu = {
       label: 'Overview',
       slug: '../data-orchestrator',
     },
+    {
+      label: 'Concepts',
+      slug: 'concepts',
+    },
   ],
   label: 'Data Orchestrator',
   slug: 'data-orchestrator',

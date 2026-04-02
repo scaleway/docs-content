@@ -15,11 +15,13 @@ ecosystem:
   - third-party
 ---
 
-In this tutorial, you will learn how to establish a secure connection between two private networks using Site-to-Site VPN with strongSwan on Scaleway. You will create a connection between a Scaleway VPC and a customer network, enabling communication between private servers in each network.
+import Requirements from '@macros/iam/requirements.mdx'
 
-## Requirements
+In this tutorial, you will learn how to establish a secure connection between two private networks using Scaleway Site-to-Site VPN with strongSwan. You will create a VPN connection between a Scaleway Instance attached to a Private Network, and a customer virtual server, located in a distinct network, enabling communication between the two resources.
 
-To complete the actions presented below, you must have:
+This tutorial is intended for demonstration and testing purposes, and may not be adapted to specific production environments.
+
+<Requirements />
 
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
@@ -28,57 +30,47 @@ To complete the actions presented below, you must have:
 
 ## Overview of the setup
 
-### Network 1 (Scaleway side)
-
-- Private Network: 176.16.0.0/22
-- S2S VPN configured via Scaleway console
-- Private server instance (without public IP address): scw-srv
-
 ### Network 2 (Customer side)
 
-- Private Network: 176.16.16.0/22
+- Private Network: 176.16.0.0/22
 - Gateway instance (Debian running strongSwan): customer-gw
 - Private server instance (without public IP address): customer-srv
-
-## Goal
-
-Be able to ping scw-srv from customer-srv.
 
 ## About ASNs
 
 Both networks are created as different projects in the Scaleway console. The documentation and interface warn about it not being possible due to BGP limitation to route between different ASs. This limitation is worked around by attributing a private ASN (65000) to the customer's gateway.
 
-## Step-by-step procedure
+## Setting up the Scaleway Project
 
-### Setup the "customer" project
+### Setting up the Instance and Private Network
 
-1. Create a VPC containing only one Private Network (Advanced -> custom IP block: 172.16.16.0/22)
+This section will guide you through the creation of the required Scaleway resources.
+For safety reasons, we recommend creating resources in a dedicated Scaleway Project.
 
-2. Create the instance customer-gw:
-   - Debian OS
-   - Public IP address (51.15.82.244 in this example, adapt to your IP)
-   - Attached to the Private Network with IP 172.16.16.2/22
+1. [Create a new VPC](/vpc/how-to/create-vpc/) in the desired region.
 
-3. Create the instance customer-srv:
-   - Debian OS
-   - No public IP address
-   - Attached to the Private Network with IP 172.16.16.3/22
+2. [Create a new Private Network](/vpc/how-to/create-private-network/) within the VPC you just created. Define a custom IPv4 CIDR block with range `172.16.0.0/22`.
+
+3. [Create a Scaleway Instance](/instances/how-to/create-an-instance/) with the following parameters:
+    - Same region as the previously created Private Network
+    - Debian OS image
+    - No public IPv4 connectivity
+    - No public IPv6 connectivity
+
+4. [Attach the Instance](/vpc/how-to/attach-resources-to-pn/) to the Private Network you just created. A private IP address will be allocated automatically.
+
+### Configuring Site-to-Site VPN
 
 ### Setup the "scw" project
 
 1. Create a VPC containing only one Private Network (Advanced -> custom IP block: 172.16.0.0/22)
-
-2. Create the instance scw-srv:
-   - Debian OS
-   - No public IP address
-   - Attached to the Private Network with IP 172.16.0.2/22
 
 3. Create the VPN gateway scw-gw:
    - Public IP address (212.47.229.0 in this example, adapt to your IP)
    - Attached to the Private Network with IP 172.16.0.3/22
 
 4. Create the customer gateway:
-   - IP address: customer-gw's IP (51.15.82.244/32 in this example)
+   - IP address: customer-gw's IP (52.15.82.244/32 in this example)
    - ASN: 65000
 
 5. Create the routing policy:
@@ -143,16 +135,16 @@ Both networks are created as different projects in the Scaleway console. The doc
    ```
    connections {
       gw-gw {
-         local_addrs  = 51.15.82.244 # customer-gw's IP
-         remote_addrs = 212.47.229.0 # scw-gw's IP
+         local_addrs  = 52.15.82.244 # customer-gw's IP
+         remote_addrs = xxx.47.229.0 # scw-gw's IP
 
          local {
             auth = psk
-            id = 51.15.82.244
+            id = 52.15.82.244
          }
          remote {
             auth = psk
-            id = 51.15.82.244
+            id = 52.15.82.244
          }
          children {
             net-net {
@@ -178,7 +170,7 @@ Both networks are created as different projects in the Scaleway console. The doc
 
    secrets {
       ike-scaleway-psk {
-         id = 51.15.82.244
+         id = xxx.15.82.244
          secret = "*****" # PSK available from Scaleway's console, in "Security & Identity -> Secret Manager"
       }
    }
@@ -194,7 +186,7 @@ Both networks are created as different projects in the Scaleway console. The doc
 At this point:
 - The S2S VPN connection should have a green status in Scaleway console
 - Both the "Tunnel via IPv4" and the BGP session should be OK
-- From customer-gw, you can ping scw-gw using its BGP session's IP (169.254.0.6 in this case)
+- From customer-gw, you can ping scw-gw using its BGP session's IP (xxx.254.0.6 in this case)
 - We cannot ping scw-gw using its private IP (172.16.0.3) because BGP routes are not yet exchanged
 
 ### Exchange routes via BGP

@@ -101,8 +101,8 @@ export const managedDatabasesForPostgresqlAndMysqlMenu = {
     {
       items: [
         {
-          label: 'Shared responsibility',
-          slug: 'shared-responsibility',
+          label: 'Shared Responsibility Model',
+          slug: 'shared-responsibility-model',
         },
         {
           label: 'PostgreSQL extensions reference',

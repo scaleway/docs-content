@@ -215,6 +215,10 @@ export const instancesMenu = {
           "slug": "instance-lifecycle"
         },
         {
+          "label": "Understanding Instance States",
+          "slug": "instance-states"
+        },
+        {
           "label": "Identifying devices of an Instance",
           "slug": "identify-devices"
         },

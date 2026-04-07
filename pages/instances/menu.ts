@@ -215,6 +215,14 @@ export const instancesMenu = {
           "slug": "understanding-instance-pricing"
         },
         {
+          "label": "Understanding Instance lifecycle",
+          "slug": "instance-lifecycle"
+        },
+        {
+          "label": "Understanding Instance states",
+          "slug": "instance-states"
+        },
+        {
           "label": "Identifying devices of an Instance",
           "slug": "identify-devices"
         },

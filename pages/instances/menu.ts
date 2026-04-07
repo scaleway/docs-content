@@ -211,11 +211,11 @@ export const instancesMenu = {
           "slug": "understanding-instance-pricing"
         },
         {
-          "label": "Understanding Instance Lifecycle",
+          "label": "Understanding Instance lifecycle",
           "slug": "instance-lifecycle"
         },
         {
-          "label": "Understanding Instance States",
+          "label": "Understanding Instance states",
           "slug": "instance-states"
         },
         {

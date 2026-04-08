@@ -63,8 +63,12 @@ export const fileStorageMenu = {
     {
       items: [
         {
-          label:'File Storage limitations',
-          slug:'limitations'
+          label:'File Storage and Instances guidelines',
+          slug:'file-system-instance-selection'
+        },
+        {
+          label:'Performance scaling',
+          slug:'performance-scaling'
         },
       ],
       label:'Additional content',

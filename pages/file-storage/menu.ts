@@ -63,7 +63,7 @@ export const fileStorageMenu = {
     {
       items: [
         {
-          label:'File Storage and Instances guidelines',
+          label:'File Storage and Instances selection',
           slug:'file-system-instance-selection'
         },
         {

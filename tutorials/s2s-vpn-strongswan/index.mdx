@@ -21,16 +21,16 @@ In this tutorial, you will learn how to establish a secure connection between tw
 
 You will create two Projects in the [Scaleway console](https://console.scaleway.com/), called **Customer Project** and **Scaleway Project**. 
 
-The **Customer Project** will act as the customer infrastructure holdng , and will contain the following resources:
+The **Customer Project** will act as the customer infrastructure, and will contain the following resources:
 
 - A Private Network within a VPC
-- A first Instance, acting as a a customer server
-- A second Instance, acting as a customer gateway that will hold the BGB and stronSwan configurations
+- A first Instance, acting as a customer server
+- A second Instance, acting as a customer gateway that will hold the BGP and strongSwan configurations
 
-The **Scaleway Project** will contain the following resources
+The **Scaleway Project** will contain the following resources:
 
 - A Private Network within a VPC
-- An Instance that we will reach from the customer server
+- An Instance that will be reached from the customer server
 - A Site-to-site VPN to handle traffic between the two networks
 
 <Message type="note">
@@ -48,7 +48,7 @@ This tutorial is intended for demonstration and testing purposes, and may not be
 
 ## Setting up the Customer Project
 
-1. In the Scaleway Console, create a new Project called "Customer Project".
+1. In the Scaleway console, create a new Project called "Customer Project".
 
 2. [Create a new VPC](/vpc/how-to/create-vpc/) in the desired region.
 
@@ -86,20 +86,20 @@ This tutorial is intended for demonstration and testing purposes, and may not be
 
 1. Access **Site-to-Site VPN** in the **Network** section of the [Scaleway console](https://console.scaleway.com) side menu.
 
-3. [Create a VPN gateway](/site-to-site-vpn/how-to/create-manage-vpn-gateway/) with the following parameters:
+2. [Create a VPN gateway](/site-to-site-vpn/how-to/create-manage-vpn-gateway/) with the following parameters:
    - Public IP address
    - Attached to the Private Network with the IP `172.16.0.3/22`
 
-4. [Create a customer gateway](/site-to-site-vpn/how-to/create-manage-customer-gateway/) with the following parameters:
+3. [Create a customer gateway](/site-to-site-vpn/how-to/create-manage-customer-gateway/) with the following parameters:
    - IP address: same as the actual customer gateway created earlier
    - ASN: 65000
 
-5. [Create a routing policy](/site-to-site-vpn/how-to/create-manage-customer-gateway/) with the following parameters:
+4. [Create a routing policy](/site-to-site-vpn/how-to/create-manage-customer-gateway/) with the following parameters:
    - IPv4
    - Incoming whitelist: 172.16.16.0/22
    - Outgoing whitelist: 172.16.0.0/22 (or set both to 0.0.0.0/0 for maximum flexibility)
 
-6. [Create the connection](/site-to-site-vpn/how-to/create-manage-vpn-connection/) with the following parameters:
+5. [Create the connection](/site-to-site-vpn/how-to/create-manage-vpn-connection/) with the following parameters:
     - The VPN gateway you just created
     - The customer gateway you just created
     - The IPv4 routing policy you just created
@@ -119,15 +119,15 @@ The Site-to-Site VPN setup is now complete. You can check its status from the **
     ```
 
 
-1. Install the required packages:
+2. Install the required packages:
 
     ```bash
     apt-get install frr frr-pythontools
     ```
 
-2. Access the `/etc/frr/daemons` file, and set the `bgpd=yes` parameter.
+3. Access the `/etc/frr/daemons` file, and set the `bgpd=yes` parameter.
 
-3. Create the `/etc/frr/frr.conf` file, and add the following content to it:
+4. Create the `/etc/frr/frr.conf` file, and add the following content to it:
    
     ```
     log syslog informational
@@ -145,7 +145,7 @@ The Site-to-Site VPN setup is now complete. You can check its status from the **
     !
     ```
 
-4. Run the following command to restart the `frr` service:
+5. Run the following command to restart the `frr` service:
    
     ```bash
     systemctl restart frr
@@ -161,7 +161,7 @@ The BGP service is now configured on the customer gateway.
     ssh root@<customer-gateway-ip>
     ```
 
-1. Run the following commands to create an XFRM interface to tag the BGP session's packets:
+2. Run the following commands to create an XFRM interface to tag the BGP session's packets:
 
     ```bash
     ip link add type xfrm if_id 1 dev ens2
@@ -169,13 +169,13 @@ The BGP service is now configured on the customer gateway.
     ip link set xfrm0 up
     ```
 
-2. Run the following command to install the required strongSwan packages:
+3. Run the following command to install the required strongSwan packages:
 
     ```bash
     apt-get install strongswan strongswan-pki libstrongswan-standard-plugins libstrongswan-extra-plugins strongswan-libcharon
     ```
 
-3. Create the `/etc/swanctl/conf.d/moon.conf` file, and add the content below to it. Make sure to replace the placeholders with the appropriate values:
+4. Create the `/etc/swanctl/conf.d/moon.conf` file, and add the content below to it. Make sure to replace the placeholders with the appropriate values:
 
     ```
     connections {
@@ -185,11 +185,11 @@ The BGP service is now configured on the customer gateway.
 
           local {
               auth = psk
-              id = 52.15.82.244
+              id = <customer-gateway-ip>
           }
           remote {
               auth = psk
-              id = 52.15.82.244
+              id = <scaleway-vpn-gateway-ip>
           }
           children {
               net-net {
@@ -215,13 +215,13 @@ The BGP service is now configured on the customer gateway.
 
     secrets {
         ike-scaleway-psk {
-          id = xxx.15.82.244
+          id = <scaleway-vpn-gateway-ip>
           secret = "<your-connection-psk>" # PSK available in Secret Manager in the Scaleway console
         }
     }
     ```
 
-4. Run the commands below to load the strongSwan configuration and initiate the connection:
+5. Run the commands below to load the strongSwan configuration and initiate the connection:
 
     ```bash
     swanctl --load-conns
@@ -229,11 +229,7 @@ The BGP service is now configured on the customer gateway.
     swanctl --initiate --child net-net
     ```
 
-At this point:
-- The Site-to-Site VPN connection status is **Active** in the Scaleway console.
-- Both the "Tunnel via IPv4" and the BGP session are up.
-- You can ping the Scaleway gateway from the customer gateway using its BGP session's IP.
-- You cannot ping scw-gw using its private IP (`172.16.0.3`) because the BGP routes are not yet exchanged.
+The Site-to-Site VPN connection status is **Active** in the Scaleway console, both the "Tunnel via IPv4" and the BGP session are up. You can ping the Scaleway gateway from the customer gateway using its BGP session's IP, however you cannot ping scw-gw using its private IP (`172.16.0.3`) because the BGP routes are not yet exchanged.
 
 ### Exchanging routes via BGP
 
@@ -273,16 +269,15 @@ At this point:
     !
     ```
 
-4. Run the following command to restart the `frr` service:
+3. Run the following command to restart the `frr` service:
    
     ```bash
     systemctl restart frr
     ```
 
-At this point:
-- In the customer gateway, the `ip route` command shows the new route for the `172.16.0.0/22` subnet.
-- You can ping the VPN gateway and Scaleway server from the customer gateway.
-- you cannot ping resources in the Scaleway Project from the customer server yet, because it misses the gateway configuration.
+3. run the `ip route` command. The new route `172.16.0.0/22` should appear in the list.
+
+You can ping the VPN gateway and Scaleway server from the customer gateway, however you cannot ping resources in the Scaleway Project from the customer server yet, because the gateway is must be configured beforehand.
 
 ### Setting up the gateway in the customer Private Network
 
@@ -292,12 +287,10 @@ At this point:
     sysctl -w net.ipv4.ip_forward=1
     ```
 
-2. In the customer server, run the following command to add the route that  gateway:
+2. In the customer server, run the following command to add the route via the gateway:
 
     ```bash
     ip route add 172.16.0.0/22 via 172.16.16.2
     ```
 
-At this point:
-- Everything works as expected, we can ping a private server from the other
-- Test it by connecting to customer-srv and issuing `ping 172.16.0.2`
+The Scaleway server is now reachable from the customer infrastructure via the Site-to-Site VPN. You can test the connection by running the `ping 172.16.0.2` command from the customer server.

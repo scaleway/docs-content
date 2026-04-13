@@ -59,8 +59,12 @@ export const interlinkMenu = {
           slug: 'overview',
         },
         {
-          label: 'InterLink provisioning',
+          label: 'InterLink hosted provisioning',
           slug: 'provisioning',
+        },
+        {
+          label: 'InterLink self-hosted provisioning',
+          slug: 'self-hosted-provisioning',
         },
         {
           label: 'Configuring an InterLink',

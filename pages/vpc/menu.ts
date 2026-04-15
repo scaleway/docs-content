@@ -75,6 +75,10 @@ export const vpcMenu = {
           slug: 'understanding-nacls',
         },
         {
+          label: 'Private Networks reserved prefixes',
+          slug: 'private-networks-reserved-prefixes',
+        },
+        {
           label: 'Getting the most from Private Networks',
           slug: 'getting-most-private-networks',
         },

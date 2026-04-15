@@ -101,7 +101,7 @@ export const kubernetesMenu = {
           slug: 'recover-space-etcd',
         },
         {
-          "label": "How to use SFS with Kubernetes Kapsule",
+          "label": "How to use File Storage with Kubernetes Kapsule",
           "slug": "use-sfs-with-kubernetes"
         },
         {

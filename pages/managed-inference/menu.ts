@@ -5,57 +5,6 @@ export const managedInferenceMenu = {
       slug: '../managed-inference',
     },
     {
-      label: 'Concepts',
-      slug: 'concepts',
-    },
-    {
-      label: 'Quickstart',
-      slug: 'quickstart',
-    },
-    {
-      label: 'FAQ',
-      slug: 'faq',
-    },
-    {
-      items: [
-        {
-          label: 'Deploy a model',
-          slug: 'create-deployment',
-        },
-        {
-          label: 'Import a custom model',
-          slug: 'import-custom-model',
-        },
-        {
-          label: 'Change the model of a deployment',
-          slug: 'change-model',
-        },
-        {
-          label: 'Monitor a deployment',
-          slug: 'monitor-deployment',
-        },
-        {
-          label: 'Configure autoscaling',
-          slug: 'configure-autoscaling',
-        },
-        {
-          label: 'Manage access to a deployment',
-          slug: 'manage-allowed-ips',
-        },
-        {
-          label:
-            'Use your Managed Inference deployment with a Private Network',
-          slug: 'managed-inference-with-private-network',
-        },
-        {
-          label: 'Delete a deployment',
-          slug: 'delete-deployment',
-        },
-      ],
-      label: 'How to',
-      slug: 'how-to',
-    },
-    {
       items: [
         {
           label: 'Managed Inference API Reference',

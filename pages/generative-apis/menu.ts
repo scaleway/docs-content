@@ -58,12 +58,53 @@ export const generativeApisMenu = {
           label: 'Use batch processing',
           slug: 'use-batch-processing',
         },
+        {
+          label: 'Deploy a model',
+          slug: 'create-deployment',
+        },
+        {
+          label: 'Import a custom model',
+          slug: 'import-custom-model',
+        },
+        {
+          label: 'Change the model of a deployment',
+          slug: 'change-model',
+        },
+        {
+          label: 'Monitor a deployment',
+          slug: 'monitor-deployment',
+        },
+        {
+          label: 'Configure autoscaling',
+          slug: 'configure-autoscaling',
+        },
+        {
+          label: 'Manage access to a deployment',
+          slug: 'manage-allowed-ips',
+        },
+        {
+          label:
+            'Use your Managed Inference deployment with a Private Network',
+          slug: 'managed-inference-with-private-network',
+        },
+        {
+          label: 'Delete a deployment',
+          slug: 'delete-deployment',
+        },
       ],
       label: 'How to',
       slug: 'how-to',
     },
     {
       items: [
+        {
+          label: 'Generative APIs - Dedicated Deployments API Reference',
+          slug: 'https://www.scaleway.com/en/developers/api/managed-inference/',
+        },
+        {
+          label: 'Generative APIs - Serverless Endpoints Developer Reference',
+          slug: 'https://www.scaleway.com/en/developers/api/generative-apis/',
+        },
         {
           label: 'Using Generative APIs',
           slug: 'using-generative-apis',

@@ -98,14 +98,6 @@ export const generativeApisMenu = {
     {
       items: [
         {
-          label: 'Generative APIs - Dedicated Deployments API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/managed-inference/',
-        },
-        {
-          label: 'Generative APIs - Serverless Endpoints Developer Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/generative-apis/',
-        },
-        {
           label: 'Using Generative APIs',
           slug: 'using-generative-apis',
         },

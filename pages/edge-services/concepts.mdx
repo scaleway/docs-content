@@ -17,20 +17,24 @@ Note that if an object has a caching directive, the caching directive always tak
 
 ## Certificate
 
-The SSL/TLS certificate for your subdomain to enable Edge Services to serve content over HTTPS, if you have customized your [Edge Services endpoint](#endpoint). You can choose between uploading your own certificate held in Scaleway Secret Manager, or letting Edge Services generate a fully-managed Let's Encrypt certificate.
+The SSL/TLS certificate for your custom domain to enable Edge Services to serve content over HTTPS, if you have customized your [Edge Services endpoint](#endpoint). You can choose between uploading your own certificate held in Scaleway Secret Manager, or letting Edge Services generate a fully-managed Let's Encrypt certificate.
+
+If you have enabled [wildcard subdomain support](#wildcard-subdomain-support), you must provide a wildcard certificate (Common Name: `*.yourdomain.com`). The Let's Encrypt managed option is not available in this case.
 
 ## CNAME record
 
-The CNAME record pointing your subdomain to the Edge Services endpoint, if you have customized your [Edge Services endpoint](#endpoint). This is necessary to ensure that traffic for your customized subdomain is correctly directed towards the Edge Services endpoint by DNS servers.
+A CNAME record pointing a **subdomain** to the Edge Services endpoint, if you have customized your [Edge Services endpoint](#endpoint) with a subdomain. This is necessary to ensure that traffic for your customized subdomain is correctly directed towards the Edge Services endpoint by DNS servers.
 
-Refer to [CNAME records for Edge Services](/edge-services/reference-content/cname-record/) for more information.
+Note that a CNAME record cannot be created at the root (apex) of a domain. If you are using a **root domain**, you must use an ALIAS record or Flattened CNAME instead.
+
+Refer to [DNS records for Edge Services](/edge-services/reference-content/cname-record/) for more information.
 
 ## Edge Services
 
 Edge Services is an additional feature for Scaleway Load Balancers and Object Storage buckets. It provides:
 - A [caching service](/edge-services/how-to/configure-cache/) to improve performance by reducing load on your [origin](#origin)
 - A [Web Application Firewall](/edge-services/how-to/configure-waf/) to protect your origin from threats and malicious activity
-- A customizable and secure [endpoint](#endpoint) for accessing content via Edge Services, which can be set to a subdomain of your choice.
+- A customizable and secure [endpoint](#endpoint) for accessing content via Edge Services, which can be set to a domain or subdomain of your choice.
 
 Read the [Edge Services Quickstart](/edge-services/quickstart/) to get started.
 
@@ -38,7 +42,7 @@ Read the [Edge Services Quickstart](/edge-services/quickstart/) to get started.
 
 The endpoint from which a given Edge Services pipeline can be accessed, e.g. `https://pipeline-id.svc.edge.scw.cloud`. When a client requests content from the Edge Services endpoint, it is served by Edge Services and its cache, rather than from the origin (Object Storage bucket or Load Balancer backend servers) directly. Edge Services automatically manages redirection from HTTP to HTTPS.
 
-The endpoint can be customized with a user-defined subdomain, allowing you to replace the standardized endpoint with the subdomain of a domain you already own, e.g. `http://my-own-domain.com`. An associated [certificate](#certificate), and [CNAME record](#cname-record) will be required, in this case.
+The endpoint can be customized with a user-defined domain or subdomain, allowing you to replace the standardized endpoint with a domain you already own, e.g. `mycompany.com` or `blog.mycompany.com`. An associated [certificate](#certificate) and DNS record ([CNAME](#cname-record) for subdomains, or ALIAS/Flattened CNAME for root domains) will be required in this case. You can also optionally enable [wildcard subdomain support](#wildcard-subdomain-support).
 
 ## Exclusions
 
@@ -57,6 +61,14 @@ In the case of a Load Balancer origin, the specific host for which Edge Services
 
 The origin host must be associated with the origin Load Balancer / its backend servers, and only one host may be set per pipeline. If your Load Balancer is in front of multiple hosts, you can create a separate Edge Services pipeline for each. Each host will therefore get its own Edge Services endpoint and cache.
 
+## HOST routing condition
+
+A filter available when creating routing rules in a multi-backend Edge Services pipeline. The HOST condition checks the hostname of the incoming request and compares it against a given regular expression (e.g. `api[0-9]\.mycompany\.com`). Requests whose hostname matches the expression are routed to the associated backend.
+
+If not defined, the rule matches regardless of the request hostname. The HOST condition can be combined with [PATH and method filters](/edge-services/reference-content/understanding-multi-backend/) or used on its own.
+
+While the HOST condition can be set regardless of the [wildcard subdomain support](#wildcard-subdomain-support) setting, it is particularly useful when wildcard support is enabled, since in that scenario multiple different subdomains can reach the same pipeline and be routed to different backends based on the host.
+
 ## Origin Load Balancer
 
 The Load Balancer defined by the user as origin for a given Edge Services pipeline. The pipeline connects to this Load Balancer, on the specified frontend port to request content.
@@ -69,9 +81,18 @@ In the context of an Edge Services [Web Application Firewall](#waf), the paranoi
 
 <Lightbox image={image} alt="A diagram shows the elements and workflow of an Edge Services pipeline. The user connects to the customizable Edge Services endpoint (with its SSL/TLS certificate), which fetches content from the Edge Services cache, which itself fetches content to cache from an origin which is either an Object Storage bucket or Load Balancer. A Web Application Firewall sits between the cache and origin, protecting the origin from threats." />
 
-An Edge Services pipeline consists of an [origin](#origin), which Edge Services can protect from threats with a [Web Application Firewall](#web-application-firewall), and for which it also requests and [caches](#cache) content. Each pipeline also has an [endpoint](#endpoint) from which content is accessed and served via Edge Services. The pipeline's endpoint can be customized with a user-defined [subdomain](/domains-and-dns/concepts/#subdomain) and associated [certificate](#certificate) so that Edge Services can serve content over HTTPS.
+An Edge Services pipeline consists of an [origin](#origin), which Edge Services can protect from threats with a [Web Application Firewall](#web-application-firewall), and for which it also requests and [caches](#cache) content. Each pipeline also has an [endpoint](#endpoint) from which content is accessed and served via Edge Services. The pipeline's endpoint can be customized with a user-defined domain or subdomain and associated [certificate](#certificate) so that Edge Services can serve content over HTTPS.
 
 You can create an Edge Services pipeline for each of your Object Storage buckets or Load Balancer origins. Note that caching and WAF can be enabled and disabled at will, so are optional parts of the pipeline, as is the customization of the endpoint. WAF is only available for Load Balancer origins, not Object Storage buckets.
+
+## Wildcard subdomain support
+
+An optional setting available when [configuring a custom domain](/edge-services/how-to/configure-custom-domain/) for an Edge Services pipeline. When enabled, Edge Services exposes both the configured domain itself and any subdomain of it via this pipeline. For example, if the configured domain is `mycompany.com`, Edge Services will also serve traffic for `www.mycompany.com`, `api.mycompany.com`, and any other subdomain.
+
+When wildcard subdomain support is enabled:
+- A [wildcard certificate](#certificate) is required (Common Name: `*.yourdomain.com`). The managed Let's Encrypt option is not available.
+- No other Edge Services pipeline should be configured for any specific subdomain of the same domain, as this would result in unpredictable routing behavior.
+- This setting applies to the custom domain only, not to the default Edge Services endpoint.
 
 ## Protocol
 

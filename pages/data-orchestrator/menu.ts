@@ -18,6 +18,10 @@ export const dataOrchestratorMenu = {
           label: 'Run a workflow',
           slug: 'run-workflow',
         },
+        {
+          label: 'Schedule a workflow',
+          slug: 'schedule-workflow',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

@@ -124,16 +124,24 @@ export const generativeApisMenu = {
     {
       items: [
         {
-          label: 'Supported models',
-          slug: 'supported-models',
+          label: 'Model catalog',
+          slug: 'model-catalog',
         },
         {
-          label: 'Model lifecycle',
+          label: 'Rate limits for Serverless',
+          slug: 'rate-limits',
+        },
+        {
+          label: 'Model lifecycle for Serverless',
           slug: 'model-lifecycle',
         },
         {
-          label: 'Rate limits',
-          slug: 'rate-limits',
+          label: 'Model integration, lifecycle, licensing for Dedicated',
+          slug: 'supported-models',
+        },
+        {
+          label: 'OpenAI API compatibility for Dedicated',
+          slug: 'openai-compatibility',
         },
         {
           label: 'Data privacy',

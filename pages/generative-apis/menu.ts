@@ -42,7 +42,11 @@ export const generativeApisMenu = {
           label: 'Query audio models',
           slug: 'query-audio-models'
         },
-                {
+        {
+          label: 'Query OCR models',
+          slug: 'query-ocr-models'
+        },
+        {
           label: 'Query reranking models',
           slug: 'query-reranking-models'
         },

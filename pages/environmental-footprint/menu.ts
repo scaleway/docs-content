@@ -68,6 +68,10 @@ export const environmentalFootprintMenu = {
         {
           label: 'Kubernetes footprint calculation',
           slug: 'kubernetes-env-footprint'
+        },
+        {
+          label: 'Managed Database footprint calculation',
+          slug: 'managed-databases-env-footprint'
         }
       ],
       label: 'Additional Content',

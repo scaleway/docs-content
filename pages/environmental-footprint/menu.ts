@@ -68,7 +68,11 @@ export const environmentalFootprintMenu = {
         {
           label: 'Kubernetes footprint calculation',
           slug: 'kubernetes-env-footprint'
-        }
+        },
+        {
+          label: 'Managed Inference footprint calculation',
+          slug: 'managed-inference-env-footprint'
+        },
       ],
       label: 'Additional Content',
       slug: 'additional-content',

@@ -43,8 +43,16 @@ export const dataWarehouseMenu = {
           slug: 'connect-bi-tools',
         },
         {
+          label: 'Connect a deployment with PowerBI in a Private Network',
+          slug: 'connect-powerbi-vpc'
+        },
+        {
           label: 'Use Private Networks',
           slug: 'use-private-networks',
+        },
+        {
+          label: 'Start/stop a deployment',
+          slug: 'start-stop-deployment',
         },
         {
           label: 'Monitor a deployment',
@@ -55,7 +63,7 @@ export const dataWarehouseMenu = {
           slug: 'import-data',
         },
         {
-          label: 'Edit the autoscaling of a deployment',
+          label: 'Edit the autoscaling and nodes settings',
           slug: 'edit-autoscaling',
         },
         {

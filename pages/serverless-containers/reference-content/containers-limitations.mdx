@@ -51,7 +51,148 @@ We recommend keeping your image size **below 1 GB** to ensure faster deployment 
 * Use lightweight distribution like *Alpine*
 * Minimize layers and unnecessary dependencies
 * Clean up temp files and cache (e.g., `rm -rf /var/lib/apt/lists/*` in Debian-based images)
-* Use multi-stage builds to keep only runtime essentials. [Example](https://github.com/scaleway/serverless-examples/blob/a7a3b5fc3427ec0f1391aaa78957f91af266867c/containers/rust-hello-world/Dockerfile#L14)
+* Use multi-stage builds to keep only runtime essentials. Examples:
+
+<Tabs>
+<TabsTab label="Node.js">
+```dockerfile
+# Build stage
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Copy package files
+COPY package*.json ./
+
+# Install dependencies
+RUN npm ci --only=production
+
+# Copy source code
+COPY . .
+
+# Runtime stage
+FROM node:22-alpine
+
+WORKDIR /app
+
+# Copy built artifacts from builder
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app .
+
+# Expose the port the app listens on
+ENV PORT=8080
+
+# Start the application
+CMD ["node", "index.js"]
+```
+</TabsTab>
+<TabsTab label="Go">
+```dockerfile
+# Build stage
+FROM golang:1.23-alpine AS builder
+
+WORKDIR /app
+
+# Copy Go module files
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Copy source code
+COPY . .
+
+# Build the binary
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+
+# Runtime stage
+FROM scratch
+
+WORKDIR /app
+
+# Copy the binary from builder
+COPY --from=builder /app/main .
+
+# Expose the port the app listens on
+ENV PORT=8080
+
+# Run the binary
+CMD ["./main"]
+```
+</TabsTab>
+<TabsTab label="Python">
+```dockerfile
+# Build stage
+FROM python:3.13-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    && rm -rf /var/lib/apt/lists/*
+
+# Copy requirements and install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir --user -r requirements.txt
+
+# Runtime stage
+FROM python:3.13-slim
+
+WORKDIR /app
+
+# Copy installed packages from builder
+COPY --from=builder /root/.local /root/.local
+COPY . .
+
+# Make sure scripts in .local are usable
+ENV PATH=/root/.local/bin:$PATH
+
+# Expose the port the app listens on
+ENV PORT=8080
+
+# Run the application
+CMD ["python", "app.py"]
+```
+</TabsTab>
+<TabsTab label="Rust">
+```dockerfile
+# Build stage
+FROM rust:1.94-alpine AS builder
+
+WORKDIR /app
+
+# Copy Cargo configuration
+COPY Cargo.toml Cargo.lock ./
+
+# Create a minimal src directory to cache dependencies
+RUN mkdir src && \
+    echo "fn main() {}" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src
+
+# Copy the actual source code
+COPY src ./src
+
+# Build the application
+RUN cargo build --release
+
+# Runtime stage
+FROM scratch
+
+WORKDIR /app
+
+# Copy the compiled binary from the builder stage
+COPY --from=builder /app/target/release/my-app .
+
+# Expose the port the app listens on
+ENV PORT=8080
+
+# Run the binary
+CMD ["./my-app"]
+```
+</TabsTab>
+</Tabs>
 
 ## Configuration Restrictions
 

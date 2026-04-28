@@ -1,0 +1,58 @@
+---
+title: Resolving peering conflicts
+description: Learn how to proceed when your VPC Peering connector has a conflict state, and what to do to resolve the issue of overlapping CIDR networks.
+tags: vpc, private-network, delete, resources, ipam, error
+dates:
+  validation: 2026-02-10
+  posted: 2026-02-10
+---
+
+<Message type="note">
+VPC Peering is currently in Public Beta, and available only via the [Scaleway API](https://www.scaleway.com/en/developers/api/vpc/).
+</Message>
+
+You may create a peering connector, and then see that it has a status of `Conflict`. This page explains that status, and gives you tips on resolving the issue so your connector can move to a status of `Peered`.
+
+## Understanding conflict status
+
+A `Conflict` status means that a matching connector has been created, but the two VPCs to peer contain Private Networks with overlapping [CIDR blocks](/vpc-peering/concepts/#cidr-block). A peering connection cannot be created until this conflict is resolved.
+
+For example, imagine the following scenario:
+
+**VPC A** contains:
+- Private Network X with CIDR block: `172.16.20.0/22`
+- Private Network Y with CIDR block: `172.16.24.0/24`
+- Private Network Z with CIDR block: `10.10.0.0/16`
+
+**VPC B** contains:
+- Private Network J with CIDR block: `172.16.23.0/24`
+- Private Network K with CIDR block: `192.168.1.0/24`
+- Private Network L with CIDR block: `10.10.5.0/24`
+
+A conflict occurs because the CIDR block `172.16.20.0/22` (in VPC A) overlaps with `172.16.23.0/24` (in VPC B). The `172.16.20.0/22` block covers all IP addresses from `172.16.20.0` to `172.16.23.255`, which includes the entire `172.16.23.0/24` range.
+
+Since both VPCs define Private Networks that claim ownership of the same IP address space, traffic cannot be safely routed between them over a peering connection without causing network ambiguity or outages. No peering connection can be established until the conflict is resolved.
+
+## Identifying conflicting Private Networks
+
+For security and privacy reasons, Scaleway does not disclose which specific Private Networks are involved in a CIDR conflict. Revealing such information would expose details about the network topology of the peer VPC - something that should only be shared between trusted parties.
+
+You must contact an owner or manager of the target VPC, and together compare the CIDR blocks of your respective Private Networks to identify the overlap. Since both sides have full knowledge of their own network configurations, collaborating on this comparison allows you to pinpoint the conflicting subnets without requiring Scaleway to disclose sensitive network details. 
+
+The CIDR block of each Private Network in a VPC can be viewed in the [VPC section of the Scaleway console](https://console.scaleway.com/vpc/). A tool such as [CIDR Clash Calculator](https://cidrclash.com/) can help you identify overlaps.
+
+## Resolving the conflict
+
+It is not currently possible to modify the CIDR block of a Scaleway Private Network after its creation.
+
+This means that to resolve the conflict, one or more of the Private Networks involved in the overlap must be [deleted](/vpc/how-to/delete-private-network/), and [recreated](/vpc/how-to/create-private-network/) with a different CIDR block. You can define a custom IPv4 CIDR block via the **Advanced Settings** when creating a Private Network via the console. Remember that you can use [IPAM](/ipam/) to reserve specific private IP addresses on each Private Network, to use when attaching resources, if needed.
+
+Once you have resolved the conflict, you must use the dedicated refresh button (or equivalent devtool command/call) in the Scaleway console to retry establishment of a peering connection between the two VPCs.
+
+If the conflict is resolved, the peering connectors will now show a `Peered` status, and the connection is established.
+
+<Message type="note">
+Note that after creating a peering connector towards a target VPC, you cannot create a new Private Network the origin VPC where its CIDR range overlaps with a Private Network in the target VPC. This restriction applies regardless of whether the peering connection is successfuly established yet. Attempting to create such a Private Network will result in a validation error, as overlapping subnets across peered VPCs would cause routing ambiguities and potential traffic blackholing. 
+
+Always ensure that new Private Networks have non-overlapping CIDR blocks with all VPCs they may peer with or are already connected to.
+</Message>

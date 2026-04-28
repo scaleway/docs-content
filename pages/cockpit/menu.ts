@@ -19,10 +19,6 @@ export const cockpitMenu = {
     {
       items: [
         {
-          label: 'Retrieve your Grafana credentials',
-          slug: 'retrieve-grafana-credentials',
-        },
-        {
           label: 'Access Grafana and preconfigured dashboards',
           slug: 'access-grafana-and-managed-dashboards',
         },
@@ -53,6 +49,10 @@ export const cockpitMenu = {
         {
           label: 'Send metrics from your Kubernetes cluster to Cockpit',
           slug: 'send-metrics-from-k8s-to-cockpit',
+        },
+        {
+          label: 'Monitor your Kubernetes cluster with Cockpit',
+          slug: 'monitor-k8s-cluster-with-cockpit',
         },
         {
           label: 'Create and push and traces to your Cockpit',

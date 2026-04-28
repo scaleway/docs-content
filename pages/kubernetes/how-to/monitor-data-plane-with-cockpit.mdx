@@ -1,16 +1,16 @@
 ---
-title: How to monitor your Kubernetes Kapsule cluster with Cockpit using Promtail
-description: This page explains how to integrate Kubernetes container logs with Scaleway Cockpit using Promtail
-tags: kubernetes kapsule kosmos cockpit promtail logs
+title: How to monitor your Kubernetes Kapsule cluster with Cockpit using Alloy
+description: This page explains how to integrate Kubernetes container logs with Scaleway Cockpit using Alloy
+tags: kubernetes kapsule kosmos cockpit alloy logs
 dates:
-  validation: 2025-08-05
+  validation: 2026-03-11
   posted: 2025-01-17
 ---
 import Requirements from '@macros/iam/requirements.mdx'
 import CockpitIamPermissions from '@macros/cockpit/iam-permissions-cockpit.mdx'
 
 
-You can now send **data plane** logs from your [Kapsule](https://www.scaleway.com/en/kubernetes-kapsule/) or [Kosmos](https://www.scaleway.com/en/kubernetes-kosmos/) clusters to [Cockpit](https://www.scaleway.com/en/cockpit/), providing centralized, real-time access to application and system logs. Reduce complexity and manual work thanks to this integration, powered by a **Promtail** deployment via [Easy Deploy](/kubernetes/how-to/enable-easy-deploy/).
+You can now send **data plane** logs from your [Kapsule](https://www.scaleway.com/en/kubernetes-kapsule/) or [Kosmos](https://www.scaleway.com/en/kubernetes-kosmos/) clusters to [Cockpit](https://www.scaleway.com/en/cockpit/), providing centralized, real-time access to application and system logs. Reduce complexity and manual work thanks to this integration, powered by an **Alloy** deployment via [Easy Deploy](/kubernetes/how-to/enable-easy-deploy/).
 
 This feature allows you to:
 
@@ -27,7 +27,7 @@ This feature allows you to:
 - An API Key with [IAM permissions](/iam/reference-content/permission-sets/) to:
   - edit your cluster (`KubernetesFullAccess` or `KubernetesSystemMastersGroupAccess`)
   - write on Cockpit (`ObservabilityFullAccess`)
-- [A token](/cockpit/how-to/create-token/) with permissions to push to, and query logs from Cockpit
+- [A token](/cockpit/how-to/create-token/) with permissions to push to and query logs from Cockpit
 
 <CockpitIamPermissions />
 
@@ -49,9 +49,9 @@ Because the data plane is entirely under your control, **logs from any component
 
 ## How it works
 
-The system leverages **Promtail** (a lightweight log collector) running on your Kapsule or Kosmos cluster. Promtail forwards logs to the Loki endpoint of your Cockpit instance:
+The system leverages **Alloy** (an open source telemetry collector) running on your Kapsule or Kosmos cluster. Alloy forwards logs to the Loki endpoint of your Cockpit instance:
 
-1. **Promtail** can collect logs from:
+1. **Alloy** can collect logs from:
    - **Container stdout/stderr** (Pods)
    - **systemd journal** (e.g., `kubelet.service`)
 2. The app automatically creates a custom datasource called `kubernetes-logs` and a Cockpit token with push logs permission.
@@ -60,43 +60,95 @@ The system leverages **Promtail** (a lightweight log collector) running on your 
 
 ## Step-by-step: Enabling container logs in Cockpit
 
-You can use Scaleway’s **[Easy Deploy](/kubernetes/how-to/enable-easy-deploy/)** to add a Promtail deployment to your cluster:
+You can use Scaleway’s **[Easy Deploy](/kubernetes/how-to/enable-easy-deploy/)** to add an Alloy deployment to your cluster:
 
 1. Log in to the [Scaleway console](https://console.scaleway.com/) and go to your **Kubernetes** cluster.
 2. Navigate to the **Easy Deploy** tab.
-3. Select **Promtail for Cockpit** from the library.
-4. **Deploy** the application. Promtail will install on your cluster with default settings that:
-   - Collect container logs for **all namespaces** (by default).
-   - Collect systemd journal logs (e.g., `kubelet.service`).
+3. Select **Alloy to Cockpit** from the library.
+4. **Deploy** the application. Alloy will install on your cluster with default settings that:
+   - Collect container logs for the `kube-system` namespace (by default).
+   - Collect **all** systemd journal logs (e.g., `kubelet`).
    - Forward logs securely to **Cockpit**.
     <Message type="note">
-      You can edit the default deployment configuration to filter logs by source (under `config.snippets.scrapeConfigs` in the YAML file). For example:
+      You can edit the default deployment configuration to filter logs by source (under `alloy.configMap.content` in the YAML file). For example:
       ```yaml
-      cockpit_promtail_scrape_config_pods: "namespace1,namespace2"
-      cockpit_promtail_scrape_config_journal: "kubelet.service,kube-proxy.service"
+      cockpit_alloy_kubernetes_pods "namespace1" "namespace2"
+      cockpit_alloy_journal "kubelet" "sshd"
       ```
     </Message>
 
-### Example Promtail configuration
+### Example Alloy configuration
 Below is a simplified snippet of the configuration that Easy Deploy generates by default:
 ```yaml
-config:
-  clients:
-    - bearer_token: "{{{ cockpit_bearer_token }}}" # Automatically set by Easy Deploy
-      url: "{{{ cockpit_loki_push_url }}}" # Automatically set by Easy Deploy
+alloy:
+    configMap:
+        content: |
+            /* Default loki writer. DO NOT REMOVE OR UPDATE. */
+            loki.write "default" {
+              endpoint {
+                url = sys.env("COCKPIT_LOKI_PUSH_URL")
 
-  snippets:
-    scrapeConfigs: |
-      {{{- cockpit_promtail_scrape_config_pods }}} # Default: log all Pods
-      {{{- cockpit_promtail_scrape_config_journal }}} # Default: log all system components
-extraVolumeMounts:
-  - mountPath: /var/log/journal
-    name: journal
-    readOnly: true
-extraVolumes:
-  - hostPath:
-      path: /var/log/journal
-    name: journal
+                authorization {
+                  type        = "Bearer"
+                  credentials = sys.env("COCKPIT_TOKEN")
+                }
+              }
+            }
+
+            /* Default loki process. DO NOT REMOVE */
+            loki.process "default" {
+              forward_to = [loki.write.default.receiver]
+
+              // NOTE: You may update or remove this block if necessary.
+              stage.limit {
+                  rate  = 500 // The maximum number of burst lines that the stage forwards.
+                  burst = 500 // The maximum rate of lines per second that the stage forwards.
+              }
+
+              // NOTE: You may update or remove this block if necessary.
+              stage.drop {
+                  longer_than         = "4KB"
+                  drop_counter_reason = "too long"
+              }
+
+              // NOTE: You may update or remove this block if necessary.
+              stage.drop {
+                  older_than          = "48h"
+                  drop_counter_reason = "too old"
+              }
+            }
+
+            /* Optional: you may update the following lines: */
+            {{{- cockpit_alloy_kubernetes_pods "kube-system" }}}
+            {{{- cockpit_alloy_journal }}}
+
+            /* Optional: put your custom Alloy configuration here: */
+            /* ... */
+    envFrom:
+        - secretRef:
+            name: easydeploy-alloy-credentials
+    mounts:
+        dockercontainers: true
+        extra:
+            - mountPath: /var/lib/alloy
+              name: easydeploy-alloy
+        varlog: true
+    storagePath: /var/lib/alloy
+controller:
+    volumes:
+        extra:
+            - hostPath:
+                path: /var/easydeploy-alloy
+                type: DirectoryOrCreate
+              name: easydeploy-alloy
+extraObjects:
+    - apiVersion: v1
+      kind: Secret
+      metadata:
+        name: easydeploy-alloy-credentials
+      stringData:
+        COCKPIT_LOKI_PUSH_URL: '{{{ cockpit_loki_push_url }}}'
+        COCKPIT_TOKEN: '{{{ cockpit_bearer_token }}}'
 ```
 <Message type="note">
   Template values like `{{{ cockpit_bearer_token }}}` (Bearer Token) and `{{{ cockpit_loki_push_url }}}` (Loki URL) are automatically set. Avoid modifying these values.
@@ -104,10 +156,10 @@ extraVolumes:
 
 ## Visualizing logs in Cockpit
 
-Once Promtail is running:
+Once Alloy is running:
 
 1. Go to the **Cockpit** section of the Scaleway console, then click **Open dashboards**.
-2. Log into Grafana.
+2. Log in to Grafana.
 3. In Grafana's menu, navigate to **Dashboards** and select **Kubernetes Cluster Pod Logs** to view logs collected from Pods in your clusters.
 4. **Filter Pod logs** by:
    - `Datasource` which is automatically created upon deployment and visible in the Cockpit console
@@ -132,13 +184,30 @@ Key points include:
 - **Filtering**: Limit logs to critical namespaces or system components only.
 
 <Message type="note">
-  You may edit the default configuration of the deployment to adjust the volume of logs to ingest:
-  ```yaml
-  extraLimitsConfig: |
-    readline_rate_enabled: true # rate limiting
-    readline_rate: 10000 # log lines / sec
-    readline_burst: 10000 # cap for burst lines
-    readline_rate_drop: true # drop excess lines
+  You may edit the "default" loki process in the configuration of the deployment to adjust the volume of logs to ingest:
+  ```hcl
+  /* Default loki process. DO NOT REMOVE */
+  loki.process "default" {
+    forward_to = [loki.write.default.receiver]
+
+    // NOTE: You may update or remove this block if necessary.
+    stage.limit {
+        rate  = 500 // The maximum number of burst lines that the stage forwards.
+        burst = 500 // The maximum rate of lines per second that the stage forwards.
+    }
+
+    // NOTE: You may update or remove this block if necessary.
+    stage.drop {
+        longer_than         = "4KB"
+        drop_counter_reason = "too long"
+    }
+
+    // NOTE: You may update or remove this block if necessary.
+    stage.drop {
+        older_than          = "48h"
+        drop_counter_reason = "too old"
+    }
+  }
   ```
 
 </Message>
@@ -149,20 +218,20 @@ Key points include:
 
 ## Security considerations
 
-- **Authentication**: The Promtail client uses a Cockpit Bearer Token to authenticate. Keep this token secret; do not store it in publicly accessible repos.
-- **Encryption**: Communication between Promtail and Cockpit (HTTPS) encrypts logs in transit.
+- **Authentication**: The Alloy client uses a Cockpit Bearer Token to authenticate. Keep this token secret; do not store it in publicly accessible repos.
+- **Encryption**: Communication between Alloy and Cockpit (HTTPS) encrypts logs in transit.
 - **Access Control**: Ensure only trusted team members can deploy Easy Deploy applications or modify cluster-level configurations.
 
 ## Troubleshooting
 
 - **No logs appearing** in Cockpit:
-  - Verify that the Promtail Pod is running.
+  - Verify that the Alloy Pod is running.
     ```bash
-    kubectl get pods -n <promtail-namespace>
+    kubectl get pods -n <alloy-namespace>
     ```
-  - Inspect Promtail logs for errors.
+  - Inspect Alloy logs for errors.
     ```bash
-    kubectl logs <promtail-pod-name> -n <promtail-namespace>
+    kubectl logs <alloy-pod-name> -n <alloy-namespace>
     ```
 
 - **High log ingestion cost**:
@@ -175,5 +244,5 @@ Key points include:
 - [Push logs to Cockpit (How-To)](/cockpit/how-to/send-metrics-logs-to-cockpit/)
 - [Send logs from your Kubernetes cluster to your Cockpit (How-To)](/cockpit/how-to/send-logs-from-k8s-to-cockpit/)
 - [Send metrics from your Kubernetes cluster to your Cockpit (How-To)](/cockpit/how-to/send-metrics-from-k8s-to-cockpit/)
-- [Promtail Documentation](https://grafana.com/docs/loki/latest/clients/promtail/)
+- [Alloy Documentation](https://grafana.com/docs/alloy/latest/)
 - [Scaleway Kubernetes Kapsule and Kosmos Documentation](/kubernetes/quickstart/)

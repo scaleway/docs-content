@@ -51,8 +51,12 @@ export const iamMenu = {
           slug: 'set-up-sso-with-authentik'
         },
         {
-          label: 'Set up automatic user provisioning with SCIM',
+          label: 'Configure automatic user provisioning with SCIM',
           slug: 'manage-users-with-scim'
+        },
+        {
+          label: 'Configure SCIM for Microsoft Entra ID',
+          slug: 'configure-scim-for-entra-id'
         },
         {
           label: 'Set and manage credential maximum duration',

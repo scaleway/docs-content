@@ -11,6 +11,7 @@ import { cockpitMenu } from "../pages/cockpit/menu"
 import { containerRegistryMenu } from "../pages/container-registry/menu"
 import { cpanelHostingMenu } from "../pages/cpanel-hosting/menu"
 import { dataLabMenu } from "../pages/data-lab/menu"
+import { dataOrchestratorMenu } from "../pages/data-orchestrator/menu"
 import { dataWarehouseMenu } from "../pages/data-warehouse/menu"
 import { dediboxMenu } from "../pages/dedibox/menu"
 import { dediboxAccountMenu } from "../pages/dedibox-account/menu"
@@ -40,6 +41,7 @@ import { keyManagerMenu } from '../pages/key-manager/menu'
 import { kubernetesMenu } from "../pages/kubernetes/menu"
 import { loadBalancerMenu } from "../pages/load-balancer/menu"
 import { localStorageMenu } from "../pages/local-storage/menu"
+import { mailboxMenu } from "../pages/mailbox/menu"
 import { managedDatabasesForPostgresqlAndMysqlMenu } from "../pages/managed-databases-for-postgresql-and-mysql/menu"
 import { managedDatabasesForRedisMenu } from "../pages/managed-databases-for-redis/menu"
 import { managedInferenceMenu } from "../pages/managed-inference/menu"
@@ -63,6 +65,7 @@ import { terraformMenu } from "../pages/terraform/menu"
 import { topicsAndEventsMenu } from "../pages/topics-and-events/menu"
 import { transactionalEmailMenu } from "../pages/transactional-email/menu"
 import { vpcMenu } from "../pages/vpc/menu"
+import { vpcPeeringMenu } from "../pages/vpc-peering/menu"
 import { webhostingMenu } from "../pages/webhosting/menu"
 import { quantumComputingMenu } from "../pages/quantum-computing/menu"
 
@@ -154,6 +157,7 @@ export default [
       {
         icon: 'DataAndAnalyticsCategoryIcon',
         items: [
+          dataOrchestratorMenu,
           dataWarehouseMenu,
           dataLabMenu,
           clustersForKafkaMenu,
@@ -176,6 +180,7 @@ export default [
         icon: 'DomainsAndWebHostingCategoryIcon',
         items: [
           domainsAndDnsMenu,
+          mailboxMenu,
           transactionalEmailMenu,
           webhostingMenu,
         ],
@@ -211,6 +216,7 @@ export default [
           publicGatewaysMenu,
           siteToSiteVpnMenu,
           vpcMenu,
+          vpcPeeringMenu,
         ],
         label: 'Network',
         category: 'network',

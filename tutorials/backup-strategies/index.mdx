@@ -1,0 +1,240 @@
+---
+title: Backup strategies for Scaleway resources
+description: This page provides guidance for several key backup scenarios involving Instances, Object Storage, Block Storage, Managed Databases, and Kubernetes resources.
+tags: backup snaphot autobackup encryption
+products:
+  - block-storage
+  - instances
+  - kubernetes
+dates:
+  validation: 2026-04-07
+  posted: 2026-04-07
+  validation_frequency: 12
+difficulty: intermediate
+usecase:
+  - back-up-data
+  - best-practices
+ecosystem:
+  - scaleway-only
+---
+
+
+This document consolidates best practice procedures, configuration options, and compliance considerations for backing up your Scaleway resources. It is intended to help you implement and operate reliable backup and snapshot workflows for:
+
+- Instances
+- Block Storage
+- Managed Databases
+- Kubernetes cluster resources
+
+
+## Operational management
+
+### Automatically moving or copying snapshots/backups to buckets in a different region/zone
+
+There is no native, single-click feature (such as S3 Cross-Region Replication) to automatically mirror or move your snapshots and backups to a bucket in a different region.
+
+To achieve automated cross-region or cross-bucket copies, you must use a combination of exporting, CLI tools, and scripting. Here is how you can set this up:
+
+1. [Create backups of Instances via the Scaleway API.](/instances/api-cli/creating-backups/)
+2. [Export the snapshot to an Object Storage bucket](https://cli.scaleway.com/block/#export-a-snapshot-to-a-scaleway-object-storage-bucket) that is located in the same region as the snapshot.
+3. [Copy the object to your destination bucket in a different region using Rclone](/tutorials/migrate-data-rclone/).
+4. [Import your backup file in the target region](https://cli.scaleway.com/block/#import-a-snapshot-from-a-scaleway-object-storage-bucket) from the destination bucket as a new snapshot in the new Availability Zone.
+
+To automate the export/import of snapshots into buckets as well as the synchronization of buckets, use Serverless Jobs:
+
+- [Use Serverless Jobs to move snapshots to S3 Object Storage](https://github.com/scaleway/serverless-examples/tree/main/jobs/block-snapshot-s3-archiver)
+- [Quickstart for Scaleway Serverless Jobs](/serverless-jobs/quickstart/)
+- [Clean old snaphots using Serverless Jobs](https://github.com/scaleway/serverless-examples/blob/main/jobs/instances-snapshot-cleaner/README.md)
+
+<Message type="tip">
+  When moving data between two regions using an automation script, make sure you are maximizing transfer speed by using parallelism. To avoid slow transfers, configure your script to move multiple files simultaneously (for example, by adding the `--transfers=8` flag with Rclone).
+</Message>
+
+
+### Automating backups
+
+For Managed Databases, snapshot creation can be automated using the autobackup feature.
+
+In the case of the operating system, Scaleway does not offer a native feature for automatic OS backup.
+
+The following options allow you to automatically create and export instance volumes' snapshots to buckets: 
+
+- Full backup with snapshot using SCW CLI and Object Storage:
+  - [Create a snapshot from a specified volume or from a QCOW2 file](https://cli.scaleway.com/instance/#create-a-snapshot-from-a-specified-volume-or-from-a-qcow2-file)
+  - [Export a snapshot to S3](https://cli.scaleway.com/instance/#export-a-snapshot) (with an [automation using Serverless Jobs](https://github.com/scaleway/serverless-examples/tree/main/jobs/block-snapshot-s3-archiver))
+  - [Delete a snapshot after the retention period](https://cli.scaleway.com/instance/#delete-a-snapshot) 
+- Encrypted backup using Duplicity and Object Storage:
+  - [Back up your instance on Scaleway Object Storage with Duplicity](/tutorials/backup-dedicated-server-s3-duplicity)
+- Incremental backup using Restic and Object Storage, saving significant bandwidth and storage costs:
+  - [Create backups with Restic and Object Storage](/tutorials/restic-s3-backup)
+
+You can schedule automatic backups using the SCW CLI and [Scaleway Serverless Jobs](/serverless-jobs/quickstart/).
+
+The standard OS backup frequency is every 10 days with a retention period of one month (as mentioned in the [Backing up your dedicated server on Scaleway Object Storage with Duplicity](/tutorials/backup-dedicated-server-s3-duplicity/#editing-the-configuration) tutorial). Backup rules and retention policies need to be adapted to your backup strategy and aligned with your organization's constraints.
+
+
+### Scheduling cross-zone/cross-region backups and snapshots
+
+#### Scheduling cross-zone backups
+
+In the case of **Managed Databases**, you have the following options:
+
+- **Autobackups**: Scaleway automatically performs daily backups for PostgreSQL and MySQL databases. The default autobackup frequency is one per day, with a retention period of seven days and the ability to be restored within the same region. You can change this on the Database Instance information page after Instance creation.
+- **Manual or Scheduled Backups**: Use Serverless Jobs with the Scaleway CLI to schedule recurring backups (e.g., cron job with a daily run at 6:00 PM).
+
+  <Message type="tip">
+    For massive data transfers, replace Serverless Jobs with a lightweight dedicated "Backup Runner" Instance, or trigger the transfers using a CI/CD pipeline runner that does not have tight execution limits.
+  </Message>
+
+    Scheduled backups for Data Warehouse for ClickHouse® are not yet available.
+
+- **Regions and AZs**: The backup is stored in the same region and can be restored in any AZ within that region.
+
+  Multi-region backups for Relational Databases are not yet available.
+
+
+In the case of **Instances** (virtual machines), follow this procedure:
+
+1. Create a snapshot of the volume using Serverless Jobs.
+2. Export the snapshot to Object Storage (same region).
+3. In the target AZ, create a new Block Storage volume from the snapshot.
+4. Attach the volume to a new Instance launched in the desired AZ.
+
+  <Message type="note">
+    Direct cross-AZ snapshot usage is not supported, but exporting to Object Storage enables migration.
+  </Message>
+
+#### Scheduling cross-region backups
+
+Cross-region backups can be automated using CLI and Serverless Jobs, as described in section [Automatically moving or copying snapshots/backups to buckets in a different region/zone](#automatically-moving-or-copying-snapshot-backups-to-buckets-in-a-different-region-zone).
+
+
+### Centralized backup management
+
+There is currently no native, unified "Central Backup Manager" available to centrally manage, monitor, and create backup policies (schedules, retention, incremental/differential rules) across all your different resources (Instances, Databases, Kubernetes) at the Organization or Project level. The proposed approach to work around this is to use decentralized automation.
+
+Backup management is handled on a per-product basis or via custom automation:
+
+- **Databases**: Managed Databases handle their own automated backup schedules and retention policies (for details, see the [documentation about the autobackup feature](/managed-databases-for-postgresql-and-mysql/how-to/manage-backups/#how-to-set-up-autobackups)).
+- **Instances and volumes**: You must orchestrate your own backup policies using Serverless Jobs and the Scaleway CLI, or configure third-party agents directly on the OS (e.g., with [Duplicity](/tutorials/backup-dedicated-server-s3-duplicity/) or [Restic](/tutorials/restic-s3-backup/)).
+
+**Use Object Storage as the central hub** since all resources' backups (VM QCOW2 exports, database dumps, Velero Kubernetes backups, and third-party tools) can be routed to S3 buckets. You can use bucket-level lifecycle rules to centrally manage the retention and archiving of all your data (e.g., automatically transitioning old backups to Glacier or deleting them).
+
+
+## Encryption and security
+
+### Object Storage encryption
+
+Scaleway supports three primary ways to encrypt your Object Storage data:
+
+- **[Server-Side Encryption with Object Native Encryption (SSE-ONE)](/object-storage/how-to/enable-sse-one/#how-to-enable-sse-one-on-an-existing-bucket)**: This is a fully managed server-side encryption method using AES-256 keys.
+  - **Enablement**: disabled by default
+    - SSE-ONE can be enabled at the bucket level (either at creation or later).
+    - SSE-ONE can be enabled using the Scaleway console, AWS CLI, and is implemented in [Scaleway's Terraform provider](https://github.com/scaleway/terraform-provider-scaleway/pull/3775).
+    - Once enabled on the bucket, every single newly-uploaded object is automatically encrypted by default.
+  - **Algorithm**: AES-256 
+  - **Key storage**: Scaleway
+  - **Key management**: Scaleway
+- **[Server-Side Encryption with Customer-provided keys (SSE-C)](/tutorials/object-storage-sse-c-with-secret-manager/)**: This is a server-side encryption method where you supply your own 256-bit (32-byte) AES256 encryption key and its MD5 digest.
+  - **Enablement**: disabled by default
+    - SSE-C can be enabled using the AWS CLI or [Scaleway's Terraform provider](https://registry.terraform.io/providers/scaleway/scaleway/latest/docs/resources/object).
+  - **Algorithm**: AES-256 
+  - **Key storage**: Customer ([possible in Scaleway Secret Manager](/tutorials/object-storage-sse-c-with-secret-manager/))
+  - **Key management**: Customer
+- **Customer-Side Encryption**: You can also encrypt your sensitive data yourself before uploading it to Scaleway Object Storage, giving you absolute control over the encryption mechanism (e.g., [Encrypting your Scaleway Object Storage data using Rclone](/tutorials/encrypt-s3-data-rclone/)).
+  - Fully managed by the customer before the upload on the bucket.
+
+  <Message type="important">
+    Data imported before enabling SSE on Object Storage ARE NOT encrypted.
+  </Message>
+
+
+### Backup and snapshot encryption
+
+**Snapshots**: Snapshots on Scaleway are encrypted when they are taken from encrypted volumes.
+
+**Block Storage (Volumes)**: For Block Storage, for instance, volume encryption is handled at the operating system level. Scaleway's Block Storage does not offer built-in encryption at rest as a managed service feature. You can use industry-standard tools such as Linux Unified Key Setup (LUKS) to create an encrypted partition. For details, see the [Encrypting volumes for sensitive data](/tutorials/encrypt-volumes/) tutorial.
+
+  <Message type="note">
+    If your snapshots are not taken from encrypted volumes and hosted on Scaleway Object Storage, SSE-X encryption has to be enabled before uploading the snapshot.
+  </Message>
+
+
+### Backup to Object Storage without transiting via internet
+
+Because Scaleway Object Storage currently relies on regional public endpoints (e.g., `s3.fr-par.scw.cloud`), there is no native "VPC Endpoint" that routes S3 traffic exclusively over the internal backbone. Instead, Scaleway's official solution is to isolate your resources inside a Private Network and route outbound S3 traffic through a Public Gateway.
+
+  <Message type="iam">
+    **Workaround**
+    
+      To better secure you data transiting to Object Storage through the internet, we recommend to encrypt you data before sending them to the bucket (e.g., [Encrypting your Scaleway Object Storage data using Rclone](/tutorials/encrypt-s3-data-rclone/)).
+  </Message>
+
+## Compliance
+
+In Scaleway, backup compliance is primarily assured through a combination of **data immutability** features and comprehensive **activity logging**.
+
+### Data immutability via object lock (WORM)
+
+To ensure that your backups cannot be altered, encrypted by ransomware, or maliciously deleted, Scaleway Object Storage provides an [object lock](/object-storage/api-cli/object-lock) feature (based on an Amazon S3 API functionality).
+
+This feature uses a [Write-Once-Read-Many (WORM)](/object-storage/concepts/#retention-period) data protection model, a standard requirement for regulatory compliance. You can configure object lock in [two distinct retention modes](/object-storage/api-cli/object-lock/#retention-modes):
+
+- **Compliance mode**: When a backup is locked in this mode, the object version cannot be overwritten or deleted by any user, not even an administrator, during the retention period. The retention mode cannot be changed, and the retention period cannot be shortened. The data can only be deleted once the lock expires or if the entire Scaleway account is deleted.
+- **Governance mode**: This mode offers strong protection but allows specific users with specialized permissions to alter the lock settings or delete the object if absolutely necessary.
+
+In addition to the object lock, you can use the Object Storage [versioning feature](/object-storage/how-to/use-bucket-versioning/), which will create new versions of the objects that you store with the same name.
+
+
+### Accountability and auditing via Audit Trail
+
+Compliance is also about proving who accessed what and when. Scaleway offers a product called Audit Trail for this exact purpose.
+
+- **Activity tracking**: Audit Trail keeps an immutable record of events and changes performed within your Scaleway Organization. It tracks the identity of the principal (who did it), the date, the source IP address, the specific API method used, and whether the request was successful or denied. For example, Audit Trail allows you to track who triggered, modified, or deleted backups (such as manual Instance snapshots or Object Storage configurations).
+- **Compliance verification**: By logging these actions, you can easily troubleshoot issues, analyze security breaches, and verify compliance for external auditors.
+
+Audit Trail logs are only accessible in the console for a limited time (90 days). For long-term logs retention, you can [configure an export of your event logs directly to an Object Storage bucket](/audit-trail/how-to/manage-adt-export/). You can apply object lock to this bucket to ensure your audit logs are also WORM-protected.
+
+
+## Specialized workloads and storage classes
+
+### Backing up Kubernetes Kapsule and Kosmos resources
+
+For Kubernetes products Kapsule and Kosmos, [Scaleway recommends using Velero](/tutorials/k8s-velero-backup/), an open-source utility designed to facilitate the backup, restoration, and migration of Kubernetes cluster resources and persistent volumes on Amazon S3-compatible Object Storage (e.g., Scaleway Object Storage).
+
+**How it integrates**
+
+- **Native Integration**: Velero operates as a deployment directly within your Kapsule cluster and uses Custom Resource Definitions (CRDs).
+- **Storage Target**: Configure Velero with your Scaleway credentials and point it to your Scaleway bucket.
+
+**What it backs up**
+
+Velero captures the state of your cluster, including:
+
+- **Resources**: Deployments, services, config maps, and secrets
+- **Data**: Persistent Volumes attached to your cluster
+- **Metadata**: It ensures the preservation of all associated metadata and labels so restorations are completely accurate.
+
+**How to run and schedule backups**
+
+On-demand backups are triggered using a single command (`velero backup create full-backup --include-namespaces '*'`).
+
+Backups can be scheduled using Scaleway's Serverless Jobs.
+
+**How to restore a cluster**
+
+You can restore your applications and data either into the exact same Kubernetes cluster, or migrate them to an entirely different cluster, only running the `velero restore create` command pointing to the specific backup name.
+
+
+### Glacier storage class
+
+Scaleway's Glacier is the low‑cost, archival tier of the Scaleway Object Storage service. It is designed for data that is accessed rarely and can tolerate longer retrieval times.
+
+You can access Glacier-related functionality both via the Scaleway console and the API:
+- When uploading objects using the Scaleway console, you have the option to select the **Glacier** storage class. 
+- When [using the API](/object-storage/api-cli/object-operations/#putobject), you can define the `GLACIER` storage class of your object.
+
+Regarding encryption:
+
+- SSE-ONE and SSE-C encryption methods are compatible with the Glacier storage class (for details, see section [Object Storage encryption](#object-storage-encryption)).
+- Data encryption for Glacier can also be done before sending it to Scaleway Object Storage, on the client side (e.g., with GPG), guaranteeing that there is no evidence of your private key stored on the cluster.

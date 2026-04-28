@@ -39,6 +39,10 @@ export const publicGatewaysMenu = {
           slug: 'use-flexible-ips',
         },
         {
+          label: 'Monitor Public Gateways',
+          slug: 'monitor-public-gateways',
+        },
+        {
           label: 'Delete a Public Gateway',
           slug: 'delete-a-public-gateway',
         },

@@ -191,6 +191,10 @@ export const instancesMenu = {
           "slug": "images-and-instantapps"
         },
         {
+          "label": "Using Red Hat Enterprise Linux with BYOS on Scaleway",
+          "slug": "use-red-hat-license"
+        },
+        {
           "label": "Understanding the differences between ARM and x86 Instances",
           "slug": "understanding-differences-x86-arm"
         },
@@ -209,6 +213,14 @@ export const instancesMenu = {
         {
           "label": "Understanding Instance pricing",
           "slug": "understanding-instance-pricing"
+        },
+        {
+          "label": "Understanding Instance lifecycle",
+          "slug": "instance-lifecycle"
+        },
+        {
+          "label": "Understanding Instance states",
+          "slug": "instance-states"
         },
         {
           "label": "Identifying devices of an Instance",

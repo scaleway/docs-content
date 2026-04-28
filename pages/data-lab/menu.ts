@@ -19,7 +19,7 @@ export const dataLabMenu = {
     {
       items: [
         {
-          label: 'Create a Data Lab cluster',
+          label: 'Create a Spark™ cluster',
           slug: 'create-data-lab',
         },
         {
@@ -47,6 +47,6 @@ export const dataLabMenu = {
       slug: 'troubleshooting',
     },
   ],
-  label: 'Data Lab for Apache Spark™',
+  label: 'Clusters for Apache Spark™',
   slug: 'data-lab',
 }

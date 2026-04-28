@@ -84,8 +84,8 @@ export const generativeApisMenu = {
         },
         {
           label:
-            'Use your Managed Inference deployment with a Private Network',
-          slug: 'managed-inference-with-private-network',
+            'Use your dedicated deployment with a Private Network',
+          slug: 'dedicated-deployment-with-private-network',
         },
         {
           label: 'Delete a deployment',

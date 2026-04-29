@@ -43,7 +43,6 @@ import { localStorageMenu } from "../pages/local-storage/menu"
 import { mailboxMenu } from "../pages/mailbox/menu"
 import { managedDatabasesForPostgresqlAndMysqlMenu } from "../pages/managed-databases-for-postgresql-and-mysql/menu"
 import { managedDatabasesForRedisMenu } from "../pages/managed-databases-for-redis/menu"
-import { managedInferenceMenu } from "../pages/managed-inference/menu"
 import { managedMongodbDatabasesMenu } from "../pages/managed-mongodb-databases/menu"
 import { natsMenu } from "../pages/nats/menu"
 import { objectStorageMenu } from "../pages/object-storage/menu"
@@ -108,7 +107,6 @@ export default [
         icon: 'AiCategoryIcon',
         items: [
           generativeApisMenu,
-          managedInferenceMenu,
         ],
         label: 'AI',
         category: 'ai-data',

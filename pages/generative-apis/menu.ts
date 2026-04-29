@@ -42,7 +42,7 @@ export const generativeApisMenu = {
           label: 'Query audio models',
           slug: 'query-audio-models'
         },
-                {
+        {
           label: 'Query reranking models',
           slug: 'query-reranking-models'
         },
@@ -84,7 +84,7 @@ export const generativeApisMenu = {
         },
         {
           label:
-            'Use your dedicated deployment with a Private Network',
+            'Use deployment with a Private Network',
           slug: 'dedicated-deployment-with-private-network',
         },
         {
@@ -124,31 +124,27 @@ export const generativeApisMenu = {
     {
       items: [
         {
-          label: 'Model catalog',
-          slug: 'model-catalog',
+          label: 'Supported models',
+          slug: 'supported-models',
+        },
+        {
+          label: 'Model lifecycle',
+          slug: 'model-lifecycle',
+        },
+        {
+          label: 'OpenAI API compatibility',
+          slug: 'openai-compatibility',
         },
         {
           label: 'Rate limits for Serverless',
           slug: 'rate-limits',
         },
         {
-          label: 'Model lifecycle for Serverless',
-          slug: 'model-lifecycle',
-        },
-        {
-          label: 'Model integration, lifecycle, licensing for Dedicated',
-          slug: 'supported-models',
-        },
-        {
-          label: 'OpenAI API compatibility for Dedicated',
-          slug: 'openai-compatibility',
-        },
-        {
           label: 'Data privacy',
           slug: 'data-privacy',
         },
         {
-          label: 'Security and Reliability in Generative APIs',
+          label: 'Security and reliability in Generative APIs',
           slug: 'security-and-reliability',
         },
         {

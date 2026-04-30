@@ -101,7 +101,7 @@ export const kubernetesMenu = {
           slug: 'recover-space-etcd',
         },
         {
-          "label": "How to use SFS with Kubernetes Kapsule",
+          "label": "How to use File Storage with Kubernetes Kapsule",
           "slug": "use-sfs-with-kubernetes"
         },
         {
@@ -230,6 +230,10 @@ export const kubernetesMenu = {
         {
           label: 'Wildcard DNS routing',
           slug: 'wildcard-dns',
+        },
+        {
+          label: 'Using Kubernetes subPath with SFS on Kapsule',
+          slug: 'using-subpath-with-sfs',
         },
         {
           label: 'Migrate end-of-life pools to newer Instances',

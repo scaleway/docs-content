@@ -11,6 +11,7 @@ import { cockpitMenu } from "../pages/cockpit/menu"
 import { containerRegistryMenu } from "../pages/container-registry/menu"
 import { cpanelHostingMenu } from "../pages/cpanel-hosting/menu"
 import { dataLabMenu } from "../pages/data-lab/menu"
+import { dataOrchestratorMenu } from "../pages/data-orchestrator/menu"
 import { dataWarehouseMenu } from "../pages/data-warehouse/menu"
 import { dediboxMenu } from "../pages/dedibox/menu"
 import { dediboxAccountMenu } from "../pages/dedibox-account/menu"
@@ -154,6 +155,7 @@ export default [
       {
         icon: 'DataAndAnalyticsCategoryIcon',
         items: [
+          dataOrchestratorMenu,
           dataWarehouseMenu,
           dataLabMenu,
           clustersForKafkaMenu,

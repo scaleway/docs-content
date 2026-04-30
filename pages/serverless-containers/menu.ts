@@ -173,6 +173,10 @@ export const serverlessContainersMenu = {
           label: 'v1 migration guide',
           slug: 'v1-migration-guide',
         },
+        {
+          label: 'Request headers reference',
+          slug: 'request-headers',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

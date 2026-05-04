@@ -42,7 +42,7 @@ export const generativeApisMenu = {
           label: 'Query audio models',
           slug: 'query-audio-models'
         },
-                {
+        {
           label: 'Query reranking models',
           slug: 'query-reranking-models'
         },
@@ -57,6 +57,39 @@ export const generativeApisMenu = {
         {
           label: 'Use batch processing',
           slug: 'use-batch-processing',
+        },
+        {
+          label: 'Deploy a model',
+          slug: 'create-deployment',
+        },
+        {
+          label: 'Import a custom model',
+          slug: 'import-custom-model',
+        },
+        {
+          label: 'Change the model of a deployment',
+          slug: 'change-model',
+        },
+        {
+          label: 'Monitor a deployment',
+          slug: 'monitor-deployment',
+        },
+        {
+          label: 'Configure autoscaling',
+          slug: 'configure-autoscaling',
+        },
+        {
+          label: 'Manage access to a deployment',
+          slug: 'manage-allowed-ips',
+        },
+        {
+          label:
+            'Use deployment with a Private Network',
+          slug: 'dedicated-deployment-with-private-network',
+        },
+        {
+          label: 'Delete a deployment',
+          slug: 'delete-deployment',
         },
       ],
       label: 'How to',
@@ -99,7 +132,11 @@ export const generativeApisMenu = {
           slug: 'model-lifecycle',
         },
         {
-          label: 'Rate limits',
+          label: 'OpenAI API compatibility',
+          slug: 'openai-compatibility',
+        },
+        {
+          label: 'Rate limits for Serverless',
           slug: 'rate-limits',
         },
         {
@@ -107,7 +144,7 @@ export const generativeApisMenu = {
           slug: 'data-privacy',
         },
         {
-          label: 'Security and Reliability in Generative APIs',
+          label: 'Security and reliability in Generative APIs',
           slug: 'security-and-reliability',
         },
         {

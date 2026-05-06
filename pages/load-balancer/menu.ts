@@ -127,6 +127,10 @@ export const loadBalancerMenu = {
           slug: 'public-private-accessibility',
         },
         {
+          label: 'Load Balancers limitations',
+          slug: 'load-balancers-limitations',
+        },
+        {
           label: 'Migrating from AWS ELB',
           slug: 'migrating-aws',
         },

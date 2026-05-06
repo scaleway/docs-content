@@ -45,8 +45,8 @@ export const rabbitmqMenu = {
     {
       items: [
         {
-          label: 'X y z',
-          slug: 'x-y-z',
+          label: 'Choosing between shared and dedicated resources',
+          slug: 'shared-vs-dedicated-resources',
         },
       ],
       label: 'Additional Content',

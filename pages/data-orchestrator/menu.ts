@@ -9,6 +9,10 @@ export const dataOrchestratorMenu = {
       slug: 'concepts',
     },
     {
+      label: 'Quickstart',
+      slug: 'quickstart',
+    },
+    {
       items: [
         {
           label: 'Create a workflow',

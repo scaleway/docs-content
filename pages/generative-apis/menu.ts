@@ -148,6 +148,10 @@ export const generativeApisMenu = {
           slug: 'security-and-reliability',
         },
         {
+          label: 'Understanding Generative APIs costs',
+          slug: 'cost-estimator',
+        },
+        {
           label: 'Adding AI to VS Code using Continue',
           slug: 'adding-ai-to-vscode-using-continue',
         },

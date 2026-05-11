@@ -23,6 +23,24 @@ export const vpcPeeringMenu = {
           slug: 'https://www.scaleway.com/en/developers/api/vpc/',
         }
       ],
+      label: 'How to',
+      slug: 'how-to',
+    },
+    {
+      items: [
+        {
+          label: 'Create a peering connector',
+          slug: 'create-peering-connector',
+        },
+        {
+          label: 'Manage a peering connector',
+          slug: 'manage-peering-connector',
+        },
+        {
+          label: 'Delete a peering connector',
+          slug: 'delete-peering-connector',
+        },
+      ],
       label: 'API/CLI',
       slug: 'api-cli',
     },

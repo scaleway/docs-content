@@ -11,6 +11,7 @@ import { cockpitMenu } from "../pages/cockpit/menu"
 import { containerRegistryMenu } from "../pages/container-registry/menu"
 import { cpanelHostingMenu } from "../pages/cpanel-hosting/menu"
 import { dataLabMenu } from "../pages/data-lab/menu"
+import { dataOrchestratorMenu } from "../pages/data-orchestrator/menu"
 import { dataWarehouseMenu } from "../pages/data-warehouse/menu"
 import { dediboxMenu } from "../pages/dedibox/menu"
 import { dediboxAccountMenu } from "../pages/dedibox-account/menu"
@@ -43,7 +44,6 @@ import { localStorageMenu } from "../pages/local-storage/menu"
 import { mailboxMenu } from "../pages/mailbox/menu"
 import { managedDatabasesForPostgresqlAndMysqlMenu } from "../pages/managed-databases-for-postgresql-and-mysql/menu"
 import { managedDatabasesForRedisMenu } from "../pages/managed-databases-for-redis/menu"
-import { managedInferenceMenu } from "../pages/managed-inference/menu"
 import { managedMongodbDatabasesMenu } from "../pages/managed-mongodb-databases/menu"
 import { natsMenu } from "../pages/nats/menu"
 import { objectStorageMenu } from "../pages/object-storage/menu"
@@ -108,7 +108,6 @@ export default [
         icon: 'AiCategoryIcon',
         items: [
           generativeApisMenu,
-          managedInferenceMenu,
         ],
         label: 'AI',
         category: 'ai-data',
@@ -156,6 +155,7 @@ export default [
       {
         icon: 'DataAndAnalyticsCategoryIcon',
         items: [
+          dataOrchestratorMenu,
           dataWarehouseMenu,
           dataLabMenu,
           clustersForKafkaMenu,

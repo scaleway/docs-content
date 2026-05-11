@@ -78,6 +78,10 @@ export const serverlessFunctionsMenu = {
           label: 'Migrate Functions to Containers',
           slug: 'migrate-functions-to-containers',
         },
+        {
+          label: 'Request headers reference',
+          slug: 'request-headers',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

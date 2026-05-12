@@ -52,6 +52,7 @@ import { organizationsAndProjectsMenu } from '../pages/organizations-and-project
 import { partnerSpaceMenu } from "../pages/partner-space/menu"
 import { publicGatewaysMenu } from "../pages/public-gateways/menu"
 import { queuesMenu } from "../pages/queues/menu"
+import { rabbitmqMenu } from "../pages/rabbitmq/menu"
 import { scalewayCliMenu } from "../pages/scaleway-cli/menu"
 import { scalewaySdkMenu } from "../pages/scaleway-sdk/menu"
 import { secretManagerMenu } from "../pages/secret-manager/menu"
@@ -191,6 +192,7 @@ export default [
           iotHubMenu,
           topicsAndEventsMenu,
           queuesMenu,
+          rabbitmqMenu,
         ],
         label: 'Integration Services',
         category: 'integration-services',

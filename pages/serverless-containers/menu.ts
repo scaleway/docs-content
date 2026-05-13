@@ -177,10 +177,6 @@ export const serverlessContainersMenu = {
           label: 'Request headers reference',
           slug: 'request-headers',
         },
-        {
-          label: 'Deploy AI projects on Containers',
-          slug: 'deploy-ai-projects',
-        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

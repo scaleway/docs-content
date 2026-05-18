@@ -63,6 +63,10 @@ export const siteToSiteVpnMenu = {
           slug: 'configure-site-to-site-vpn-aws-scw-terraform',
         },
         {
+          label: 'High availability and multi-site configurations',
+          slug: 'ha-multisite-configurations',
+        },
+        {
           label: 'Site-to-Site VPN Security proposals',
           slug: 'security-proposals',
         },

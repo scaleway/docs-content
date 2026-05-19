@@ -26,6 +26,16 @@ export const dataOrchestratorMenu = {
       label: 'How to',
       slug: 'how-to',
     },
+    {
+      items: [
+        {
+          label: 'Cron schedules',
+          slug: 'cron-schedules',
+        },
+      ],
+      label: 'Additional content',
+      slug: 'reference-content',
+    },
   ],
   label: 'Data Orchestrator',
   slug: 'data-orchestrator',

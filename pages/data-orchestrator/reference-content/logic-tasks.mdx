@@ -1,0 +1,179 @@
+---
+title: Workflow definition logic tasks
+description: Learn the logic tasks format for YAML Workflow definition files in Scaleway Data Orchestrator.
+tags: data-orchestrator workflow create logic tasks
+dates:
+  posted: 2026-05-18
+---
+
+Data Orchestrator in Code view requires the user to upload a YAML file to use as a workflow definition.
+
+This page explains how to use logic tasks to create more complex workflows.
+
+<Tabs>
+  <TabsTab label="Basic workflow">
+    This is a basic example of a sequential workflow using three Serverless Jobs.
+      ```yaml
+      document:
+        dsl: 1.0.0
+        namespace: <namespace_name>
+        name: <workflow_name>
+        version: 1.0.0
+      do:
+      - task1:
+          call: "serverless_job"
+          metadata:
+            description: "The first job"
+          with:
+            id: "<Serverless_job1_ID>"
+            region: "fr-par"
+      - task2:
+          call: "serverless_job"
+          metadata:
+            description: "The second job"
+          with:
+            id: "<Serverless_job2_ID>"
+            region: "fr-par"
+      - task3:
+          call: "serverless_job"
+          metadata:
+            description: "The third job"
+          with:
+            id: "<Serverless_job3_ID>"
+            region: "fr-par"
+      ```
+    Replace the ID placeholders with the IDs of your Serverless Jobs. You can copy them from the [Serverless Jobs page](https://console.scaleway.com/serverless-jobs/) of the console.
+
+    ## Workflow definition properties
+
+    | Property&nbsp;name |         Type         | Required |                         Description                          |
+    | :----------------- | :------------------: | :------: | :----------------------------------------------------------- |
+    | `dsl`              |        string        |   yes    | The version of the DSL used to define the workflow.          |
+    | `namespace`        |        string        |   yes    | The namespace of the workflow.                               |
+    | `name`             |        string        |   yes    | The name of the workflow..                                   |
+    | `version`          |        string        |   yes    | The [semantic version](https://semver.org/) of the workflow. |
+    | `title`            |        string        |    no    | The title of the workflow..                                  |
+    | `summary`          |        string        |    no    | The Markdown summary of the workflow..                       |
+    | `tags`             | map [string, string] |    no    | A key/value mapping of the tags of the workflow., if any.    |
+    | `metadata`         |         map          |    no    | Additional information about the workflow.                   |
+
+  </TabsTab>
+
+  <TabsTab label="Fork">
+    A **Fork** allows multiple tasks to perform at the same time in their respective branches. This is a basic example of two Serverless Jobs running in parallel.
+      ```yaml
+      document:
+        dsl: 1.0.0
+        namespace: <namespace_name>
+        name: <workflow_name>
+        version: 1.0.0
+      do:
+      - task1:
+          fork:
+            compete: false
+            branches:
+              - task1a:
+                  call: "serverless_job"
+                  metadata:
+                    description: "This is my first job"
+                  with:
+                    id: "<Serverless_job1_ID>"
+                    region: "fr-par"
+              - task1b:
+                  call: "serverless_job"
+                  metadata:
+                    description: "This is my other first job running in parallel"
+                  with:
+                    id: "<Serverless_job2_ID>"
+                    region: "fr-par"        
+      ```
+    Replace the ID placeholders with the IDs of your Serverless Jobs. You can copy them from the [Serverless Jobs page](https://console.scaleway.com/serverless-jobs/) of the console.
+
+    ## Fork properties
+    
+    | Property&nbsp;name |        Type        | Required |                                                                                                                                              Description                                                                                                                                               |
+    | :-----------: | :----------------: | :------: | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    |  `branches`   | map [string,&nbsp;task] |    no    | The tasks to perform concurrently                                                                                                                                                                                                                                                                      |
+    |   `compete`   |      boolean       |    no    | - If `false` (default value), the task returns an array that includes the outputs from each branch, preserving the order in which the branches are declared. <br/> - If `true`, only the jobs following the first competing job to succeed will be running afterwards. Other branches will be dropped. |
+    
+  </TabsTab>
+
+  <TabsTab label="Switch">
+    A **Switch** allows workflows to dynamically select different paths based on specified conditions or criteria. This is a basic example of two Serverless Jobs running in parallel.
+      ```yaml
+      document:
+        dsl: 1.0.0
+        namespace: <namespace_name>
+        name: <workflow_name>
+        version: 1.0.0
+      do:
+        - task1:
+            switch:
+              - case1:
+                  when: .task1condition == "condition1"
+                  then: task1case1
+              - case2:
+                  when: .task1condition == "condition2"
+                  then: task1case2
+              - default:
+                  then: task1default
+        - task1case1:
+            call: "serverless_job"
+            metadata:
+              description: "The case 1 job"
+            with:
+              id: "<Serverless_job1_ID>"
+              region: "fr-par"
+            then: exit
+        - task1case2:
+            call: "serverless_job"
+            metadata:
+              description: "The case 2 job"
+            with:
+              id: "<Serverless_job2_ID>"
+              region: "fr-par" 
+            then: exit
+        - task1default:
+            call: "serverless_job"
+            metadata:
+              description: "The default job"
+            with:
+              id: "<Serverless_job3_ID>"
+              region: "fr-par"
+            then: exit  
+      ```
+      Replace the ID placeholders with the IDs of your Serverless Jobs. You can copy them from the [Serverless Jobs page](https://console.scaleway.com/serverless-jobs/) of the console.
+
+    ## Switch properties
+    
+    | Property&nbsp;name | Type  | Required |                Description                 |
+    | :----------------- | :---: | :------: | :----------------------------------------- |
+    | `case`             | map [string, string]  |   yes    | A name/value map of the cases to switch on (see below). |
+
+    ## Switch case properties
+
+    Define a switch case with a condition for matching and an associated action to execute upon match.
+
+    | Property&nbsp;name |              Type               | Required |                                                                                                                 Description                                                                                                                  |
+    | :----------------- | :-----------------------------: | :------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | `when`             |             string              |    no    | A runtime expression used to determine whether or not the case matches.<br/> If not set, the case will be matched by default if no other case matches.<br/> Note that there can be only one default case, all others **MUST** set a condition. |
+    | `then`             | flowDirective <br/> (see below) |   yes    | The flow directive to execute when the case matches.                                                                                                                                                                                         |
+
+    ## Flow directives
+
+    Flow directives are commands within a workflow that dictate its progression.
+
+    | Flow&nbsp;directive |                                                                              Description                                                                               |
+    | :------------------ | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+    | `continue`          | Instruct the workflow to proceed with the next task in line. This may conclude the execution of a workflow or branch if there is no task defined after the `continue`. |
+    | `end`               | Conclude the workflow execution and signal its completion with a `succeeded` status.                                                                                   |
+    | `exit`              | Complete the current parent `do` execution. This may conclude the execution of a workflow or branch if there is no task defined after the parent `do` scope.           |
+    | `string`            | Continues the workflow at the task with the specified name.                                                                                                            |
+    | `<task>`            | Redirect to a task declared within the scope.                                                                                                                          |
+
+    <Message type="note">
+      Flow directives may only redirect to tasks declared within their own scope. They cannot target tasks at a different depth.
+    </Message>
+    
+  </TabsTab>
+</Tabs>

@@ -9,6 +9,10 @@ export const dataOrchestratorMenu = {
       slug: 'concepts',
     },
     {
+      label: 'Quickstart',
+      slug: 'quickstart',
+    },
+    {
       items: [
         {
           label: 'Create a workflow',
@@ -33,6 +37,16 @@ export const dataOrchestratorMenu = {
       ],
       label: 'How to',
       slug: 'how-to',
+    },
+    {
+      items: [
+        {
+          label: 'Cron schedules',
+          slug: 'cron-schedules',
+        },
+      ],
+      label: 'Additional Content',
+      slug: 'reference-content',
     },
   ],
   label: 'Data Orchestrator',

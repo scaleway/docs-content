@@ -10,7 +10,7 @@ import { clustersForKafkaMenu } from "../pages/clusters-for-kafka/menu"
 import { cockpitMenu } from "../pages/cockpit/menu"
 import { containerRegistryMenu } from "../pages/container-registry/menu"
 import { cpanelHostingMenu } from "../pages/cpanel-hosting/menu"
-import { dataLabMenu } from "../pages/data-lab/menu"
+import { dataLabMenu } from "../pages/apache-spark/menu"
 import { dataOrchestratorMenu } from "../pages/data-orchestrator/menu"
 import { dataWarehouseMenu } from "../pages/data-warehouse/menu"
 import { dediboxMenu } from "../pages/dedibox/menu"
@@ -52,6 +52,7 @@ import { organizationsAndProjectsMenu } from '../pages/organizations-and-project
 import { partnerSpaceMenu } from "../pages/partner-space/menu"
 import { publicGatewaysMenu } from "../pages/public-gateways/menu"
 import { queuesMenu } from "../pages/queues/menu"
+import { rabbitmqMenu } from "../pages/rabbitmq/menu"
 import { scalewayCliMenu } from "../pages/scaleway-cli/menu"
 import { scalewaySdkMenu } from "../pages/scaleway-sdk/menu"
 import { secretManagerMenu } from "../pages/secret-manager/menu"
@@ -191,6 +192,7 @@ export default [
           iotHubMenu,
           topicsAndEventsMenu,
           queuesMenu,
+          rabbitmqMenu,
         ],
         label: 'Integration Services',
         category: 'integration-services',

@@ -2,7 +2,7 @@ export const dataLabMenu = {
   items: [
     {
       label: 'Overview',
-      slug: '../data-lab',
+      slug: '../apache-spark',
     },
     {
       label: 'Concepts',
@@ -20,7 +20,7 @@ export const dataLabMenu = {
       items: [
         {
           label: 'Create a Spark™ cluster',
-          slug: 'create-data-lab',
+          slug: 'create-spark-cluster',
         },
         {
           label: 'Access the notebook',
@@ -36,7 +36,7 @@ export const dataLabMenu = {
         },
         {
           label: 'Manage and delete a cluster',
-          slug: 'manage-delete-data-lab',
+          slug: 'manage-delete-spark-cluster',
         },
       ],
       label: 'How to',
@@ -48,5 +48,5 @@ export const dataLabMenu = {
     },
   ],
   label: 'Clusters for Apache Spark™',
-  slug: 'data-lab',
+  slug: 'apache-spark',
 }

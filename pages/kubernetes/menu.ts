@@ -239,6 +239,10 @@ export const kubernetesMenu = {
           label: 'Migrate end-of-life pools to newer Instances',
           slug: 'migrate-end-of-life-pools-to-newer-instances',
         },
+        {
+          label: 'Shared Responsibility Model for Kubernetes',
+          slug: 'kubernetes-shared-responsibility-model',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

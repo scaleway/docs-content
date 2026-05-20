@@ -49,7 +49,7 @@ export const dataOrchestratorMenu = {
           slug: 'cron-schedules',
         },
       ],
-      label: 'Additional content',
+      label: 'Additional Content',
       slug: 'reference-content',
     },
   ],

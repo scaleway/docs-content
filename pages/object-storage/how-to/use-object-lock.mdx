@@ -16,7 +16,7 @@ Object lock provides two mechanisms to protect your objects: **retention** and *
   - **Compliance mode** prevents users, including owners and users with administrative permissions, from deleting or overwriting objects during the specified retention period. The retention mode cannot be modified, and the retention period cannot be shortened.
   - **Governance mode** prevents users without the necessary permissions from deleting or overwriting objects during the specified retention period. Authorized users can modify the retention settings, and delete the targeted objects.
 
-- **Legal hold** is an independent  that provides the same protection as the retention, but has no expiration date. It must be explicitly removed by a user with the appropriate permissions, and is evaluated independently of any retention configuration.
+- **Legal hold** is an independent ON/OFF switch that provides the same protection as retention, but has no expiration date. It must be explicitly removed by a user with the appropriate permissions, and is evaluated independently of any retention configuration.
 
 Object Lock is supported on `Standard Multi-AZ`, `Standard One Zone`, and `Glacier` [storage classes](/object-storage/concepts/#storage-class).
 
@@ -169,22 +169,12 @@ Legal hold is independent of retention settings and has no expiration date. It m
       --legal-hold Status=ON
     ```
 
-
-3. Run the following command to check if legal hold was properly applied:
+2. Run the following command to check if the legal hold was properly applied:
 
     ```bash
     aws s3api get-object-legal-hold \
       --bucket my-locked-bucket \
       --key my-object
-    ```
-
-2. To remove the legal hold:
-
-    ```bash
-    aws s3api put-object-legal-hold \
-      --bucket my-locked-bucket \
-      --key my-object \
-      --legal-hold Status=OFF
     ```
 
     An output similar to the following displays:
@@ -195,6 +185,15 @@ Legal hold is independent of retention settings and has no expiration date. It m
             "Status": "ON"
         }
     }
+    ```
+
+3. To remove the legal hold:
+
+    ```bash
+    aws s3api put-object-legal-hold \
+      --bucket my-locked-bucket \
+      --key my-object \
+      --legal-hold Status=OFF
     ```
 
 ## Limitations
@@ -208,24 +207,154 @@ Legal hold is independent of retention settings and has no expiration date. It m
 
 ### Bucket lock configuration tokens
 
-| Token | Description | Type | Required |
-|---|---|---|---|
-| `ObjectLockConfiguration` | Root element | — | Yes |
-| `ObjectLockEnabled` | Enables Object Lock on the bucket | String: `Enabled` | Yes |
-| `Rule` | Default retention rule applied to new objects | ObjectLockRule | No |
-| `Mode` | Retention mode | String: `GOVERNANCE` or `COMPLIANCE` | Required if `Rule` is set |
-| `Days` | Retention duration in days | Integer | `Days` or `Years`, not both |
-| `Years` | Retention duration in years | Integer | `Days` or `Years`, not both |
+#### `ObjectLockConfiguration`
+
+**Description**
+: Root element of the lock configuration.
+
+**Required**
+: Yes
+
+#### `ObjectLockEnabled`
+
+**Description**
+: Enables Object Lock on the bucket.
+
+**Type**
+: String — `Enabled`
+
+**Required**
+: Yes
+
+#### `Rule`
+
+**Description**
+: Default retention rule applied to every new object placed in the bucket.
+
+**Required**
+: No
+
+#### `Mode`
+
+**Description**
+: Default retention mode for new objects.
+
+**Type**
+: String — `GOVERNANCE` or `COMPLIANCE`
+
+**Required**
+: Yes, if `Rule` is set
+
+#### `Days`
+
+**Description**
+: Default retention duration in days.
+
+**Type**
+: Integer
+
+**Required**
+: Use `Days` or `Years`, not both
+
+#### `Years`
+
+**Description**
+: Default retention duration in years.
+
+**Type**
+: Integer
+
+**Required**
+: Use `Days` or `Years`, not both
 
 ### Object retention tokens
 
-| Token | Description | Type | Required |
-|---|---|---|---|
-| `Mode` | Retention mode for the object | String: `GOVERNANCE` or `COMPLIANCE` | Yes |
-| `RetainUntilDate` | Retention expiry date | Timestamp (ISO 8601) | Yes |
+#### `Mode`
+
+**Description**
+: Retention mode for the object.
+
+**Type**
+: String — `GOVERNANCE` or `COMPLIANCE`
+
+**Required**
+: Yes
+
+#### `RetainUntilDate`
+
+**Description**
+: Date on which the object retention expires.
+
+**Type**
+: Timestamp (ISO 8601)
+
+**Required**
+: Yes
 
 ### Legal hold tokens
 
-| Token | Description | Type | Required |
-|---|---|---|---|
-| `Status` | Legal hold state | String: `ON` or `OFF` | Yes |
+#### `Status`
+
+**Description**
+: Enables or disables the legal hold on the object.
+
+**Type**
+: String — `ON` or `OFF`
+
+**Required**
+: Yes
+
+## Examples
+
+### Regulatory compliance bucket (Compliance mode)
+
+This example sets up a bucket for strict regulatory retention: all objects are locked in Compliance mode for 7 years and cannot be deleted or overwritten by any user until the period expires.
+
+```bash
+# Enable Object Lock on a new bucket
+aws s3api create-bucket \
+  --bucket my-compliance-bucket \
+  --object-lock-enabled-for-bucket
+
+# Set a default 7-year Compliance retention on all new objects
+aws s3api put-object-lock-configuration \
+  --bucket my-compliance-bucket \
+  --object-lock-configuration '{
+    "ObjectLockEnabled": "Enabled",
+    "Rule": {
+      "DefaultRetention": {
+        "Mode": "COMPLIANCE",
+        "Years": 7
+      }
+    }
+  }'
+```
+
+Objects uploaded to `my-compliance-bucket` are automatically locked in Compliance mode until 7 years after their upload date. No user can shorten the retention period or delete objects before it expires.
+
+### Flexible protection bucket (Governance mode + legal hold)
+
+This example sets up a bucket with a default Governance retention of 90 days, then places an additional legal hold on a specific object under active investigation.
+
+```bash
+# Enable Object Lock on an existing bucket
+aws s3api put-object-lock-configuration \
+  --bucket my-governance-bucket \
+  --object-lock-configuration '{
+    "ObjectLockEnabled": "Enabled",
+    "Rule": {
+      "DefaultRetention": {
+        "Mode": "GOVERNANCE",
+        "Days": 90
+      }
+    }
+  }'
+
+# Apply a legal hold to a specific object
+aws s3api put-object-legal-hold \
+  --bucket my-governance-bucket \
+  --key audit/report-2026-05.pdf \
+  --legal-hold Status=ON
+```
+
+Objects in `my-governance-bucket` are protected for 90 days under Governance mode. Authorized users can override the retention if needed. The object `audit/report-2026-05.pdf` additionally has a legal hold, which blocks deletion regardless of the retention period and must be explicitly removed.

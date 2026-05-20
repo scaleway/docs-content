@@ -63,8 +63,8 @@ export const objectStorageMenu = {
           slug: 'enable-sse-one',
         },
         {
-          label: 'Enable object lock',
-          slug: 'object-lock',
+          label: 'Use object lock',
+          slug: 'use-object-lock',
         },
         {
           label: 'Host healthcare data (HDS)',

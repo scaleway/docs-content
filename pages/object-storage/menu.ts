@@ -47,7 +47,7 @@ export const objectStorageMenu = {
           slug: 'access-objects-via-https',
         },
         {
-          label: 'Use bucket versioning',
+          label: 'Use versioning',
           slug: 'use-bucket-versioning',
         },
         {

@@ -40,7 +40,7 @@ export const vpcMenu = {
         },
         {
           label: 'Use Network ACLs',
-          slug: 'use-network-acls',
+          slug: 'use-network-acl',
         },
         {
           label: 'Delete a Private Network',

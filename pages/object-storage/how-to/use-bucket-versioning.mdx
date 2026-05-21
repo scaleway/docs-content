@@ -1,13 +1,12 @@
 ---
 title: How to use bucket versioning
 description: Enable and manage bucket versioning for Object Storage.
-tags: object storage object-storage bucket versioning archived
+tags: object storage object-storage bucket versioning
 dates:
-  validation: 2025-07-01
+  validation: 2026-05-20
   posted: 2021-05-27
 ---
 import Requirements from '@macros/iam/requirements.mdx'
-
 
 Versioning is a feature designed to keep multiple variants of an object in the same bucket. When enabled, it allows you to store, retrieve, and restore every version of your objects stored in a bucket.
 
@@ -15,11 +14,37 @@ Versioning allows you to easily recover your objects in case of unintended user 
 
 <Requirements />
 
-- A Scaleway account logged into the [console](https://console.scaleway.com)
+- A Scaleway account logged in to the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- An [Object Storage bucket](/object-storage/how-to/create-a-bucket/)
+
+## Versioning overview
+
+### General concepts
+
+- **Version ID**: a unique identifier generated for each object write. Combined with the object key, it forms the full object address. Without versioning, the key alone identifies the object.
+- **Current version**: the most recent write. The console object list and any `GET` request without a version ID return this version by default.
+- **Non-current (previous) version**: any older write. Non-current versions remain stored, are billable, and can be retrieved by version ID.
+- **Delete marker**: a placeholder current version that a `DELETE` operation inserts on a versioned bucket. The object appears removed, but prior versions remain intact. Removing the delete marker restores the object.
+- **`null` version**: an object written before versioning was enabled, or while versioning is suspended. It has no version ID, and only one `null` version exists per key.
+- **Versioning states**: a bucket is `Unversioned` (versioning never enabled), `Enabled`, or `Suspended`. Once enabled, versioning cannot return to the `Unversioned` state, only to `Suspended`.
+
+### Object and bucket behavior
+
+An object version behaves like a regular object, except that a combination of the object key and a version ID identifies it, rather than the key alone.
+
+Buckets with versioning enabled observe the following behavior:
+
+| Situation                                       | What happens to existing objects                                                     | What happens to new objects                                                                                        |
+|-------------------------------------------------|--------------------------------------------------------------------------------------|--------------------------------------------------------------------------------------------------------------------|
+| **Versioning never enabled**                    | Every object uploaded has a single `null` version.                                   | Overwrites permanently replace the previous object, and deletes remove it completely.                              |
+| **Versioning enabled from the start**           | Every object uploaded receives a unique version ID.                                  | Each subsequent write creates a new version automatically.                                                         |
+| **Versioning disabled initially, then enabled** | Objects uploaded before the switch remain as a `null` version and are not versioned. | New objects are versioned, and overwrites create new versions.                                                     |
+| **Versioning enabled, then suspended**          | Existing versions stay exactly as they are, and are not removed automatically.       | New objects do not get a version ID. Overwrites replace the current `null` version, but older versions remain in place. |
+| **Versioning enabled, then bucket deleted**     | All versions are deleted together when the bucket is removed.                       | N/A                                                                                                                |
 
 ## How to enable versioning
+
+This procedure explains how to enable versioning on an existing bucket. To create a new bucket with versioning enabled, refer to the [bucket creation documentation](/object-storage/how-to/create-a-bucket/).
 
 1. Click **Object Storage** in the **Storage** section of the side menu. A list of your buckets displays.
 2. Click the name of the bucket in which you want to enable versioning.
@@ -27,23 +52,70 @@ Versioning allows you to easily recover your objects in case of unintended user 
 4. Scroll down and click the toggle <Icon name="toggle" /> under **Bucket versioning**. A pop-up appears.
 5. Type **ENABLE** to confirm your action, then click **Enable bucket versioning** to proceed.
 
-<Message type="note">
-Once versioning is enabled, uploading an object with the same name as an existing object will create a new version of it. This new version consumes storage as well, which may lead to higher costs.
-</Message>
+Once versioning is enabled, uploading an object with the same name as an existing object creates a new version of it. This new version consumes storage as well, which may lead to higher costs.
 
 ## How to manage object versions
 
+### View object versions
+
 1. Click **Object Storage** in the **Storage** section of the side menu. A list of your buckets displays.
-2. Click the name of your selected bucket. A list of the objects it contains appears.
-3. Click <Icon name="more" /> next to the object you want to manage, then click **Versioning**. A list of the object versions displays.
+2. Click the name of your versioned bucket. A list of the objects it contains appears.
+3. Click <Icon name="more" /> next to the object you want to manage, then click **Versioning**. A side-panel displays, containing the different versions of your object.
 
-4. Click <Icon name="more" /> next to a non-current object version to download it, or permanently delete it.
+    Each object version displays the following elements:
+    - A unique version ID
+    - A status badge (**CURRENT**, **PREVIOUS**, or **DELETE MARKER**)
+    - The date of last modification
+    - The size of the version
+    - The storage class
+    - The object lock indicator
 
-<Message type="note">
-To restore an object to a previous version, download the desired non-current version and upload it again. This action will replace the current version with the uploaded one. 
+### Add a new object version
+
+To add a new object version, upload an object with the same key as an existing one.
+
+### Restore an object to a previous version
+
+The Scaleway console does not currently provide a native restore action. To restore an object to a previous version, download the desired non-current version and upload it again. This action replaces the current version with the uploaded one.
+
+## How to delete an object or a version
+
+When versioning is enabled, deleting an object inserts a delete marker as the current version rather than removing the object. You can also permanently delete a specific version of an object.
+
+### Insert a delete marker
+
+1. Click **Object Storage** in the **Storage** section of the side menu. A list of your buckets displays.
+2. Click the name of your versioned bucket. A list of the objects it contains appears.
+3. Click <Icon name="more" /> next to the object you want to manage, then click **Versioning**. A side-panel displays, containing the different versions of your object.
+4. Click **Mark as deleted** at the bottom of the side panel. A **delete marker** is inserted as the current version of your object.
+
+Objects with a delete marker as their current version do not appear in console listings, and return errors when called via the API or CLI tools. Previous versions persist and remain billable.
+
+### Delete a specific version
+
+<Message type="important">
+Deleting a specific version permanently removes that version. This action cannot be undone.
 </Message>
 
+1. Click **Object Storage** in the **Storage** section of the side menu. A list of your buckets displays.
+2. Click the name of your versioned bucket. A list of the objects it contains appears.
+3. Click <Icon name="more" /> next to the object you want to manage, then click **Versioning**. A side-panel displays, containing the different versions of your object.
+4. Click <Icon name="more" /> next to the version you want to delete, then click **Delete**. A confirmation pop-up appears.
+5. Confirm the deletion to permanently remove the selected version.
+
+### Restore an object by removing its delete marker
+
+1. Click **Object Storage** in the **Storage** section of the side menu. A list of your buckets displays.
+2. Click the name of your versioned bucket. A list of the objects it contains appears.
+3. Use the search bar to locate the object you want to restore.
+4. Click <Icon name="more" /> next to the object name, then click **Versioning**. A side-panel displays, containing the different versions of your object.
+5. Delete the delete marker at the top of the versions list.
+
+The version that preceded the delete marker becomes the current version of your object.
+
 ## How to suspend versioning
+
+Once you enable versioning on a bucket, you can only suspend it rather than disable it completely. When versioning is suspended, existing object versions persist and remain billable.
 
 1. Click **Object Storage** in the **Storage** section of the side menu. A list of your buckets displays.
 2. Click the name of your selected bucket.
@@ -52,5 +124,10 @@ To restore an object to a previous version, download the desired non-current ver
 5. Type **SUSPEND** to confirm your action, then click **Suspend bucket versioning** to proceed.
 
 <Message type="important">
-Once versioning is suspended, no new object versions will be created. Versions created up until this point will remain stored and billable. Uploading an object with the same name as an existing object will overwrite it.
+- Once versioning is suspended, no new object versions are created. Versions created up to that point remain stored and billable. Uploading an object with the same name as an existing object overwrites it.
+- You cannot suspend versioning on a bucket with [object lock](/object-storage/how-to/use-object-lock/) enabled.
 </Message>
+
+## How to use versioning in combination with lifecycle rules
+
+Lifecycle rules can target non-current versions and delete markers to automatically expire or transition them, which is the main lever to control storage costs on a versioned bucket. Refer to the [lifecycle rules documentation](/object-storage/how-to/manage-lifecycle-rules/) for more information.

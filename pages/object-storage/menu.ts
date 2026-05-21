@@ -47,7 +47,7 @@ export const objectStorageMenu = {
           slug: 'access-objects-via-https',
         },
         {
-          label: 'Use bucket versioning',
+          label: 'Use versioning',
           slug: 'use-bucket-versioning',
         },
         {
@@ -61,6 +61,10 @@ export const objectStorageMenu = {
         {
           label: 'Enable SSE-ONE',
           slug: 'enable-sse-one',
+        },
+        {
+          label: 'Use object lock',
+          slug: 'use-object-lock',
         },
         {
           label: 'Host healthcare data (HDS)',
@@ -169,10 +173,6 @@ export const objectStorageMenu = {
         {
           label: 'Managing bucket permissions for IP addresses',
           slug: 'manage-bucket-permissions-ip',
-        },
-        {
-          label: 'Setting up object lock',
-          slug: 'object-lock',
         },
         {
           label: 'Hosting static websites on a bucket',

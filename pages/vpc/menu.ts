@@ -39,6 +39,10 @@ export const vpcMenu = {
           slug: 'manage-routing',
         },
         {
+          label: 'Use Network ACLs',
+          slug: 'use-network-acl',
+        },
+        {
           label: 'Delete a Private Network',
           slug: 'delete-private-network',
         },

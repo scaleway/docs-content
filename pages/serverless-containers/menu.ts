@@ -99,6 +99,11 @@ export const serverlessContainersMenu = {
           slug: 'deploy-container-cli',
         },
         {
+          label:
+            'Build and deploy with CLI and Buildpacks',
+          slug: 'cli-build-and-deploy',
+        },
+        {
           label: 'Migrate images to the Scaleway Registry',
           slug: 'migrate-external-image-to-scaleway-registry',
         },

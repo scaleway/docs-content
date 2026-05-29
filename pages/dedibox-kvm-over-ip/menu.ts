@@ -19,6 +19,10 @@ export const dediboxKvmOverIpMenu = {
             'Understanding the Baseboard Management Controller (BMC)',
           slug: 'understanding-bmc',
         },
+         {
+          label: 'Use the ASRock Rack KVM',
+          slug: 'asrockrack',
+        },
         {
           label: 'Use HP iLO',
           slug: 'hp-ilo',

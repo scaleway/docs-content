@@ -68,10 +68,6 @@ export const billingMenu = {
           label: 'Retrieve monthly consumption',
           slug: 'retrieve-monthly-consumption',
         },
-        {
-          label: 'Retrieve FinOps data',
-          slug: 'retrieve-finops-data',
-        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',

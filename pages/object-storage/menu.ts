@@ -63,6 +63,10 @@ export const objectStorageMenu = {
           slug: 'enable-sse-one',
         },
         {
+          label: 'Enable SSE-KMS',
+          slug: 'enable-sse-kms',
+        },
+        {
           label: 'Use object lock',
           slug: 'use-object-lock',
         },

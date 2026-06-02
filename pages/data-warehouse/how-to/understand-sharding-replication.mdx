@@ -1,0 +1,172 @@
+---
+title: How to understand sharding and replication in Data Warehouse for ClickHouse®
+description: Learn how sharding and replication work in Scaleway Data Warehouse for ClickHouse® deployments.
+tags: sharding replication data warehouse clickhouse cluster architecture distributed
+dates:
+  validation: 2026-06-02
+  posted: 2026-06-02
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+import shardingReplicationDiagram from './assets/data-warehouse-sharding-replication-diagram.png'
+
+This page explains how sharding and replication work in your Data Warehouse for ClickHouse® deployment, and how to view your cluster configuration.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+
+## How sharding and replication work
+
+Scaleway Data Warehouse for ClickHouse® uses a distributed architecture that divides your data across multiple shards, with each shard being replicated for fault tolerance and high availability.
+
+When you create a deployment, you specify the number of shards and replicas in the configuration:
+
+- **Sharding**: Your data is divided across the number of shards specified in your deployment configuration. Each shard contains a subset of your total data, enabling horizontal scaling and distributed query processing.
+
+- **Replication**: Each shard is replicated across the number of replicas configured in your deployment. This means every shard has multiple copies stored on different nodes, ensuring data durability and availability even if a node fails.
+
+The total node count of your deployment is calculated as follows:
+
+**Total nodes = Shard count × Replica count**
+
+For example, a deployment configured with 2 shards and 3 replicas will have 6 nodes total (2 × 3 = 6). Your data is distributed across 2 shards, with each shard having 3 copies.
+
+<Message type="note">
+The number of replicas can be edited after deployment creation, but the number of shards cannot be changed. Choose your shard count carefully based on your expected data volume and query workload.
+</Message>
+
+<Lightbox image={shardingReplicationDiagram} alt="Diagram explaining shards and replicas in a Data Warehouse Deployment"/>
+
+
+## Viewing shard and replica configuration
+
+You can view the number of shards and replicas for your deployment in two locations:
+
+- **Deployments list page**: The shard and replica count is displayed alongside each deployment in the main Data Warehouse deployments list.
+
+- **Deployment Overview tab**: Click on a deployment name to access its details. The shard and replica configuration is shown in the **Overview** tab under the deployment configuration section.
+
+## Understanding your ClickHouse® cluster
+
+To get a detailed overview of your cluster's architecture, you can query the ClickHouse® system tables.
+
+1. [Connect to your deployment](/data-warehouse/how-to/connect-applications/) using the ClickHouse® CLI or HTTP console.
+
+2. Run the following SQL query to view your cluster topology:
+
+    ```sql
+    SELECT cluster, host_name, shard_num, replica_num, is_local 
+    FROM system.clusters 
+    WHERE cluster = 'scw';
+    ```
+
+3. The query returns information about each node in your cluster:
+
+    | Column        | Description                                                                                          |
+    |---------------|------------------------------------------------------------------------------------------------------|
+    | `cluster`     | The name of the cluster (always `scw` for Scaleway Data Warehouse)                                   |
+    | `host_name`   | The hostname of the node                                                                             |
+    | `shard_num`   | The shard number this node belongs to                                                                |
+    | `replica_num` | The replica number within the shard                                                                  |
+    | `is_local`    | Returns `1` (true) only for the node you are currently connected to, `0` (false) for all other nodes |
+
+This query provides a complete view of how your nodes are organized across shards and replicas, helping you understand the physical distribution of your data and the role of each node in the cluster.
+
+## Using Distributed tables
+
+The `Distributed` table engine allows you to perform distributed queries across all shards in your cluster. Tables with the `Distributed` engine do not store any data themselves, but instead route queries to the underlying local tables on each shard. Reading is automatically parallelized across shards.
+
+To use distributed tables, you need to create two tables:
+
+1. A **local table** on each shard that actually stores the data
+2. A **distributed table** that routes queries to the local tables across all shards
+
+### Creating a local table
+
+First, create the local table that will store the data on each shard. This table uses a standard table engine like `ReplicatedMergeTree`:
+
+```sql
+CREATE TABLE mytable_local
+(
+    id UInt64,
+    timestamp DateTime,
+    user_id UInt32,
+    event_type String,
+    value Float64
+)
+PARTITION BY toYYYYMM(timestamp)
+ORDER BY (id, timestamp);
+```
+
+<Message type="note">
+You only need to execute this query once.
+</Message>
+
+### Creating a Distributed table
+
+Once the local tables exists, create a distributed table that references it:
+
+```sql
+CREATE TABLE mytable_distributed
+(
+    id UInt64,
+    timestamp DateTime,
+    user_id UInt32,
+    event_type String,
+    value Float64
+)
+ENGINE = Distributed('scw', 'default', mytable_local, cityHash64(user_id));
+```
+
+The `Distributed` engine takes the following parameters:
+
+```sql
+ENGINE = Distributed(cluster_name, database_name, local_table_name, sharding_key)
+```
+
+| Parameter          | Description                                                   |
+|--------------------|-------------------------------------------------------------- |
+| `cluster_name`     | The name of the cluster (`'scw'` for Scaleway Data Warehouse) |
+| `database_name`    | The name of the database containing the local table           |
+| `local_table_name` | The name of the local table that stores the data              |
+| `sharding_key`     | An expression used to determine which shard receives each row |
+
+### Understanding the sharding key
+
+The sharding key determines how data is distributed across shards. ClickHouse® evaluates the sharding key expression for each row and uses the result to assign the row to a specific shard.
+
+Common sharding key examples:
+
+- **`cityHash64(user_id)`**: Distributes data based on user ID hash. Rows with the same `user_id` always go to the same shard, which is useful for user-centric queries.
+
+- **`toYYYYMMDD(timestamp)`**: Distributes data by date. Useful for time-series data where queries typically filter by time ranges.
+
+- **`region_id`**: Distributes data by geographic region. Useful when queries often filter by region.
+
+- **`rand()`**: Random distribution. Use when you want an even distribution and have no specific query pattern.
+
+<Message type="note">
+Choose your sharding key carefully based on your query patterns. A good sharding key ensures even data distribution and allows queries to be efficiently routed to specific shards.
+</Message>
+
+### Querying the Distributed table
+
+Once both tables are created, insert and query data through the distributed table:
+
+```sql
+-- Insert data (automatically distributed across shards)
+INSERT INTO mytable_distributed 
+SELECT * FROM source_data;
+
+-- Query data (automatically parallelized across shards)
+SELECT 
+    user_id, 
+    count() as event_count
+FROM mytable_distributed
+WHERE timestamp >= now() - INTERVAL 7 DAY
+GROUP BY user_id;
+```
+
+For more information on the `Distributed` table engine, refer to the [official ClickHouse® documentation](https://clickhouse.com/docs/engines/table-engines/special/distributed).

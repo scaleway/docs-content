@@ -158,6 +158,10 @@ export const objectStorageMenu = {
           slug: 'enable-sse-one',
         },
         {
+          label: 'Enabling SSE-KMS',
+          slug: 'enable-sse-kms',
+        },        
+        {
           label: 'Setting CORS rules',
           slug: 'setting-cors-rules',
         },

@@ -41,6 +41,10 @@ export const dataOrchestratorMenu = {
     {
       items: [
         {
+          label: 'Logic tasks',
+          slug: 'logic-tasks',
+        },
+        {
           label: 'Cron schedules',
           slug: 'cron-schedules',
         },

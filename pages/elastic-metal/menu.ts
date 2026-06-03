@@ -122,6 +122,10 @@ export const elasticMetalMenu = {
           label: 'Run Kubernetes nodes on RISC-V',
           slug: 'kubernetes-on-riscv',
         },
+        {
+          label: 'Use the ASRock Rack KVM',
+          slug: 'asrockrack',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

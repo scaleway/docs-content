@@ -43,6 +43,10 @@ export const quantumComputingMenu = {
           slug: 'use-qsim-emulators',
         },
         {
+          label: 'Use remote Quobly emulators',
+          slug: 'use-quobly-qpus',
+        },
+        {
           label: 'Use Pennylane for Quantum Machine Learning',
           slug: 'use-pennylane',
         },

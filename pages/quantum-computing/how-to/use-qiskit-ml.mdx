@@ -1,0 +1,266 @@
+---
+title: Use Qiskit ML plugin for Quantum Machine Learning
+description: Explore QML capabilities using Qiskit.
+tags: quantum qiskit merlin pennylane qaas qml ml
+dates:
+  validation: 2026-06-08
+  posted: 2026-06-08
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+**[Qiskit](https://qiskit.org/)** is a comprehensive, open-source SDK for working with quantum computers. Its dedicated plugin, `qiskit-machine-learning`, [introduces foundational quantum machine learning (QML)](https://qiskit-community.github.io/qiskit-machine-learning/index.html) algorithms, neural networks, and tools to integrate quantum circuits seamlessly into classic machine learning workflows.
+
+Scaleway offers access to the `qiskit-scaleway` provider, enabling you to run your Qiskit circuits and QML models directly on Scaleway's QaaS infrastructure with minimal configuration.
+
+We will build a Quantum Autoencoder using `qiskit-machine-learning` to compress and reconstruct a custom toy dataset of digital numbers (zeros and ones) on Scaleway's infrastructure. This example is freely adapted from [here](https://qiskit-community.github.io/qiskit-machine-learning/tutorials/12_quantum_autoencoder.html).
+
+## How to perform Quantum Neural Network training on Scaleway using Qiskit-ML
+
+<Requirements />
+
+* A Scaleway account with a valid **Project ID**
+* A Scaleway **API Key** (Secret Key)
+* Python installed on your local machine
+
+1. Install the `qiskit-scaleway` provider alongside the necessary machine learning and visualization packages:
+    ```bash
+    pip install qiskit-machine-learning qiskit-scaleway pylatexenc matplotlib
+    ```
+
+2. Create a helper file named `digits_dataset.py` in your working directory. This script generates a basic 5x3 grid representing handwritten "zeros" and "ones" that we will use to train our model.
+    ```python
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from qiskit_machine_learning.utils import algorithm_globals
+
+    algorithm_globals.random_seed = 42
+
+    def zero_idx():
+        # Index for zero pixels (Perimeter of a 5x3 grid)
+        return [[0,1], [1,0], [1,2], [2,0], [2,2], [3,0], [3,2], [4,1]]
+
+    def one_idx():
+        # Index for one pixels (Middle column of a 5x3 grid)
+        return [[0,1], [1,0], [1,1], [2,1], [3,1], [4,1]]
+
+    def get_dataset_digits(num, draw=True):
+        train_images = []
+        train_labels = []
+
+        for i in range(int(num / 2)):
+            empty = np.array([algorithm_globals.random.uniform(0, 0.1) for _ in range(15)]).reshape(5, 3)
+            for r, c in one_idx():
+                empty[r][c] = algorithm_globals.random.uniform(0.9, 1)
+            train_images.append(empty)
+            train_labels.append(1)
+            if draw:
+                plt.title("This is a One")
+                plt.imshow(train_images[-1], vmin=0, vmax=1)
+                plt.show(block=True)
+
+        for i in range(int(num / 2)):
+            empty = np.array([algorithm_globals.random.uniform(0, 0.1) for _ in range(15)]).reshape(5, 3)
+            for r, c in zero_idx():
+                empty[r][c] = algorithm_globals.random.uniform(0.9, 1)
+            train_images.append(empty)
+            train_labels.append(0)
+            if draw:
+                plt.imshow(train_images[-1], vmin=0, vmax=1)
+                plt.title("This is a Zero")
+                plt.show(block=True)
+
+        train_images = np.array(train_images)
+        # Flatten to 15-dimensional vectors for the 15 data qubits
+        train_images = train_images.reshape(len(train_images), 15)
+
+        return train_images, train_labels
+
+    ```
+
+3. Create the main training script. Save the following code as `qml_tutorial.py`.
+    Make sure to define your `SCW_PROJECT_ID` and `SCW_SECRET_KEY` as environment variables (or via a `.env` file) before running it. Notice how the `ScalewayProvider` is used to fetch the `EMU-AER-2L4` backend and initiate a dedicated session for the iterative `COBYLA` optimizer.
+    ```python
+    import os
+    import time
+
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    from qiskit import ClassicalRegister, QuantumRegister, QuantumCircuit
+    from qiskit.circuit import ParameterVector
+    from qiskit.circuit.library import real_amplitudes
+    from qiskit.quantum_info import Statevector
+
+    from qiskit_scaleway import ScalewayProvider
+    from qiskit_scaleway.primitives import Sampler as ScwSampler
+
+    from qiskit_machine_learning.optimizers import COBYLA
+    from qiskit_machine_learning.utils import algorithm_globals
+    from qiskit_machine_learning.neural_networks import SamplerQNN
+
+    from digits_dataset import get_dataset_digits
+
+    algorithm_globals.random_seed = 42
+
+    ### Instantiate Scaleway provider ###
+    PROJECT_ID = os.getenv("SCW_PROJECT_ID")
+    SECRET_KEY = os.getenv("SCW_SECRET_KEY")
+    provider = ScalewayProvider(
+        project_id=PROJECT_ID,
+        secret_key=SECRET_KEY,
+    )
+    backend = provider.get_backend("EMU-AER-2L4")
+    session_id = backend.start_session()
+    sampler = ScwSampler(backend, session_id, options={"default_shots": 100})
+    print(sampler)
+
+    ### Helpers ###
+    def ansatz(num_qubits: int):
+        return real_amplitudes(num_qubits, reps=3)
+
+    def encoder_circuit(num_latent: int, num_trash: int) -> QuantumCircuit:
+        qr = QuantumRegister(num_latent + 2 * num_trash + 1, "q")
+        cr = ClassicalRegister(1, "c")
+        circuit = QuantumCircuit(qr, cr)
+        circuit.compose(ansatz(num_latent + num_trash), range(0, num_latent + num_trash), inplace=True)
+        circuit.barrier()
+        auxiliary_qubit = num_latent + 2 * num_trash
+
+        # swap test
+        circuit.h(auxiliary_qubit)
+        for i in range(num_trash):
+            circuit.cswap(auxiliary_qubit, num_latent + i, num_latent + num_trash + i)
+
+        circuit.h(auxiliary_qubit)
+        circuit.measure(auxiliary_qubit, cr[0])
+        return circuit
+
+    fig, ax, line = None, None, None
+
+    def cost_func_digits(params_values) -> float:
+        global fig, ax, line 
+
+        probabilities = qnn.forward(train_images, params_values)
+        cost = np.sum(probabilities[:, 1]) / train_images.shape[0]
+
+        if not objective_func_vals:
+            plt.ion() 
+            fig, ax = plt.subplots()
+            ax.set_title("Objective function value against iteration")
+            ax.set_xlabel("Iteration")
+            ax.set_ylabel("Objective function value")
+            line, = ax.plot([], [], color='blue', marker='o', markersize=4)
+            plt.show(block=False)
+
+        objective_func_vals.append(cost)
+        line.set_data(range(len(objective_func_vals)), objective_func_vals)
+        ax.relim()
+        ax.autoscale_view()
+        fig.canvas.draw()
+        fig.canvas.flush_events()
+
+        return cost
+
+    ### MAIN SCRIPT ###
+    num_latent = 9
+    num_trash = 6
+
+    train_images, __ =  get_dataset_digits(4, draw=False)
+
+    # Custom Unitary Feature Map (Avoids OpenQASM 3 Serialization errors)
+    num_features = num_latent + num_trash
+    feature_map = QuantumCircuit(num_features)
+    inputs = ParameterVector("x", num_features)
+    for i in range(num_features):
+        # Mapping [0, 1] data into RY rotation probability. 
+        feature_map.ry(np.pi * inputs[i], i)
+
+    ae = encoder_circuit(num_latent, num_trash)
+
+    qc = QuantumCircuit(num_latent + 2 * num_trash + 1, 1)
+    qc = qc.compose(feature_map, range(num_latent + num_trash))
+    qc = qc.compose(ae)
+
+    qc.draw(output="mpl", style="clifford")
+    plt.show(block=True)
+
+    qnn = SamplerQNN(
+        circuit=qc,
+        input_params=feature_map.parameters,
+        weight_params=ae.parameters,
+        interpret=lambda x: x,
+        output_shape=2,
+        sampler=sampler,
+    )
+
+    opt = COBYLA(maxiter=150)
+    initial_point = algorithm_globals.random.random(ae.num_parameters)
+    objective_func_vals = []
+
+    plt.rcParams["figure.figsize"] = (12, 6)
+
+    start = time.time()
+    opt_result = opt.minimize(fun=cost_func_digits, x0=initial_point)
+    elapsed = time.time() - start
+    print(f"Fit in {elapsed:0.2f} seconds")
+    plt.ioff()
+    plt.show(block=True)
+
+    # Test our circuit
+    test_qc = QuantumCircuit(num_latent + num_trash)
+    test_qc = test_qc.compose(feature_map)
+    ansatz_qc = ansatz(num_latent + num_trash)
+    test_qc = test_qc.compose(ansatz_qc)
+    test_qc.barrier()
+
+    # Dynamically reset the designated trash qubits
+    for i in range(num_latent, num_latent + num_trash):
+        test_qc.reset(i)
+
+    test_qc.barrier()
+    test_qc = test_qc.compose(ansatz_qc.inverse())
+
+    # Helper to visually decode our RY probabilities back into images
+    def extract_image(state_circ):
+        sv = Statevector(state_circ)
+        pixels = np.zeros(15)
+        for i in range(15):
+            # Marginal probability of measuring |1> on qubit i
+            pixels[i] = sv.probabilities([i])[1]
+        return pixels.reshape(5, 3)
+
+    # Sample new images and reconstruct
+    test_images, test_labels = get_dataset_digits(2, draw=False)
+    for image, label in zip(test_images, test_labels):
+        original_qc = feature_map.assign_parameters(image)
+        original_img = extract_image(original_qc)
+
+        param_values = np.concatenate((image, opt_result.x))
+        output_qc = test_qc.assign_parameters(param_values)
+        output_img = extract_image(output_qc)
+
+        fig, (ax1, ax2) = plt.subplots(1, 2)
+        ax1.imshow(original_img, vmin=0, vmax=1)
+        ax1.set_title("Input Data")
+        ax2.imshow(output_img, vmin=0, vmax=1)
+        ax2.set_title("Output Data")
+        plt.show(block=True)
+
+    ```
+
+4. Run the script.
+    ```bash
+    python ~/qml_tutorial.py
+    ```
+
+Executing this code will iteratively train the parameters of the quantum autoencoder, visually plotting the decreasing cost function in real-time. Once convergence is reached, the script will output a comparison of the newly reconstructed digits against the original input data for comparison.
+
+
+## Understanding Session Management
+
+Because quantum machine learning algorithms often require hundreds of iterative steps (like the `COBYLA` optimization in the script above), submitting each circuit independently can introduce heavy network overhead.
+With `qiskit-scaleway`, your iterative workloads are grouped via a **session**. By explicitly calling `start_session()` on your backend and passing that `session_id` to your `ScwSampler` primitive, you guarantee that Scaleway's QaaS infrastructure processes your training loop on the same session.
+
+<Message type="tip">
+  Refer to the [Quantum Computing information page](/quantum-computing/additional-content/quantum-computing-information) for more details on how emulation platforms and billing work.
+</Message>

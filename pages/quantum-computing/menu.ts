@@ -50,6 +50,10 @@ export const quantumComputingMenu = {
           label: 'Use MerLin for Photonic Quantum Machine Learning',
           slug: 'use-merlin',
         },
+        {
+          label: 'Use Qiskit ML plugin for Quantum Machine Learning',
+          slug: 'use-qiskit-ml',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

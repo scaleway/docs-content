@@ -70,6 +70,10 @@ export const dataWarehouseMenu = {
           label: 'Manage the storage policy of a deployment',
           slug: 'manage-storage',
         },
+        {
+          label: 'Understand sharding and replication',
+          slug: 'understand-sharding-replication',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

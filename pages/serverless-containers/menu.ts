@@ -89,13 +89,11 @@ export const serverlessContainersMenu = {
           slug: 'https://www.scaleway.com/en/developers/api/serverless-containers/',
         },
         {
-          label:
-            'Create and deploy a container with the Scaleway API',
+          label: 'Create and deploy a container with the Scaleway API',
           slug: 'deploy-container-api',
         },
         {
-          label:
-            'Create and deploy a container with the Scaleway CLI',
+          label: 'Create and deploy a container with the Scaleway CLI',
           slug: 'deploy-container-cli',
         },
         {
@@ -114,7 +112,7 @@ export const serverlessContainersMenu = {
         },
         {
           label: 'Migrating to Serverless Containers',
-          slug: 'migrate-to-serverless-containers'
+          slug: 'migrate-to-serverless-containers',
         },
         {
           label: 'Containers and Private Networks integration',

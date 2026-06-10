@@ -141,8 +141,7 @@ export const objectStorageMenu = {
           slug: 'lifecycle-rules-api',
         },
         {
-          label:
-            'Managing Object Storage using using CLI tools',
+          label: 'Managing Object Storage using using CLI tools',
           slug: 'managing-lifecycle-cliv2',
         },
         {
@@ -160,7 +159,7 @@ export const objectStorageMenu = {
         {
           label: 'Enabling SSE-KMS',
           slug: 'enable-sse-kms',
-        },        
+        },
         {
           label: 'Setting CORS rules',
           slug: 'setting-cors-rules',
@@ -174,8 +173,7 @@ export const objectStorageMenu = {
           slug: 'create-bucket-policy',
         },
         {
-          label:
-            'Combining IAM and bucket policies for granular access',
+          label: 'Combining IAM and bucket policies for granular access',
           slug: 'combining-iam-and-object-storage',
         },
         {

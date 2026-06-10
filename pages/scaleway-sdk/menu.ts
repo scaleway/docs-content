@@ -27,6 +27,6 @@ export const scalewaySdkMenu = {
       slug: 'reference-content',
     },
   ],
-    label: 'Scaleway SDKs',
+  label: 'Scaleway SDKs',
   slug: 'scaleway-sdk',
 }

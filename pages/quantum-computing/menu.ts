@@ -93,7 +93,7 @@ export const quantumComputingMenu = {
         {
           label: 'Quandela QPUs Information',
           slug: 'quandela-qpus',
-        }
+        },
       ],
       label: 'Additional Content',
       slug: 'additional-content',

@@ -137,8 +137,7 @@ export const elasticMetalMenu = {
           slug: 'https://www.scaleway.com/en/developers/api/elastic-metal/',
         },
         {
-          label:
-            'Creating and managing Elastic Metal servers with the CLI',
+          label: 'Creating and managing Elastic Metal servers with the CLI',
           slug: 'elastic-metal-with-cli',
         },
         {

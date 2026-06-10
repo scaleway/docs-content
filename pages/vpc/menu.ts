@@ -89,7 +89,7 @@ export const vpcMenu = {
         {
           label: 'VPC use case 1: basic infrastructure',
           slug: 'use-case-basic',
-        }
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

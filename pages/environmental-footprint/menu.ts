@@ -14,7 +14,7 @@ export const environmentalFootprintMenu = {
     },
     {
       items: [
-         {
+        {
           label: 'Use the Environmental Footprint dashboard',
           slug: 'environmental-footprint-dashboard',
         },
@@ -41,8 +41,7 @@ export const environmentalFootprintMenu = {
           slug: 'environmental-footprint-integration',
         },
         {
-          label:
-            'Understanding your environmental footprint estimation',
+          label: 'Understanding your environmental footprint estimation',
           slug: 'environmental-footprint-calculator-estimation',
         },
         {
@@ -59,24 +58,24 @@ export const environmentalFootprintMenu = {
         },
         {
           label: 'Object Storage footprint calculation',
-          slug: 'object-storage-env-footprint'
+          slug: 'object-storage-env-footprint',
         },
         {
           label: 'Load Balancer footprint calculation',
-          slug: 'load-balancer-env-footprint'
+          slug: 'load-balancer-env-footprint',
         },
         {
           label: 'Kubernetes footprint calculation',
-          slug: 'kubernetes-env-footprint'
+          slug: 'kubernetes-env-footprint',
         },
         {
           label: 'Managed Database footprint calculation',
-          slug: 'managed-databases-env-footprint'
+          slug: 'managed-databases-env-footprint',
         },
         {
           label: 'Generative APIs - Dedicated Deployment footprint calculation',
-          slug: 'generative-apis-dedicated-env-footprint'
-        }        
+          slug: 'generative-apis-dedicated-env-footprint',
+        },
       ],
       label: 'Additional Content',
       slug: 'additional-content',

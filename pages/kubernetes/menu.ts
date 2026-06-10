@@ -84,8 +84,7 @@ export const kubernetesMenu = {
           slug: 'use-nvidia-gpu-operator',
         },
         {
-          label:
-            'Use the scratch storage on H100 GPU Instances with Kapsule',
+          label: 'Use the scratch storage on H100 GPU Instances with Kapsule',
           slug: 'use-scratch-storage-h100',
         },
         {
@@ -97,8 +96,8 @@ export const kubernetesMenu = {
           slug: 'recover-space-etcd',
         },
         {
-          "label": "How to use File Storage with Kubernetes Kapsule",
-          "slug": "use-sfs-with-kubernetes"
+          label: 'How to use File Storage with Kubernetes Kapsule',
+          slug: 'use-sfs-with-kubernetes',
         },
         {
           label: 'Enable or disable SSH',
@@ -161,8 +160,7 @@ export const kubernetesMenu = {
           slug: 'kubernetes-control-plane-offers',
         },
         {
-          label:
-            'Understanding differences between the Kapsule and Kosmos',
+          label: 'Understanding differences between the Kapsule and Kosmos',
           slug: 'understanding-differences-kapsule-kosmos',
         },
         {
@@ -190,8 +188,7 @@ export const kubernetesMenu = {
           slug: 'exposing-services',
         },
         {
-          label:
-            'Setting IAM permissions and implementing RBAC on a cluster',
+          label: 'Setting IAM permissions and implementing RBAC on a cluster',
           slug: 'set-iam-permissions-and-implement-rbac',
         },
         {

@@ -44,23 +44,23 @@ export const iamMenu = {
         },
         {
           label: 'Set up identity federation',
-          slug: 'set-up-identity-federation'
+          slug: 'set-up-identity-federation',
         },
         {
           label: 'Set up SSO with Authentik',
-          slug: 'set-up-sso-with-authentik'
+          slug: 'set-up-sso-with-authentik',
         },
         {
           label: 'Configure automatic user provisioning with SCIM',
-          slug: 'manage-users-with-scim'
+          slug: 'manage-users-with-scim',
         },
         {
           label: 'Configure SCIM for Microsoft Entra ID',
-          slug: 'configure-scim-for-entra-id'
+          slug: 'configure-scim-for-entra-id',
         },
         {
           label: 'Set and manage credential maximum duration',
-          slug: 'set-credentials-maximum-duration'
+          slug: 'set-credentials-maximum-duration',
         },
         {
           label: 'Create an application',
@@ -121,8 +121,7 @@ export const iamMenu = {
           slug: 'permission-sets',
         },
         {
-          label:
-            'Reproducing roles and Project-scoped API keys with IAM',
+          label: 'Reproducing roles and Project-scoped API keys with IAM',
           slug: 'reproduce-roles-project-api-keys',
         },
         {

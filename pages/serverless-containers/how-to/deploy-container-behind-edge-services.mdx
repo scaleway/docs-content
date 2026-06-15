@@ -1,11 +1,24 @@
-# Deploy a Serverless Container behind an Edge Service
+---
+title: How to deploy a Serverless Container behind an Edge Service
+description: Deploy a Serverless Container behind a Scaleway Edge Service pipeline using the CLI. Configure HTTPS termination and a public endpoint.
+tags: serverless containers edge services deploy CLI
+dates:
+  validation: 2026-06-15
+  posted: 2026-01-15
+categories:
+  - serverless-containers
+---
+import Requirements from '@macros/iam/requirements.mdx'
 
-This tutorial walks you through creating a simple Serverless Container and connecting it to a Scaleway Edge Service pipeline.
+<Requirements />
 
-## Prerequisites
+- A Scaleway account logged in to the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Project
+- The Scaleway CLI installed and configured
 
-- Scaleway CLI installed and configured
-- A Scaleway account with a Project ID
+## Introduction
+
+This guide walks you through deploying a Serverless Container behind a Scaleway Edge Service pipeline. You create a namespace, deploy a container, and configure an Edge Service pipeline with stages for backend routing, TLS termination, and DNS to expose a public endpoint.
 
 ## Step 1: Create a Serverless Container Namespace
 
@@ -15,7 +28,7 @@ First, create a namespace to hold your container:
 scw container namespace create name=my-app
 ```
 
-Note the returned `ID` (namespace ID) -- you will need it in subsequent steps.
+Note the returned `ID` (namespace ID). You need it in subsequent steps.
 
 ## Step 2: Create and Deploy a Container
 
@@ -25,12 +38,11 @@ Create a simple container. Replace the registry image with your own, or use a sa
 scw container container create \
   namespace-id=<YOUR_NAMESPACE_ID> \
   name=my-container \
-  image="nginx:latest" \
+  image="nginx:alpine" \
   port=80
 ```
 
-
-Once created, note the `id` (container ID) from the output -- you will need it to attach the container to an Edge Service.
+After creating the container, note the `id` (container ID) from the output. You need it to attach the container to an Edge Service.
 
 ## Step 3: Create an Edge Service Pipeline
 
@@ -48,8 +60,8 @@ Note the returned `ID` (pipeline ID).
 
 A pipeline needs a chain of stages from the entry point (head stage) to the origin (backend stage). For a simple setup, you need:
 
-1. **Backend Stage** (origin - where requests are forwarded)
-2. **TLS Stage** (entry point - handles HTTPS termination)
+1. **Backend Stage** (origin -- where requests are forwarded)
+2. **TLS Stage** (entry point -- handles HTTPS termination)
 3. **DNS Stage** (provides the public endpoint URL)
 
 ### 4.1 Create a Backend Stage
@@ -69,7 +81,9 @@ Replace the following placeholders:
 
 Note the returned `ID` (backend stage ID).
 
-> **Important:** If the `scaleway-serverless-container` option is not available in your CLI version, update the Scaleway CLI to the latest version. You can check your version with `scw --version`.
+<Message type="important">
+If the `scaleway-serverless-container` option is not available in your CLI version, update the Scaleway CLI to the latest version. You can check your version with `scw --version`.
+</Message>
 
 ### 4.2 Create a TLS Stage
 
@@ -86,7 +100,9 @@ Replace `<YOUR_BACKEND_STAGE_ID>` with the backend stage ID from Step 4.1.
 
 Note the returned `ID` (TLS stage ID).
 
-> **Note:** By linking the backend stage during TLS stage creation, you avoid needing a separate update command later.
+<Message type="note">
+By linking the backend stage during TLS stage creation, you avoid needing a separate update command later.
+</Message>
 
 ### 4.3 (Optional) Create a Route Stage
 
@@ -113,7 +129,7 @@ scw edge-services route-rules set \
 
 ## Step 5: Create a DNS Stage and Set It as Head
 
-A DNS stage is required to expose your pipeline with a public endpoint URL.
+You need a DNS stage to expose your pipeline with a public endpoint URL.
 
 ### 5.1 Create a DNS Stage
 
@@ -127,7 +143,9 @@ scw edge-services dns-stage create \
 
 Note the returned `ID` (DNS stage ID) and the `default_fqdn` field -- this is your public endpoint URL.
 
-> **Note:** If you want to use a custom domain, add the `fqdns.0=app.example.com` parameter. You will need to configure a DNS record (CNAME) pointing your domain to the endpoint provided by the DNS stage response.
+<Message type="note">
+If you want to use a custom domain, add the `fqdns.0=app.example.com` parameter. You need to configure a DNS record (CNAME) pointing your domain to the endpoint provided by the DNS stage response.
+</Message>
 
 ### 5.2 Set the DNS Stage as the Pipeline Head
 
@@ -155,7 +173,7 @@ Get the DNS stage details to retrieve your endpoint URL:
 scw edge-services dns-stage get <YOUR_DNS_STAGE_ID>
 ```
 
-The output will show your endpoint in the `default_fqdn` field:
+The output shows your endpoint in the `default_fqdn` field:
 
 ```
 ID                  b92d2abe-4304-4d98-85ea-0f44f51dab8f
@@ -178,24 +196,6 @@ Test the endpoint by making an HTTP request to your pipeline endpoint:
 ```bash
 curl -v https://<YOUR_ENDPOINT_FQDN>
 ```
-
-## Pipeline Structure Summary
-
-```
-                    +----------------+
-                    |   DNS Stage    |  (Head stage - provides public endpoint)
-                    +-------+--------+
-                            |
-                    +-------v--------+
-                    |   TLS Stage    |  (Handles HTTPS termination)
-                    +-------+--------+
-                            |
-                    +-------v--------+
-                    | Backend Stage  |  (origin: Serverless Container)
-                    +----------------+
-```
-
-The request flows from the DNS stage (head) through the TLS stage (HTTPS termination) until it reaches the backend stage, which forwards the request to your Serverless Container.
 
 ## Alternative: Simplified Workflow
 

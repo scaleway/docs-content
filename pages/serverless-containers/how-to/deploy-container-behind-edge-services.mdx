@@ -1,7 +1,7 @@
 ---
 title: How to deploy a Serverless Container behind an Edge Service
-description: Deploy a Serverless Container behind a Scaleway Edge Service pipeline using the CLI. Configure HTTPS termination and a public endpoint.
-tags: serverless containers edge services deploy CLI
+description: Deploy a Serverless Container behind a Scaleway Edge Service pipeline using the CLI or Terraform. Configure HTTPS termination and a public endpoint.
+tags: serverless containers edge services deploy CLI terraform
 dates:
   validation: 2026-06-15
   posted: 2026-01-15
@@ -14,11 +14,16 @@ import Requirements from '@macros/iam/requirements.mdx'
 
 - A Scaleway account logged in to the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Project
-- The Scaleway CLI installed and configured
 
 ## Introduction
 
 This guide walks you through deploying a Serverless Container behind a Scaleway Edge Service pipeline. You create a namespace, deploy a container, and configure an Edge Service pipeline with stages for backend routing, TLS termination, and DNS to expose a public endpoint.
+
+<Tabs>
+
+  <TabsTab label="CLI">
+
+- The Scaleway CLI installed and configured
 
 ## Step 1: Create a Serverless Container Namespace
 
@@ -238,3 +243,271 @@ scw edge-services dns-stage get $DNS_STAGE_ID
 ```
 
 This workflow automates the process by capturing IDs in variables and chaining the commands together.
+
+  </TabsTab>
+
+  <TabsTab label="Terraform">
+
+- [Terraform](https://developer.hashicorp.com/terraform/install) installed on your local machine (version 1.0 or later)
+- A valid [Scaleway API key](/iam/how-to/create-api-keys/) with appropriate permissions
+- An active [Edge Services subscription](/edge-services/how-to/subscribe-edge-services/)
+
+## Step 1: Configure the Scaleway Provider
+
+Create a new directory for your Terraform configuration and initialize it:
+
+```bash
+mkdir edge-container-tutorial
+cd edge-container-tutorial
+```
+
+Create a file named `main.tf` with the following content:
+
+```terraform
+terraform {
+  required_providers {
+    scaleway = {
+      source = "scaleway/scaleway"
+    }
+  }
+  required_version = ">= 0.13"
+}
+```
+
+Set your Scaleway credentials as environment variables:
+
+```bash
+export SCW_ACCESS_KEY="SCWXXXXXXXXXXXXXXXXX"
+export SCW_SECRET_KEY="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+```
+
+<Message type="important">
+Never commit your API keys to version control. Use environment variables or a secrets manager to store your credentials securely.
+</Message>
+
+Initialize the Terraform provider:
+
+```bash
+terraform init
+```
+
+## Step 2: Create a Serverless Container Namespace
+
+Add the following to your `main.tf` file to create a namespace for your container:
+
+```terraform
+resource "scaleway_container_namespace" "main" {
+  name        = "edge-container-ns"
+}
+```
+
+## Step 3: Deploy the Serverless Container
+
+Add the container resource to your `main.tf` file. For this document, we will use a lightweight Nginx image:
+
+```terraform
+resource "scaleway_container" "main" {
+  name         = "web-app"
+  namespace_id = scaleway_container_namespace.main.id
+  image        = "nginx:alpine"
+  port         = 80
+}
+```
+
+<Message type="note">
+The `memory_limit_bytes` must correspond with the right amount of vCPU. For 100m vCPU, use 512 MiB (536870912 bytes). Refer to the [memory and vCPU configuration table](/serverless-containers/reference-content/containers-limitations/) for valid combinations.
+</Message>
+
+## Step 4: Create the Edge Services Pipeline
+
+Add the pipeline resource to your `main.tf` file:
+
+```terraform
+resource "scaleway_edge_services_pipeline" "main" {
+  name        = "container-pipeline"
+  description = "Pipeline for Serverless Container"
+}
+```
+
+## Step 5: Create the Stages
+
+An Edge Services pipeline is built from a chain of **stages** that process requests from the public endpoint to your origin (backend). For a simple setup, you need:
+
+1. **TLS Stage** (entry point - handles HTTPS termination)
+2. **Backend Stage** (origin - where requests are forwarded to your Serverless Container)
+
+<Message type="note">
+A Route Stage is optional. It allows you to define routing rules that forward requests to different backends based on path or method patterns. For this tutorial, we will skip the Route Stage and link the TLS stage directly to the backend stage.
+</Message>
+
+### 5.1 Create a TLS Stage
+
+Add the TLS stage resource to your `main.tf` file:
+
+```terraform
+resource "scaleway_edge_services_tls_stage" "main" {
+  pipeline_id         = scaleway_edge_services_pipeline.main.id
+  managed_certificate = true
+}
+```
+
+The `managed_certificate = true` parameter tells Scaleway to generate and manage a Let's Encrypt certificate automatically for your Edge Services endpoint.
+
+### 5.2 Create a Backend Stage
+
+Add the backend stage resource to connect your Serverless Container:
+
+```terraform
+resource "scaleway_edge_services_backend_stage" "main" {
+  pipeline_id = scaleway_edge_services_pipeline.main.id
+  
+  container_backend_config {
+    container_id = scaleway_container.main.id
+    region       = "fr-par" # Adjust to your container's region
+  }
+}
+```
+
+<Message type="important">
+Replace `"fr-par"` with the region where your Serverless Container is deployed if you're using a different region (e.g., `"nl-ams"`, `"pl-waw"`).
+</Message>
+
+## Step 6: Link the Stages Together
+
+The stages must be linked in a chain. Update the TLS stage to link to the backend stage:
+
+```terraform
+resource "scaleway_edge_services_tls_stage" "main" {
+  pipeline_id         = scaleway_edge_services_pipeline.main.id
+  backend_stage_id    = scaleway_edge_services_backend_stage.main.id
+  managed_certificate = true
+}
+```
+
+Then create a head stage to set the TLS stage as the pipeline entry point:
+
+```terraform
+resource "scaleway_edge_services_head_stage" "main" {
+  pipeline_id   = scaleway_edge_services_pipeline.main.id
+  head_stage_id = scaleway_edge_services_tls_stage.main.id
+}
+```
+
+## Step 7: Deploy the Infrastructure
+
+Your complete `main.tf` file should look like this:
+
+```terraform
+terraform {
+  required_providers {
+    scaleway = {
+      source  = "scaleway/scaleway"
+      version = "~> 2.0"
+    }
+  }
+}
+
+provider "scaleway" {
+  # Credentials should be set via environment variables:
+  # SCW_ACCESS_KEY and SCW_SECRET_KEY
+}
+
+# Container Namespace
+resource "scaleway_container_namespace" "main" {
+  name        = "edge-container-ns"
+  description = "Namespace for Edge Services container"
+}
+
+# Serverless Container
+resource "scaleway_container" "main" {
+  name         = "web-app"
+  namespace_id = scaleway_container_namespace.main.id
+  image        = "nginx:alpine"
+  port         = 80
+}
+
+# Edge Services Pipeline
+resource "scaleway_edge_services_pipeline" "main" {
+  name        = "container-pipeline"
+  description = "Pipeline for Serverless Container"
+}
+
+# Backend Stage (Serverless Container)
+resource "scaleway_edge_services_backend_stage" "main" {
+  pipeline_id = scaleway_edge_services_pipeline.main.id
+  
+  container_backend_config {
+    container_id = scaleway_container.main.id
+    region       = "fr-par"
+  }
+}
+
+# TLS Stage
+resource "scaleway_edge_services_tls_stage" "main" {
+  pipeline_id         = scaleway_edge_services_pipeline.main.id
+  backend_stage_id    = scaleway_edge_services_backend_stage.main.id
+  managed_certificate = true
+}
+
+# Head Stage
+resource "scaleway_edge_services_head_stage" "main" {
+  pipeline_id   = scaleway_edge_services_pipeline.main.id
+  head_stage_id = scaleway_edge_services_tls_stage.main.id
+}
+```
+
+Now deploy the infrastructure:
+
+1. Review the execution plan:
+
+```bash
+terraform plan
+```
+
+2. Apply the configuration:
+
+```bash
+terraform apply
+```
+
+3. Type `yes` when prompted to confirm.
+
+Terraform will create all the resources and display their IDs and endpoints upon completion.
+
+## Step 8: Verify the Setup
+
+After Terraform completes the deployment, you can verify the setup:
+
+1. Your Edge Services endpoint URL will be:
+
+```
+https://<PIPELINE_ID>.svc.edge.scw.cloud
+```
+
+2. Test the endpoint using curl:
+
+```bash
+curl -v https://<PIPELINE_ID>.svc.edge.scw.cloud
+```
+
+You should see the Nginx welcome page (or your container's application response).
+
+3. Check the pipeline status in the console:
+   - Navigate to **Edge Services** in the **Network** section
+   - Click on your pipeline
+   - Verify that all stages are active and healthy
+
+  </TabsTab>
+
+</Tabs>
+
+## Going Further
+
+Now that you have deployed your Serverless Container behind Edge Services, you can explore additional configurations:
+
+- [Configure caching](/edge-services/how-to/configure-cache/) to optimize content delivery performance
+- [Configure WAF](/edge-services/how-to/configure-waf/) to add web application firewall protection
+- [Monitor with Cockpit](/edge-services/how-to/monitor-cockpit/) to track your pipeline's metrics and logs
+- [Add a custom domain](/edge-services/how-to/configure-custom-domain/) to your Edge Services pipeline
+- [Secure a container](/serverless-containers/how-to/secure-a-container/) with IAM authentication for private access
+- [Use Private Networks](/serverless-containers/how-to/use-private-networks/) to connect your Serverless Container to other Scaleway resources in an isolated network

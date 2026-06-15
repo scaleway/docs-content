@@ -1,0 +1,240 @@
+# Deploy a Serverless Container behind an Edge Service
+
+This tutorial walks you through creating a simple Serverless Container and connecting it to a Scaleway Edge Service pipeline.
+
+## Prerequisites
+
+- Scaleway CLI installed and configured
+- A Scaleway account with a Project ID
+
+## Step 1: Create a Serverless Container Namespace
+
+First, create a namespace to hold your container:
+
+```bash
+scw container namespace create name=my-app
+```
+
+Note the returned `ID` (namespace ID) -- you will need it in subsequent steps.
+
+## Step 2: Create and Deploy a Container
+
+Create a simple container. Replace the registry image with your own, or use a sample image for testing:
+
+```bash
+scw container container create \
+  namespace-id=<YOUR_NAMESPACE_ID> \
+  name=my-container \
+  image="nginx:latest" \
+  port=80
+```
+
+
+Once created, note the `id` (container ID) from the output -- you will need it to attach the container to an Edge Service.
+
+## Step 3: Create an Edge Service Pipeline
+
+A pipeline is the core Edge Service entity. It defines the request processing chain from the public endpoint to your origin (backend).
+
+```bash
+scw edge-services pipeline create \
+  name=my-pipeline \
+  description="Pipeline for my serverless container"
+```
+
+Note the returned `ID` (pipeline ID).
+
+## Step 4: Create the Stages
+
+A pipeline needs a chain of stages from the entry point (head stage) to the origin (backend stage). For a simple setup, you need:
+
+1. **Backend Stage** (origin - where requests are forwarded)
+2. **TLS Stage** (entry point - handles HTTPS termination)
+3. **DNS Stage** (provides the public endpoint URL)
+
+### 4.1 Create a Backend Stage
+
+The backend stage defines your origin. To connect a Serverless Container, use the `scaleway-serverless-container` option:
+
+```bash
+scw edge-services backend-stage create \
+  pipeline-id=<YOUR_PIPELINE_ID> \
+  scaleway-serverless-container.region=fr-par \
+  scaleway-serverless-container.container-id=<YOUR_CONTAINER_ID>
+```
+
+Replace the following placeholders:
+- `<YOUR_PIPELINE_ID>`: The pipeline ID from Step 3
+- `<YOUR_CONTAINER_ID>`: The UUID of your Serverless Container from Step 2
+
+Note the returned `ID` (backend stage ID).
+
+> **Important:** If the `scaleway-serverless-container` option is not available in your CLI version, update the Scaleway CLI to the latest version. You can check your version with `scw --version`.
+
+### 4.2 Create a TLS Stage
+
+The TLS stage handles TLS termination and can use a managed Let's Encrypt certificate. You can link it directly to the backend stage during creation:
+
+```bash
+scw edge-services tls-stage create \
+  pipeline-id=<YOUR_PIPELINE_ID> \
+  managed-certificate=true \
+  backend-stage-id=<YOUR_BACKEND_STAGE_ID>
+```
+
+Replace `<YOUR_BACKEND_STAGE_ID>` with the backend stage ID from Step 4.1.
+
+Note the returned `ID` (TLS stage ID).
+
+> **Note:** By linking the backend stage during TLS stage creation, you avoid needing a separate update command later.
+
+### 4.3 (Optional) Create a Route Stage
+
+A route stage allows you to define routing rules that forward requests to different backends based on path or method patterns:
+
+```bash
+scw edge-services route-stage create \
+  pipeline-id=<YOUR_PIPELINE_ID>
+```
+
+Note the returned `ID` (route stage ID).
+
+### 4.4 (Optional) Set Route Rules
+
+If you created a route stage, you can define routing rules. For a simple setup that forwards all traffic to your backend:
+
+```bash
+scw edge-services route-rules set \
+  route-stage-id=<YOUR_ROUTE_STAGE_ID> \
+  route-rules.0.backend-stage-id=<YOUR_BACKEND_STAGE_ID> \
+  route-rules.0.rule-http-match.path-filter.value=".*" \
+  route-rules.0.rule-http-match.path-filter.path-filter-type=regex 
+```
+
+## Step 5: Create a DNS Stage and Set It as Head
+
+A DNS stage is required to expose your pipeline with a public endpoint URL.
+
+### 5.1 Create a DNS Stage
+
+Create a DNS stage linked to your TLS stage:
+
+```bash
+scw edge-services dns-stage create \
+  pipeline-id=<YOUR_PIPELINE_ID> \
+  tls-stage-id=<YOUR_TLS_STAGE_ID>
+```
+
+Note the returned `ID` (DNS stage ID) and the `default_fqdn` field -- this is your public endpoint URL.
+
+> **Note:** If you want to use a custom domain, add the `fqdns.0=app.example.com` parameter. You will need to configure a DNS record (CNAME) pointing your domain to the endpoint provided by the DNS stage response.
+
+### 5.2 Set the DNS Stage as the Pipeline Head
+
+Set the DNS stage as the entry point of your pipeline:
+
+```bash
+scw edge-services pipeline set-head \
+  pipeline-id=<YOUR_PIPELINE_ID> \
+  add-new-head-stage.new-stage-id=<YOUR_DNS_STAGE_ID>
+```
+
+Replace `<YOUR_DNS_STAGE_ID>` with the DNS stage ID from Step 5.1.
+
+## Step 6: Verify the Setup
+
+List your pipeline to check the configuration:
+
+```bash
+scw edge-services pipeline get <YOUR_PIPELINE_ID>
+```
+
+Get the DNS stage details to retrieve your endpoint URL:
+
+```bash
+scw edge-services dns-stage get <YOUR_DNS_STAGE_ID>
+```
+
+The output will show your endpoint in the `default_fqdn` field:
+
+```
+ID                  b92d2abe-4304-4d98-85ea-0f44f51dab8f
+DefaultFqdn         79778b1b-afbf-47a8-9609-f034ae28dfaf.svc.edge.scw.cloud
+DefaultPrivateFqdn  -
+Type                auto
+PipelineID          79778b1b-afbf-47a8-9609-f034ae28dfaf
+Status              active
+```
+
+List the stages to verify the configuration:
+
+```bash
+scw edge-services tls-stage list pipeline-id=<YOUR_PIPELINE_ID>
+scw edge-services backend-stage list pipeline-id=<YOUR_PIPELINE_ID>
+```
+
+Test the endpoint by making an HTTP request to your pipeline endpoint:
+
+```bash
+curl -v https://<YOUR_ENDPOINT_FQDN>
+```
+
+## Pipeline Structure Summary
+
+```
+                    +----------------+
+                    |   DNS Stage    |  (Head stage - provides public endpoint)
+                    +-------+--------+
+                            |
+                    +-------v--------+
+                    |   TLS Stage    |  (Handles HTTPS termination)
+                    +-------+--------+
+                            |
+                    +-------v--------+
+                    | Backend Stage  |  (origin: Serverless Container)
+                    +----------------+
+```
+
+The request flows from the DNS stage (head) through the TLS stage (HTTPS termination) until it reaches the backend stage, which forwards the request to your Serverless Container.
+
+## Alternative: Simplified Workflow
+
+For a quicker setup, you can chain the commands together:
+
+```bash
+# Create pipeline
+PIPELINE_ID=$(scw edge-services pipeline create \
+  name=my-edge-pipeline \
+  description="Pipeline for my serverless container" \
+  -o json | jq -r '.id')
+
+# Create backend stage
+BACKEND_STAGE_ID=$(scw edge-services backend-stage create \
+  pipeline-id=$PIPELINE_ID \
+  scaleway-serverless-container.region=fr-par \
+  scaleway-serverless-container.container-id=<YOUR_CONTAINER_ID> \
+  -o json | jq -r '.id')
+
+# Create TLS stage linked to backend
+TLS_STAGE_ID=$(scw edge-services tls-stage create \
+  pipeline-id=$PIPELINE_ID \
+  managed-certificate=true \
+  backend-stage-id=$BACKEND_STAGE_ID \
+  -o json | jq -r '.id')
+
+# Create DNS stage
+DNS_STAGE_ID=$(scw edge-services dns-stage create \
+  pipeline-id=$PIPELINE_ID \
+  tls-stage-id=$TLS_STAGE_ID \
+  -o json | jq -r '.id')
+
+# Set DNS stage as head
+scw edge-services pipeline set-head \
+  $PIPELINE_ID \
+  add-new-head-stage.new-stage-id=$DNS_STAGE_ID
+
+# Get endpoint URL
+scw edge-services dns-stage get $DNS_STAGE_ID
+```
+
+This workflow automates the process by capturing IDs in variables and chaining the commands together.

@@ -43,7 +43,7 @@ export const vpcPeeringMenu = {
         {
           label: 'VPC Peering API Reference',
           slug: 'https://www.scaleway.com/en/developers/api/vpc/',
-        }
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',
@@ -57,6 +57,10 @@ export const vpcPeeringMenu = {
         {
           label: 'Features and limitations',
           slug: 'features-limitations',
+        },
+        {
+          label: 'Understanding transitive peering',
+          slug: 'understanding-transitive-peering',
         },
         {
           label: 'VPC Peering statuses',

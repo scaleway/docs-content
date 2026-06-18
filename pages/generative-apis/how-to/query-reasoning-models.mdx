@@ -17,7 +17,7 @@ Language models supporting the reasoning feature include `gpt-oss-120b`. See [Su
 You can interact with reasoning models in the following ways:
 
 - Use the [playground](/generative-apis/how-to/query-reasoning-models/#accessing-the-playground) in the Scaleway [console](https://console.scaleway.com) to test models, adapt parameters, and observe how your changes affect the output in real-time
-- Use the [Chat Completions API](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) or the [Responses API](https://www.scaleway.com/en/developers/api/generative-apis/#path-responses-create-a-response)
+- Use the [Chat Completions API](https://www.scaleway.com/en/developers/api/generative-apis/chat-completions) or the [Responses API](https://www.scaleway.com/en/developers/api/generative-apis/responses)
 - Use your own [dedicated deployment](/generative-apis/how-to/create-deployment/) of a chosen model
 
 <Requirements />
@@ -41,7 +41,7 @@ The web playground displays.
 ### Using the playground
 
 1. Enter a prompt at the bottom of the page, or use one of the suggested prompts in the conversation area.
-2. Edit the parameters listed on the right column, for example the default temperature for more or less randomness on the outputs. 
+2. Edit the parameters listed in the right column, for example the default temperature for more or less randomness in the outputs. 
 3. Switch models at the top of the page, to observe the capabilities of chat models offered via Generative APIs. 
 4. Click **Deploy**, then select the **Serverless** option to get code snippets configured according to your settings in the playground. 
     
@@ -58,9 +58,9 @@ In the example that follows, we will use the OpenAI Python client.
 
 ### Chat Completions API or Responses API?
 
-Both the [Chat Completions API](/https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) and the [Responses API](https://www.scaleway.com/en/developers/api/generative-apis/#path-chat-completions-create-a-chat-completion) allow you to access and control reasoning for supported models.
+Both the [Chat Completions API](https://www.scaleway.com/en/developers/api/generative-apis/chat-completions) and the [Responses API](https://www.scaleway.com/en/developers/api/generative-apis/responses) allow you to access and control reasoning for supported models.
 
-For more information on Chat Completions versus Responses API, see the information provided in the [querying language models](/generative-apis/how-to/query-language-models/#chat-completions-api-or-responses-api) documentation.
+For more details on Chat Completions versus Responses API, see the information provided in the [querying language models](/generative-apis/how-to/query-language-models/#chat-completions-api-or-responses-api) documentation.
 
 ### Installing the OpenAI SDK
 
@@ -112,7 +112,7 @@ You can now create a chat completion with reasoning, using either the Chat Compl
     print(f"Answer: {response.choices[0].message.content}")
     ```
 
-    This code sends a message to the model, as well as specifying the effort to make with reasoning, and returns an answer based on your input. The model's reasoning metadata can be accessed as well as its answer, with outputs such as:
+    This code sends a message to the model, specifies the effort to make with reasoning, and returns an answer based on your input. You can access the model's reasoning metadata and its answer in the model's output. Here is an example output:
 
     ```python
     Reasoning: The user wants a description of a futuristic city with advanced tech and green energy solutions. Should be creative, vivid, detailed. No disallowed content. Provide description.
@@ -141,7 +141,7 @@ You can now create a chat completion with reasoning, using either the Chat Compl
         if output.type == "message":
             print(f"Answer: {output.content[0].text}")
     ```
-    This code sends a message to the model, as well as specifying the effort to make with reasoning, and returns an answer based on your input. The model's reasoning metadata can be accessed as well as its answer, with outputs such as:
+    This code sends a message to the model, specifies the effort to make with reasoning, and returns an answer based on your input. You can access the model's reasoning metadata and its answer in the model's output. Here is an example output:
 
     ```python
     Reasoning: The user asks: "Briefly describe a futuristic city with advanced technology and green energy solutions." They want a brief description. Should be concise but vivid. Provide details: architecture, transport, energy, AI, and sustainability. Probably a paragraph or a few sentences. Ensure it's brief. Let's produce a short description.
@@ -151,9 +151,61 @@ You can now create a chat completion with reasoning, using either the Chat Compl
     </TabsTab>
 </Tabs>
 
+### Configuring reasoning
+
+All models with reasoning capabilities have reasoning enabled by default (i.e., if the field `reasoning_effort` is not provided). You can disable reasoning for most models (except for `gpt-oss-120b`) by using `reasoning_effort=none`.
+
+For a quick test, issue the following simple API calls.
+
+Reasoning is disabled:
+
+```bash
+curl https://api.scaleway.ai/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SCW_SECRET_KEY" \
+  -d '{
+    "model": "qwen3.5-397b-a17b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant."
+      },
+      {
+        "role": "user",
+        "content": "Hello!"
+      }
+    ],
+   "reasoning_effort": "none"
+  }'
+```
+Reasoning is set to medium effort:
+
+```bash
+curl https://api.scaleway.ai/v1/chat/completions \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer $SCW_SECRET_KEY" \
+  -d '{
+    "model": "qwen3.5-397b-a17b",
+    "messages": [
+      {
+        "role": "system",
+        "content": "You are a helpful assistant."
+      },
+      {
+        "role": "user",
+        "content": "Hello!"
+      }
+    ],
+   "reasoning_effort": "medium"
+  }' 
+```
+
+The supported `reasoning_effort` value (values such as `low`, `medium`, `high`) differs by model.
+
+
 ## Exceptions and legacy models
 
-Some legacy models such as `deepseek-r1-distill-llama-70b` do not output reasoning data as described above, but make it available in the `content` field of the response inside special tags, as shown in the example below:
+Some legacy models, such as `deepseek-r1-distill-llama-70b`, do not output reasoning data as described above, but make it available in the `content` field of the response inside special tags, as shown in the example below:
 
 ```
 response.content = "<think> The user asks for questions about mathematics (...) </think>  Answer is 42."
@@ -163,8 +215,87 @@ The reasoning content is inside the `<think>`...`</think>` tags, and you can par
 
 Note that the `reasoning_effort` parameter is not available for this model.
 
+## Distinguishing between reasoning data and answer content in streaming mode
+
+In streaming mode, some models (for example, Qwen3.5-397b-a17b) output two different server-side events for reasoning data and answer content. You receive all the reasoning chunks one by one, followed by all the answer chunks one by one (each chunk is a server‑side event of one type or the other).
+
+Take the following example:
+
+```json
+data: {
+    "id": "chatcmpl-d6804e7b-8099-41f8-8486-3233eb11178d",
+    "object": "chat.completion.chunk",
+    "created": 1777583471,
+    "model": "qwen3.5-397b-a17b",
+    "choices": [
+        {
+            "index": 0,
+            "delta": {
+                "reasoning": ")*"
+            },
+            "logprobs": null,
+            "finish_reason": null,
+            "token_ids": null
+        }
+    ]
+}
+
+data: {
+    "id": "chatcmpl-d6804e7b-8099-41f8-8486-3233eb11178d",
+    "object": "chat.completion.chunk",
+    "created": 1777583471,
+    "model": "qwen3.5-397b-a17b",
+    "choices": [
+        {
+            "index": 0,
+            "delta": {
+                "reasoning": "\n"
+            },
+            "logprobs": null,
+            "finish_reason": null,
+            "token_ids": null
+        }
+    ]
+}
+
+data: {
+    "id": "chatcmpl-d6804e7b-8099-41f8-8486-3233eb11178d",
+    "object": "chat.completion.chunk",
+    "created": 1777583471,
+    "model": "qwen3.5-397b-a17b",
+    "choices": [
+        {
+            "index": 0,
+            "delta": {
+                "content": "\n\n"
+            },
+            "logprobs": null,
+            "finish_reason": null,
+            "token_ids": null
+        }
+    ]
+}
+
+data: {
+    "id": "chatcmpl-d6804e7b-8099-41f8-8486-3233eb11178d",
+    "object": "chat.completion.chunk",
+    "created": 1777583471,
+    "model": "qwen3.5-397b-a17b",
+    "choices": [
+        {
+            "index": 0,
+            "delta": {
+                "content": "The"
+            },
+            "logprobs": null,
+            "finish_reason": null,
+            "token_ids": null
+        }
+    ]
+}
+```
+
 
 ## Impact on token generation
 
-Reasoning models generate reasoning tokens, which are billable. Generally these are in the model's output as part of the reasoning content. To limit the generation of reasoning tokens, you can adjust settings for the **reasoning effort** and **max completion/output tokens** parameters. Alternatively, use a non-reasoning model to avoid the generation of reasoning tokens and subsequent billing.
-
+Reasoning models generate reasoning tokens, which are billable. Generally these are in the model's output as part of the reasoning content. To limit the generation of reasoning tokens, you can adjust settings for the `reasoning_effort` and `max_completion_tokens` / `max_output_tokens` parameters. Alternatively, use a non-reasoning model to avoid the generation of reasoning tokens and subsequent billing.

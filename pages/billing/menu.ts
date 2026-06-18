@@ -68,6 +68,10 @@ export const billingMenu = {
           label: 'Retrieve monthly consumption',
           slug: 'retrieve-monthly-consumption',
         },
+        {
+          label: 'Retrieve FinOps data',
+          slug: 'retrieve-finops-data',
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',
@@ -81,7 +85,7 @@ export const billingMenu = {
         {
           label: 'Understanding savings plans',
           slug: 'understanding-savings-plans',
-        }
+        },
       ],
       label: 'Additional Content',
       slug: 'additional-content',

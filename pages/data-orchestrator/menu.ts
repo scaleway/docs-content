@@ -38,6 +38,20 @@ export const dataOrchestratorMenu = {
       label: 'How to',
       slug: 'how-to',
     },
+    {
+      items: [
+        {
+          label: 'Logic tasks',
+          slug: 'logic-tasks',
+        },
+        {
+          label: 'Cron schedules',
+          slug: 'cron-schedules',
+        },
+      ],
+      label: 'Additional Content',
+      slug: 'reference-content',
+    },
   ],
   label: 'Data Orchestrator',
   slug: 'data-orchestrator',

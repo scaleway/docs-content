@@ -122,6 +122,10 @@ export const elasticMetalMenu = {
           label: 'Run Kubernetes nodes on RISC-V',
           slug: 'kubernetes-on-riscv',
         },
+        {
+          label: 'Use the ASRock Rack KVM',
+          slug: 'asrockrack',
+        },
       ],
       label: 'How to',
       slug: 'how-to',
@@ -133,8 +137,7 @@ export const elasticMetalMenu = {
           slug: 'https://www.scaleway.com/en/developers/api/elastic-metal/',
         },
         {
-          label:
-            'Creating and managing Elastic Metal servers with the CLI',
+          label: 'Creating and managing Elastic Metal servers with the CLI',
           slug: 'elastic-metal-with-cli',
         },
         {

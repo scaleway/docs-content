@@ -44,7 +44,7 @@ export const dataWarehouseMenu = {
         },
         {
           label: 'Connect a deployment with PowerBI in a Private Network',
-          slug: 'connect-powerbi-vpc'
+          slug: 'connect-powerbi-vpc',
         },
         {
           label: 'Use Private Networks',
@@ -70,6 +70,10 @@ export const dataWarehouseMenu = {
           label: 'Manage the storage policy of a deployment',
           slug: 'manage-storage',
         },
+        {
+          label: 'Understand sharding and replication',
+          slug: 'understand-sharding-replication',
+        },
       ],
       label: 'How to',
       slug: 'how-to',
@@ -77,7 +81,8 @@ export const dataWarehouseMenu = {
     {
       items: [
         {
-          label: 'Using a Public Gateway to connect to a deployment in a Private Network',
+          label:
+            'Using a Public Gateway to connect to a deployment in a Private Network',
           slug: 'use-data-warehouse-public-gateway',
         },
       ],

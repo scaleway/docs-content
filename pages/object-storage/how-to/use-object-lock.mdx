@@ -1,0 +1,396 @@
+---
+title: How to use object lock
+description: Learn how to protect objects in Scaleway Object Storage using object lock, retention modes, and legal hold.
+tags: object storage object-storage object-lock compliance governance retention legal-hold worm
+dates:
+  validation: 2026-05-21
+  posted: 2021-05-27
+---
+
+import Requirements from '@macros/iam/requirements.mdx'
+
+Object lock prevents objects from being deleted or overwritten for a defined period or indefinitely. It uses a **write-once-read-many (WORM)** model, commonly required for regulatory compliance and protection against ransomware or accidental deletion. Object lock can only be used in buckets with versioning enabled.
+
+## Overview
+
+Object lock provides two mechanisms to protect your objects: **retention** and **legal hold**. You can enable either, or both, at the same time:
+
+- **Retention** allows you to apply a retention period and a retention mode to your objects, limiting the actions that users can perform on them:
+  - **Compliance mode** prevents users, including owners and users with administrative permissions, from deleting or overwriting objects during the specified retention period. The retention mode cannot be modified, and the retention period cannot be shortened.
+  - **Governance mode** prevents users without the necessary permissions from deleting or overwriting objects during the specified retention period. Authorized users can modify the retention settings and delete the targeted objects.
+
+- **Legal hold** is an independent ON/OFF switch that provides the same protection as retention but has no expiration date. It must be explicitly removed by a user with the appropriate permissions and is evaluated independently of any retention configuration.
+
+Object lock is supported on `Standard Multi-AZ`, `Standard One Zone`, and `Glacier` [storage classes](/object-storage/concepts/#storage-class).
+
+<Message type="important">
+  Once object lock is enabled on a bucket, it cannot be disabled and versioning cannot be suspended.
+</Message>
+
+<Requirements />
+
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Installed and configured the [AWS CLI](/object-storage/api-cli/object-storage-aws-cli/)
+
+## Enable object lock on a bucket
+
+You can enable object lock at bucket creation or on an existing bucket.
+
+### On a new bucket
+
+<Tabs id="object-lock-new">
+  <TabsTab label="Console">
+
+  To enable object lock during bucket creation, refer to the [dedicated how-to page](/object-storage/how-to/create-a-bucket/).
+
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+
+  Run the command below to create a new bucket with object lock enabled. Replace `my-locked-bucket` with your bucket name.
+
+  ```bash
+  aws s3api create-bucket \
+    --bucket my-locked-bucket \
+    --object-lock-enabled-for-bucket
+  ```
+
+  </TabsTab>
+</Tabs>
+
+### On an existing bucket
+
+<Tabs id="object-lock-existing">
+  <TabsTab label="Console">
+
+  1. Click **Object Storage** in the **Storage** section of the side menu. A list of your buckets displays.
+  2. Click the name of the bucket for which you want to enable object lock.
+  3. Click the **Bucket settings** tab.
+  4. In the **Bucket versioning** section, click **Modify** under **Object lock**.
+  5. Type **ENABLE** to confirm your action, then click **Confirm** to proceed.
+
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+
+  Run the command below to enable object lock on an existing bucket. Replace `my-locked-bucket` with your bucket name.
+
+  ```bash
+  aws s3api put-object-lock-configuration \
+    --bucket my-locked-bucket \
+    --object-lock-configuration '{"ObjectLockEnabled": "Enabled"}'
+  ```
+
+  If the command is successful, no output is returned.
+
+  </TabsTab>
+</Tabs>
+
+## Apply retention to a specific object
+
+Object-level retention overrides the bucket default for that specific object.
+
+<Tabs id="object-retention">
+  <TabsTab label="Console">
+
+  1. Click **Object Storage** in the **Storage** section of the side menu. A list of your buckets displays.
+  2. Click the name of the desired bucket. A list of the objects it contains appears.
+  3. Click <Icon name="more" /> next to the desired object, then click **Versioning**. A side panel displays the different versions of your object.
+  4. Click <Icon name="more" /> next to the version ID you want to set up object lock for. A configuration pop-up displays.
+  5. Tick **Enable retention mode**, then select one of the following:
+    - **Governance mode** to protect the selected version from being deleted or overwritten. Its duration can be shortened, and users with the appropriate permissions can bypass it.
+    - **Compliance mode** to protect the selected version from being deleted or overwritten. Its duration cannot be shortened, and no user (including the Organization owner) can bypass it.
+  6. Enter a retain-until date in the `MM/DD/YYYY` format, then click **Save changes**. A confirmation pop-up displays.
+  7. Verify the correct retention mode and retain-until date are selected, then click **Confirm** to proceed.
+
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+
+  1. Run the following command to apply the **compliance mode** to an object. Replace `my-locked-bucket`, `my-object`, and the date with your values.
+
+      ```bash
+      aws s3api put-object-retention \
+        --bucket my-locked-bucket \
+        --key my-object \
+        --retention '{
+          "Mode": "COMPLIANCE",
+          "RetainUntilDate": "2028-01-01T00:00:00Z"
+        }'
+      ```
+
+      To use **Governance** mode instead, replace `COMPLIANCE` with `GOVERNANCE` and adjust the date. If the command is successful, no output is returned.
+
+  2. Run the following command to verify the configuration was applied correctly:
+
+      ```bash
+      aws s3api get-object-retention \
+        --bucket my-locked-bucket \
+        --key my-object
+      ```
+
+      An output similar to the following displays:
+
+      ```json
+      {
+          "Retention": {
+              "Mode": "COMPLIANCE",
+              "RetainUntilDate": "2028-01-01T00:00:00Z"
+          }
+      }
+      ```
+
+      <Message type="note">
+        The `RetainUntilDate` must be an absolute timestamp in ISO 8601 format.
+      </Message>
+
+  </TabsTab>
+</Tabs>
+
+## Manage legal hold on an object
+
+Legal hold is independent of retention settings and has no expiration date. It must be explicitly enabled and removed by a user with the necessary permissions.
+
+<Tabs id="legal-hold">
+  <TabsTab label="Console">
+
+  1. Click **Object Storage** in the **Storage** section of the side menu. A list of your buckets displays.
+  2. Click the name of the desired bucket. A list of the objects it contains appears.
+  3. Click <Icon name="more" /> next to the desired object, then click **Versioning**. A side panel displays the different versions of your object.
+  4. Click <Icon name="more" /> next to the version ID you want to set up object lock for. A configuration pop-up displays.
+  5. Enable **legal hold** to protect this version from being overwritten or deleted until the hold is explicitly removed by a user with the necessary permissions.
+  6. Verify the correct settings are selected, then click **Confirm** to proceed.
+
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+
+  1. Run the following command to enable a legal hold on an object. Replace `my-locked-bucket` and `my-object` with the appropriate values.
+
+      ```bash
+      aws s3api put-object-legal-hold \
+        --bucket my-locked-bucket \
+        --key my-object \
+        --legal-hold Status=ON
+      ```
+
+  2. Run the following command to verify the legal hold was applied:
+
+      ```bash
+      aws s3api get-object-legal-hold \
+        --bucket my-locked-bucket \
+        --key my-object
+      ```
+
+      An output similar to the following displays:
+
+      ```json
+      {
+          "LegalHold": {
+              "Status": "ON"
+          }
+      }
+      ```
+
+  3. Run the following command to remove the legal hold:
+
+      ```bash
+      aws s3api put-object-legal-hold \
+        --bucket my-locked-bucket \
+        --key my-object \
+        --legal-hold Status=OFF
+      ```
+
+  </TabsTab>
+</Tabs>
+
+## Set a default retention policy on a bucket
+
+A default retention policy applies automatically to every new object added to the bucket.
+
+<Message type="note">
+Currently, you can only set a default retention policy using the AWS CLI, or other Amazon S3-compatible tools.
+</Message>
+
+1. Run the following command to set a retention period of 365 days in **compliance mode**. Replace `my-locked-bucket` with your bucket name.
+
+    ```bash
+    aws s3api put-object-lock-configuration \
+      --bucket my-locked-bucket \
+      --object-lock-configuration '{
+        "ObjectLockEnabled": "Enabled",
+        "Rule": {
+          "DefaultRetention": {
+            "Mode": "COMPLIANCE",
+            "Days": 365
+          }
+        }
+      }'
+    ```
+
+    To use **Governance** mode with a duration in years, replace the `Rule` block:
+
+    ```json
+    "Rule": {
+      "DefaultRetention": {
+        "Mode": "GOVERNANCE",
+        "Years": 5
+      }
+    }
+    ```
+
+    No output is returned on success.
+
+2. Run the following command to verify the configuration was applied correctly:
+
+    ```bash
+    aws s3api get-object-lock-configuration \
+      --bucket my-locked-bucket
+    ```
+
+    An output similar to the following displays:
+
+    ```json
+    {
+        "ObjectLockConfiguration": {
+            "ObjectLockEnabled": "Enabled",
+            "Rule": {
+                "DefaultRetention": {
+                    "Mode": "COMPLIANCE",
+                    "Days": 365
+                }
+            }
+        }
+    }
+    ```
+
+<Message type="note">
+  Use either `Days` or `Years`, not both. The retention period starts from each object's creation date.
+</Message>
+
+## Technical reference
+
+### Object lock configuration tokens
+
+#### `ObjectLockConfiguration`
+
+**Description:** Root element of the lock configuration.
+
+**Required:** Yes
+
+#### `ObjectLockEnabled`
+
+**Description:** Enables object lock on the bucket.
+
+**Type:** String — `Enabled`
+
+**Required:** Yes
+
+#### `Rule`
+
+**Description:** Default retention rule applied to every new object placed in the bucket.
+
+**Required:** No
+
+#### `Mode`
+
+**Description:** Default retention mode for new objects.
+
+**Type:** String — `GOVERNANCE` or `COMPLIANCE`
+
+**Required:** Yes, if `Rule` is set
+
+#### `Days`
+
+**Description:** Default retention duration in days.
+
+**Type:** Integer
+
+**Required:** Use `Days` or `Years`, not both
+
+#### `Years`
+
+**Description:** Default retention duration in years.
+
+**Type:** Integer
+
+**Required:** Use `Days` or `Years`, not both
+
+### Object retention tokens
+
+#### `Mode`
+
+**Description:** Retention mode for the object.
+
+**Type:** String — `GOVERNANCE` or `COMPLIANCE`
+
+**Required:** Yes
+
+#### `RetainUntilDate`
+
+**Description:** Date on which the object retention expires.
+
+**Type:** Timestamp (ISO 8601)
+
+**Required:** Yes
+
+### Legal hold tokens
+
+#### `Status`
+
+**Description:** Enables or disables the legal hold on the object.
+
+**Type:** String — `ON` or `OFF`
+
+**Required:** Yes
+
+## Examples
+
+### Regulatory compliance bucket (compliance mode)
+
+This example sets up a bucket for strict regulatory retention: all objects are locked in compliance mode for seven years and cannot be deleted or overwritten by any user until the period expires.
+
+```bash
+# Enable object lock on a new bucket
+aws s3api create-bucket \
+  --bucket my-compliance-bucket \
+  --object-lock-enabled-for-bucket
+
+# Set a default seven-year compliance retention on all new objects
+aws s3api put-object-lock-configuration \
+  --bucket my-compliance-bucket \
+  --object-lock-configuration '{
+    "ObjectLockEnabled": "Enabled",
+    "Rule": {
+      "DefaultRetention": {
+        "Mode": "COMPLIANCE",
+        "Years": 7
+      }
+    }
+  }'
+```
+
+Objects uploaded to `my-compliance-bucket` are automatically locked in compliance mode until seven years after their upload date. No user can shorten the retention period or delete objects before it expires.
+
+### Flexible protection bucket (governance mode + legal hold)
+
+This example sets up a bucket with a default governance retention of 90 days, then places an additional legal hold on a specific object under active investigation.
+
+```bash
+# Enable object lock on an existing bucket
+aws s3api put-object-lock-configuration \
+  --bucket my-governance-bucket \
+  --object-lock-configuration '{
+    "ObjectLockEnabled": "Enabled",
+    "Rule": {
+      "DefaultRetention": {
+        "Mode": "GOVERNANCE",
+        "Days": 90
+      }
+    }
+  }'
+
+# Apply a legal hold to a specific object
+aws s3api put-object-legal-hold \
+  --bucket my-governance-bucket \
+  --key audit/report-2026-05.pdf \
+  --legal-hold Status=ON
+```
+
+Objects in `my-governance-bucket` are protected for 90 days under governance mode. Authorized users can override the retention if needed. The object `audit/report-2026-05.pdf` additionally has a legal hold, which blocks deletion regardless of the retention period and must be explicitly removed.

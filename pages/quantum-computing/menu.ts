@@ -43,12 +43,20 @@ export const quantumComputingMenu = {
           slug: 'use-qsim-emulators',
         },
         {
+          label: 'Use remote Quobly emulators',
+          slug: 'use-quobly-qpus',
+        },
+        {
           label: 'Use Pennylane for Quantum Machine Learning',
           slug: 'use-pennylane',
         },
         {
           label: 'Use MerLin for Photonic Quantum Machine Learning',
           slug: 'use-merlin',
+        },
+        {
+          label: 'Use Qiskit ML plugin for Quantum Machine Learning',
+          slug: 'use-qiskit-ml',
         },
       ],
       label: 'How to',
@@ -89,7 +97,7 @@ export const quantumComputingMenu = {
         {
           label: 'Quandela QPUs Information',
           slug: 'quandela-qpus',
-        }
+        },
       ],
       label: 'Additional Content',
       slug: 'additional-content',

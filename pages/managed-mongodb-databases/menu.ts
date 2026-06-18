@@ -64,7 +64,7 @@ export const managedMongodbDatabasesMenu = {
       items: [
         {
           label: 'Managing users',
-          slug: "managing-users-api"
+          slug: 'managing-users-api',
         },
         {
           label: 'Back up and restore MongoDB® Databases',

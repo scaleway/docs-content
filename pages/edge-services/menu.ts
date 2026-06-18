@@ -23,12 +23,8 @@ export const edgeServicesMenu = {
           slug: 'subscribe-edge-services',
         },
         {
-          label: 'Create an Object Storage pipeline',
-          slug: 'create-pipeline-bucket',
-        },
-        {
-          label: 'Create a Load Balancer pipeline',
-          slug: 'create-pipeline-lb',
+          label: 'Create a pipeline',
+          slug: 'create-pipeline',
         },
         {
           label: 'Configure a custom domain',

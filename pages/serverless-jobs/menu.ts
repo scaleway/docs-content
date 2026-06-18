@@ -47,6 +47,10 @@ export const serverlessJobsMenu = {
           slug: 'manage-job-triggers',
         },
         {
+          label: 'Manage job retries',
+          slug: 'manage-job-retries',
+        },
+        {
           label: 'Execute complex startup commands',
           slug: 'execute-complex-commands',
         },

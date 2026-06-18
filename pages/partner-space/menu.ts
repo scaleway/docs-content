@@ -38,6 +38,10 @@ export const partnerSpaceMenu = {
           label: 'Grant access to the Partner Space',
           slug: 'grant-access-to-partner-space',
         },
+        {
+          label: 'Manage customer support tickets',
+          slug: 'manage-customer-support-tickets',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

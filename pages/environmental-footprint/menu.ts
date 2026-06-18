@@ -73,9 +73,9 @@ export const environmentalFootprintMenu = {
           slug: 'managed-databases-env-footprint',
         },
         {
-          label: 'Generative APIs - Dedicated Deployment footprint calculation',
-          slug: 'generative-apis-dedicated-env-footprint',
-        },
+          label: 'Generative APIs footprint calculation',
+          slug: 'generative-apis-dedicated-env-footprint'
+        }        
       ],
       label: 'Additional Content',
       slug: 'additional-content',

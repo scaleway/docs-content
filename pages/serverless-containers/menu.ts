@@ -78,6 +78,10 @@ export const serverlessContainersMenu = {
           label: 'Delete a container',
           slug: 'delete-a-container',
         },
+        {
+          label: 'Deploy a Container behind Edge Services',
+          slug: 'deploy-container-behind-edge-services',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

@@ -43,8 +43,8 @@ export const serverlessJobsMenu = {
           slug: 'automate-resources-management',
         },
         {
-          label: 'Manage the scheduling of a job',
-          slug: 'manage-job-schedule',
+          label: 'Manage the triggers of a job',
+          slug: 'manage-job-triggers',
         },
         {
           label: 'Manage job retries',

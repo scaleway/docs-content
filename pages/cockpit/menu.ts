@@ -51,6 +51,10 @@ export const cockpitMenu = {
           slug: 'send-metrics-from-k8s-to-cockpit',
         },
         {
+          label: 'Federate Scaleway metrics with your own Prometheus',
+          slug: 'federate-scaleway-metrics',
+        },
+        {
           label: 'Monitor your Kubernetes cluster with Cockpit',
           slug: 'monitor-k8s-cluster-with-cockpit',
         },

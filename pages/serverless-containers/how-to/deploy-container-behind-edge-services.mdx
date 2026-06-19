@@ -70,30 +70,11 @@ Note the returned `ID` (pipeline ID).
 
 A pipeline needs a chain of stages from the entry point (head stage) to the origin (backend stage). For a simple setup, you need:
 
-1. **TLS stage** (entry point - handles HTTPS termination)
-2. **Backend stage** (origin - where requests are forwarded to your Serverless Container)
+1. **Backend stage** (origin - where requests are forwarded to your Serverless Container)
+2. **TLS stage** (entry point - handles HTTPS termination)
 3. **DNS stage** (provides the public endpoint URL)
 
-### 4.1 Create a TLS stage
-
-The TLS stage handles TLS termination and can use a managed Let's Encrypt certificate. You can link it directly to the backend stage during creation:
-
-```bash
-scw edge-services tls-stage create \
-  pipeline-id=<YOUR_PIPELINE_ID> \
-  managed-certificate=true \
-  backend-stage-id=<YOUR_BACKEND_STAGE_ID>
-```
-
-Replace `<YOUR_BACKEND_STAGE_ID>` with the backend stage ID from Step 4.2.
-
-Note the returned `ID` (TLS stage ID).
-
-<Message type="note">
-By linking the backend stage during TLS stage creation, you avoid needing a separate update command later.
-</Message>
-
-### 4.2 Create a backend stage
+### 4.1 Create a backend stage
 
 The backend stage defines your origin. To connect a Serverless Container, use the `scaleway-serverless-container` option:
 
@@ -112,6 +93,25 @@ Note the returned `ID` (backend stage ID).
 
 <Message type="important">
 If the `scaleway-serverless-container` option is not available in your CLI version, update the Scaleway CLI to the latest version. You can check your version with `scw --version`.
+</Message>
+
+### 4.2 Create a TLS stage
+
+The TLS stage handles TLS termination and can use a managed Let's Encrypt certificate. You can link it directly to the backend stage during creation:
+
+```bash
+scw edge-services tls-stage create \
+  pipeline-id=<YOUR_PIPELINE_ID> \
+  managed-certificate=true \
+  backend-stage-id=<YOUR_BACKEND_STAGE_ID>
+```
+
+Replace `<YOUR_BACKEND_STAGE_ID>` with the backend stage ID from Step 4.1.
+
+Note the returned `ID` (TLS stage ID).
+
+<Message type="note">
+By linking the backend stage during TLS stage creation, you avoid needing a separate update command later.
 </Message>
 
 ### 4.3 (Optional) Create a route stage
@@ -338,27 +338,14 @@ resource "scaleway_edge_services_pipeline" "main" {
 
 An Edge Services pipeline is built from a chain of **stages** that process requests from the public endpoint to your origin (backend). For a simple setup, you need:
 
-1. **TLS stage** (entry point - handles HTTPS termination)
-2. **Backend stage** (origin - where requests are forwarded to your Serverless Container)
+1. **Backend stage** (origin - where requests are forwarded to your Serverless Container)
+2. **TLS stage** (entry point - handles HTTPS termination)
 
 <Message type="note">
 A route stage is optional. It allows you to define routing rules that forward requests to different backends based on path or method patterns. For this tutorial, we will skip the route stage and link the TLS stage directly to the backend stage. A head stage is then required to set the entry point of the pipeline.
 </Message>
 
-### 5.1 Create a TLS stage
-
-Add the TLS stage resource to your `main.tf` file:
-
-```terraform
-resource "scaleway_edge_services_tls_stage" "main" {
-  pipeline_id         = scaleway_edge_services_pipeline.main.id
-  managed_certificate = true
-}
-```
-
-The `managed_certificate = true` parameter tells Scaleway to generate and manage a Let's Encrypt certificate automatically for your Edge Services endpoint.
-
-### 5.2 Create a backend stage
+### 5.1 Create a backend stage
 
 Add the backend stage resource to connect your Serverless Container:
 
@@ -377,11 +364,27 @@ resource "scaleway_edge_services_backend_stage" "main" {
 Replace `"fr-par"` with the region where your Serverless Container is deployed if you are using a different region (e.g., `"nl-ams"`, `"pl-waw"`).
 </Message>
 
-## Step 6: Create a DNS stage and link the stages together
+### 5.2 Create a TLS stage
+
+Add the TLS stage resource to your `main.tf` file. Link it directly to the backend stage using the Terraform resource reference:
+
+```terraform
+resource "scaleway_edge_services_tls_stage" "main" {
+  pipeline_id         = scaleway_edge_services_pipeline.main.id
+  backend_stage_id    = scaleway_edge_services_backend_stage.main.id
+  managed_certificate = true
+}
+```
+
+The `managed_certificate = true` parameter tells Scaleway to generate and manage a Let's Encrypt certificate automatically for your Edge Services endpoint.
+
+<Message type="note">
+By linking the backend stage during TLS stage creation, you avoid needing a separate update command later. This is the same approach as the CLI workflow.
+</Message>
+
+## Step 6: Create a DNS stage and set it as head
 
 A DNS stage is required to expose your pipeline with a public endpoint URL. Create the DNS stage, then link all stages together in a chain.
-
-### 6.1 Create a DNS stage
 
 Add the DNS stage resource to your `main.tf` file:
 
@@ -397,18 +400,6 @@ The DNS stage provides your public endpoint URL in the `default_fqdn` field.
 <Message type="note">
 If you want to use a custom domain, add `fqdns = ["app.example.com"]` to the DNS stage resource. You need to configure a DNS record (CNAME) pointing your domain to the endpoint provided by the DNS stage.
 </Message>
-
-### 6.2 Link the stages together
-
-The stages must be linked in a chain. Update the TLS stage to link to the backend stage:
-
-```terraform
-resource "scaleway_edge_services_tls_stage" "main" {
-  pipeline_id         = scaleway_edge_services_pipeline.main.id
-  backend_stage_id    = scaleway_edge_services_backend_stage.main.id
-  managed_certificate = true
-}
-```
 
 Then create a head stage to set the DNS stage as the pipeline entry point:
 

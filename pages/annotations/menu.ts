@@ -19,16 +19,12 @@ export const annotationsMenu = {
     {
       items: [
         {
-          label: 'XXX',
-          slug: 'xxx',
+          label: 'Configure the Annotations permission sets',
+          slug: 'configure-annotations-permissions',
         },
         {
-          label: 'YYY',
-          slug: 'yyy',
-        },
-        {
-          label: 'ZZZ',
-          slug: 'zzz',
+          label: 'Create annotations',
+          slug: 'how-to-create-annotations',
         },
       ],
       label: 'How to',

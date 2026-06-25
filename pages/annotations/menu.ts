@@ -23,8 +23,20 @@ export const annotationsMenu = {
           slug: 'configure-annotations-permissions',
         },
         {
-          label: 'Use annotations',
-          slug: 'how-to-use-annotations',
+          label: 'Create annotations',
+          slug: 'create-annotations',
+        },
+        {
+          label: 'Bind and detach annotations',
+          slug: 'bind-and-detach-annotations',
+        },
+        {
+          label: 'Manage keys and values',
+          slug: 'manage-keys-values',
+        },
+        {
+          label: 'Delete keys and values',
+          slug: 'delete-keys-values',
         },
       ],
       label: 'How to',

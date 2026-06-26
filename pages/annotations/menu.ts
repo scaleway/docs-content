@@ -55,8 +55,12 @@ export const annotationsMenu = {
     {
       items: [
         {
-          label: 'Scaleway Resource Names',
-          slug: 'scaleway-resource-names',
+          label: 'Scaleway Resource Name',
+          slug: 'scaleway-resource-name',
+        },
+        {
+          label: 'Technical rules and limits',
+          slug: 'technical-rules-limits',
         },
       ],
       label: 'Additional Content',

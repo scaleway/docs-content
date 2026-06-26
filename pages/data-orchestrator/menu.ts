@@ -41,6 +41,10 @@ export const dataOrchestratorMenu = {
     {
       items: [
         {
+          label: 'Action tasks',
+          slug: 'action-tasks',
+        },
+        {
           label: 'Logic tasks',
           slug: 'logic-tasks',
         },

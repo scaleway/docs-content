@@ -13,6 +13,20 @@ export const generativeApisMenu = {
       slug: 'quickstart',
     },
     {
+      items: [
+        {
+          label: 'Overview',
+          slug: 'overview',
+        },
+        {
+          label: 'Pricing and Billing',
+          slug: 'pricing-and-billing',
+        },
+        {
+          label: 'Usages',
+          slug: 'usages',
+        },
+      ],
       label: 'FAQ',
       slug: 'faq',
     },

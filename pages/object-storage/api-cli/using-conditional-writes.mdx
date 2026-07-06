@@ -1,0 +1,141 @@
+---
+title: Using conditional writes
+description: Add logic to your requests and avoid accidental overwrites with conditional writes for Scaleway Object Storage.
+tags: object storage object-storage conditional write overwrite etag if-match if-none-match header
+dates:
+  validation: 2026-07-03
+  posted: 2026-07-03
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+Conditional writes allow you to add an HTTP header to your write requests to specify preconditions for Object Storage operations. The operation proceeds only if the preconditions are met. Object Storage supports two conditional headers:
+
+- The `If-None-Match` header prevents overwrites of existing data by checking that no object with the same key name already exists in the bucket.
+- The `If-Match` header checks an object's entity tag (ETag) before writing. Object Storage compares the ETag value you provide with the ETag of the object stored in the bucket. If the values do not match, the operation fails.
+
+Conditional writes help you add concurrency control to your applications and avoid accidental overwrites when several users write to the same bucket.
+
+<Requirements />
+
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Installed the [AWS CLI](/object-storage/api-cli/object-storage-aws-cli/)
+- An [Object Storage bucket](/object-storage/how-to/create-a-bucket/)
+
+## Preventing object overwrites based on object key names
+
+You can use the `If-None-Match` header to check whether an object already exists in the bucket, based on its key name, before creating or copying it.
+
+Conditional writes with the `If-None-Match` header check for the existence of an object during the write operation. If an identical key name is found in the bucket, the operation fails. Without the `If-None-Match` header, uploading or copying an object with an identical key name in an unversioned or version-suspended bucket overwrites the existing object.
+
+<Message type="note">
+  Set the `If-None-Match` header value to `*` to check against any object with the same key name.
+</Message>
+
+### Conditional put operation
+
+The following `put-object` command performs a conditional write for an object with the specified key. The upload fails if an object with this key already exists.
+
+```bash
+aws s3api put-object --bucket <BUCKET_NAME> --key <OBJECT_KEY> --body <OBJECT_BODY> --if-none-match "*"
+```
+
+### Conditional copy operation
+
+The following `copy-object` command copies an object to a destination bucket with a conditional write for an object with the specified key. The copy fails if an object with this key already exists in the destination bucket.
+
+```bash
+aws s3api copy-object --copy-source <SOURCE_BUCKET_NAME>/<SOURCE_OBJECT_KEY> --key <OBJECT_KEY> --bucket <DESTINATION_BUCKET_NAME> --if-none-match "*"
+```
+
+### Conditional multipart upload operation
+
+Conditional writes apply only to the `complete-multipart-upload` operation, which writes the final object to the bucket. The `create-multipart-upload` and `upload-part` operations do not accept conditional headers. For the full multipart upload workflow, refer to [Managing multipart uploads](/object-storage/api-cli/multipart-uploads/).
+
+The following `complete-multipart-upload` command completes a multipart upload with a conditional write for an object with the specified key. The `file://` prefix loads the JSON structure listing all uploaded parts from a local file named `mpu-parts-list`.
+
+```bash
+aws s3api complete-multipart-upload --multipart-upload file://mpu-parts-list --bucket <BUCKET_NAME> --key <OBJECT_KEY> --upload-id <UPLOAD_ID> --if-none-match "*"
+```
+
+## Preventing overwrites if the object has changed
+
+An object's ETag is a string that is unique to the object and reflects any change to its content. Use the `If-Match` header to compare the ETag of an object in your bucket with the value you provide during the write operation. If the ETag values do not match, the operation fails.
+
+To perform conditional writes with the `If-Match` header, you must have the `s3:PutObject` and `s3:GetObject` permissions. These permissions allow the caller to check the ETag and verify the state of the objects in the bucket. The `If-Match` header expects the ETag value as a string.
+
+To retrieve an object's ETag, run the `head-object` command to get the ETag of an existing object:
+
+  ```bash
+  aws s3api head-object --bucket <BUCKET_NAME> --key <OBJECT_KEY>
+  ```
+  
+  The command returns a JSON response containing the ETag value:
+  
+  ```json
+  {
+      "ETag": "6805f2cfc46c0f04559748bb039d69ae",
+      "ContentType": "application/octet-stream",
+      "Metadata": {}
+  }
+  ```
+
+Use the returned ETag value in your conditional write operations.
+
+### Conditional put
+
+The following `put-object` command performs a conditional write with the ETag value retrieved above.
+
+```bash
+aws s3api put-object --bucket <BUCKET_NAME> --key <OBJECT_KEY> --body <OBJECT_BODY> --if-match "<ETAG>"
+```
+
+### Conditional copy
+
+The following `copy-object` command performs a conditional write with the ETag value retrieved above.
+
+```bash
+aws s3api copy-object --copy-source <SOURCE_BUCKET_NAME>/<SOURCE_OBJECT_KEY> --key <OBJECT_KEY> --bucket <DESTINATION_BUCKET_NAME> --if-match "<ETAG>"
+```
+
+### Conditional multipart upload
+
+Conditional writes apply only to the `complete-multipart-upload` operation, which writes the final object to the bucket. The `create-multipart-upload` and `upload-part` operations do not accept conditional headers. For the full multipart upload workflow, refer to [Managing multipart uploads](/object-storage/api-cli/multipart-uploads/).
+
+The following `complete-multipart-upload` command completes a multipart upload with the ETag value retrieved above. The `file://` prefix loads the JSON structure listing all uploaded parts from a local file named `mpu-parts-list`.
+
+```bash
+aws s3api complete-multipart-upload --multipart-upload file://mpu-parts-list --bucket <BUCKET_NAME> --key <OBJECT_KEY> --upload-id <UPLOAD_ID> --if-match "<ETAG>"
+```
+
+## Enforcing conditional writes with a bucket policy
+
+You can use a [bucket policy](/object-storage/api-cli/bucket-policy/) to enforce conditional writes for object uploads in your bucket. A bucket policy is a resource-based policy that grants access permissions to your bucket and the objects it contains.
+
+Use the `s3:if-match` or `s3:if-none-match` condition keys in the `Condition` block to define when the policy applies. For multipart uploads, use the `s3:ObjectCreationOperation` condition key to exempt the `CreateMultipartUpload`, `UploadPart`, and `UploadPartCopy` operations, as these do not accept conditional headers.
+
+<Message type="important">
+  When you enforce conditional writes with a bucket policy, you cannot perform copy operations to the bucket or prefix specified in the policy. `CopyObject` requests without an `If-None-Match` or `If-Match` header fail with a `403 Access Denied` error, and `CopyObject` requests made with these headers fail with a `501 Not Implemented` response.
+</Message>
+
+The following example bucket policy allows a `PutObject` request only when it includes the `If-None-Match` header, forcing clients to use conditional writes.
+
+```json
+{
+  "Version": "2023-04-17",
+  "Statement": [
+    {
+      "Sid": "EnforceConditionalWrite",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "s3:PutObject",
+      "Resource": "<BUCKET_NAME>/*",
+      "Condition": {
+        "Null": {
+          "s3:if-none-match": "false"
+        }
+      }
+    }
+  ]
+}
+```

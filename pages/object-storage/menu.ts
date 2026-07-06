@@ -149,6 +149,10 @@ export const objectStorageMenu = {
           slug: 'multipart-uploads',
         },
         {
+          label: 'Using conditional writes',
+          slug: 'using-conditional-writes',
+        },
+        {
           label: 'Enabling SSE-C',
           slug: 'enable-sse-c',
         },

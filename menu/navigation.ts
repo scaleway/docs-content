@@ -125,18 +125,6 @@ export default [
         category: 'containers',
       },
       {
-        icon: 'DatabaseCategoryIcon',
-        items: [
-          managedDatabasesForPostgresqlAndMysqlMenu,
-          managedDatabasesForRedisMenu,
-          managedMongodbDatabasesMenu,
-          openSearchMenu,
-          serverlessSqlDatabasesMenu,
-        ],
-        label: 'Databases',
-        category: 'databases',
-      },
-      {
         icon: 'DataAndAnalyticsCategoryIcon',
         items: [
           dataOrchestratorMenu,
@@ -147,6 +135,18 @@ export default [
         ],
         label: 'Data & Analytics',
         category: 'data-and-analytics',
+      },
+      {
+        icon: 'DatabaseCategoryIcon',
+        items: [
+          managedDatabasesForPostgresqlAndMysqlMenu,
+          managedDatabasesForRedisMenu,
+          managedMongodbDatabasesMenu,
+          openSearchMenu,
+          serverlessSqlDatabasesMenu,
+        ],
+        label: 'Databases',
+        category: 'databases',
       },
       {
         icon: 'DevToolsCategoryIcon',
@@ -193,6 +193,12 @@ export default [
         category: 'network',
       },
       {
+        icon: 'LabsCategoryIcon',
+        items: [quantumComputingMenu],
+        label: 'Quantum',
+        category: 'quantum',
+      },
+      {
         icon: 'ServerlessComputeCategoryIcon',
         items: [
           serverlessContainersMenu,
@@ -201,12 +207,6 @@ export default [
         ],
         label: 'Serverless',
         category: 'serverless',
-      },
-      {
-        icon: 'LabsCategoryIcon',
-        items: [quantumComputingMenu],
-        label: 'Quantum',
-        category: 'quantum',
       },
       {
         icon: 'StorageCategoryIcon',

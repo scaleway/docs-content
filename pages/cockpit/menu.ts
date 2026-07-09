@@ -51,6 +51,10 @@ export const cockpitMenu = {
           slug: 'send-metrics-from-k8s-to-cockpit',
         },
         {
+          label: 'Send metrics or logs to Cockpit with OTLP',
+          slug: 'send-metrics-logs-to-cockpit-with-otlp',
+        },
+        {
           label: 'Federate Scaleway metrics with your own Prometheus',
           slug: 'federate-scaleway-metrics',
         },

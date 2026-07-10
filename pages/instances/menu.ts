@@ -23,6 +23,10 @@ export const instancesMenu = {
           slug: 'create-an-instance',
         },
         {
+          label: 'Create and manage Instance templates',
+          slug: 'create-manage-instance-templates',
+        },
+        {
           label: 'Manage Instance storage',
           slug: 'manage-storage',
         },

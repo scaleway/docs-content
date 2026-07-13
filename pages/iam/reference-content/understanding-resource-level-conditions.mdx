@@ -1,0 +1,72 @@
+---
+title: Understanding resource-level conditions
+description: Detailed information on resource-level policy conditions within Scaleway IAM.
+tags: iam resource policy conditions
+dates:
+  posted: 2026-07-13
+  validation: 2026-07-13
+---
+
+Resource-level conditions let you scope a rule to specific resources, based on attributes of the resource being targeted by the request — such as its name, ID, or location.
+
+Resource-level conditions are built using [CEL](/iam/reference-content/understanding-policy-conditions/#common-expression-language) expressions. See [Understanding policy conditions](/iam/reference-content/understanding-policy-conditions) for the general concepts, operators, and logical operators shared by all condition types.
+
+<Message type="important">
+  Resource-level conditions are currently only supported for a limited set of products. See [Products supporting resource-level conditions](/iam/reference-content/supported-products-resource-level/) for the up-to-date list.
+</Message>
+
+## Variables
+
+| Name | Type         | Description |
+| ------------ | ------------------- | ------ |
+| `resource.name` | String | The name of the resource targeted by the request. |
+| `resource.id` | String | The unique ID of the resource targeted by the request. |
+| `resource.locality` | String | The location of the resource targeted by the request (format depends on the product; e.g. region or zone). |
+
+`resource.name` is a mutable attribute: a resource can be renamed at any time. Because of this, a condition based on `resource.name` may stop matching the intended resource — or start matching a different one — if that resource is later renamed. Use `resource.id` instead wherever possible, as it does not change over the resource's lifetime.
+
+<Message type="note">
+  `resource.annotation` is not supported as a condition attribute at this time.
+</Message>
+
+## Supported operators and functions
+
+Resource-level conditions use the same CEL syntax as [Request-level conditions](/iam/reference-content/understanding-request-level-conditions) and the rest of Scaleway's IAM conditions. For the specific operators and functions supported on resource attributes, refer to the [CEL matcher language reference](https://docs.cloud.google.com/secure-web-proxy/docs/cel-matcher-language-reference).
+
+<Message type="note">
+  The Scaleway console and API only validate the **syntax** of a condition expression, not whether it is logically possible to satisfy. For example, the following expressions follow the correct syntax but can never evaluate to true, or reference a resource that doesn't exist:
+
+  ```
+  resource.name == "toto" && resource.name == "tata"
+  ```
+
+  ```
+  resource.name == "tutu"
+  ```
+
+  Make sure to double-check the logic of your condition, as Scaleway does not warn you if it is impossible to satisfy.
+</Message>
+
+## Expression examples
+
+### Restricting access to a resource folder
+
+To grant access only to resources within a given folder, you can use the `startswith()` function on `resource.name`:
+
+```
+resource.name.startswith("/folder/")
+```
+
+This expression matches `/folder/secret1` and `/folder/subfolder/secret2`, but not `/secret3`.
+
+## Resource-level conditions and listing actions
+
+By default, adding a resource-level condition to a rule breaks **listing** actions, since a list request has no single resource to evaluate the condition against. To preserve listing behavior, add `|| !has(resource.id)` to your condition expression.
+
+For example, to preserve listing behavior alongside the folder example above:
+
+```
+resource.name.startswith("/folder/") || !has(resource.id)
+```
+
+More generally, resource-level conditions can affect console behavior in ways beyond listing actions. We recommend testing your conditions carefully after applying them, to confirm they behave as expected.

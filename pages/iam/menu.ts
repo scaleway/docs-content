@@ -117,6 +117,18 @@ export const iamMenu = {
           slug: 'understanding-policy-conditions',
         },
         {
+          label: 'Request-level conditions',
+          slug: 'understanding-request-level-conditions',
+        },
+        {
+          label: 'Resource-level conditions',
+          slug: 'understanding-resource-level-conditions',
+        },
+        {
+          label: 'Products supporting resource-level conditions',
+          slug: 'supported-products-resource-level',
+        },
+        {
           label: 'Permission sets',
           slug: 'permission-sets',
         },

@@ -129,6 +129,10 @@ export const iamMenu = {
           slug: 'supported-products-resource-level',
         },
         {
+          label: 'Understand CEL syntax',
+          slug: 'understand-cel-syntax',
+        },
+        {
           label: 'Permission sets',
           slug: 'permission-sets',
         },

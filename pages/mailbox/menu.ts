@@ -13,6 +13,10 @@ export const mailboxMenu = {
       slug: 'quickstart',
     },
     {
+      label: 'FAQ',
+      slug: 'faq',
+    },
+    {
       items: [
         {
           label: 'Create your Mailbox domain',

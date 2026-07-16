@@ -23,6 +23,7 @@ You are unable to establish a remote desktop (VNC) connection to your Scaleway M
 - Authentication errors occur during connection attempts.
 - Connection times out or is refused.
 - Mac mini appears unreachable.
+- The VNC connection succeeds and authentication is accepted, but the screen is completely black.
 
 ### Possible causes
 - The Mac mini is powered off or unresponsive.
@@ -31,6 +32,7 @@ You are unable to establish a remote desktop (VNC) connection to your Scaleway M
 - Your connection is blocked due to failed attempts.
 - Incorrect credentials are being used.
 - Remote connection client compatibility issues.
+- The `WindowServer` graphics process is stuck and serving a black frame (typically after a very long uptime).
 
 ### Solution
 
@@ -75,7 +77,7 @@ If VNC connection attempts fail repeatedly, your connection may be blocked. [Reb
 Use a compatible VNC client. See [this guide](/apple-silicon/how-to/access-remote-desktop-mac-mini/#comparison-matrix-of-remote-desktop-clients) for recommendations.
 
 #### Reinstall the Mac mini
-If all else fails, [reinstall macOS](/apple-silicon/how-to/reinstall-mac-mini/) via the Scaleway console. 
+If all else fails, [reinstall macOS](/apple-silicon/how-to/reinstall-mac-mini/) via the Scaleway console.
 <Message type="important">
   Reinstalling your Mac mini will delete all data on its disk. Ensure you have a backup of your data before launching any reinstallation.
 </Message>
@@ -106,6 +108,30 @@ If all else fails, [reinstall macOS](/apple-silicon/how-to/reinstall-mac-mini/) 
     ```bash
     sudo killall screensharingd
     ```
+
+### Fixing a black screen by restarting WindowServer via SSH
+If the VNC connection succeeds and your credentials are accepted, but the screen remains completely black, the `WindowServer` graphics process has likely frozen and is serving a black frame to the screen-capture pipeline. This can happen after a very long uptime.
+
+Restarting `screensharingd` does not fix this, because it is respawned on demand for each new connection (a fresh, still-black session starts on every attempt).
+
+<Message type="important">
+  `WindowServer` ignores `SIGTERM`, so a plain `killall WindowServer` has no effect. You must send `SIGKILL` (the `-9` flag).
+</Message>
+
+1. Connect via SSH:
+    ```bash
+    ssh your_mac_mini_username@<your_mac_mini_ip>
+    ```
+2. Force a restart of the graphics session:
+    ```bash
+    sudo killall -9 WindowServer
+    ```
+
+This restarts the graphics session (data on the disk is not affected) and returns the Mac to the login screen. Reconnect via VNC: the screen should now display correctly, and you can log in.
+
+<Message type="note">
+  A software reboot (the console **Reboot** button or `sudo reboot`) can be silently blocked by an application's unsaved-changes dialog that is invisible on the black screen. Restarting `WindowServer` directly avoids this. SSH remains available throughout, so there is no risk of lock-out.
+</Message>
 
 ## Further troubleshooting
 If the issue persists, contact [Scaleway's support](https://console.scaleway.com/support) for assistance.

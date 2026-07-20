@@ -28,9 +28,11 @@ In addition to CPU and RAM, Serverless Jobs also provide a storage volume for th
 
 ## Exit code
 
-An exit code is an integer returned by a process when it finishes running. A value of `0` indicates success, while any non-zero value indicates an error. For Serverless Jobs, the exit code of a [job run](#job-run) determines its outcome: a non-zero exit code causes the job run to reach the `failed` status, which may trigger a [retry](#retries) if the configured retry count is greater than zero. See [Reason](#reason) (`exited_with_error`) for more information about non-zero exit codes.
+An exit code is an integer returned by a process when it finishes running. A value of `0` indicates success, while any non-zero value indicates an error. For Serverless Jobs, the exit code of a [job run](#job-run) determines its outcome:
 
-Note that the exit code can also be `null` when the job run fails before the container process runs or exits, for example when the reason is `image_not_found` or `technical_error`. In these cases the job run still reaches the `failed` status, but no exit code is returned by the runtime.
+- **`0`** — the job run succeeds.
+- **Non-zero** — the job run reaches the `failed` status, which may trigger a [retry](#retries) if the configured retry count is greater than zero. See [Reason](#reason) (`exited_with_error`) for more information about non-zero exit codes.
+- **`null`** — the exit code is not set when the job run fails before the container process runs or exits. The job run still reaches the `failed` status, but no exit code is returned by the runtime. This typically happens for reasons such as `image_not_found` or `technical_error`.
 
 ## GB-s
 
@@ -80,6 +82,8 @@ A retry is triggered when all the following conditions are met:
 
 - The job run does not succeed and exits with an exit code other than zero.
 - The maximum number of retry attempts has not been reached.
+
+Note that `succeeded` and `failed` are **final** statuses. When a retry is configured and the job run encounters an error during execution, it does not transition through `failed` first. Instead, it goes directly from `running` to `retrying`, and only reaches `failed` once all retry attempts are exhausted (or `succeeded` if a retry succeeds). This means a job run that will be retried never passes through the `failed` status between attempts.
 
 [Learn how to manage the retry attempts of a Serverless Job.](/serverless-jobs/how-to/manage-job-retries/)
 
@@ -131,11 +135,11 @@ A Serverless Job run can have the following statuses:
 * **`failed`**: The job run finished with an error, see [Reason](#reason) for detailed information about the error. [Check our troubleshooting documentation](/serverless-jobs/troubleshooting/job-in-error-state/) to solve the issue. 
 * **`interrupting`**: A request to stop the job (via user action or system preemption) is currently being processed.
 * **`interrupted`**: The job was stopped before it could finish naturally, see [Reason](#reason) for details about the interruption.
-* **`retrying`**: The job run failed and is being automatically re-executed, based on the configured retry policy. See [Retries](#retries) for more information.
+* **`retrying`**: The job run encountered an error during execution and is being automatically re-executed, based on the configured retry policy. Note that the job run transitions directly from `running` to `retrying` — it does not pass through `failed`, which is a final status only reached when all retry attempts are exhausted. See [Retries](#retries) for more information.
 
 Typical successful flow is: `initialized -> validated -> queued -> running -> succeeded`.
 
-When retries are configured, a failed job run transitions to `retrying` before being re-executed: `initialized -> validated -> queued -> running -> failed -> retrying -> queued -> running -> succeeded`.
+When retries are configured, a job run that errors during execution transitions directly from `running` to `retrying` (not through `failed`, which is a final status), then is re-executed: `initialized -> validated -> queued -> running -> retrying -> queued -> running -> succeeded`. Only when all retry attempts are exhausted does the job run reach the final `failed` status: `initialized -> validated -> queued -> running -> retrying -> queued -> running -> ... -> failed`.
 
 ### Reason
 

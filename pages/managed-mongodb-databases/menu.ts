@@ -43,6 +43,10 @@ export const managedMongodbDatabasesMenu = {
           slug: 'increase-volume',
         },
         {
+          label: 'Upgrade MongoDB Database Instance engine versions',
+          slug: 'mongodb-upgrade-engine-version',
+        },
+        {
           label: 'Delete a Database Instance',
           slug: 'delete-a-database-instance',
         },

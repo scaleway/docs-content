@@ -75,8 +75,8 @@ export const managedDatabasesForPostgresqlAndMysqlMenu = {
           slug: 'monitor-databases-cockpit',
         },
         {
-          label: 'Upgrade Database Instance engine versions',
-          slug: 'upgrade-version',
+          label: 'Upgrade PostgreSQL and MySQL Database Instance engine versions',
+          slug: 'postgresql-upgrade-version',
         },
         {
           label: 'Apply scheduled maintenance',

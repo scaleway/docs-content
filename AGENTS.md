@@ -5,12 +5,19 @@ description: Overview of the docs‑content repository for AI‑agents
 
 # AGENTS.md - Scaleway Documentation Content
 
+## Purpose
+
+This file helps AI/LLM agents understand the structure, tooling, and conventions of the
+Scaleway documentation repository so they can make consistent, high-quality contributions.
+
 ## Project Overview
 
-This repository hosts the **Scaleway Documentation Platform** content. The goal is to provide information about all resources in the Scaleway ecosystem and the procedures users should follow to get the best experience from products and services.
+This repository hosts the **Scaleway Documentation** content. The goal of Scaleway documentation is to provide information about all resources in the Scaleway ecosystem and the procedures users should follow to get the best experience from products and services.
 
 **Repository**: [scaleway/docs-content](https://github.com/scaleway/docs-content)  
 **Website**: [scaleway.com/en/docs](https://www.scaleway.com/en/docs/)
+
+Scaleway documentation content is authored in MDX and includes React components to add dynamic, interactive elements.
 
 ## Content Types
 
@@ -66,7 +73,6 @@ docs-content/
 └── tutorials/                      # Standalone tutorial content
 ```
 
-
 ## Content Authoring Conventions
 
 ### Frontmatter Structure
@@ -88,7 +94,7 @@ categories:
 
 ### Navigation Structure
 
-Each product directory contains a `menu.ts` file defining its navigation:
+Each product directory contains a `menu.ts` file defining its navigation. The following example uses the Instances product to illustrate how `menu.ts` works.
 
 ```typescript
 export const instancesMenu = {
@@ -116,7 +122,7 @@ macro: compute-instances
 ---
 ```
 
-Used to embed consistent definitions across multiple pages.
+Macros embed consistent, reusable content snippets across multiple pages from a single source.
 
 ### MDX Components
 
@@ -134,7 +140,7 @@ For full component reference, see: [storybook-docs.scaleway.com](https://storybo
 
 ## Product Categories
 
-The navigation is organized into these main categories:
+The navigation of the documentation website [scaleway.com/en/docs](https://www.scaleway.com/en/docs/) is organized into these main categories (to match the navigation of the Scaleway console):
 
 ### Management & Governance
 - Account, Billing, Environmental Footprint
@@ -160,7 +166,7 @@ The navigation is organized into these main categories:
 
 ## Contributing
 
-See `CONTRIBUTING.md` for the full guide.
+See [CONTRIBUTING.md]((./docs/CONTRIBUTING.md)) for the full guide.
 
 ### Branch Naming Convention
 
@@ -201,13 +207,17 @@ type(module): description PROJECT-XXX
 docs(product_name): description with some words
 ```
 
+## Building and Serving Locally
+
+This repository only hosts the documentation site content, and does not include any of the frontend or backend components required to build or render the site.
+
 ## Important Notes
 
 - This repository contains **content only** - no frontend/backend for building the site
 - Internal Scaleway users have access to internal preview tools
 - All PRs are reviewed and approved by the Scaleway Product Documentation team
 - Files use `.mdx` extension for extended Markdown with React components
-- Slugs must be kebab-case (use `pnpm check-slugs` to validate)
+- Slugs must be kebab-case
 
 ## Related Resources
 

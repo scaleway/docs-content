@@ -166,7 +166,7 @@ The navigation of the documentation website [scaleway.com/en/docs](https://www.s
 
 ## Contributing
 
-See [CONTRIBUTING.md]((./docs/CONTRIBUTING.md)) for the full guide.
+See [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for the full guide.
 
 ### Branch Naming Convention
 

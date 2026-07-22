@@ -26,6 +26,14 @@ An environment variable is a variable whose value is set outside the program, ty
 
 In addition to CPU and RAM, Serverless Jobs also provide a storage volume for the duration of the task. This storage space allows to hold the data retrieved by the job, and disappears once the execution is complete.
 
+## Exit code
+
+An exit code is an integer returned by a process when it finishes running. A value of `0` indicates success, while any non-zero value indicates an error. For Serverless Jobs, the exit code of a [job run](#job-run) determines its outcome:
+
+- **`0`** — the job run succeeds.
+- **Non-zero** — the job run reaches the `failed` status, which may trigger a [retry](#retries) if the configured retry count is greater than zero. See [Reason](#reason) (`exited_with_error`) for more information about non-zero exit codes.
+- **`null`** — the exit code is not set when the job run fails before the container process runs or exits. The job run still reaches the `failed` status, but no exit code is returned by the runtime. This typically happens for reasons such as `image_not_found` or `technical_error`.
+
 ## GB-s
 
 Unit used to measure the resource consumption of a container. It reflects the amount of memory consumed over time.
@@ -68,7 +76,16 @@ Refer to the [dedicated FAQ](/serverless-jobs/faq/#how-can-i-configure-access-to
 
 ## Retries
 
-Retries refer to the automatic re-execution of a failed job run. You can configure Serverless Jobs to automatically retry a job run after up to five failed attempts. [Learn how to manage the retry attempts of a Serverless Job.](/serverless-jobs/how-to/manage-job-retries/)
+Retries refer to the automatic re-execution of a failed job run. You can configure Serverless Jobs to automatically retry a job run after up to five failed attempts.
+
+A retry is triggered when all the following conditions are met:
+
+- The job run does not succeed and exits with an exit code other than zero.
+- The maximum number of retry attempts has not been reached.
+
+Note that `succeeded` and `failed` are **final** statuses. When a retry is configured and the job run encounters an error during execution, it does not transition through `failed` first. Instead, it goes directly from `running` to `retrying`, and only reaches `failed` once all retry attempts are exhausted (or `succeeded` if a retry succeeds). This means a job run that will be retried never passes through the `failed` status between attempts.
+
+[Learn how to manage the retry attempts of a Serverless Job.](/serverless-jobs/how-to/manage-job-retries/)
 
 ## Schedule (deprecated)
 
@@ -109,20 +126,26 @@ Refer to the [official Kubernetes documentation](https://kubernetes.io/docs/task
 
 ## Status
 
-A Serverless Job run can have the following statuses:
+A Serverless Job run can have the following statuses, grouped into **transient statuses** (the job run is still progressing through its lifecycle) and **final statuses** (the job run has reached a terminal status and will not change anymore):
+
+### Transient statuses
+
 * **`initialized`**: The job has been created in the system but has not yet entered the processing pipeline.
 * **`validated`**: The job configuration and resources have been verified and are ready for scheduling.
 * **`queued`**: The job is waiting for compute resources to become available.
 * **`running`**: The job run is currently being executed.
+* **`interrupting`**: A request to stop the job (via user action or system preemption) is currently being processed.
+* **`retrying`**: The job run encountered an error during execution and is being automatically re-executed, based on the configured retry policy. Note that the job run transitions directly from `running` to `retrying` — it does not pass through `failed`, which is a final status only reached when all retry attempts are exhausted. See [Retries](#retries) for more information.
+
+### Final statuses
+
 * **`succeeded`**: The job has successfully completed.
 * **`failed`**: The job run finished with an error, see [Reason](#reason) for detailed information about the error. [Check our troubleshooting documentation](/serverless-jobs/troubleshooting/job-in-error-state/) to solve the issue. 
-* **`interrupting`**: A request to stop the job (via user action or system preemption) is currently being processed.
 * **`interrupted`**: The job was stopped before it could finish naturally, see [Reason](#reason) for details about the interruption.
-* **`retrying`**: The job run failed and is being automatically re-executed, based on the configured retry policy. See [Retries](#retries) for more information.
 
 Typical successful flow is: `initialized -> validated -> queued -> running -> succeeded`.
 
-When retries are configured, a failed job run transitions to `retrying` before being re-executed: `initialized -> validated -> queued -> running -> failed -> retrying -> queued -> running -> succeeded`.
+When retries are configured, a job run that errors during execution transitions directly from `running` to `retrying` (not through `failed`, which is a final status), then is re-executed: `initialized -> validated -> queued -> running -> retrying -> queued -> running -> succeeded`. Only when all retry attempts are exhausted does the job run reach the final `failed` status: `initialized -> validated -> queued -> running -> retrying -> queued -> running -> ... -> failed`.
 
 ### Reason
 

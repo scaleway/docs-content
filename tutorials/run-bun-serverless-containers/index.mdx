@@ -1,0 +1,141 @@
+---
+title: Running a Bun application on Serverless Containers
+description: This page provides guidelines on how to host and deploy a Bun application using Scaleway Serverless Containers
+tags: deploy host website webapp bun javascript typescript containerize application docker dockerfile
+products:
+  - containers
+  - container-registry
+dates:
+  validation: 2026-07-17
+  posted: 2026-07-17
+  validation_frequency: 12
+difficulty: beginner
+usecase:
+  - application-hosting
+  - deploy-external-software
+  - website-hosting
+ecosystem:
+  - third-party
+---
+
+import Requirements from '@macros/iam/requirements.mdx'
+
+[Bun](https://bun.sh/) is an all-in-one JavaScript and TypeScript runtime toolkit built for speed, combining a fast bundler, transpiler, and package manager in a single binary. Hosting Bun on [Scaleway Serverless Containers](/serverless-containers/) provides automatic scaling, simplified deployment, and reduced infrastructure management. Thanks to Bun's quick startup time and small memory footprint, this combination is a great fit for serverless workloads, allowing you to minimize [cold starts](/serverless-containers/concepts/#cold-start) while focusing on writing code rather than maintaining servers.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- Installed [Docker](https://docs.docker.com/get-started/get-docker/) or [Docker Engine](https://docs.docker.com/engine/install/)
+- Installed [Bun](https://bun.sh/) on your local machine
+- [Created a Scaleway Container Registry namespace](/container-registry/how-to/create-namespace/) and [logged into it](/container-registry/how-to/connect-docker-cli/)
+
+## Create and host a basic Bun application
+
+To host a [Bun](https://bun.sh/) web application on **Scaleway Serverless Containers**, you need to create a Bun project, implement a simple HTTP server using the native `Bun.serve` API, and containerize it using a production-ready `Dockerfile`. After building the image locally, push it to the [Scaleway Container Registry](/container-registry/) and deploy it via [Scaleway Serverless Containers](/serverless-containers/).
+
+### Create your app and test it locally
+
+1. In a terminal, create a new directory and navigate into it:
+    ```bash
+    mkdir my-bun-app
+    cd my-bun-app
+    ```
+
+2. Initialize a new Bun project:
+    ```bash
+    bun init -y
+    ```
+
+3. Create a `src` directory and add an `index.ts` file with the following code. This starts a simple HTTP server using Bun's native `Bun.serve` API:
+    ```ts
+    const PORT = process.env.PORT || 3000;
+
+    const server = Bun.serve({
+      port: PORT,
+      fetch(req) {
+        const url = new URL(req.url);
+        if (url.pathname === "/") {
+          return new Response("Hello from Bun on Scaleway Serverless Containers!");
+        }
+        return new Response("Not Found", { status: 404 });
+      },
+    });
+
+    console.log(`Bun app running on http://localhost:${server.port}`);
+    ```
+
+4. Verify your project structure:
+    ```
+    my-bun-app/
+    ├── src/
+    │   └── index.ts           # HTTP server entry point
+    ├── package.json           # Dependencies and scripts
+    ├── bun.lockb              # Locked dependencies
+    └── tsconfig.json          # TypeScript configuration
+    ```
+
+5. Run the following command to start your application locally:
+    ```bash
+    bun run src/index.ts
+    ```
+
+    Visit [http://localhost:3000](http://localhost:3000) to view your running Bun application.
+
+### Build the app image and push it to Scaleway Container Registry
+
+Before building and pushing your image, ensure you have [created a Scaleway Container Registry namespace](/container-registry/how-to/create-namespace/), and [logged into it with the Docker CLI](/container-registry/how-to/connect-docker-cli/).
+
+1. Create a `Dockerfile` at the root of your Bun app:
+    ```dockerfile
+    # Use the official Bun image
+    FROM oven/bun:1
+
+    # Set working directory
+    WORKDIR /app
+
+    # Copy the application code
+    COPY . .
+
+    # Expose port
+    EXPOSE 3000
+
+    # Run the Bun application
+    CMD ["bun", "run", "src/index.ts"]
+    ```
+
+2. Create a `.dockerignore` file in the same directory as your Dockerfile to keep the image lightweight:
+    ```
+    node_modules
+    .git
+    ```
+
+3. Build, tag, and push the image to Scaleway Container Registry:
+    ```bash
+    docker build \
+      --platform linux/amd64 \
+      --push \
+      -t <CONTAINER_REGISTRY_ENDPOINT>/my-bun-app:latest .
+    ```
+
+    <Message type="note">
+    You can find your Container Registry endpoint in the **Overview** tab of your Container Registry namespace in the [Scaleway console](https://console.scaleway.com/registry/namespaces).
+    </Message>
+
+### Deploy your app using Serverless Containers
+
+1. [Deploy a Serverless Container](/serverless-containers/how-to/deploy-container/) with the following settings:
+    - **Registry**: Scaleway Container Registry
+    - **Registry namespace**: The namespace where you pushed your image
+    - **Container port**: `3000` as it is the [port](/serverless-containers/reference-content/port-parameter-variable/) exposed in the dockerfile
+    - **Resources**: `500 mVCPU` and `512 MB` memory
+    - **Autoscaling**: Set minimum scale to `1` to avoid [cold starts](/serverless-containers/concepts/#cold-start) (optional)
+
+    Deployment may take up to a minute.
+
+2. Once the container is **ready**, click the **container endpoint** in the **Overview** tab. Your Bun app is live and accessible to anyone with the link.
+
+## Going further
+
+- You can deploy an existing Bun project by building and pushing its container image as shown above.
+- [Add a custom domain](/serverless-containers/how-to/add-a-custom-domain-to-a-container/) to your deployed app.

@@ -138,15 +138,37 @@ This project uses MDX (Markdown + React components). Key components include:
 
 For full component reference, see: [storybook-docs.scaleway.com](https://storybook-docs.scaleway.com/)
 
+## Writing Guidelines
+
+See [Writing Guidelines](.pages/guidelines.mdx) for the full documentation style guide.
+
+- Language: Use American English (US English) spelling exclusively (e.g., "center" not "centre", "recognize" not "recognise").
+- Tone: Use present tense, active voice. Maintain a formal tone. Do not use passive voice, "please", "thank you", future tense, or contractions.
+- Pronouns: Address the user as "you". Refer to Scaleway as "Scaleway".
+- File format: All pages must be .mdx files. All images must be .webp format.
+- Page structure: Include metadata in the frontmatter YAML, Introduction, Requirements (when applicable), and Page body in that order.
+- Headings: Only one H1 per page (the title). Use H2/H3 for subsections. All headings must be in sentence case.
+- Numbered steps: Use numbered steps for instructions. Each step = one action, starting with an imperative verb.
+- Code blocks: Use triple backticks with language specification (e.g., ```python).
+- Inline code: Use backticks for environment variables, placeholders, and short code snippets.
+- Links: Use descriptive link text (not "here" or "this page"). Use relative links with leading and trailing slashes for internal pages.
+- Admonitions: Use one of the following message boxes: Tip, Note, Important. Do not use tables in message boxes.
+- Bold text: Use bold for console navigation elements and button names (e.g., Click Create Instance).
+- Capitalization: Capitalize product names (Instance, Load Balancer). Do not capitalize feature names unless they are Scaleway-specific terms (InstantApp, Easy Deploy). Use sentence-case capitalization in titles and headings.
+- Numbers: Write numbers 1-9 in full. Use numerals for 10+. Use commas to separate thousands.
+- Dates/Times: Use 24-hour format for times. Use day/month/year or DD/MM/YY for dates. Avoid ordinals (e.g., "14 January" not "14th January").
+
 ## Product Categories
 
 The navigation of the documentation website [scaleway.com/en/docs](https://www.scaleway.com/en/docs/) is organized into these main categories (to match the navigation of the Scaleway console):
 
 ### Management & Governance
+
 - Account, Billing, Environmental Footprint
 - Security & Identity (IAM, Key Manager, Organizations, Secret Manager)
 
 ### Products
+
 - **AI**: Generative APIs
 - **Bare Metal**: Apple Silicon, Elastic Metal, Dedibox
 - **Compute**: Instances, GPU
@@ -162,6 +184,7 @@ The navigation of the documentation website [scaleway.com/en/docs](https://www.s
 - **Storage**: Block Storage, File Storage, Local Storage, Object Storage
 
 ### Dedibox (separate console)
+
 - Dedibox Console, Servers, Network
 
 ## Contributing
@@ -206,6 +229,29 @@ type(module): description PROJECT-XXX
 ```
 docs(product_name): description with some words
 ```
+
+### Agent Attributions
+
+All agent-drafted content must add `draftedBy` metadata as the last line of the YAML frontmatter, using the following format:
+
+```yaml
+---
+title: Page Title
+description: One-sentence description for SEO
+tags: tag1 tag2 tag3
+dates:
+  validation: 2024-01-01
+  posted: 2024-01-01
+categories:
+  - product-category
+draftedBy: agent-name version
+---
+```
+
+### Strict Boundaries
+
+- You MAY edit files in the `macros`, `pages`, and `tutorials` directories.
+- You MUST NEVER modify files in the `.github`, `assets`, `bin`, `blocks`, `changelog`, `docs`, `menu`, and the root directories.
 
 ## Building and Serving Locally
 

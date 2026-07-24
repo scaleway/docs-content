@@ -1,0 +1,418 @@
+---
+title: How to use Vertical Pod Autoscaler with Kubernetes Kapsule
+description: Learn how to configure and use Vertical Pod Autoscaler (VPA) to automatically adjust CPU and memory requests for your workloads on Scaleway Kubernetes Kapsule.
+tags: kubernetes vpa autoscaling kapsule resource-management
+dates:
+  validation: 2026-07-24
+  posted: 2026-07-24
+draftedBy: cline v1
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+This guide explains how to configure and use Vertical Pod Autoscaler (VPA) with Scaleway Kubernetes Kapsule. VPA automatically adjusts the CPU and memory requests and limits for containers based on historical and real-time resource usage, helping optimize cluster efficiency and reduce resource waste.
+
+<Requirements />
+
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An active [Scaleway Kubernetes Kapsule cluster](/kubernetes/how-to/create-cluster/) with version 1.25 or later
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) installed and configured to connect to your cluster
+- [Metrics Server](https://github.com/kubernetes-sigs/metrics-server) enabled on your cluster
+- [Vertical Pod Autoscaler](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler) installed on your cluster
+
+## Install Vertical Pod Autoscaler
+
+Install VPA on your Kubernetes Kapsule cluster.
+
+1. Clone the VPA repository to your local machine:
+
+    ```bash
+    git clone https://github.com/kubernetes/autoscaler.git
+    cd autoscaler/vertical-pod-autoscaler
+    ```
+
+2. Run the VPA installation script:
+
+    ```bash
+    ./hack/vpa-up.sh
+    ```
+
+    <Message type="note">
+      The installation script creates RBAC permissions, custom resource definitions, and deploys VPA components (recommender, updater, and admission controller) to the `kube-system` namespace.
+    </Message>
+
+3. Verify VPA components are running:
+
+    ```bash
+    kubectl get pods -n kube-system | grep vpa
+    ```
+
+    The output shows the recommender, updater, and admission-controller Pods in `Running` state.
+
+4. Verify the VPA custom resource definition is created:
+
+    ```bash
+    kubectl get crd verticalpodautoscalers.autoscaling.k8s.io
+    ```
+
+## Create a VPA resource
+
+Configure VPA to analyze and manage resources for your deployment.
+
+### Create a VPA in Off mode
+
+Start with VPA in `Off` mode to observe recommendations without automatic changes.
+
+1. Create a file named `vpa.yaml` with the following content:
+
+    ```yaml
+    apiVersion: autoscaling.k8s.io/v1
+    kind: VerticalPodAutoscaler
+    metadata:
+      name: my-app-vpa
+      namespace: default
+    spec:
+      targetRef:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: my-app
+      updatePolicy:
+        updateMode: Off
+    ```
+
+    <Message type="important">
+      Replace `my-app` with the name of your existing deployment. The deployment must have resource requests configured for VPA to provide recommendations.
+    </Message>
+
+2. Apply the VPA configuration:
+
+    ```bash
+    kubectl apply -f vpa.yaml
+    ```
+
+3. View VPA recommendations after allowing time for data collection (approximately 5-10 minutes):
+
+    ```bash
+    kubectl describe vpa my-app-vpa
+    ```
+
+    The output displays recommended resource values based on historical usage analysis.
+
+### Enable VPA in Auto mode
+
+Configure VPA to automatically apply recommendations.
+
+1. Update the VPA resource to use `Auto` mode:
+
+    ```yaml
+    apiVersion: autoscaling.k8s.io/v1
+    kind: VerticalPodAutoscaler
+    metadata:
+      name: my-app-vpa
+      namespace: default
+    spec:
+      targetRef:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: my-app
+      updatePolicy:
+        updateMode: Auto
+      resourcePolicy:
+        containerPolicies:
+        - containerName: my-app-container
+          minAllowed:
+            cpu: "50m"
+            memory: "64Mi"
+          maxAllowed:
+            cpu: "2"
+            memory: "2Gi"
+          controlledResources:
+          - cpu
+          - memory
+          controlledValues: RequestsAndLimits
+    ```
+
+    <Message type="tip">
+      `Auto` mode allows VPA to intelligently choose between `Initial` and `Recreate` update modes based on potential disruption. Use this mode for production workloads.
+    </Message>
+
+2. Apply the updated configuration:
+
+    ```bash
+    kubectl apply -f vpa.yaml
+    ```
+
+3. Monitor VPA status:
+
+    ```bash
+    kubectl get vpa my-app-vpa
+    ```
+
+## Configure VPA update modes
+
+Choose the appropriate update mode for your workload requirements.
+
+### Use Initial mode
+
+Apply recommendations only when Pods are created.
+
+1. Configure the VPA with `Initial` mode:
+
+    ```yaml
+    spec:
+      updatePolicy:
+        updateMode: Initial
+    ```
+
+2. Apply the configuration:
+
+    ```bash
+    kubectl apply -f vpa.yaml
+    ```
+
+3. Delete existing Pods to trigger recreation with new resources:
+
+    ```bash
+    kubectl rollout restart deployment/my-app
+    ```
+
+### Use Recreate mode
+
+Enable automatic Pod recreation when VPA determines resources need adjustment.
+
+1. Configure the VPA with `Recreate` mode:
+
+    ```yaml
+    spec:
+      updatePolicy:
+        updateMode: Recreate
+    ```
+
+    <Message type="important">
+      `Recreate` mode evicts Pods when resource recommendations change. This causes brief downtime during Pod recreation. Use with caution in production environments.
+    </Message>
+
+2. Apply the configuration:
+
+    ```bash
+    kubectl apply -f vpa.yaml
+    ```
+
+## Configure resource policies
+
+Define minimum and maximum resource bounds for VPA recommendations.
+
+### Set min/max resource limits
+
+1. Create or update the VPA resource with resource policies:
+
+    ```yaml
+    apiVersion: autoscaling.k8s.io/v1
+    kind: VerticalPodAutoscaler
+    metadata:
+      name: my-app-vpa
+      namespace: default
+    spec:
+      targetRef:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: my-app
+      updatePolicy:
+        updateMode: Auto
+      resourcePolicy:
+        containerPolicies:
+        - containerName: my-app-container
+          minAllowed:
+            cpu: "100m"
+            memory: "128Mi"
+          maxAllowed:
+            cpu: "4"
+            memory: "8Gi"
+    ```
+
+2. Apply the configuration:
+
+    ```bash
+    kubectl apply -f vpa.yaml
+    ```
+
+### Control specific resources
+
+Configure VPA to manage only CPU or memory.
+
+1. Update the VPA to control only CPU:
+
+    ```yaml
+    spec:
+      resourcePolicy:
+        containerPolicies:
+        - containerName: my-app-container
+          controlledResources:
+          - cpu
+    ```
+
+2. Apply the configuration:
+
+    ```bash
+    kubectl apply -f vpa.yaml
+    ```
+
+### Exclude sidecar containers
+
+Prevent VPA from managing specific containers like sidecars.
+
+1. Configure selective container management:
+
+    ```yaml
+    spec:
+      resourcePolicy:
+        containerPolicies:
+        - containerName: main-app
+          controlledResources:
+          - cpu
+          - memory
+        - containerName: sidecar-logger
+          mode: Off
+    ```
+
+2. Apply the configuration:
+
+    ```bash
+    kubectl apply -f vpa.yaml
+    ```
+
+## Monitor VPA recommendations
+
+View and analyze VPA resource recommendations.
+
+### Check VPA status
+
+1. List all VPA resources:
+
+    ```bash
+    kubectl get vpa
+    ```
+
+2. Describe a specific VPA for detailed information:
+
+    ```bash
+    kubectl describe vpa my-app-vpa
+    ```
+
+### View recommended resources
+
+1. Get VPA recommendations in YAML format:
+
+    ```bash
+    kubectl get vpa my-app-vpa -o yaml
+    ```
+
+2. Review the recommendation values:
+    - `lowerBound`: Minimum recommended resources
+    - `target`: Optimal recommended resources
+    - `upperBound`: Maximum recommended resources before considering horizontal scaling
+
+## Troubleshoot VPA
+
+Resolve common VPA issues.
+
+### VPA shows no recommendations
+
+**Problem:** VPA status shows empty recommendations or "No metrics available".
+
+**Solution:**
+
+1. Verify Metrics Server is running:
+
+    ```bash
+    kubectl top pods -n kube-system
+    ```
+
+2. Check if target Pods have been running long enough (minimum 5 minutes):
+
+    ```bash
+    kubectl get pods -l app=my-app -o wide
+    ```
+
+3. Review VPA recommender logs:
+
+    ```bash
+    kubectl logs -n kube-system deployment/vpa-recommender
+    ```
+
+### VPA conflicts with HPA
+
+**Problem:** Both VPA and HPA manage the same workload, causing instability.
+
+**Solution:**
+
+1. Check for conflicting configurations:
+
+    ```bash
+    kubectl get hpa,vpa -l app=my-app
+    ```
+
+2. Remove one of the autoscalers:
+
+    ```bash
+    kubectl delete vpa my-app-vpa
+    ```
+
+    <Message type="important">
+      Do not use VPA and HPA together on the same resource metric (CPU or memory) for the same workload. VPA modifies resource requests, which interferes with HPA utilization calculations.
+    </Message>
+
+### Pods stuck in Pending state
+
+**Problem:** VPA evicts Pods but new Pods remain in `Pending` state.
+
+**Solution:**
+
+1. Check cluster capacity:
+
+    ```bash
+    kubectl top nodes
+    ```
+
+2. Review pending Pod events:
+
+    ```bash
+    kubectl describe pods -l app=my-app
+    ```
+
+3. Adjust VPA `maxAllowed` values or add cluster nodes.
+
+## Remove VPA
+
+Uninstall VPA from your cluster.
+
+1. Delete VPA resources:
+
+    ```bash
+    kubectl delete vpa --all
+    ```
+
+2. Remove VPA components completely:
+
+    ```bash
+    cd autoscaler/vertical-pod-autoscaler
+    ./hack/vpa-down.sh
+    ```
+
+    <Message type="note">
+      This removes all VPA components, CRDs, and RBAC permissions from your cluster.
+    </Message>
+
+3. Verify VPA is removed:
+
+    ```bash
+    kubectl get vpa
+    kubectl get pods -n kube-system | grep vpa
+    ```
+
+## Related resources
+
+- [Kubernetes VPA official documentation](https://kubernetes.io/docs/concepts/workloads/autoscaling/vertical-pod-autoscale/)
+- [VPA GitHub repository](https://github.com/kubernetes/autoscaler/tree/master/vertical-pod-autoscaler)
+- [Kubernetes Horizontal Pod Autoscaler tutorial](/tutorials/kubernetes-horizontal-pod-autoscaler/)
+- [Manage Kubernetes Kapsule node pools](/kubernetes/how-to/manage-node-pools/)

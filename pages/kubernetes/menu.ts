@@ -107,6 +107,10 @@ export const kubernetesMenu = {
           label: 'Delete a cluster',
           slug: 'delete-cluster',
         },
+        {
+          label: 'Use Vertical Pod Autoscaler',
+          slug: 'use-vertical-pod-autoscaler',
+        },
       ],
       label: 'How to',
       slug: 'how-to',

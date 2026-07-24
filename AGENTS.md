@@ -147,7 +147,7 @@ See [Writing Guidelines](.pages/guidelines.mdx) for the full documentation style
 - Pronouns: Address the user as "you". Refer to Scaleway as "Scaleway".
 - File format: All pages must be .mdx files. All images must be .webp format.
 - Page structure: Include metadata in the frontmatter YAML, Introduction, Requirements (when applicable), and Page body in that order.
-- Headings: Only one H1 per page (the title). Use H2/H3 for subsections. All headings must be in sentence case.
+- Headings: Treat the title in the frontmatter YAML as the H1 heading, it must be the only H1 heading, and use H2/H3 for subsections. All headings must be in sentence case.
 - Numbered steps: Use numbered steps for instructions. Each step = one action, starting with an imperative verb.
 - Code blocks: Use triple backticks with language specification (e.g., ```python).
 - Inline code: Use backticks for environment variables, placeholders, and short code snippets.

@@ -1,0 +1,554 @@
+---
+title: Kubernetes Horizontal Pod Autoscaler
+description: Learn how to configure and use Horizontal Pod Autoscaler (HPA) to automatically scale your applications on Scaleway Kubernetes Kapsule based on CPU and memory metrics.
+tags: kubernetes hpa autoscaling scaling kapsule
+products:
+  - kubernetes
+dates:
+  validation: 2026-07-24
+  posted: 2026-07-24
+  validation_frequency: 12
+draftedBy: cline v1
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+# Kubernetes Horizontal Pod Autoscaler
+
+This tutorial explains how to implement Horizontal Pod Autoscaler (HPA) on Scaleway Kubernetes Kapsule. HPA automatically scales the number of Pods in a deployment based on observed CPU utilization, memory usage, or custom metrics. This ensures your applications maintain performance during traffic spikes while optimizing resource costs during low-demand periods.
+
+<Requirements />
+
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- An active [Scaleway Kubernetes Kapsule cluster](/kubernetes/how-to/create-cluster/) with version 1.24 or later
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) installed and configured to connect to your cluster
+- [Metrics Server](https://github.com/kubernetes-sigs/metrics-server) enabled on your cluster (required for CPU/memory-based autoscaling)
+- Basic understanding of Kubernetes resources (Deployments, Pods, Services)
+
+## Overview of Horizontal Pod Autoscaler
+
+Horizontal Pod Autoscaler (HPA) is a Kubernetes feature that automatically adjusts the number of Pod replicas in a deployment, replica set, or stateful set based on observed metrics. Unlike Vertical Pod Autoscaler (VPA), which adjusts resource requests and limits, HPA scales the number of replicas horizontally.
+
+### How HPA works
+
+The HPA controller continuously monitors the metrics specified in the HPA resource configuration. When metrics exceed the target threshold, HPA increases the number of replicas. When metrics fall below the threshold, HPA reduces the number of replicas.
+
+The scaling decision follows this formula:
+
+```
+desiredReplicas = currentReplicas * (currentMetricValue / desiredMetricValue)
+```
+
+### HPA API versions
+
+Kubernetes supports multiple HPA API versions:
+
+| API VERSION | KUBERNETES VERSION | FEATURES |
+|-------------|-------------------|----------|
+| `autoscaling/v1` | 1.2+ | CPU-based scaling only |
+| `autoscaling/v2beta1` | 1.6+ | Multiple metrics support (deprecated) |
+| `autoscaling/v2beta2` | 1.12+ | Improved metrics specification (deprecated) |
+| `autoscaling/v2` | 1.23+ | Current stable version with full features |
+
+This tutorial uses `autoscaling/v2`, the current stable API version.
+
+## Prerequisites
+
+### Verify cluster connectivity
+
+Ensure kubectl is configured to connect to your Kubernetes cluster:
+
+```bash
+kubectl cluster-info
+```
+
+The output displays information about your cluster's control plane and core services.
+
+### Verify Metrics Server is running
+
+HPA requires the Metrics Server to collect resource metrics from your cluster nodes:
+
+```bash
+kubectl get deployment metrics-server -n kube-system
+```
+
+If the Metrics Server is not installed, enable it using the Scaleway console or install it manually:
+
+```bash
+kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+```
+
+### Verify metrics are available
+
+Check that metrics are being collected:
+
+```bash
+kubectl top nodes
+```
+
+The output shows CPU and memory usage for each node in your cluster.
+
+## Create a sample application
+
+Deploy a sample application to demonstrate HPA functionality. This example uses a CPU-intensive nginx-based application.
+
+### Create the deployment
+
+1. Create a file named `php-apache.yaml` with the following content:
+
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: php-apache
+      labels:
+        app: php-apache
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app: php-apache
+      template:
+        metadata:
+          labels:
+            app: php-apache
+        spec:
+          containers:
+          - name: php-apache
+            image: registry.k8s.io/hpa-example
+            ports:
+            - containerPort: 80
+            resources:
+              requests:
+                cpu: "250m"
+                memory: "256Mi"
+              limits:
+                cpu: "500m"
+                memory: "512Mi"
+    ---
+    apiVersion: v1
+    kind: Service
+    metadata:
+      name: php-apache-service
+      labels:
+        app: php-apache
+    spec:
+      selector:
+        app: php-apache
+      ports:
+      - port: 80
+        targetPort: 80
+      type: ClusterIP
+    ```
+
+    <Message type="important">
+      Resource requests and limits are mandatory for HPA to function correctly. The CPU request value serves as the baseline for calculating percentage-based utilization targets.
+    </Message>
+
+2. Apply the configuration:
+
+    ```bash
+    kubectl apply -f php-apache.yaml
+    ```
+
+3. Verify the deployment and service are running:
+
+    ```bash
+    kubectl get deployment php-apache
+    kubectl get pods -l app=php-apache
+    kubectl get svc php-apache-service
+    ```
+
+## Create a basic HPA configuration
+
+Create an HPA resource that scales the php-apache deployment based on CPU utilization.
+
+### Define the HPA resource
+
+1. Create a file named `hpa-basic.yaml` with the following content:
+
+    ```yaml
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    metadata:
+      name: php-apache-hpa
+    spec:
+      scaleTargetRef:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: php-apache
+      minReplicas: 1
+      maxReplicas: 10
+      metrics:
+      - type: Resource
+        resource:
+          name: cpu
+          target:
+            type: Utilization
+            averageUtilization: 50
+    ```
+
+    This configuration defines:
+    - `scaleTargetRef`: References the php-apache deployment to scale
+    - `minReplicas`: Minimum number of replicas (never scales below this)
+    - `maxReplicas`: Maximum number of replicas (never scales above this)
+    - `metrics`: CPU utilization target of 50% average across all Pods
+
+2. Apply the HPA configuration:
+
+    ```bash
+    kubectl apply -f hpa-basic.yaml
+    ```
+
+3. Verify the HPA status:
+
+    ```bash
+    kubectl get hpa php-apache-hpa
+    ```
+
+    The output displays:
+    - `MINPODS`: Minimum replicas (1)
+    - `MAXPODS`: Maximum replicas (10)
+    - `REPLICAS`: Current number of replicas
+    - `TARGETS`: Current CPU utilization percentage vs. target (e.g., `0%/50%`)
+
+### Monitor HPA behavior
+
+Watch the HPA resource in real-time:
+
+```bash
+kubectl get hpa php-apache-hpa --watch
+```
+
+The `TARGETS` column shows the current average CPU utilization across all Pods compared to the 50% target threshold.
+
+## Test autoscaling with load
+
+Generate load on the application to trigger autoscaling events.
+
+### Generate CPU load
+
+1. Run a load test using a busybox container:
+
+    ```bash
+    kubectl run -i --tty load-generator --image=busybox --restart=Never -- /bin/sh -c "while true; do wget -q -O- http://php-apache-service; done"
+    ```
+
+2. Open a new terminal window and monitor the HPA status:
+
+    ```bash
+    kubectl get hpa php-apache-hpa --watch
+    ```
+
+    After a few minutes, the CPU utilization increases and HPA scales up the number of replicas.
+
+3. Monitor the Pod scaling:
+
+    ```bash
+    kubectl get pods -l app=php-apache --watch
+    ```
+
+    New Pods are created to handle the increased load until the maximum of 10 replicas is reached.
+
+### Stop the load test
+
+1. Return to the terminal running the load generator and press `Ctrl+C` to stop it.
+
+2. Continue monitoring the HPA:
+
+    ```bash
+    kubectl get hpa php-apache-hpa --watch
+    ```
+
+    After the load decreases, HPA gradually scales down the number of replicas. By default, HPA waits 300 seconds (5 minutes) before scaling down to prevent rapid scale-up/scale-down cycles.
+
+## Advanced HPA configuration
+
+Configure HPA with multiple metrics and custom scaling behaviors for more precise control.
+
+### Multi-metric autoscaling
+
+Scale based on both CPU and memory utilization simultaneously.
+
+1. Create a file named `hpa-multi-metric.yaml` with the following content:
+
+    ```yaml
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    metadata:
+      name: php-apache-hpa-multi
+    spec:
+      scaleTargetRef:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: php-apache
+      minReplicas: 1
+      maxReplicas: 10
+      metrics:
+      - type: Resource
+        resource:
+          name: cpu
+          target:
+            type: Utilization
+            averageUtilization: 50
+      - type: Resource
+        resource:
+          name: memory
+          target:
+            type: Utilization
+            averageUtilization: 70
+    ```
+
+    HPA scales when either metric exceeds its target. The controller calculates the desired replica count for each metric and selects the highest value.
+
+2. Apply the configuration:
+
+    ```bash
+    kubectl apply -f hpa-multi-metric.yaml
+    ```
+
+### Custom scaling behavior
+
+Define custom stabilization windows and scaling rates to control how quickly HPA responds to metric changes.
+
+1. Create a file named `hpa-behavior.yaml` with the following content:
+
+    ```yaml
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    metadata:
+      name: php-apache-hpa-behavior
+    spec:
+      scaleTargetRef:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: php-apache
+      minReplicas: 1
+      maxReplicas: 10
+      metrics:
+      - type: Resource
+        resource:
+          name: cpu
+          target:
+            type: Utilization
+            averageUtilization: 50
+      behavior:
+        scaleDown:
+          stabilizationWindowSeconds: 300
+          policies:
+          - type: Percent
+            value: 10
+            periodSeconds: 60
+        scaleUp:
+          stabilizationWindowSeconds: 0
+          policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 15
+          - type: Pods
+            value: 4
+            periodSeconds: 15
+          selectPolicy: Max
+    ```
+
+    This configuration defines:
+
+    **Scale down behavior:**
+    - `stabilizationWindowSeconds: 300`: Waits 5 minutes before scaling down to avoid flapping
+    - `policies`: Scales down by maximum 10% of replicas every 60 seconds
+
+    **Scale up behavior:**
+    - `stabilizationWindowSeconds: 0`: Scales up immediately when metrics exceed target
+    - `policies`: Scales up by maximum 100% (doubles) or 4 Pods every 15 seconds, whichever is greater
+    - `selectPolicy: Max`: Uses the policy that results in the highest replica count
+
+2. Apply the configuration:
+
+    ```bash
+    kubectl apply -f hpa-behavior.yaml
+    ```
+
+## Scale to zero with HPA
+
+Configure HPA to scale down to zero replicas when there is no traffic, useful for cost optimization in development environments.
+
+<Message type="important">
+  Scaling to zero requires Kubernetes 1.20+ and may not be suitable for production workloads that require low-latency responses.
+</Message>
+
+1. Create a file named `hpa-scale-to-zero.yaml` with the following content:
+
+    ```yaml
+    apiVersion: autoscaling/v2
+    kind: HorizontalPodAutoscaler
+    metadata:
+      name: php-apache-hpa-scale-zero
+    spec:
+      scaleTargetRef:
+        apiVersion: apps/v1
+        kind: Deployment
+        name: php-apache
+      minReplicas: 0
+      maxReplicas: 10
+      metrics:
+      - type: Resource
+        resource:
+          name: cpu
+          target:
+            type: Utilization
+            averageUtilization: 50
+    ```
+
+2. Apply the configuration:
+
+    ```bash
+    kubectl apply -f hpa-scale-to-zero.yaml
+    ```
+
+3. Verify the HPA allows zero replicas:
+
+    ```bash
+    kubectl get hpa php-apache-hpa-scale-zero
+    ```
+
+    When there is no load, the deployment scales down to 0 replicas. New traffic triggers an immediate scale-up.
+
+## Troubleshooting HPA
+
+Common issues and solutions when working with Horizontal Pod Autoscaler.
+
+### HPA shows `<unknown>` for current metrics
+
+**Problem:** The HPA status displays `<unknown>` for current CPU or memory utilization.
+
+**Cause:** The Metrics Server is not running or not collecting metrics.
+
+**Solution:**
+
+1. Verify the Metrics Server deployment:
+
+    ```bash
+    kubectl get deployment metrics-server -n kube-system
+    ```
+
+2. Check Metrics Server logs:
+
+    ```bash
+    kubectl logs -n kube-system deployment/metrics-server
+    ```
+
+3. If not installed, deploy the Metrics Server:
+
+    ```bash
+    kubectl apply -f https://github.com/kubernetes-sigs/metrics-server/releases/latest/download/components.yaml
+    ```
+
+### HPA shows `0% / 50%` but does not scale
+
+**Problem:** Current utilization shows 0% but HPA does not scale up.
+
+**Cause:** The application is not generating enough CPU load, or resource requests are set too high.
+
+**Solution:**
+
+1. Verify the application is receiving traffic:
+
+    ```bash
+    kubectl top pods -l app=php-apache
+    ```
+
+2. Check if resource requests are appropriate:
+
+    ```bash
+    kubectl get deployment php-apache -o yaml | grep -A 10 "resources:"
+    ```
+
+3. Generate load to test scaling behavior.
+
+### HPA unable to calculate scale
+
+**Problem:** HPA status shows `FailedGetResourceMetric` or `FailedComputeMetricsReplica`.
+
+**Cause:** Missing resource requests/limits on the target deployment.
+
+**Solution:**
+
+Ensure the deployment specifies CPU and memory requests:
+
+```yaml
+resources:
+  requests:
+    cpu: "250m"
+    memory: "256Mi"
+  limits:
+    cpu: "500m"
+    memory: "512Mi"
+```
+
+### Pods not scaling as expected
+
+**Problem:** HPA calculates desired replicas but actual Pod count does not match.
+
+**Cause:** Cluster resource constraints, node affinity rules, or PodDisruptionBudgets may prevent scheduling.
+
+**Solution:**
+
+1. Check for pending Pods:
+
+    ```bash
+    kubectl get pods -l app=php-apache
+    ```
+
+2. Review events for scheduling issues:
+
+    ```bash
+    kubectl describe hpa php-apache-hpa
+    ```
+
+3. Verify available cluster capacity:
+
+    ```bash
+    kubectl top nodes
+    ```
+
+## Clean up resources
+
+Remove all resources created during this tutorial to avoid unnecessary charges.
+
+1. Delete the HPA resources:
+
+    ```bash
+    kubectl delete hpa php-apache-hpa php-apache-hpa-multi php-apache-hpa-behavior php-apache-hpa-scale-zero
+    ```
+
+2. Delete the sample application:
+
+    ```bash
+    kubectl delete -f php-apache.yaml
+    ```
+
+3. Delete the load generator Pod (if still running):
+
+    ```bash
+    kubectl delete pod load-generator
+    ```
+
+4. Verify all resources are removed:
+
+    ```bash
+    kubectl get hpa
+    kubectl get pods -l app=php-apache
+    ```
+
+## Conclusion
+
+This tutorial demonstrated how to implement Horizontal Pod Autoscaler on Scaleway Kubernetes Kapsule. You learned to configure basic CPU-based autoscaling, implement multi-metric scaling, customize scaling behavior, and troubleshoot common HPA issues.
+
+HPA provides automatic scaling capabilities that help maintain application performance while optimizing resource utilization. For production workloads, consider combining HPA with Cluster Autoscaler to automatically add nodes when Pod scheduling fails due to resource constraints.
+
+## Related resources
+
+- [Kubernetes HPA official documentation](https://kubernetes.io/docs/tasks/run-application/horizontal-pod-autoscale/)
+- [Scaleway Kubernetes documentation](/kubernetes/)
+- [Metrics Server GitHub repository](https://github.com/kubernetes-sigs/metrics-server)
+- [Cluster Autoscaler documentation](https://github.com/kubernetes/autoscaler/tree/master/cluster-autoscaler)

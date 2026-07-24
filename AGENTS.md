@@ -10,7 +10,7 @@ description: Overview of the docs‑content repository for AI‑agents
 This file helps AI/LLM agents understand the structure, tooling, and conventions of the
 Scaleway documentation repository so they can make consistent, high-quality contributions.
 
-## Project Overview
+## Project overview
 
 This repository hosts the **Scaleway Documentation** content. The goal of Scaleway documentation is to provide information about all resources in the Scaleway ecosystem and the procedures users should follow to get the best experience from products and services.
 
@@ -19,7 +19,7 @@ This repository hosts the **Scaleway Documentation** content. The goal of Scalew
 
 Scaleway documentation content is authored in MDX and includes React components to add dynamic, interactive elements.
 
-## Content Types
+## Content types
 
 | PAGE TYPE          | DESCRIPTION                                                                              |
 | -------------------| ---------------------------------------------------------------------------------------- |
@@ -32,7 +32,7 @@ Scaleway documentation content is authored in MDX and includes React components 
 | Tutorial           | Explains how to use a Scaleway product with a third-party tool, or how to use multiple Scaleway products together for a specific use-case, e.g. [Deploying Strapi on an Instance](/tutorials/strapi/)                                            |
 | FAQ                | Gives answers to the most frequently asked questions about Scaleway products, e.g. [Cockpit FAQ](/cockpit/faq/)                                            |
 
-## Directory Structure
+## Directory structure
 
 ```
 docs-content/
@@ -73,9 +73,9 @@ docs-content/
 └── tutorials/                      # Standalone tutorial content
 ```
 
-## Content Authoring Conventions
+## Content authoring conventions
 
-### Frontmatter Structure
+### Frontmatter structure
 
 All `.mdx` pages use YAML frontmatter:
 
@@ -92,7 +92,7 @@ categories:
 ---
 ```
 
-### Navigation Structure
+### Navigation structure
 
 Each product directory contains a `menu.ts` file defining its navigation. The following example uses the Instances product to illustrate how `menu.ts` works.
 
@@ -124,7 +124,7 @@ macro: compute-instances
 
 Macros embed consistent, reusable content snippets across multiple pages from a single source.
 
-### MDX Components
+### MDX components
 
 This project uses MDX (Markdown + React components). Key components include:
 
@@ -138,7 +138,7 @@ This project uses MDX (Markdown + React components). Key components include:
 
 For full component reference, see: [storybook-docs.scaleway.com](https://storybook-docs.scaleway.com/)
 
-## Writing Guidelines
+## Writing guidelines
 
 See [Writing Guidelines](.pages/guidelines.mdx) for the full documentation style guide.
 
@@ -158,7 +158,7 @@ See [Writing Guidelines](.pages/guidelines.mdx) for the full documentation style
 - Numbers: Write numbers 1-9 in full. Use numerals for 10+. Use commas to separate thousands.
 - Dates/Times: Use 24-hour format for times. Use day/month/year or DD/MM/YY for dates. Avoid ordinals (e.g., "14 January" not "14th January").
 
-## Product Categories
+## Product categories
 
 The navigation of the documentation website [scaleway.com/en/docs](https://www.scaleway.com/en/docs/) is organized into these main categories (to match the navigation of the Scaleway console):
 
@@ -191,7 +191,7 @@ The navigation of the documentation website [scaleway.com/en/docs](https://www.s
 
 See [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for the full guide.
 
-### Branch Naming Convention
+### Branch naming convention
 
 ```
 [source]-[action]-[product]
@@ -203,7 +203,7 @@ See [CONTRIBUTING.md](./docs/CONTRIBUTING.md) for the full guide.
 
 **Example**: `int-add-instances`, `ext-fix-kubernetes`
 
-### Commit Convention
+### Commit convention
 
 Based on [Conventional Commits](https://www.conventionalcommits.org/):
 
@@ -224,13 +224,13 @@ type(module): description PROJECT-XXX
 - `fix(iot): wrong image in quickstart`
 - `style: add bold at scaleway name occurrences MTA-1337`
 
-### Pull Request Naming
+### Pull Request naming
 
 ```
 docs(product_name): description with some words
 ```
 
-### Agent Attributions
+### Agent attributions
 
 All agent-drafted content must add `draftedBy` metadata as the last line of the YAML frontmatter, using the following format:
 
@@ -248,16 +248,16 @@ draftedBy: agent-name agent-version
 ---
 ```
 
-### Strict Boundaries
+### Strict boundaries
 
 - You MAY edit files in the `macros`, `pages`, and `tutorials` directories.
 - You MUST NEVER modify files in the `.github`, `assets`, `bin`, `blocks`, `changelog`, `docs`, `menu`, and the root directories.
 
-## Building and Serving Locally
+## Building and serving locally
 
 This repository only hosts the documentation site content, and does not include any of the frontend or backend components required to build or render the site.
 
-## Important Notes
+## Important notes
 
 - This repository contains **content only** - no frontend/backend for building the site
 - Internal Scaleway users have access to internal preview tools
@@ -265,7 +265,7 @@ This repository only hosts the documentation site content, and does not include 
 - Files use `.mdx` extension for extended Markdown with React components
 - Slugs must be kebab-case
 
-## Related Resources
+## Related resources
 
 - [Writing Guidelines](.pages/guidelines.mdx)
 - [MDX Components](https://storybook-docs.scaleway.com/)

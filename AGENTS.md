@@ -244,7 +244,7 @@ dates:
   posted: 2024-01-01
 categories:
   - product-category
-draftedBy: agent-name version
+draftedBy: agent-name agent-version
 ---
 ```
 

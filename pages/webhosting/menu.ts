@@ -70,10 +70,6 @@ export const webhostingMenu = {
           label: 'Migrate an Online.net/Dedibox web hosting plan to Scaleway',
           slug: 'migrate-webhosting-plan',
         },
-        {
-          label: 'Access your Web Hosting migrated from Dedibox to Scaleway',
-          slug: 'access-migrated-webhosting',
-        },
       ],
       label: 'How to',
       slug: 'how-to',
@@ -109,6 +105,10 @@ export const webhostingMenu = {
         {
           label: 'Understanding security measures on a shared hosting',
           slug: 'shared-hosting-best-practices',
+        },
+        {
+          label: 'Access your Web Hosting migrated from Dedibox to Scaleway',
+          slug: 'access-migrated-webhosting',
         },
       ],
       label: 'Additional Content',

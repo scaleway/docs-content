@@ -106,6 +106,10 @@ export const webhostingMenu = {
           label: 'Understanding security measures on a shared hosting',
           slug: 'shared-hosting-best-practices',
         },
+        {
+          label: 'Access your Web Hosting migrated from Dedibox to Scaleway',
+          slug: 'access-migrated-webhosting',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

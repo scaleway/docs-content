@@ -35,6 +35,10 @@ export const mailboxMenu = {
           slug: 'manage-mailbox-subscription',
         },
         {
+          label: 'Add an alias to a Mailbox email account',
+          slug: 'add-alias',
+        },
+        {
           label: 'Delete a Mailbox email account',
           slug: 'delete-email-account',
         },

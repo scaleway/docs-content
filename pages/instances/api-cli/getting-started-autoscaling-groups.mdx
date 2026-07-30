@@ -1,0 +1,281 @@
+---
+title: Getting started with Autoscaling Groups API
+description: Learn how to create and manage an Autoscaling Group for Scaleway Instances using the API.
+tags: instances autoscaling api
+dates:
+  validation: 2026-07-30
+  posted: 2026-07-30
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+Autoscaling Groups adjust the number of Instances in a group automatically, based on scaling policies you define. A scaling action (scale-out or scale-in) triggers when a monitored metric, gathered through Cockpit, such as RAM or bandwidth usage, crosses the configured threshold. When a Load Balancer is attached to the group, Scaleway updates it automatically on each scaling action, so that connections stay distributed correctly among the active Instances. You can also configure the group to replace Instances that the Load Balancer marks as unhealthy.
+
+Autoscaling Groups help you maintain application performance and control costs: the group scales up during peak traffic and scales down when demand decreases, without manual intervention.
+
+This guide takes you from setup to your first working Autoscaling Group. You create an Instance template, launch an Autoscaling Group, and verify that scale-out, scale-in, and auto-healing behave as expected.
+
+<Message type="important">
+  The Autoscaling Groups API is in **Private Beta**. [Contact Scaleway Support](https://console.scaleway.com/support) to request Beta access before following this guide.
+</Message>
+
+## Before you start
+
+- A Scaleway account logged into the [console](https://console.scaleway.com/)
+- Beta access to the Autoscaling Groups Private Beta
+- A Scaleway Project to work in
+- A terminal with [curl](https://curl.se/) installed
+- [jq](https://jqlang.github.io/jq/) installed, to parse JSON responses (optional but recommended)
+
+### Create the required resources
+
+Create the following resources in the Scaleway console before you begin:
+
+| Resource | Where to create it | Notes |
+|----------|--------------------|-------|
+| Load Balancer | Console > Load Balancers > **Create Load Balancer** | Required for auto-healing |
+| Backend | Console > Load Balancers > your Load Balancer > **Backends** | Instances created by the group are added to this backend |
+| Private Network | Console > Private Networks > **Create Private Network** | Instances created by the group are attached to this network |
+
+### Get your API credentials
+
+1. In the Console, go to **Identity and Access Management** > **API Keys**.
+2. Click **Generate API Key**.
+3. Copy the secret key. It is displayed only once.
+4. In **Organization** > **Project**, copy your Project ID.
+
+Make sure your API key has the required permissions:
+
+- `InstancesFullAccess` - Create templates and manage Instances.
+- `LoadBalancersFullAccess` - Link autoscaling groups to Load Balancers.
+- `PrivateNetworksFullAccess` - Attach Instances to Private Networks.
+
+## Get started with your Autoscaling Group
+
+### Set your environment variables
+
+Open a terminal and set the following variables, replacing the placeholders with your own values:
+
+```bash
+export SCW_SECRET_KEY="<YOUR_API_SECRET_KEY>"
+export SCW_PROJECT_ID="<YOUR_PROJECT_ID>"
+export SCW_DEFAULT_ZONE="fr-par-1"
+```
+
+Get the following resource IDs from the console before continuing:
+
+| Resource | Where to find it |
+|----------|-------------------|
+| Load Balancer ID | Console > Load Balancers |
+| Backend ID | Console > Load Balancers > your Load Balancer > Backends |
+| Private Network ID | Console > Private Networks |
+
+### Create an Instance template
+
+An Instance template defines the configuration used for Instances created by the Autoscaling Group.
+
+```bash
+PRIVATE_NETWORK_ID="<YOUR_PRIVATE_NETWORK_ID>"
+
+curl -X POST \
+  -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  "https://api.scaleway.com/instance/v2alpha1/zones/$SCW_DEFAULT_ZONE/templates" \
+  -d '{
+    "name": "autoscaling-template",
+    "server_type": "PLAY2-NANO",
+    "volumes": [
+        {
+          "name": "boot volume",
+          "image_label": "ubuntu_noble",
+          "volume_type": "sbs"
+        }
+    ],
+    "private_networks": [
+        {
+          "private_network_id": "'"$PRIVATE_NETWORK_ID"'"
+        }
+    ],
+    "project_id": "'"$SCW_PROJECT_ID"'"
+  }'
+```
+
+Save the `id` value from the response. This is your `INSTANCE_TEMPLATE_ID`.
+
+### Create the Autoscaling Group
+
+The following command creates a group that scales between two and eight Instances, based on a CPU usage target of 30%.
+
+```bash
+INSTANCE_TEMPLATE_ID="<YOUR_TEMPLATE_ID_FROM_STEP_2>"
+LOAD_BALANCER_ID="<YOUR_LOAD_BALANCER_ID>"
+BACKEND_ID="<YOUR_BACKEND_ID>"
+PRIVATE_NETWORK_ID="<YOUR_PRIVATE_NETWORK_ID>"
+
+curl -X POST \
+  -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  "https://api.scaleway.com/autoscaling/v1alpha2/zones/$SCW_DEFAULT_ZONE/groups" \
+  -d '{
+    "project_id": "'"$SCW_PROJECT_ID"'",
+    "name": "test-autoscaling-group",
+    "template_id": "'"$INSTANCE_TEMPLATE_ID"'",
+    "scaling_policy_spec": {
+      "minimum_size": 2,
+      "maximum_size": 8,
+      "cpu_target": {
+        "target_avg_percent": 30
+      }
+    },
+    "load_balancer_configuration_spec":{
+      "load_balancer_id": "'"$LOAD_BALANCER_ID"'",
+      "auto_healing": {
+        "enabled": true,
+        "grace_period": "300s"
+      },
+      "backends": [
+        {
+          "backend_id": "'"$BACKEND_ID"'",
+          "address_family": "ipv4",
+          "private_network_id": "'"$PRIVATE_NETWORK_ID"'"
+        }
+      ]
+    }
+  }'
+```
+
+Save the group `id` value from the response. This is your `AUTOSCALING_GROUP_ID`.
+
+## Watch your Autoscaling Group in action
+
+### Verify scale-out behavior
+
+The group adds Instances automatically when average CPU usage exceeds the 30% target.
+
+Connect to each Instance over SSH and run the following command to generate CPU load:
+
+```bash
+# Generate 100% CPU load for 5 minutes
+yes > /dev/null &
+yes > /dev/null &
+yes > /dev/null &
+yes > /dev/null &
+```
+
+Monitor the current Instance count:
+
+```bash
+curl -s -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  "https://api.scaleway.com/autoscaling/v1alpha2/zones/$SCW_DEFAULT_ZONE/servers?group_id=$AUTOSCALING_GROUP_ID" | jq '.servers | length'
+```
+
+After 2 to 3 minutes of high CPU usage, check the logs to confirm the scale-out event:
+
+```bash
+curl -s -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  "https://api.scaleway.com/autoscaling/v1alpha2/zones/$SCW_DEFAULT_ZONE/logs?group_id=$AUTOSCALING_GROUP_ID" | jq '.logs[0]'
+```
+
+New Instances are added and the Instance count increases toward the maximum value of eight.
+
+### Verify scale-in behavior
+
+The group removes Instances automatically when average CPU usage drops below the 30% target.
+
+On each Instance, stop the load generators:
+
+```bash
+# Kill the yes processes
+pkill yes
+```
+
+Wait 5 to 10 minutes for the group to scale in, checking the Instance count periodically:
+
+```bash
+# Check instance count every 30 seconds
+watch -n 30 'curl -s -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  "https://api.scaleway.com/autoscaling/v1alpha2/zones/$SCW_DEFAULT_ZONE/servers?group_id=$AUTOSCALING_GROUP_ID" | jq ".servers | length"'
+```
+
+The Instance count decreases toward the minimum value of two.
+
+### Verify auto-healing behavior
+
+Auto-healing replaces Instances that the Load Balancer marks as unhealthy.
+
+1. Stop an Instance, either from the console (**Instances** > select an Instance > **Stop**) or using the API:
+   ```bash
+   # Get first server ID
+   SERVER_ID=$(curl -s -H "X-Auth-Token: $SCW_SECRET_KEY" \
+     "https://api.scaleway.com/autoscaling/v1alpha2/zones/$SCW_DEFAULT_ZONE/servers?group_id=$AUTOSCALING_GROUP_ID" | jq -r '.servers[0].id')
+ 
+   # Stop the instance
+   curl -X POST \
+     -H "X-Auth-Token: $SCW_SECRET_KEY" \
+     "https://api.scaleway.com/instance/v1/zones/$SCW_DEFAULT_ZONE/servers/$SERVER_ID/stop"
+   ```
+2. Wait 5 to 10 minutes for the Load Balancer to mark the Instance as unhealthy.
+3. Check the logs for the auto-healing event:
+   ```bash
+   curl -s -H "X-Auth-Token: $SCW_SECRET_KEY" \
+     "https://api.scaleway.com/autoscaling/v1alpha2/zones/$SCW_DEFAULT_ZONE/logs?group_id=$AUTOSCALING_GROUP_ID" | jq '.logs[] | select(.message | contains("healing"))'
+   ```
+
+The logs show the unhealthy Instance being terminated and a new Instance being created.
+
+## Monitor your Autoscaling Group
+
+Beyond the scaling events above, the following requests are available at any time to check on your group.
+
+### Get Autoscaling Group logs
+
+Retrieve all scaling activities and events for the group:
+
+```bash
+AUTOSCALING_GROUP_ID="<YOUR_GROUP_ID>"
+
+curl -X GET \
+  -H "Content-Type: application/json" \
+  -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  "https://api.scaleway.com/autoscaling/v1alpha2/zones/$SCW_DEFAULT_ZONE/logs?group_id=$AUTOSCALING_GROUP_ID"
+```
+
+The following log messages indicate the corresponding scaling activity:
+
+- `Scaling event: added X instance(s)`: a scale-out event occurred
+- `Scaling event: removed X instance(s)`: a scale-in event occurred
+- `Auto-healing: replacing unhealthy instance`: auto-healing was triggered
+
+### Check the current state of your group
+
+```bash
+# Get current instance count
+curl -s -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  "https://api.scaleway.com/autoscaling/v1alpha2/zones/$SCW_DEFAULT_ZONE/servers?group_id=$AUTOSCALING_GROUP_ID" | jq '.servers | length'
+ 
+# Get the last 5 log entries
+curl -s -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  "https://api.scaleway.com/autoscaling/v1alpha2/zones/$SCW_DEFAULT_ZONE/logs?group_id=$AUTOSCALING_GROUP_ID" | jq '.logs[:5]'
+ 
+# Get scaling alerts
+curl -s -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  "https://api.scaleway.com/autoscaling/v1alpha2/zones/$SCW_DEFAULT_ZONE/alerts?group_id=$AUTOSCALING_GROUP_ID" | jq '.'
+```
+
+### API endpoint reference
+
+| Action | Endpoint |
+|--------|----------|
+| Create template | `POST /instance/v2alpha1/zones/{zone}/templates` |
+| Create group | `POST /autoscaling/v1alpha2/zones/{zone}/groups` |
+| Get logs | `GET /autoscaling/v1alpha2/zones/{zone}/logs?group_id={id}` |
+| Get alerts | `GET /autoscaling/v1alpha2/zones/{zone}/alerts?group_id={id}` |
+| Get Instances | `GET /autoscaling/v1alpha2/zones/{zone}/servers?group_id={id}` |
+
+## Troubleshooting
+
+| Error | Solution |
+|-------|----------|
+| `401 Unauthorized` | Check your `SCW_SECRET_KEY` |
+| `403 Forbidden` | Verify your Beta access and Project permissions |
+| `404 Not Found` | Check the zone and resource IDs |
+| No scaling occurs | Wait 2 to 5 minutes, then check the CPU target threshold |

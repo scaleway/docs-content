@@ -129,6 +129,10 @@ export const instancesMenu = {
           slug: 'creating-managing-instances-with-cliv2',
         },
         {
+          label: 'Getting started with Autoscaling Groups',
+          slug: 'getting-started-autoscaling-groups',
+        },
+        {
           label: 'Creating backups',
           slug: 'creating-backups',
         },

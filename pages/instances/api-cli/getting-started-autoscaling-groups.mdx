@@ -8,14 +8,14 @@ dates:
 ---
 import Requirements from '@macros/iam/requirements.mdx'
 
-Autoscaling Groups adjust the number of Instances in a group automatically, based on scaling policies you define. A scaling action (scale-out or scale-in) triggers when a monitored metric, gathered through Cockpit, such as RAM or bandwidth usage, crosses the configured threshold. When a Load Balancer is attached to the group, Scaleway updates it automatically on each scaling action, so that connections stay distributed correctly among the active Instances. You can also configure the group to replace Instances that the Load Balancer marks as unhealthy.
+Autoscaling Groups adjust the number of Instances in a group automatically, based on scaling policies you define. A scaling action (scale-out or scale-in) triggers when a monitored metric, gathered through Cockpit, such as RAM or CPU usage, crosses the configured threshold. When a Load Balancer is attached to the group, Scaleway updates it automatically on each scaling action, so that connections stay distributed correctly among the active Instances. You can also configure the group to replace Instances that the Load Balancer marks as unhealthy.
 
 Autoscaling Groups help you maintain application performance and control costs: the group scales up during peak traffic and scales down when demand decreases, without manual intervention.
 
 This guide takes you from setup to your first working Autoscaling Group. You create an Instance template, launch an Autoscaling Group, and verify that scale-out, scale-in, and auto-healing behave as expected.
 
 <Message type="important">
-  The Autoscaling Groups API is in **Private Beta**. [Contact Scaleway Support](https://console.scaleway.com/support) to request Beta access before following this guide.
+  The Autoscaling Groups API is in **Private Beta**. [Submit your request](https://www.scaleway.com/fr/betas/) for Beta access before following this guide.
 </Message>
 
 ## Before you start
@@ -23,18 +23,8 @@ This guide takes you from setup to your first working Autoscaling Group. You cre
 - A Scaleway account logged into the [console](https://console.scaleway.com/)
 - Beta access to the Autoscaling Groups Private Beta
 - A Scaleway Project to work in
-- A terminal with [curl](https://curl.se/) installed
+- A terminal with [curl](https://curl.se/) and/or [CLI](https://www.scaleway.com/fr/cli/) installed
 - [jq](https://jqlang.github.io/jq/) installed, to parse JSON responses (optional but recommended)
-
-### Create the required resources
-
-Create the following resources in the Scaleway console before you begin.
-
-| Resource | Where to create it | Notes |
-|----------|--------------------|-------|
-| Load Balancer | Console > Load Balancers > Create Load Balancer | Required for auto-healing |
-| Backend | Console > Load Balancers > your Load Balancer > Backends | Instances created by the group are added to this backend |
-| Private Network | Console > Private Networks > Create Private Network | Instances created by the group are attached to this network |
 
 ### Get your API credentials
 
@@ -49,8 +39,6 @@ Make sure your API key has the required permissions:
 - `LoadBalancersFullAccess` - Link autoscaling groups to Load Balancers.
 - `PrivateNetworksFullAccess` - Attach Instances to Private Networks.
 
-## Get started with your Autoscaling Group
-
 ### Set your environment variables
 
 Open a terminal and set the following variables, replacing the placeholders with your own values:
@@ -59,15 +47,69 @@ Open a terminal and set the following variables, replacing the placeholders with
 export SCW_SECRET_KEY="<YOUR_API_SECRET_KEY>"
 export SCW_PROJECT_ID="<YOUR_PROJECT_ID>"
 export SCW_DEFAULT_ZONE="fr-par-1"
+export SCW_DEFAULT_REGION="fr-par"
 ```
 
-Get the following resource IDs from the console before continuing.
+### Create the required resources
 
-| Resource | Where to find it |
-|----------|-------------------|
-| Load Balancer ID | Console > Load Balancers |
-| Backend ID | Console > Load Balancers > your Load Balancer > Backends |
-| Private Network ID | Console > Private Networks |
+Create a Load Balancer:
+
+```bash
+curl -X POST \
+  -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  "https://api.scaleway.com/lb/v1/zones/$SCW_DEFAULT_ZONE/lbs" \
+  -d '{
+    "name": "autoscaling-lb",
+    "project_id": "'"$SCW_PROJECT_ID"'"
+  }'
+```
+
+Save the `id` value from the response as `LOAD_BALANCER_ID`.
+
+Create a backend for the Load Balancer. The `server_ip` list stays empty for now: the Autoscaling Group attaches Instances to it automatically as it scales.
+
+```bash
+LOAD_BALANCER_ID="<YOUR_LOAD_BALANCER_ID>"
+ 
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  "https://api.scaleway.com/lb/v1/zones/$SCW_DEFAULT_ZONE/lbs/$LOAD_BALANCER_ID/backends" \
+  -d '{
+    "name": "autoscaling-backend",
+    "forward_port": 80,
+    "forward_port_algorithm": "roundrobin",
+    "forward_protocol": "tcp",
+    "health_check": {
+      "check_delay": 2000,
+      "check_max_retries": 3,
+      "check_timeout": 1000,
+      "port": 80,
+      "tcp_config": {}
+    },
+    "server_ip": []
+  }'
+```
+
+Save the `id` value from the response as `BACKEND_ID`.
+
+Create a Private Network:
+
+```bash
+curl -X POST \
+  -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  -H "Content-Type: application/json" \
+  "https://api.scaleway.com/vpc/v2/regions/$SCW_DEFAULT_REGION/private-networks" \
+  -d '{
+    "name": "autoscaling-pn",
+    "project_id": "'"$SCW_PROJECT_ID"'"
+  }'
+```
+
+Save the `id` value from the response as `PRIVATE_NETWORK_ID`.
+
+## Get started with your Autoscaling Group
 
 ### Create an Instance template
 

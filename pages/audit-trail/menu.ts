@@ -55,6 +55,10 @@ export const auditTrailMenu = {
           slug: 'resource-integration-with-adt',
         },
         {
+          label: 'Integrate Audit Trail with Splunk',
+          slug: 'splunk-integration',
+        },
+        {
           label: 'IAM authentication events in Audit Trail',
           slug: 'iam-authentication-events',
         },

@@ -156,7 +156,7 @@ See [Writing Guidelines](.pages/guidelines.mdx) for the full documentation style
 - Bold text: Use bold for console navigation elements and button names (e.g., Click Create Instance).
 - Capitalization: Capitalize product names (Instance, Load Balancer). Do not capitalize feature names unless they are Scaleway-specific terms (InstantApp, Easy Deploy). Use sentence-case capitalization in titles and headings.
 - Numbers: Write numbers 1-9 in full. Use numerals for 10+. Use commas to separate thousands.
-- Dates/Times: Use 24-hour format for times. Use day/month/year or DD/MM/YY for dates. Avoid ordinals (e.g., "14 January" not "14th January").
+- Dates/Times: Use 24-hour format for times. Use `Month Day, Year` for dates. Avoid ordinals (e.g., "January 14" not "January 14th").
 
 ## Product categories
 

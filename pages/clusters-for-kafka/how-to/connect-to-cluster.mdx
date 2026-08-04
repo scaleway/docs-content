@@ -55,340 +55,341 @@ The username displays in the list of users. Click **Change password** if you hav
 
 ## How to connect to the cluster
 
-Once you have ensured that the client in question has the cluster's TLS certificate, appropriate network access, and the correct username and password, you can facilitate connection via the Kafka-compatible framework of your choice. Code snippets are provided for Go, Python and Java.
+Once you have ensured that the client in question has the cluster's TLS certificate, appropriate network access, and the correct username and password, you can facilitate connection via the Kafka-compatible framework of your choice. Code snippets are provided for Go, Python, and Java.
+
 It is possible to connect to the cluster using IAM or using SCRAM (basic-auth) connection.
-To connect with IAM, create one or more [API keys](https://www.scaleway.com/en/docs/iam/how-to/create-api-keys/), each associated with a [policy](https://www.scaleway.com/en/docs/iam/how-to/create-policy/) granting at least the following permission sets: `KafkaConsumerAccess`, `KafkaManagerAccess`, and `KafkaProducerAccess`
-The following **Go**, **Python**, and **Java** code snippets demonstrate how to connect to the cluster, using sample consumer and producer.
+To connect with IAM, create one or more [API keys](/iam/how-to/create-api-keys/), each associated with a [policy](/iam/how-to/create-policy/) and granting at least the following permission sets: `KafkaConsumerAccess`, `KafkaManagerAccess`, and `KafkaProducerAccess`.
 
-1. Connect with Go or Python
-  Download necessary packages
+The following **Go**, **Python**, and **Java** code snippets demonstrate how to connect to the cluster, using a sample consumer and producer.
 
-  <details open>
-  <summary>Go</summary>
+<Tabs>
+  <TabsTab label="Go">
 
-  ```go
-  go install github.com/segmentio/kafka-go
-  ```
+    To connect with Go, complete the following steps.
 
-  </details>
+    1. Download the necessary packages.
 
-  <details>
-  <summary>Python</summary>
+        ```go
+        go install github.com/segmentio/kafka-go
+        ```
 
-  ```python
-  pip install kafka-python
-  ```
+    2. Create a sample consumer.
 
-  </details>
+        ```go
+        package main
 
-  Create a sample consumer
+        import (
+          "context"
+          "crypto/tls"
+          "crypto/x509"
+          "fmt"
+          "log"
+          "os"
+          "time"
 
-  <details>
-  <summary>Go</summary>
+          "github.com/segmentio/kafka-go"
+          "github.com/segmentio/kafka-go/sasl"
+          "github.com/segmentio/kafka-go/sasl/plain"
+          "github.com/segmentio/kafka-go/sasl/scram"
+        )
+        func main() {
+          ca_path := "<path_to_downloaded_pem_file>"
+          brokers := []string{
+            "<kafka_cluster_private_endpoint>:9092",
+          }
+          topic_name := "<topic_name>"
+          authMethod := "<basic-auth/iam>"
 
-  ```go
-  package main
+          var username, password string
+          var mechanism sasl.Mechanism
+          switch authMethod {
+          case "basic-auth":
+            username = "<configured_username>"
+            password = "<configured_password>"
+            var err error
+            mechanism, err = scram.Mechanism(scram.SHA512, username, password)
+            if err != nil {
+              log.Fatalf("Error: %v", err)
+            }
+          case "iam":
+            username = "<iam_access_key>:<iam_secret_key>"
+            password = "SCW"
+            mechanism = plain.Mechanism{
+              Username: username,
+              Password: password,
+            }
+          default:
+            log.Fatalf("Error: authMethod not supported")
+          }
 
-  import (
-    "context"
-    "crypto/tls"
-    "crypto/x509"
-    "fmt"
-    "log"
-    "os"
-    "time"
+          rootCAs := x509.NewCertPool()
+          certData, err := os.ReadFile(ca_path)
+          if err != nil {
+            log.Fatalf("Error when reading certificate CA: %v", err)
+          }
 
-    "github.com/segmentio/kafka-go"
-    "github.com/segmentio/kafka-go/sasl"
-    "github.com/segmentio/kafka-go/sasl/plain"
-    "github.com/segmentio/kafka-go/sasl/scram"
-  )
-  func main() {
-    ca_path := "<path_to_downloaded_pem_file>"
-    brokers := []string{
-      "<kafka_cluster_private_endpoint>:9092",
-    }
-    topic_name := "<topic_name>"
-    authMethod := "<basic-auth/iam>"
+          if !rootCAs.AppendCertsFromPEM(certData) {
+            log.Fatal("unable to parse CA certificate")
+          }
 
-    var username, password string
-    var mechanism sasl.Mechanism
-    switch authMethod {
-    case "basic-auth":
-      username = "<configured_username>"
-      password = "<configured_password>"
-      var err error
-      mechanism, err = scram.Mechanism(scram.SHA512, username, password)
-      if err != nil {
-        log.Fatalf("Error: %v", err)
-      }
-    case "iam":
-      username = "<iam_access_key>:<iam_secret_key>"
-      password = "SCW"
-      mechanism = plain.Mechanism{
-        Username: username,
-        Password: password,
-      }
-    default:
-      log.Fatalf("Error: authMethod not supported")
-    }
+          tlsConfig := &tls.Config{
+            MinVersion: tls.VersionTLS12,
+            RootCAs:    rootCAs,
+          }
 
-    rootCAs := x509.NewCertPool()
-    certData, err := os.ReadFile(ca_path)
-    if err != nil {
-      log.Fatalf("Error when reading certificate CA: %v", err)
-    }
+          dialer := &kafka.Dialer{
+            Timeout:       10 * time.Second,
+            DualStack:     true,
+            SASLMechanism: mechanism,
+            TLS:           tlsConfig,
+          }
+          reader := kafka.NewReader(kafka.ReaderConfig{
+            Brokers:  brokers,
+            Topic:    topic_name,
+            MinBytes: 1,
+            MaxBytes: 10e6,
+            MaxWait:  2 * time.Second,
+            Dialer:   dialer,
+          })
+          defer reader.Close()
+          fmt.Println("Waiting for messages...")
+          for {
+            msg, err := reader.ReadMessage(context.Background())
+            if err != nil {
+              log.Printf("Error: %v", err)
+              continue
+            }
+            fmt.Printf("Message received — Partition: %d Offset: %d Key: %s Value: %s", msg.Partition, msg.Offset, string(msg.Key), string(msg.Value))
+          }
+        }
+        ```
 
-    if !rootCAs.AppendCertsFromPEM(certData) {
-      log.Fatal("unable to parse CA certificate")
-    }
+    3. Create a sample producer.
 
-    tlsConfig := &tls.Config{
-      MinVersion: tls.VersionTLS12,
-      RootCAs:    rootCAs,
-    }
+        ```go
+        package main
 
-    dialer := &kafka.Dialer{
-      Timeout:       10 * time.Second,
-      DualStack:     true,
-      SASLMechanism: mechanism,
-      TLS:           tlsConfig,
-    }
-    reader := kafka.NewReader(kafka.ReaderConfig{
-      Brokers:  brokers,
-      Topic:    topic_name,
-      MinBytes: 1,
-      MaxBytes: 10e6,
-      MaxWait:  2 * time.Second,
-      Dialer:   dialer,
-    })
-    defer reader.Close()
-    fmt.Println("Waiting for messages...")
-    for {
-      msg, err := reader.ReadMessage(context.Background())
-      if err != nil {
-        log.Printf("Error: %v", err)
-        continue
-      }
-      fmt.Printf("Message received — Partition: %d Offset: %d Key: %s Value: %s", msg.Partition, msg.Offset, string(msg.Key), string(msg.Value))
-    }
-  }
-  ```
+        import (
+          "context"
+          "crypto/tls"
+          "crypto/x509"
+          "errors"
+          "fmt"
+          "log"
+          "os"
+          "time"
 
-  </details>
+          "github.com/segmentio/kafka-go"
+          "github.com/segmentio/kafka-go/sasl"
+          "github.com/segmentio/kafka-go/sasl/plain"
+          "github.com/segmentio/kafka-go/sasl/scram"
+        )
 
-  <details>
-  <summary>Python</summary>
+        func main() {
+          ca_path := "<path_to_downloaded_pem_file>"
+          brokers := []string{
+            "<kafka_cluster_private_endpoint>:9092",
+          }
+          topic_name := "<topic_name>"
+          authMethod := "<basic-auth/iam>"
 
-  ```python
-  from kafka import KafkaConsumer
+          var username, password string
+          var mechanism sasl.Mechanism
+          switch authMethod {
+          case "basic-auth":
+            username = "<configured_username>"
+            password = "<configured_password>"
+            var err error
+            mechanism, err = scram.Mechanism(scram.SHA512, username, password)
+            if err != nil {
+              log.Fatalf("Error: %v", err)
+            }
+          case "iam":
+            username = "<iam_access_key>:<iam_secret_key>"
+            password = "SCW"
+            mechanism = plain.Mechanism{
+              Username: username,
+              Password: password,
+            }
+          default:
+            log.Fatalf("Error: authMethod not supported")
+          }
 
-  bootstrap_servers = "<kafka_cluster_private_endpoint>:9092"
-  ca_pem_file = "<path_to_downloaded_pem_file>"
-  auth_method = "<basic-auth/iam>"
-  username = None
-  password = None
-  sasl_mechanism = None
-  topic_name = "<topic_name>"
+          rootCAs := x509.NewCertPool()
+          certData, err := os.ReadFile(ca_path)
+          if err != nil {
+            log.Fatalf("Error when reading certificate CA: %v", err)
+          }
+          if !rootCAs.AppendCertsFromPEM(certData) {
+            log.Fatal("unable to parse CA certificate")
+          }
 
-  match auth_method:
-    case "basic-auth":
-      username = "<configured_username>"
-      password = "<configured_password>"
-      sasl_mechanism = "SCRAM-SHA-512"
-    case "iam":
-      username = "<iam_access_key>:<iam_secret_key>"
-      password = "SCW"
-      sasl_mechanism = "PLAIN"
-    case _:
-      raise ValueError("auth_method not supported")
+          tlsConfig := &tls.Config{
+            MinVersion: tls.VersionTLS12,
+            RootCAs:    rootCAs,
+          }
+          writer := kafka.Writer{
+            Addr:     kafka.TCP(brokers...),
+            Topic:    topic_name,
+            Balancer: &kafka.LeastBytes{},
+            Transport: &kafka.Transport{
+              SASL: mechanism,
+              TLS:  tlsConfig,
+            },
+            AllowAutoTopicCreation: true,
+          }
+          defer writer.Close()
+          msg := kafka.Message{
+            Key:   []byte("random key"),
+            Value: []byte("Hello World!\n"),
+          }
 
-  consumer = KafkaConsumer(
-    topic_name,
-    bootstrap_servers=bootstrap_servers,
-    ssl_cafile=ca_pem_file,
-    security_protocol="SASL_SSL",
-    sasl_mechanism=sasl_mechanism,
-    sasl_plain_username=username,
-    sasl_plain_password=password,
-  )
+          // Retry to handle auto-topic creation.
+          retries := 3
+          for range retries {
+            err = writer.WriteMessages(context.Background(), msg)
+            if !errors.Is(err, kafka.UnknownTopicOrPartition) {
+              break
+            }
+            time.Sleep(time.Second)
+          }
+          if err != nil {
+            log.Fatalf("Error : %v", err)
+          }
+          fmt.Println("Message successfully sent!")
+        }
+        ```
 
-  for event in consumer:
-    print(f"Message received: {event}")
-  ```
+  </TabsTab>
+  <TabsTab label="Python">
 
-  </details>
+    To connect with Python, complete the following steps.
 
-  Create a sample producer
+    1. Download the necessary packages.
 
-  <details>
-  <summary>Go</summary>
+        ```python
+        pip install kafka-python
+        ```
 
-   ```go
-  package main
+    2. Create a sample consumer.
 
-  import (
-    "context"
-    "crypto/tls"
-    "crypto/x509"
-    "errors"
-    "fmt"
-    "log"
-    "os"
-    "time"
+        ```python
+        from kafka import KafkaConsumer
 
-    "github.com/segmentio/kafka-go"
-    "github.com/segmentio/kafka-go/sasl"
-    "github.com/segmentio/kafka-go/sasl/plain"
-    "github.com/segmentio/kafka-go/sasl/scram"
-  )
+        bootstrap_servers = "<kafka_cluster_private_endpoint>:9092"
+        ca_pem_file = "<path_to_downloaded_pem_file>"
+        auth_method = "<basic-auth/iam>"
+        username = None
+        password = None
+        sasl_mechanism = None
+        topic_name = "<topic_name>"
 
-  func main() {
-    ca_path := "<path_to_downloaded_pem_file>"
-    brokers := []string{
-      "<kafka_cluster_private_endpoint>:9092",
-    }
-    topic_name := "<topic_name>"
-    authMethod := "<basic-auth/iam>"
+        match auth_method:
+          case "basic-auth":
+            username = "<configured_username>"
+            password = "<configured_password>"
+            sasl_mechanism = "SCRAM-SHA-512"
+          case "iam":
+            username = "<iam_access_key>:<iam_secret_key>"
+            password = "SCW"
+            sasl_mechanism = "PLAIN"
+          case _:
+            raise ValueError("auth_method not supported")
 
-    var username, password string
-    var mechanism sasl.Mechanism
-    switch authMethod {
-    case "basic-auth":
-      username = "<configured_username>"
-      password = "<configured_password>"
-      var err error
-      mechanism, err = scram.Mechanism(scram.SHA512, username, password)
-      if err != nil {
-        log.Fatalf("Error: %v", err)
-      }
-    case "iam":
-      username = "<iam_access_key>:<iam_secret_key>"
-      password = "SCW"
-      mechanism = plain.Mechanism{
-        Username: username,
-        Password: password,
-      }
-    default:
-      log.Fatalf("Error: authMethod not supported")
-    }
+        consumer = KafkaConsumer(
+          topic_name,
+          bootstrap_servers=bootstrap_servers,
+          ssl_cafile=ca_pem_file,
+          security_protocol="SASL_SSL",
+          sasl_mechanism=sasl_mechanism,
+          sasl_plain_username=username,
+          sasl_plain_password=password,
+        )
 
-    rootCAs := x509.NewCertPool()
-    certData, err := os.ReadFile(ca_path)
-    if err != nil {
-      log.Fatalf("Error when reading certificate CA: %v", err)
-    }
-    if !rootCAs.AppendCertsFromPEM(certData) {
-      log.Fatal("unable to parse CA certificate")
-    }
+        for event in consumer:
+          print(f"Message received: {event}")
+        ```
 
-    tlsConfig := &tls.Config{
-      MinVersion: tls.VersionTLS12,
-      RootCAs:    rootCAs,
-    }
-    writer := kafka.Writer{
-      Addr:     kafka.TCP(brokers...),
-      Topic:    topic_name,
-      Balancer: &kafka.LeastBytes{},
-      Transport: &kafka.Transport{
-        SASL: mechanism,
-        TLS:  tlsConfig,
-      },
-      AllowAutoTopicCreation: true,
-    }
-    defer writer.Close()
-    msg := kafka.Message{
-      Key:   []byte("random key"),
-      Value: []byte("Hello World!\n"),
-    }
+    3. Create a sample producer.
 
-    // Retry to handle auto-topic creation.
-    retries := 3
-    for range retries {
-      err = writer.WriteMessages(context.Background(), msg)
-      if !errors.Is(err, kafka.UnknownTopicOrPartition) {
-        break
-      }
-      time.Sleep(time.Second)
-    }
-    if err != nil {
-      log.Fatalf("Error : %v", err)
-    }
-    fmt.Println("Message successfully sent!")
-  }
-  ```
+        ```python
+        from kafka import KafkaProducer
 
-  </details>
+        bootstrap_servers = "<kafka_cluster_private_endpoint>:9092"
+        ca_pem_file = "<path_to_downloaded_pem_file>"
+        auth_method = "<basic-auth/iam>"
+        username = None
+        password = None
+        sasl_mechanism = None
+        topic_name = "<topic_name>"
 
-  <details>
-  <summary>Python</summary>
+        match auth_method:
+          case "basic-auth":
+            username = "<configured_username>"
+            password = "<configured_password>"
+            sasl_mechanism = "SCRAM-SHA-512"
+          case "iam":
+            username = "<iam_access_key>:<iam_secret_key>"
+            password = "SCW"
+            sasl_mechanism = "PLAIN"
+          case _:
+            raise ValueError("auth_method not supported")
 
-  ```python
-  from kafka import KafkaProducer
+        producer = KafkaProducer(
+          bootstrap_servers=bootstrap_servers,
+          ssl_cafile=ca_pem_file,
+          security_protocol="SASL_SSL",
+          sasl_mechanism=sasl_mechanism,
+          sasl_plain_username=username,
+          sasl_plain_password=password,
+        )
 
-  bootstrap_servers = "<kafka_cluster_private_endpoint>:9092"
-  ca_pem_file = "<path_to_downloaded_pem_file>"
-  auth_method = "<basic-auth/iam>"
-  username = None
-  password = None
-  sasl_mechanism = None
-  topic_name = "<topic_name>"
+        producer.send(topic_name, b"Hello World!")
+        producer.flush()
+        ```
 
-  match auth_method:
-    case "basic-auth":
-      username = "<configured_username>"
-      password = "<configured_password>"
-      sasl_mechanism = "SCRAM-SHA-512"
-    case "iam":
-      username = "<iam_access_key>:<iam_secret_key>"
-      password = "SCW"
-      sasl_mechanism = "PLAIN"
-    case _:
-      raise ValueError("auth_method not supported")
+  </TabsTab>
+  <TabsTab label="Java">
 
-  producer = KafkaProducer(
-    bootstrap_servers=bootstrap_servers,
-    ssl_cafile=ca_pem_file,
-    security_protocol="SASL_SSL",
-    sasl_mechanism=sasl_mechanism,
-    sasl_plain_username=username,
-    sasl_plain_password=password,
-  )
+    To Connect with Java, complete the following steps.
 
-  producer.send(topic_name, b"Hello World!")
-  producer.flush()
-  ```
+    1. Download Kafka and export it in the PATH.
 
-  </details>
+        ```
+        wget "https://downloads.apache.org/kafka/<version>/kafka_<version>.tgz
+        tar -xzf "kafka_<version>.tgz"
+        export PATH="${PATH}:/PATH/TO/kafka_<version>/bin"
+        ```
 
-2. Connect with Java
+    2. For each consumer and producer client, create the `config.properties` file.
 
-  Donwload Kafka and export it in the PATH
-  ```
-  wget "https://downloads.apache.org/kafka/<version>/kafka_<version>.tgz
-  tar -xzf "kafka_<version>.tgz"
-  export PATH="${PATH}:/PATH/TO/kafka_<version>/bin"
-  ```
+        ```java
+        security.protocol=SASL_SSL
+        ssl.truststore.location=<path_to_downloaded_pem_file>
+        ssl.truststore.type=PEM
+        sasl.mechanism=<PLAIN/SCRAM-SHA-512>
+        sasl.jaas.config=org.apache.kafka.common.security.<plain.PlainLoginModule/scram.ScramLoginModule> required \
+            username=<"<iam_access_key>:<iam_secret_key>"/"<configured_username>"> \
+            password=<"SCW"\"<configured_password>">;
+        bootstrap.servers=<kafka_cluster_private_endpoint>:9092
+        ```
 
-  For each consumer and producer client, create the `config.properties` file
-  ```java
-  security.protocol=SASL_SSL
-  ssl.truststore.location=<path_to_downloaded_pem_file>
-  ssl.truststore.type=PEM
-  sasl.mechanism=<PLAIN/SCRAM-SHA-512>
-  sasl.jaas.config=org.apache.kafka.common.security.<plain.PlainLoginModule/scram.ScramLoginModule> required \
-      username=<"<iam_access_key>:<iam_secret_key>"/"<configured_username>"> \
-      password=<"SCW"\"<configured_password>">;
-  bootstrap.servers=<kafka_cluster_private_endpoint>:9092
-  ```
+    3. Run topics, consumer, or producer commands.
 
-  Run topics, consumer or producer commands
-  ```bash
-  kafka-topics.sh --bootstrap-server <kafka_cluster_private_endpoint>:9092 --command-config config.properties -create --topic <topic_name>
-  kafka-topics.sh --bootstrap-server <kafka_cluster_private_endpoint>:9092 --command-config config.properties --list
-  kafka-console-consumer.sh --bootstrap-server <kafka_cluster_private_endpoint>:9092 --consumer.config config.properties --topic <topic_name>
-  kafka-console-producer.sh --bootstrap-server <kafka_cluster_private_endpoint>:9092 --producer.config config.properties --topic <topic_name>
-  ```
+        ```bash
+        kafka-topics.sh --bootstrap-server <kafka_cluster_private_endpoint>:9092 --command-config config.properties -create --topic <topic_name>
+        kafka-topics.sh --bootstrap-server <kafka_cluster_private_endpoint>:9092 --command-config config.properties --list
+        kafka-console-consumer.sh --bootstrap-server <kafka_cluster_private_endpoint>:9092 --consumer.config config.properties --topic <topic_name>
+        kafka-console-producer.sh --bootstrap-server <kafka_cluster_private_endpoint>:9092 --producer.config config.properties --topic <topic_name>
+        ```
 
-  All these code snippets can be found on the console, on the kafka cluster dashboard, **Connectivity section** by clicking **Connect**
+  </TabsTab>
+</Tabs>
 
+Note that you can find all of these code snippets in the Scaleway console too. Here is how to access them:
+
+1. In the console side menu, go to **Data & Analytics > Apache Kafka®**. The **Clusters for Apache Kafka®** dashboard opens.
+2. Select your cluster on the **Clusters** tab. The dashboard of your cluster opens.
+3. Once on the **Overview** tab, go to the **Connectivity** section, and click **Connect**. 
+
+    You can find the code snippets on the **Connectivity** window that appears.

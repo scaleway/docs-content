@@ -34,10 +34,20 @@ The integration consists of two components, both installable and configurable vi
 
 <Requirements />
 
-- A Scaleway account logged into the [console](https://console.scaleway.com)
+- A Scaleway account logged in to the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 - API credentials (Access Key ID and Secret Key) with Audit Trail read permissions
+- Opened port 443 to allow the Scaleway Add-on to communicate with the Scaleway servers
 - Splunk Enterprise or Splunk Cloud Platform (supported versions: 9.4.x, 10.0.x, 10.2.x, 10.4.x)
+- The Splunk `admin` role assigned to you
+
+<Message type="note">
+Because the Scaleway Add-on operates on the Splunk platform, it inherits the system requirements of your underlying Splunk environment:
+
+- For Splunk Enterprise deployments, see [System Requirements](https://help.splunk.com/en/splunk-enterprise/get-started/install-and-upgrade/10.4/plan-your-splunk-enterprise-installation/system-requirements-for-use-of-splunk-enterprise-on-premises) in the Splunk Enterprise Installation Manual.
+- If you are running the add-on entirely within Splunk Cloud, no additional platform requirements apply.
+- If you use on-premise forwarders to route data to Splunk Cloud, see the [System Requirements](https://help.splunk.com/en/splunk-enterprise/get-started/install-and-upgrade/10.4/plan-your-splunk-enterprise-installation/system-requirements-for-use-of-splunk-enterprise-on-premises) in the Splunk Enterprise Installation Manual for forwarder specifications.
+</Message>
 
 ## Scaleway Add-on for Splunk
 
@@ -45,7 +55,10 @@ The integration consists of two components, both installable and configurable vi
 
 The Scaleway Add-On for Splunk acts as a data collection layer that ingests audit logs from Scaleway infrastructure into a Splunk deployment. It connects to Scaleway accounts via API credentials, allowing administrators to collect:
 - audit events from the Scaleway Audit Trail service
-- IAM logs covering users, groups, and applications
+- Identity and Access Management (IAM) logs covering users, groups, and applications
+- event data about Compute resources
+
+After the Splunk platform indexes the ingested information, the data can be analyzed directly or correlated with other data sources to provide enriched contextual insights.
 
 Administrators can customize their setup and configure:
 - multiple Scaleway Organizations to include in the scope of data collection
@@ -55,45 +68,173 @@ To ensure compatibility across the Splunk ecosystem, the add-on extracts fields 
 
 ### Install the add-on
 
-Follow these steps to install the Scaleway Add-on for Splunk:
+You can install the Scaleway Add-on via Splunk Web or the command line. The add-on is supported across all Splunk Enterprise and Splunk Cloud instance types, including indexers, search heads, and forwarders.
 
-1. In your Splunk instance, on the **Apps** homepage, click **Find more apps** in the side menu. Alternatively, go to [splunkbase](https://splunkbase.splunk.com/) and use the search functionality.
-2. Search for "Scaleway Add-on". The add-on is displayed in the search results pane.
-3. Click **Install**, and follow the on-screen prompts.
-4. Restart Splunk when prompted.
+1. Download the Scaleway Add-on from [Splunkbase](https://splunkbase.splunk.com/).
+2. Determine the best installation location and method for your deployment architecture.
+3. Complete any required prerequisite steps.
+4. Execute the installation.
 
-    Once in Splunk, navigate to **Apps**. You should see the **Scaleway Add-on** in the list of apps.
+If you need detailed instructions for installing the add-on in a single-instance deployment, a distributed deployment, or Splunk Cloud, see the [installation walkthrough](#installation-walkthrough) section.
 
-### Configure and use the add-on
+#### Distributed installation of add-on
+
+The following table provides guidance on where and how to install the add-on within distributed Splunk Enterprise environments or setups that rely on forwarders. 
+
+Note that based on your infrastructure, deployment preferences, and the specific requirements of the add-on, deployment across multiple Splunk instances may be necessary.
+
+| Splunk instance type   | Supported | Required | Comments |
+|------------------------|-----------|----------|----------|
+| Search heads           | Yes       | Yes      | Deploy the add‑on across all search heads that require Scaleway knowledge management capabilities. To centralize management, you must assign a single node (a search head or heavy forwarder) as the configuration server, and disable the visibility of the add-on on all secondary nodes. |
+| Indexers               | No        | No       | Installation is not required here. The add-on exclusively relies on modular inputs for data collection, meaning it must be deployed on a heavy forwarder. |
+| Heavy forwarders       | Yes       | No       | Installation on indexers is not required if the add‑on is already deployed on heavy forwarders. To centralize management, select one specific node (a search head or heavy forwarder) to serve as the configuration server, and disable the visibility of the add-on across all secondary locations. |
+| Universal forwarders   | No        | No       | Data collection via universal forwarders is unsupported. Because this add‑on utilizes modular inputs that depend on Python and the Splunk REST handler, a heavy forwarder is required. |
+
+#### Distributed deployment compatibility
+
+The following table provides a quick reference for the compatibility of the add-on with Splunk distributed deployment features.
+
+| Distributed deployment feature | Supported | Comments |
+|--------------------------------|-----------|-----------|
+| Search head clusters           | Yes       | Disable add‑on visibility on search heads. |
+| Indexer clusters               | Yes       | This method is supported only for deploying the unconfigured add‑on. All configuration must be completed via the user interface of the add‑on on a single, designated node. |
+| Deployment server              | Yes       | This method is supported only for deploying the unconfigured add‑on. All configuration must be completed via the user interface of the add‑on on a single, designated node. |
+
+#### Installation walkthrough
+
+For detailed guidance on installing a Splunk add-on in the following deployment scenarios, see [Installing add-ons](https://docs.splunk.com/Documentation/AddOns/released/Overview/Installingadd-ons) in the Splunk Add-ons documentation:
+
+- [Single-instance Splunk Enterprise](https://docs.splunk.com/Documentation/AddOns/released/Overview/Singleserverinstall)
+- [Distributed Splunk Enterprise](https://docs.splunk.com/Documentation/AddOns/released/Overview/Distributedinstall)
+- [Splunk Cloud](https://docs.splunk.com/Documentation/AddOns/released/Overview/SplunkCloudinstall)
+
+### Configure an API key and permissions
+
+To collect data from the Scaleway Audit Trail, Identity and Access Management (IAM), and Compute APIs using the add-on, you must first generate an API key in the Scaleway console and assign the appropriate permissions.
+
+1. Go to the [Scaleway console](https://console.scaleway.com/).
+2. [Create a dedicated IAM application](/iam/how-to/create-application/).
+3. [Create an API key](/iam/how-to/create-api-keys/).
+4. When creating an API key, make a note of the following parameters. They will be needed later, when [configuring an account in Splunk](#configure-an-account).
+    - Secret Key
+    - Organization ID
+5. [Create a new IAM policy](/iam/how-to/create-policy/) and attach that policy to the Scaleway application you have just created.
+6. Within the policy configuration, add the necessary rules to grant read-only access by defining the exact scope and permission sets. Since these services operate at different hierarchical levels, you need to configure the following distinct rules:
+    - Audit Trail & IAM: Set the scope to your Organization and select the **AuditTrailReadOnly** and **IAMReadOnly** permission sets.
+    - Instances: Set the scope to your specific Project (or Organization, if you want to monitor all projects) and select the **InstancesReadOnly** permission set.
+
+### Configure the add-on
+
+To configure the add-on, take the following steps:
+
+1. [Configure an account](#configure-an-account) (a Scaleway Organization and corresponding API key).
+2. [Configure inputs](#configure-an-input) (i.e., data ingestion sources).
+3. [Configure optional settings](#configure-optional-proxy-and-log-level-settings) (add a proxy or change the log level).
+
+#### Configure an account
 
 Follow these steps to configure the Scaleway Add-on for Splunk:
 
-1. In your Splunk instance, navigate to **Apps** > **Scaleway Add-on**. The **Configuration** tab of the add-on opens.
-2. Configure a Scaleway Organization and API key.
+1. On your Splunk platform instance, go to the Splunk Web homepage, then select **Scaleway Add-on** in the navigation banner. The **Configuration** tab of the add-on opens.
+2. Configure an account. You must configure at least one account.
     1. On the **Configuration** tab, click the **Accounts** tab.
-    3. Click the **Add** button. The **Add Accounts** window appears.
+    2. Click the **Add** button. The **Add Accounts** window appears.
           <Lightbox image={image1} alt="A screenshot showing the Add Accounts window in Splunk" size="large" />
-    4. Provide the required information in the fields marked with an asterisk:
+    3. Provide the required information in the fields marked with an asterisk:
         - **Account name**: Any descriptive name that helps you identify the account. 
-        - **Organization ID**: The identifier of your Organization in Scaleway. You can retrieve your Organization ID from the Scaleway console: select **Organization Dashboard** in the side menu, then click **Copy ID**.
-        - **SCW Secret Key**: The API Secret Key that your Scaleway account will use to authenticate to Splunk. When you [create your Scaleway API key in the Scaleway console](/iam/how-to/create-api-keys/), you are provided an Access Key ID and a Secret Key. The Secret Key is shown only once, make sure that you save it in a secure place.
-    5. Repeat these steps for all the Organizations that you want Splunk to collect data from.
-2. Specify the Audit Trail event or IAM log type that you want Splunk to ingest for data collection.
-    1. Go to the **Inputs** tab and click the **Create New Input** button.
-          <Lightbox image={image2} alt="A screenshot showing the Create New Input button and drop-down list in Splunk" size="large" />
-    2. Select an event type from the drop-down list. A window appears prompting you to enter details for your input.
-    3. Provide the required information (e.g., polling interval, Scaleway region) in the fields marked with an asterisk.
+        - **Organization ID**: The identifier of the Scaleway Organization associated with the Scaleway API key. You can retrieve your Organization ID from the Scaleway console: select **Organization Dashboard** in the side menu, then click **Copy ID**.
+        - **SCW Secret Key**: The API Secret Key that your Scaleway account will use to authenticate to Splunk. This is the Secret Key that was shown to you when you [created your Scaleway API key](#configure-an-api-key-and-permissions) in the Scaleway console.
+    4. Repeat these steps for all the Organizations that you want Splunk to collect data from.
 
-        Note that the minimum allowed polling interval is 1 poll every 60 seconds.
+To complete the setup of the add-on, after configuring an account, you must specify one or more inputs (i.e., data ingestion sources).
 
-      <Message type="tip">
-      - To retrieve your **Project ID**. go to the Scaleway console, select **Project Dashboard** in the side menu, then click **Copy ID**.
-      - To retrieve a **Product name**, go to the Scaleway console, select **Monitoring > Audit Trail** in the side menu. The Audit Trail dashboard opens. On the **Events** tab, select the **Product** field. A drop-down list appears. Use the product name as displayed in the drop-down list. {/* EDITORIAL COMMENT: Is this correct? */}
-      </Message>
+#### Configure an input
 
-Once configured, the Scaleway Add-on continuously polls Scaleway Audit Trail APIs at the specified intervals and forwards events to Splunk for indexing and analysis.
+A Splunk input is a data ingestion source that brings raw data into the Splunk platform.
 
-Regarding guidance on usage, standard Splunk procedures apply. See the [Splunk Enterprise documentation](https://help.splunk.com/en/splunk-enterprise) or [Splunk Cloud Platform documentation](https://help.splunk.com/en/splunk-cloud-platform/) for more information. {/* EDITORIAL COMMENT: We need a more specific link. */}
+To complete the setup of the add-on, you must configure data inputs on the specific Splunk node handling data collection for the add-on (usually a heavy forwarder).
+Scaleway recommends using Splunk Web for this configuration, but it is also possible to configure inputs manually via the configuration files.
+
+Once the inputs are configured, the Scaleway Add-on continuously polls Scaleway Audit Trail APIs at the specified intervals and forwards events to Splunk for indexing and analysis.
+
+To retrieve Audit Trail events/IAM logs/Instance server events for a Scaleway Organization and/or Project, complete the following steps.
+
+1. On your Splunk platform instance, go to the Splunk Web homepage, then select **Scaleway Add-on** in the navigation banner.
+2. Go to the **Inputs** tab and click the **Create New Input** button.
+        <Lightbox image={image2} alt="A screenshot showing the Create New Input button and drop-down list in Splunk" size="large" />
+3. Select the relevant input type from the drop-down list.
+
+    | Input type                        | Scaleway endpoint that will be queried                 |
+    | --------------------------------- | ------------------------------------------------------ |
+    | Audit Trail events                | [/audit-trail/v1alpha1/regions/\{region\}/events](https://www.scaleway.com/en/developers/api/audit-trail/events) |
+    | Audit Trail authentication events | [/audit-trail/v1alpha1/regions/\{region\}/authentication-events](https://www.scaleway.com/en/developers/api/audit-trail/authentication-events) |
+    | Audit Trail system events         | [/audit-trail/v1alpha1/regions/\{region\}/system-events](https://www.scaleway.com/en/developers/api/audit-trail/system-events) |
+    | IAM logs                          | [/iam/v1alpha1/logs](https://www.scaleway.com/en/developers/api/iam/logs) |
+    | IAM users                         | [/iam/v1alpha1/users](https://www.scaleway.com/en/developers/api/iam/users) |
+    | IAM groups                        | [/iam/v1alpha1/groups](https://www.scaleway.com/en/developers/api/iam/groups) |
+    | IAM applications                  | [/iam/v1alpha1/applications](https://www.scaleway.com/en/developers/api/iam/applications) |
+    | Instance servers                  | [/instance/v1/zones/\{zone\}/servers](https://www.scaleway.com/en/developers/api/instance/v1/instances) |
+
+    A window appears prompting you to enter details for your input.
+
+4. Provide the required information (e.g., polling interval, Scaleway region). Obligatory fields  are marked with an asterisk.
+
+    Note that:
+    - The minimum allowed polling **Interval** is 1 poll every 60 seconds.
+    - The **Index** must correspond to the index in which the Audit Trail events data should be stored. The default is `main`.
+    - The **Project ID** field is optional. If no Project ID is given, the input will retrieve data from all the Scaleway Projects. 
+        
+        To retrieve your Project ID, go to the [Scaleway console](https://account.scaleway.com/), select **Project Dashboard** in the side menu, then click **Copy ID**.
+    - The **Product name** field is optional. If no Product name is given, the input will retrieve data from all the Scaleway products. 
+        
+        To retrieve a product name, go to the [Scaleway console](https://account.scaleway.com/), select **Monitoring > Audit Trail** in the side menu. The Audit Trail dashboard opens. 
+        
+        On the **Events** tab, select the **Product** field. A drop-down list appears. Use the product name as displayed in the drop-down list. However, make sure that you use lowercase letters (for example, `instance`). {/* EDITORIAL COMMENT: Is this correct? */}
+
+5. Verify that data is successfully arriving by running the following search on your search head.
+
+    | Input type                        | Search to run                                          |
+    | --------------------------------- | ------------------------------------------------------ |
+    | Audit Trail events                | `sourcetype=scaleway:audittrail_events*`               |
+    | Audit Trail authentication events | `sourcetype=scaleway:audittrail_authentication_events` |
+    | Audit Trail system events         | `sourcetype=scaleway:audittrail_system_events`         |
+    | IAM logs                          | `sourcetype=scaleway:iam:logs`                         |
+    | IAM users                         | `sourcetype=scaleway:iam:users`                        |
+    | IAM groups                        | `sourcetype=scaleway:iam:groups`                       |
+    | IAM applications                  | `sourcetype=scaleway:iam:applications`                 |
+    | Instance servers                  | `sourcetype=scaleway:instance`                         |
+
+        If you do not see any events, check the **Troubleshooting** tab on your data collection node to verify that your accounts, forwarders, and inputs are all configured successfully.
+
+To manually configure inputs using a configuration file, see [Appendix: Manual configuration](#appendix-manual-configuration).
+
+#### Configure optional proxy and log level settings
+
+You can configure optional proxy and log level settings on the Splunk platform instance that you have designated as your configuration server for this add-on.
+
+The Scaleway Add-on supports HTTP/SOCKS proxies.
+
+{/* EDITORIAL COMMENT: Shall we mention that users have to tick the Enable checkbox? */}
+
+1. On your Splunk platform instance, go to the Splunk Web homepage, then select **Scaleway Add-on** in the navigation banner. The **Configuration** tab of the add-on opens.
+2. If you need to use a proxy: 
+    1. Click the **Proxy** tab.
+    2. Check the **Enable** box.
+    3. Add your proxy details. If your proxy server does not require authentication, leave the **Username** and **Password** fields empty. 
+    4. Click **Save**.
+5. If you want to change the logging level:
+    1. Click the **Logging** tab.
+    2. Select the **Log Level**.
+    3. Click **Save**.
+
+### Upgrade the add-on
+
+To upgrade the app, complete the following steps.
+
+1. Disable all inputs.
+2. Download the latest version of the Scaleway Add-on from [Splunkbase](https://splunkbase.splunk.com/).
+3. Install the add-on across your deployment.
+4. Enable all the configured inputs to resume the data collection.
 
 ### Troubleshoot the add-on
 
@@ -144,7 +285,7 @@ The following pre-built dashboards are available:
 
 In addition to using the pre-built dashboards, you can also add your own custom dashboards and alerting.
 
-For detailed guidance, consult the [Splunk Enterprise documentation](https://help.splunk.com/en/splunk-enterprise) or the [Splunk Cloud Platform documentation](https://help.splunk.com/en/splunk-cloud-platform/). Standard Splunk operating procedures apply. {/* EDITORIAL COMMENT: We need a more specific link. */}
+For detailed guidance, consult the [Splunk dashboard documentation](https://help.splunk.com/en/splunk-enterprise/create-dashboards-and-reports/simple-xml-dashboards/9.4/build-and-edit-dashboards-in-splunk-web/create-a-dashboard) and the [Splunk alerting manual](https://help.splunk.com/en/splunk-enterprise/alert-and-respond/alerting-manual/10.4/alerting-overview/getting-started-with-alerts). Standard Splunk operating procedures apply.
 
 #### Search
 
@@ -156,6 +297,140 @@ To search and filter Audit Trail events, follow these steps:
     Enter `scaleway` to display all the Audit Trail events obtained from your Scaleway infrastructure.
     </Message>
 
+Regarding source types, the Scaleway Add-on provides the index-time and search-time knowledge for audit events in the following formats.
+
+| Source type                  | Dataset name  | Description   | CIM data model   |
+|------------------------------|---------------|---------------|------------------|
+| `scaleway:audittrail_events` | All_Changes<br/>All_Changes.Account_Management<br/>All_Changes.Instance_Changes                     | All Audit Trail events visible through the Scaleway Audit Trail portal. | [Change](https://docs.splunk.com/Documentation/CIM/latest/User/Change) |
+| `scaleway:audittrail_events:auths`| Authentication | All unauthenticated API events that actually perform and/or complete an authentication step. | [Authentication](https://docs.splunk.com/Documentation/CIM/latest/User/Authentication) |
+| `scaleway:audittrail_authentication_events` | n/a  | All Audit Trail authentication events. | n/a |
+| `scaleway:audittrail_system_events` | n/a | All Audit Trail system events. | n/a |
+| `scaleway:iam:logs` | All_Changes<br/>All_Changes.Account_Management                                                     | All logs available for given Organization. | [Change](https://docs.splunk.com/Documentation/CIM/latest/User/Change) |
+| `scaleway:iam:users` | n/a | All users available for given Organization. | n/a |
+| `scaleway:iam:groups` | n/a | All groups available for given Organization. | n/a  |
+| `scaleway:iam:applications` | n/a   | All applications available for given Organization.  | n/a |
+| `scaleway:instance` | n/a  | All instances available for given Availability Zone. | n/a |
+
 ### Troubleshoot the app
 
 For details, see [I have issues with my Splunk integration](/audit-trail/troubleshooting/issues-with-splunk-integration).
+
+## Appendix: Manual configuration
+
+### Manually configure Audit Trail inputs
+
+To manually configure Audit Trail inputs using a configuration file, complete the following steps.
+
+1. Create a `$SPLUNK_HOME/etc/apps/TA-scaleway_addon/local/inputs.conf` configuration file (if it is not already present).
+2. Add the following stanza.
+
+    <Tabs>
+        <TabsTab label="Audit Trail events">
+        ```bash
+        [audittrail_events://&lt;audit_trail_events_input_name&gt;]
+        interval = &lt;value&gt;
+        index = &lt;value&gt;
+        account = &lt;value&gt;
+        start_date = &lt;value&gt;
+        region = &lt;value&gt;
+        project_id = &lt;value&gt;
+        product_name = &lt;value&gt;
+        ```
+        </TabsTab>
+        <TabsTab label="Audit Trail authentication events">
+        ```bash
+        [audittrail_authentication_events://&lt;audit_trail_authentication_events_input_name&gt;]
+        interval = &lt;value&gt;
+        index = &lt;value&gt;
+        account = &lt;value&gt;
+        start_date = &lt;value&gt;
+        region = &lt;value&gt;
+        ```
+        </TabsTab>
+        <TabsTab label="Audit Trail system events">
+        ```bash
+        [audittrail_system_events://&lt;audit_trail_system_events_input_name&gt;]
+        interval = &lt;value&gt;
+        index = &lt;value&gt;
+        account = &lt;value&gt;
+        start_date = &lt;value&gt;
+        region = &lt;value&gt;
+        ```
+        </TabsTab>   
+    </Tabs>
+
+3. (Optional) Configure a custom `index`.
+4. Restart your Splunk platform instance.
+5. Verify that data is successfully arriving by running a search on your search head. For the search relevant to your input, see section [Configure an input](#configure-an-input) and the table that lists input types and corresponding searches.
+
+    If you do not see any events, check the **Troubleshooting** tab on your data collection node to verify that your accounts, forwarders, and inputs are all configured successfully.
+
+### Manually configure IAM inputs
+
+To manually configure IAM inputs using a configuration file, complete the following steps.
+
+1. Create a `$SPLUNK_HOME/etc/apps/TA-scaleway_addon/local/inputs.conf` configuration file (if it is not already present).
+2. Add the following stanza.
+
+    <Tabs>
+        <TabsTab label="IAM logs">
+        ```bash
+        [iam_logs://&lt;iam_logs_input_name&gt;]
+        interval = &lt;value&gt;
+        index = &lt;value&gt;
+        account = &lt;value&gt;
+        start_date = &lt;value&gt;
+        ```
+        </TabsTab>
+        <TabsTab label="IAM users">
+        ```bash
+        [iam_users://&lt;iam_users_input_name&gt;]
+        interval = &lt;value&gt;
+        index = &lt;value&gt;
+        account = &lt;value&gt;
+        ```
+        </TabsTab>
+        <TabsTab label="IAM groups">
+        ```bash
+        [iam_groups://&lt;iam_groups_input_name&gt;]
+        interval = &lt;value&gt;
+        index = &lt;value&gt;
+        account = &lt;value&gt;
+        ```
+        </TabsTab>
+        <TabsTab label="IAM applications">
+        ```bash
+        [iam_applications://&lt;iam_applications_input_name&gt;]
+        interval = &lt;value&gt;
+        index = &lt;value&gt;
+        account = &lt;value&gt;
+        ```
+        </TabsTab>  
+    </Tabs>
+
+3. (Optional) Configure a custom `index`.
+4. Restart your Splunk platform instance.
+5. Verify that data is successfully arriving by running a search on your search head. For the search relevant to your input, see section [Configure an input](#configure-an-input) and the table that lists input types and corresponding searches.
+
+    If you do not see any events, check the **Troubleshooting** tab on your data collection node to verify that your accounts, forwarders, and inputs are all configured successfully.
+
+### Manually configure Instance server inputs
+
+To manually configure Instance server using a configuration file, complete the following steps.
+
+1. Create a `$SPLUNK_HOME/etc/apps/TA-scaleway_addon/local/inputs.conf` configuration file (if it is not already present).
+2. Add the following stanza.
+
+    ```bash
+    [instance_servers://&lt;instance_servers_input_name&gt;]
+    interval = &lt;value&gt;
+    index = &lt;value&gt;
+    account = &lt;value&gt;
+    zone = &lt;value&gt;
+    ```
+
+3. (Optional) Configure a custom `index`.
+4. Restart your Splunk platform instance.
+5. Verify that data is successfully arriving by running a search on your search head. For the search relevant to your input, see section [Configure an input](#configure-an-input) and the table that lists input types and corresponding searches.
+
+    If you do not see any events, check the **Troubleshooting** tab on your data collection node to verify that your accounts, forwarders, and inputs are all configured successfully.

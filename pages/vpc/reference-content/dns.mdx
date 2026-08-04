@@ -3,7 +3,7 @@ title: Understanding Scaleway DNS for VPC and Private Networks
 description: Learn more about how internal DNS works within the Scaleway ecosystem, and how to ensure your infrastructure is using DNS efficiently.
 tags: vpc private-network dns dns-server dns-resolution hostname
 dates:
-  validation: 2025-07-16
+  validation: 2026-08-04
   posted: 2024-12-31
 ---
 
@@ -37,11 +37,7 @@ The managed DNS resolver service is exposed on each Private Network through the 
 - IPv4: `169.254.169.254`
 - IPv6: `fe80::200:22ff:fe05:ca1e`
 
-The service resolves both regular public records, as well as internal VPC records.
-
-<Message type="tip">
-The `.internal` at the end of internal addresses is important in enabling the resolver to distinguish between internal and external/public DNS. For this reason, you should always add `.internal` when addressing resources within your VPC.
-</Message>
+The service resolves both regular public records and internal VPC records. The `.internal` at the end of internal addresses is important in enabling the resolver to distinguish between internal and external/public DNS. For this reason, you should always add `.internal` when addressing resources within your VPC.
 
 The DNS service resolves the following formats:
 
@@ -51,6 +47,7 @@ The DNS service resolves the following formats:
 <resource_uuid>.<private-network_uuid>.internal
 <resource_uuid>.<private-network_name>.internal
 ```
+DNS cannot resolve or forward queries between different VPCs. It can only resolve hostnames for resources within the same VPC, though they may be on different Private Networks within that VPC. See [DNS resolution across VPC Peering connections](#dns-resolution-across-vpc-peering-connections) for the formats used to resolve resources in a peered VPC.
 
 <Message type="tip">
 The `resource_uuid` does not generally correspond to the ID of the principal resource (e.g. Instance, Elastic Metal server, Public Gateway), but rather to the ID of the sub-resource that facilitates the attachment to the Private Network. For example:
@@ -59,7 +56,28 @@ The `resource_uuid` does not generally correspond to the ID of the principal res
 - Public Gateways: `resource_uuid` corresponds to the [GatewayNetwork](https://www.scaleway.com/en/developers/api/public-gateways/#path-gateway-networks-list-public-gateway-connections-to-private-networks) ID.
 </Message>
 
-DNS cannot resolve or forward queries between different VPCs. It can only resolve hostnames for resources within the same VPC, though they may be on different Private Networks within that VPC.
+## DNS resolution across VPC Peering connections
+
+To resolve a resource located in a different, peered VPC, you must identify the target VPC in the DNS query, using either its name or its ID.
+
+Specifying the target VPC is mandatory for cross-VPC resolution. Private Network names are only guaranteed to be unique within a single VPC, so disambiguation is required to avoid conflicts between Private Networks of the same name in different, peered VPCs.
+
+When [VPC Peering](/vpc-peering/concepts/) is used to connect VPCs, the DNS service also resolves the following formats, which include the target VPC's name or ID:
+
+```
+<resource_name>.<private-network_name>.<vpc_uuid>.internal
+<resource_name>.<private-network_uuid>.<vpc_uuid>.internal
+<resource_uuid>.<private-network_uuid>.<vpc_uuid>.internal
+<resource_uuid>.<private-network_name>.<vpc_uuid>.internal
+<resource_name>.<private-network_name>.<vpc_name>.internal
+<resource_name>.<private-network_uuid>.<vpc_name>.internal
+<resource_uuid>.<private-network_uuid>.<vpc_name>.internal
+<resource_uuid>.<private-network_name>.<vpc_name>.internal
+```
+
+<Message type="tip">
+Cross-VPC DNS resolution follows the same transitivity rules as VPC Peering routing: it works across a direct peering connection, and through an intermediary VPC that has transitive peering enabled, but not through an intermediary VPC where this setting is not enabled. See [DNS resolution](/vpc-peering/concepts/#dns-resolution) for more information.
+</Message>
 
 ## Rate limiting
 

@@ -62,6 +62,10 @@ export const auditTrailMenu = {
           label: 'Supported endpoints for Audit Trail',
           slug: 'adt-supported-endpoints',
         },
+        {
+          label: 'Integrate Audit Trail with Splunk',
+          slug: 'splunk-integration',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

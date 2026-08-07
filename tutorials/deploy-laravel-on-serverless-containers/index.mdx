@@ -1,5 +1,5 @@
 ---
-title: Deploying Laravel 10.x on Serverless Containers
+title: Deploying Laravel 13.x on Serverless Containers
 description: This tutorial provides a step-by-step guide for deploying a containerized Laravel application on the Scaleway cloud platform.
 tags: laravel php docker nginx fpm
 hero: assets/scaleway-umami.webp
@@ -7,7 +7,7 @@ products:
   - containers
   - container-registry
 dates:
-  validation: 2025-05-19
+  validation: 2026-08-06
   posted: 2023-06-01
   validation_frequency: 12
 difficulty: beginner
@@ -28,7 +28,7 @@ import image8 from './assets/scaleway-cockpit-queue.webp'
 import Requirements from '@macros/iam/requirements.mdx'
 
 
-This tutorial provides a step-by-step guide for deploying a containerized Laravel application on the Scaleway cloud platform. It covers the entire process, from setting up the required infrastructure to building and deploying the application using Docker and Scaleway services. The tutorial aims to help developers easily deploy their Laravel applications on Scaleway by providing clear instructions and best practices.
+This tutorial provides a step-by-step guide for deploying a containerized Laravel 13.x application on the Scaleway cloud platform. It covers the entire process, from setting up the required infrastructure to building and deploying the application using Docker and Scaleway services. The tutorial aims to help developers easily deploy their Laravel applications on Scaleway by providing clear instructions and best practices.
 
 <Requirements />
 
@@ -46,9 +46,9 @@ Scaleway provides a seamless environment for running and managing containers, of
 
 ## Creating a queue
 
-Laravel applications make use of [queues](https://laravel.com/docs/10.x/queues) to process long-running jobs in the background. As this feature of the Laravel framework is nearly always used, we will configure it and leverage the [Scaleway Queues](/queues/) product from Scaleway. The [Scaleway documentation](/queues/quickstart/) provides clear information on how this managed service works and can be configured.
+Laravel applications make use of [queues](https://laravel.com/docs/13.x/queues) to process long-running jobs in the background. As this feature of the Laravel framework is nearly always used, we will configure it and leverage the [Scaleway Queues](/queues/) product from Scaleway. The [Scaleway documentation](/queues/quickstart/) provides clear information on how this managed service works and can be configured.
 
-1. Create a queue. In this example, we create a `Standard` queue (At-least-once delivery, the order of messages is not preserved) with the default parameters. This queue will be the default queue used by our application.
+1. Create a queue. In this example, we create a `Standard` queue (at-least-once delivery, the order of messages is not preserved) with the default parameters. This queue will be the default queue used by our application.
 
     <Lightbox image={image} alt="Scaleway Console Queue" />
 
@@ -64,14 +64,14 @@ In this section, we will focus on building the containerized image. With Docker,
 
     ```dockerfile
     # Dockerfile
-    FROM --platform=linux/amd64 php:8.2.6-fpm-alpine3.18
+    FROM --platform=linux/amd64 php:8.3-fpm-alpine
 
     ARG IPE_GD_WITHOUTAVIF=1
 
     ADD https://github.com/mlocati/docker-php-extension-installer/releases/latest/download/install-php-extensions /usr/local/bin/
 
     RUN chmod +x /usr/local/bin/install-php-extensions && \
-        install-php-extensions bcmath gd gettext intl mcrypt mysqli opcache pcntl pdo_mysql pdo_pgsql soap sockets redis xsl zip
+        install-php-extensions bcmath gd gettext intl mysqli opcache pcntl pdo_mysql pdo_pgsql soap sockets redis xsl zip
 
     RUN apk --update add \
         supervisor \
@@ -121,7 +121,7 @@ In this section, we will focus on building the containerized image. With Docker,
 
     [program:worker]
     process_name=%(program_name)s_%(process_num)02d
-    command=php /var/www/html/artisan queue:work sqs --sleep=3 --tries=3 --max-time=3600
+    command=php /var/www/html/artisan queue:work --sleep=3 --tries=3 --max-time=3600
     stdout_logfile=/dev/stdout
     stdout_logfile_maxbytes=0
     stderr_logfile=/dev/stderr
@@ -162,7 +162,7 @@ In this section, we will focus on building the containerized image. With Docker,
         error_page 404 /index.php;
 
         location ~ \.php$ {
-            fastcgi_pass unix:/var/run/php/php8.2-fpm.sock;
+            fastcgi_pass unix:/var/run/php/php8.3-fpm.sock;
             fastcgi_param SCRIPT_FILENAME $realpath_root$fastcgi_script_name;
             include fastcgi_params;
         }
@@ -201,7 +201,7 @@ In this section, we will focus on building the containerized image. With Docker,
     daemonize = no
 
     [www]
-    listen = /var/run/php/php8.2-fpm.sock
+    listen = /var/run/php/php8.3-fpm.sock
     listen.owner = www-data
     listen.group = www-data
     listen.mode = 0660
@@ -247,13 +247,84 @@ The Scaleway documentation website provides a Quickstart on how to [create and m
 
 1. Create a Serverless Containers namespace. In this example, we create the `my-laravel-application` namespace and configure the environment variables and secrets necessary for our application. In particular, we must add all the variables needed to connect to the previously created SQS/SNS queue.
 
-    By default, Laravel expects the following environment variables/secrets to be filled in for queues: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `QUEUE_CONNECTION`, `SQS_PREFIX` and `SQS_QUEUE`.
+    By default, Laravel expects the following environment variables/secrets to be filled in for queues: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`, `QUEUE_CONNECTION`, `SQS_PREFIX`, `SQS_QUEUE`, and `AWS_ENDPOINT`.
 
-2. Deploy the application. Click **+ Deploy a Container** once the namespace is created, and follow the instructions of the creation wizard. Select the registry namespace and the previously uploaded Docker image and configure the listening port (the Nginx web server is listening on port 80). For the CPU and memory, define at least 560mVPCU and 256 MB respectively. To reduce the limitations due to [cold start](/serverless-containers/concepts/#cold-start), we will run at least 1 instance.
+    Below is an example of the environment variables and secrets you should configure for your Laravel application:
+
+    ```bash
+    # Application
+    APP_NAME=Laravel
+    APP_ENV=production
+    APP_KEY=base64:...
+    APP_DEBUG=false
+    APP_URL=https://your-domain.com
+
+    # Database (if using a managed database)
+    DB_CONNECTION=pgsql
+    DB_HOST=your-db-host
+    DB_PORT=5432
+    DB_DATABASE=your-database
+    DB_USERNAME=your-username
+    DB_PASSWORD=your-password
+
+    # Queue (Scaleway Queues)
+    QUEUE_CONNECTION=sqs
+    AWS_ACCESS_KEY_ID=SCWXXXXXXXXXXXXXXX
+    AWS_SECRET_ACCESS_KEY=your-secret-key
+    AWS_DEFAULT_REGION=fr-par
+    AWS_ENDPOINT=https://sqs.fr-par.scw.cloud
+    SQS_PREFIX=https://sqs.fr-par.scw.cloud
+    SQS_QUEUE=your-queue-name
+
+    # Cache (optional, using Redis)
+    CACHE_STORE=redis
+    REDIS_HOST=your-redis-host
+    REDIS_PASSWORD=your-password
+    REDIS_PORT=6379
+
+    # Session
+    SESSION_DRIVER=database
+    SESSION_LIFETIME=120
+    SESSION_ENCRYPT=true
+    SESSION_PATH=/
+    SESSION_DOMAIN=null
+    ```
+
+    <Message type="important">
+    Store sensitive values like `APP_KEY`, database credentials, and API keys as **secrets** in the Serverless Container configuration rather than plain environment variables. Secrets are encrypted and never exposed in logs.
+    </Message>
+
+2. Configure the queue connection. In your Laravel application's `config/queue.php` file, ensure the `sqs` connection is properly configured to use the environment variables:
+
+    ```php
+    // config/queue.php
+    'connections' => [
+        // ...
+
+        'sqs' => [
+            'driver' => 'sqs',
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'prefix' => env('SQS_PREFIX', 'https://sqs.fr-par.scw.cloud'),
+            'queue' => env('SQS_QUEUE', 'your-queue-name'),
+            'region' => env('AWS_DEFAULT_REGION', 'fr-par'),
+            'url' => env('AWS_ENDPOINT', 'https://sqs.fr-par.scw.cloud'),
+            'suffix' => '',
+        ],
+
+        // ...
+    ],
+    ```
+
+    <Message type="tip">
+    Laravel 13.x uses the `AWS_ENDPOINT` environment variable to connect to Scaleway Queues instead of the default AWS SQS endpoint. Make sure this is set to `https://sqs.fr-par.scw.cloud` (or your chosen region's endpoint).
+    </Message>
+
+3. Deploy the application. Click **+ Deploy a Container** once the namespace is created, and follow the instructions of the creation wizard. Select the registry namespace and the previously uploaded Docker image and configure the listening port (the Nginx web server is listening on port 80). For the CPU and memory, define at least 560mVPCU and 256 MB respectively. To reduce the limitations due to [cold start](/serverless-containers/concepts/#cold-start), we will run at least 1 instance.
 
     <Lightbox image={image4} alt="Scaleway Console Deploy Container" />
 
-3. Review the logs to confirm that our application is running as expected, and review the logs to check if the supervisor started and spawned nginx, php-fpm, and workers. This step is optional.
+4. Review the logs to confirm that our application is running as expected, and review the logs to check if the supervisor started and spawned nginx, php-fpm, and workers. This step is optional.
 
     ```
     INFO spawned: 'worker_00' with pid 4

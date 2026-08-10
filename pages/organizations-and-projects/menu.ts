@@ -15,7 +15,7 @@ export const organizationsAndProjectsMenu = {
     {
       items: [
         {
-          label: 'Manage Organization quotas',
+          label: 'Manage Organizations',
           slug: 'manage-quotas',
         },
         {

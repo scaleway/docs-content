@@ -8,7 +8,7 @@ products:
 tags: Terraform OpenTofu Kubernetes Kapsule Instances
 hero: assets/scaleway_terraform.webp
 dates:
-  validation: 2026-03-12
+  validation: 2026-08-12
   validation_frequency: 12
 difficulty: advanced
 usecase:
@@ -57,33 +57,33 @@ The architecture includes the following:
 
 	```bash
 	variable "region" {
-	type = string
-	default = "fr-par"
-	description = "The Scaleway region to deploy resources in (e.g., fr-par)"
+		type = string
+		default = "fr-par"
+		description = "The Scaleway region to deploy resources in (e.g., fr-par)"
 	}
 	variable "scaleway_access_key" {
-	type = string
-	description = "Scaleway access key for API authentication"
-	sensitive = true
+		type = string
+		description = "Scaleway access key for API authentication"
+		sensitive = true
 	}
 	variable "scaleway_secret_key" {
-	type = string
-	description = "Scaleway secret key for API authentication"
-	sensitive = true
+		type = string
+		description = "Scaleway secret key for API authentication"
+		sensitive = true
 	}
 	variable "project_id" {
-	type = string
-	description = "Scaleway project ID for resource creation"
+		type = string
+		description = "Scaleway project ID for resource creation"
 	}
 	variable "db_user" {
-	type = string
-	description = "Username for the MySQL database"
-	default = "admin"
+		type = string
+		description = "Username for the MySQL database"
+		default = "admin"
 	}
 	variable "db_password" {
-	type = string
-	description = "Password for the MySQL database"
-	sensitive = true
+		type = string
+		description = "Password for the MySQL database"
+		sensitive = true
 	}
 	```
 
@@ -93,7 +93,7 @@ The architecture includes the following:
 	export TF_VAR_scaleway_access_key=""
 	export TF_VAR_scaleway_secret_key=""
 	export TF_VAR_project_id=""
-	export TF_VAR_db_password=""
+	export TF_VAR_db_password="" # echo -n "mySecurePass123" | base64
 	# Optional: Override defaults if needed
 	export TF_VAR_region="fr-par"
 	export TF_VAR_db_user="admin"
@@ -114,15 +114,15 @@ The architecture includes the following:
 
 Before you start, ensure you have created a Virtual Private Cloud (VPC) in the region of deployment. For detailed instructions, see [How to create and manage VPCs](/vpc/how-to/create-vpc/).
 
-For full details, see the Terraform configuration file (`main.tf`) in [Appendix: main.tf file](#appendix-maintf-file).
+For full details, see the Terraform configuration file (`main.tf`) in [Appendix: Full main.tf file](#appendix-full-maintf-file).
 
 1. Create a new Private Network named `sitesecure-private-net` in the `fr-par` region with a /22 IP subnet.
 
 	```bash
 	# Creating a private network for cluster isolation
 	resource "scaleway_vpc_private_network" "sitesecure_pn" {
-	name = "sitesecure-private-net"
-	region = var.region
+		name = "sitesecure-private-net"
+		region = var.region
 	}
 	```
 
@@ -131,8 +131,8 @@ For full details, see the Terraform configuration file (`main.tf`) in [Appendix:
 	```bash
 	# Creating a public gateway for external access
 	resource "scaleway_vpc_public_gateway" "sitesecure_gateway" {
-	name = "sitesecure-gateway"
-	type = "VPC-GW-S"
+		name = "sitesecure-gateway"
+		type = "VPC-GW-S"
 	```
 
 3. Attach the Public Gateway to the Private Network.
@@ -140,12 +140,12 @@ For full details, see the Terraform configuration file (`main.tf`) in [Appendix:
 	```bash
 	# Attaching the Public Gateway to the Private Network with Dynamic NAT
 	resource "scaleway_vpc_gateway_network" "sitesecure_gateway_network" {
-	gateway_id = scaleway_vpc_public_gateway.sitesecure_gateway.id
-	private_network_id = scaleway_vpc_private_network.sitesecure_pn.id
-	enable_masquerade = true
-	ipam_config {
-	    push_default_route = true
-	}
+		gateway_id = scaleway_vpc_public_gateway.sitesecure_gateway.id
+		private_network_id = scaleway_vpc_private_network.sitesecure_pn.id
+		enable_masquerade = true
+		ipam_config {
+			push_default_route = true
+		}
 	}
 	```
 
@@ -156,7 +156,7 @@ Create a Kubernetes Kapsule cluster with a node pool using full isolation. Confi
 - Cluster settings:
 	- Name: `sitesecure-kapsule-cluster`  
 	- Region: `fr-par`  
-	- Kubernetes version: Latest supported version (e.g., 1.32.7)  
+	- Kubernetes version: Latest supported version (e.g., 1.36.1)  
 	- CNI: Cilium (recommended for performance and security)  
 	- Private Network: Attach to `sitesecure-private-net`  
 - Pool configuration:  
@@ -173,27 +173,28 @@ Terraform example:
 ```bash
 # Creating a Kubernetes Kapsule cluster
 resource "scaleway_k8s_cluster" "sitesecure_cluster" {
-name = "sitesecure-kapsule-cluster"
-version = "1.32.7"
-cni = "cilium"
-private_network_id = scaleway_vpc_private_network.sitesecure_pn.id
-region = var.region
-delete_additional_resources = true
+	name = "sitesecure-kapsule-cluster"
+	version = "1.36.1"
+	cni = "cilium"
+	private_network_id = scaleway_vpc_private_network.sitesecure_pn.id
+	region = var.region
+	delete_additional_resources = true
 }
 
 # Creating a node pool with full isolation
 resource "scaleway_k8s_pool" "full_isolation_pool" {
-cluster_id = scaleway_k8s_cluster.sitesecure_cluster.id
-name = "full-isolation-pool"
-node_type = "DEV1-M"
-size = 2
-autoscaling = true
-autohealing = true
-min_size = 2
-max_size = 5
-public_ip_disabled = true
-region = var.region
-depends_on = [scaleway_vpc_gateway_network.sitesecure_gateway_network]
+	cluster_id = scaleway_k8s_cluster.sitesecure_cluster.id
+	name = "full-isolation-pool"
+	node_type = "PRO2-S"
+	size = 2
+	autoscaling = true
+	autohealing = true
+	min_size = 2
+	max_size = 5
+	public_ip_disabled = true
+	region = var.region
+
+	depends_on = [scaleway_vpc_gateway_network.sitesecure_gateway_network]
 }
 ```
 
@@ -206,21 +207,37 @@ depends_on = [scaleway_vpc_gateway_network.sitesecure_gateway_network]
 	```bash
 	# Creating a managed MySQL database for WordPress
 	resource "scaleway_rdb_instance" "wordpress_db" {
-	name = "sitesecure-wordpress-db"
-	node_type = "db-dev-s"
-	engine = "MySQL-8"
-	is_ha_cluster = true
-	user_name = var.db_user
-	password = var.db_password
-	region = var.region
-	private_network {
-	    pn_id = scaleway_vpc_private_network.sitesecure_pn.id
-	    enable_ipam = true
-	}
+		name = "sitesecure-wordpress-db"
+		node_type = "db-dev-s"
+		engine = "MySQL-8"
+		is_ha_cluster = true
+		user_name = var.db_user
+		password = var.db_password
+		region = var.region
+		volume_type = "sbs_15k"
+  		volume_size_in_gb = 15
+		
+		private_network {
+			pn_id = scaleway_vpc_private_network.sitesecure_pn.id
+			enable_ipam = true
+		}
 	}
 	```
+2. Obtain the database host (`db_host`) value:
 
-2. Create a Kubernetes Secret for database credentials (`wordpress-db-secret.yaml`).
+		1. Run the following command against the configuration defined in `main.tf` (you can find a reference `main.tf` file in the [Appendix](#appendix-full-maintf-file)): 
+			```bash
+			terraform apply
+			```
+
+		2. Display the value of the output variable `db_host` by running the following command: 
+			```bash
+			terraform output -raw db_host
+			```
+
+		3. Note down the value returned, you will need it when creating the Kubernetes Deployment for WordPress (`wordpress-deployment.yaml`).
+
+3. Create a Kubernetes Secret for database credentials (`wordpress-db-secret.yaml`).
 
 	```yaml
 	apiVersion: v1
@@ -230,11 +247,11 @@ depends_on = [scaleway_vpc_gateway_network.sitesecure_gateway_network]
 		namespace: default
 	type: Opaque
 	data:
-		DB_PASSWORD: "<base64-encoded-mysql-password>" # echo -n "mySecurePass123" | base64 
+		DB_PASSWORD: "<base64-encoded-mysql-password>" 
 	# Ensure the DB_PASSWORD is the same password as set in the terraform.tfvars configuration
 	```
 
-3. Create a Kubernetes Deployment for WordPress (`wordpress-deployment.yaml`).
+4. Create a Kubernetes Deployment for WordPress (`wordpress-deployment.yaml`). Remember to replace the `value` of `WORDPRESS_DB_HOST` with your actual value (obtained in Step 2).
 
 	```yaml
 	apiVersion: apps/v1
@@ -259,7 +276,7 @@ depends_on = [scaleway_vpc_gateway_network.sitesecure_gateway_network]
 				  - containerPort: 80
 				  env:
 				  - name: WORDPRESS_DB_HOST
-					value: "195.154.97.15:13156"
+					value: "<value-obtained-in-step-2>"
 				  - name: WORDPRESS_DB_NAME
 					value: "wordpress"
 				  - name: WORDPRESS_DB_USER
@@ -379,67 +396,109 @@ This configuration provisions a Scaleway Load Balancer and integrates it with th
 Once you have completed your tests, you can delete your deployment using the `terraform destroy` command.
 </Message>
 
-## Appendix: main.tf file
+## Appendix: Full main.tf file
 
 ```bash
+variable "region" {
+  type        = string
+  default     = "fr-par"
+  description = <<EOT
+Region where infrastructure will be deployed
+more details https://www.scaleway.com/en/docs/account/reference-content/products-availability
+EOT
+}
+variable "zone" {
+  type        = string
+  default     = "fr-par-1"
+  description = <<EOT
+Availability zone where infrastructure will be deployed
+more details https://www.scaleway.com/en/docs/account/reference-content/products-availability
+EOT
+}
+terraform {
+  required_providers {
+    scaleway = {
+      source = "scaleway/scaleway"
+    }
+  }
+  required_version = ">= 0.13"
+}
+provider "scaleway" {
+  zone   = var.zone
+  region = var.region
+}
+variable "db_user" {
+  type        = string
+  default     = "admin"
+  description = "database admin username"
+}
+variable "db_password" {
+  type        = string
+  sensitive   = true
+  nullable    = false
+  description = "database admin password"
+}
 # Creating a Private Network for cluster isolation
 resource "scaleway_vpc_private_network" "sitesecure_pn" {
-name = "sitesecure-private-net"
-region = var.region
+  name   = "sitesecure-private-net"
+  region = var.region
 }
-
 # Creating a Public Gateway for external access
 resource "scaleway_vpc_public_gateway" "sitesecure_gateway" {
-name = "sitesecure-gateway"
-type = "VPC-GW-S"
-
+  name = "sitesecure-gateway"
+  type = "VPC-GW-S"
+}
 # Attaching the Public Gateway to the Private Network with Dynamic NAT
 resource "scaleway_vpc_gateway_network" "sitesecure_gateway_network" {
-gateway_id = scaleway_vpc_public_gateway.sitesecure_gateway.id
-private_network_id = scaleway_vpc_private_network.sitesecure_pn.id
-enable_masquerade = true
-ipam_config {
-	push_default_route = true
+  gateway_id         = scaleway_vpc_public_gateway.sitesecure_gateway.id
+  private_network_id = scaleway_vpc_private_network.sitesecure_pn.id
+  enable_masquerade  = true
+  ipam_config {
+    push_default_route = true
+  }
 }
-}
-
 # Creating a Kubernetes Kapsule cluster
 resource "scaleway_k8s_cluster" "sitesecure_cluster" {
-name = "sitesecure-kapsule-cluster"
-version = "1.32.7"
-cni = "cilium"
-private_network_id = scaleway_vpc_private_network.sitesecure_pn.id
-region = var.region
-delete_additional_resources = true
+  name                        = "sitesecure-kapsule-cluster"
+  version                     = "1.36.1"
+  cni                         = "cilium"
+  private_network_id          = scaleway_vpc_private_network.sitesecure_pn.id
+  region                      = var.region
+  delete_additional_resources = true
 }
-
 # Creating a node pool with full isolation
 resource "scaleway_k8s_pool" "full_isolation_pool" {
-cluster_id = scaleway_k8s_cluster.sitesecure_cluster.id
-name = "full-isolation-pool"
-node_type = "DEV1-M"
-size = 2
-autoscaling = true
-autohealing = true
-min_size = 2
-max_size = 5
-public_ip_disabled = true
-region = var.region
-depends_on = [scaleway_vpc_gateway_network.sitesecure_gateway_network]
-}
+  cluster_id         = scaleway_k8s_cluster.sitesecure_cluster.id
+  name               = "full-isolation-pool"
+  node_type          = "PRO2-S"
+  size               = 2
+  autoscaling        = true
+  autohealing        = true
+  min_size           = 2
+  max_size           = 5
+  public_ip_disabled = true
+  region             = var.region
 
+  depends_on = [scaleway_vpc_gateway_network.sitesecure_gateway_network]
+}
 # Creating a managed MySQL database for WordPress
 resource "scaleway_rdb_instance" "wordpress_db" {
-name = "sitesecure-wordpress-db"
-node_type = "db-dev-s"
-engine = "MySQL-8"
-is_ha_cluster = true
-user_name = var.db_user
-password = var.db_password
-region = var.region
-private_network {
-	pn_id = scaleway_vpc_private_network.sitesecure_pn.id
-	enable_ipam = true
+  name              = "sitesecure-wordpress-db"
+  node_type         = "db-dev-s"
+  engine            = "MySQL-8"
+  is_ha_cluster     = true
+  user_name         = var.db_user
+  password          = var.db_password
+  region            = var.region
+  volume_type       = "sbs_15k"
+  volume_size_in_gb = 15
+
+  private_network {
+    pn_id       = scaleway_vpc_private_network.sitesecure_pn.id
+    enable_ipam = true
+  }
 }
+output "db_host" {
+  value = format("%s:%d", scaleway_rdb_instance.wordpress_db.private_network.0.ip, scaleway_rdb_instance.wordpress_db.private_network.0.port)
 }
 ```

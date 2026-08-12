@@ -27,6 +27,10 @@ export const instancesMenu = {
           slug: 'create-manage-instance-templates',
         },
         {
+          label: 'Create and manage Instance groups',
+          slug: 'create-manage-instance-groups',
+        },
+        {
           label: 'Manage Instance storage',
           slug: 'manage-storage',
         },

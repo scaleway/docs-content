@@ -106,6 +106,10 @@ export const domainsAndDnsMenu = {
           label: 'Understanding DNS record types',
           slug: 'understanding-dns-records',
         },
+        {
+          label: 'Access your Domain migrated from BookMyName to Scaleway',
+          slug: 'access-migrated-domain',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

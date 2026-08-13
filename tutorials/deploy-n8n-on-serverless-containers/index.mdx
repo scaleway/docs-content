@@ -1,11 +1,10 @@
 ---
 title: Deploying n8n on Serverless Containers
-description: This tutorial provides a step-by-step guide for deploying n8n workflow automation platform on Scaleway Serverless Containers with Scaleway Managed Database and Object Storage.
+description: This tutorial provides a step-by-step guide for deploying n8n workflow automation platform on Scaleway Serverless Containers with Scaleway Managed Database.
 tags: n8n automation workflow docker serverless
 products:
   - containers
   - managed-databases
-  - object-storage
 dates:
   validation: 2026-08-06
   posted: 2026-08-06
@@ -20,7 +19,7 @@ ecosystem:
 
 import Requirements from '@macros/iam/requirements.mdx'
 
-This tutorial provides a step-by-step guide for deploying n8n, an open-source workflow automation platform, on the Scaleway cloud platform. It covers the entire process, from setting up the required infrastructure including Serverless Containers, Managed Database, and Object Storage, to configuring and running n8n for workflow automation.
+This tutorial provides a step-by-step guide for deploying n8n, an open-source workflow automation platform, on the Scaleway cloud platform. It covers the process of setting up the required infrastructure, including Serverless Containers and a Managed Database, to configure and run n8n for workflow automation.
 
 <Requirements />
 
@@ -32,11 +31,10 @@ This tutorial provides a step-by-step guide for deploying n8n, an open-source wo
 n8n requires the following Scaleway services for a production-ready deployment:
 
 - **Serverless Containers** to run the n8n container image
-- **Managed Database** to store workflows and execution history
-- **Object Storage** to store binary data
+- **Managed Database** (PostgreSQL) to store workflows, execution history, and configuration data
 
 <Message type="note">
-Serverless Containers are stateless, meaning container disk space is temporary. This tutorial configures persistent storage using Managed Database and Object Storage to ensure your workflows and data persist across container restarts.
+Serverless Containers are stateless, meaning local container disk space is temporary. Workflows, credentials, and execution logs will be safely persisted in your Managed Database across container restarts.
 </Message>
 
 ## Create a PostgreSQL Managed Database
@@ -63,30 +61,12 @@ n8n requires a database for persistent storage of workflows, executions, and con
    - Click **Add**
 
 <Message type="important">
-Store the database host, username, and password securely. You will need these credentials to configure n8n environment variables.
+Store the database private host IP, username, and password securely. You will need these credentials to configure n8n environment variables.
 </Message>
 
-## Step 2: Create an Object Storage bucket
+## Deploy n8n on Serverless Containers
 
-Since Serverless Containers have temporary disk space, configure Object Storage to store binary data such as uploaded files and execution artifacts.
-
-1. Navigate to **Object Storage** in the Scaleway Console.
-
-2. Click **Create a bucket** and enter a name (for example, `n8n-data-[your-name]`).
-
-3. Select your preferred region and click **Create**.
-
-4. Generate API credentials:
-   - Navigate to **IAM** in the Scaleway Console
-   - Click **Create API Key**
-   - Give the API key a descriptive name
-   - Copy the **Access Key** and **Secret Key** and store them securely
-
-5. Note your bucket's endpoint URL (for example, `s3.fr-par.scw.cloud`).
-
-## Step 3: Deploy n8n on Serverless Containers
-
-You can deploy n8n using either the Scaleway Console or the `scw` CLI. This tutorial uses the Console.
+You can deploy n8n using either the Scaleway Console or the `scw` CLI. This guide uses the Console.
 
 ### Create a namespace
 
@@ -107,28 +87,28 @@ You can deploy n8n using either the Scaleway Console or the `scw` CLI. This tuto
    - **Memory**: At least 1024 MB (n8n requires more resources than a simple API)
    - **Minimum instances**: 1 (to avoid cold starts)
 
-3. Configure environment variables. Click the **Environment variables** tab and add the following variables:
+3. Configure Private Network connectivity:
+   - Under **Advanced Options** / **Network**, select **Private Network**.
+   - Choose the **same Private Network** you attached to your PostgreSQL Managed Database in Step 1 so the container can reach the database.
 
-   | Variable | Value |
-   | -------- | ----- |
-   | `DB_TYPE` | `postgresdb` |
-   | `DB_POSTGRESDB_HOST` | Your database host IP |
-   | `DB_POSTGRESDB_PORT` | `5432` |
-   | `DB_POSTGRESDB_DATABASE` | `n8n` |
-   | `DB_POSTGRESDB_USER` | Your database username |
-   | `N8N_BINARY_DATA_STORAGE_MODE` | `s3` |
-   | `N8N_EXTERNAL_STORAGE_S3_BUCKET_NAME` | Your bucket name |
-   | `N8N_EXTERNAL_STORAGE_S3_BUCKET_REGION` | Your region (for example, `fr-par`) |
-   | `N8N_EXTERNAL_STORAGE_S3_HOST` | Your bucket endpoint (for example, `s3.fr-par.scw.cloud`) |
-   | `N8N_EXTERNAL_STORAGE_S3_ACCESS_KEY` | Your Object Storage access key |
+4. Configure environment variables under the **Environment variables** tab:
 
-4. Configure secrets. Click the **Secrets** tab and add the following secrets:
+| Variable | Value | Description |
+| :--- | :--- | :--- |
+| `DB_TYPE` | `postgresdb` | Specifies PostgreSQL engine |
+| `DB_POSTGRESDB_HOST` | `<your-database-private-ip>` | Private Network IP of PostgreSQL |
+| `DB_POSTGRESDB_PORT` | `5432` | PostgreSQL port |
+| `DB_POSTGRESDB_DATABASE` | `n8n` | Database name |
+| `DB_POSTGRESDB_USER` | `<your-database-username>` | Database username |
+| `N8N_WEBHOOK_URL` | `https://<your-container-endpoint>/` | Public URL for webhooks and OAuth redirects |
+| `N8N_PROXY_HOPS` | `1` | Informs n8n it runs behind Scaleway's proxy |
 
-   | Secret | Value |
-   | ------ | ----- |
-   | `DB_PASSWORD` | Your PostgreSQL password |
-   | `N8N_ENCRYPTION_KEY` | A random 32+ character string |
-   | `N8N_EXTERNAL_STORAGE_S3_ACCESS_SECRET` | Your Object Storage secret key |
+5. Configure secrets under the **Secrets** tab:
+
+| Secret | Value | Description |
+| :--- | :--- | :--- |
+| `DB_POSTGRESDB_PASSWORD` | `<your-database-password>` | PostgreSQL user password |
+| `N8N_ENCRYPTION_KEY` | `<random-32-char-string>` | Key used to encrypt stored credentials |
 
 <Message type="important">
 Store sensitive values like database passwords, encryption keys, and API secrets as **secrets** rather than plain environment variables. Secrets are encrypted and never exposed in logs.

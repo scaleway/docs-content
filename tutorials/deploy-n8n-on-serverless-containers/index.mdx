@@ -1,7 +1,7 @@
 ---
 title: Deploying n8n on Serverless Containers
 description: This tutorial provides a step-by-step guide for deploying n8n workflow automation platform on Scaleway Serverless Containers with Scaleway Managed Database.
-tags: n8n automation workflow docker serverless
+tags: n8n workflow serverless containers
 products:
   - containers
   - managed-databases
@@ -26,39 +26,20 @@ This tutorial provides a step-by-step guide for deploying n8n, an open-source wo
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
 
-## Prerequisites
-
-n8n requires the following Scaleway services for a production-ready deployment:
-
-- **Serverless Containers** to run the n8n container image
-- **Managed Database** (PostgreSQL) to store workflows, execution history, and configuration data
-
-<Message type="note">
-Serverless Containers are stateless, meaning local container disk space is temporary. Using Serverless containers safely persists workflows, credentials, and execution logs in your Managed Database across container restarts.
-</Message>
-
 ## Create a PostgreSQL Managed Database
 
 n8n requires a database for persistent storage of workflows, executions, and configuration data.
 
-1. Click **PostgreSQL and MySQL** under **Databases** on the side menu. If you do not have a database already created, the creation page displays.
-2. Select the geographical region of the Instance you want to manage from the drop-down.
-3. Click **Create Database Instance**. The creation wizard displays.
-
-2. Click **Create Database** and select **PostgreSQL**.
-
-3. Configure the database instance:
-   - Select a plan suitable for your needs (DB-PLAY2-PICO is sufficient for testing)
-   - Choose your preferred region
-   - Click **Create**
-
-4. Once the database is provisioned, create a database named `n8n` and a dedicated user with a secure password.
-
-5. Attach the database to a Private Network:
-   - In the database configuration, navigate to the **Network** tab
-   - Click **Add Private Network**
-   - Select an existing Private Network or create a new one
-   - Click **Add**
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Databases** > **PostgreSQL and MySQL**.
+2. Click **Create Database Instance**.
+    1. Select the region for your Database Instance.
+    2. Select **PostgreSQL**.
+    3. Select a node type suitable for your needs (DB-PLAY2-PICO is sufficient for testing).
+    4. Enter a default username and password for the database. You will use these credentials to connect n8n to the database.
+    5. Enter the name `n8n` for the Database Instance.
+6. Click **Create Database Instance**. The database instance overview appears. It is ready to use after a few minutes.
+7. Go to the **Private Networks** tab and click **Attach to Private Network**.
+8. Select an existing Private Network or create a new one, then click **Attach to Private Network**.
 
 <Message type="important">
 Store the database private host IP, username, and password securely. You will need these credentials to configure n8n environment variables.
@@ -68,88 +49,79 @@ Store the database private host IP, username, and password securely. You will ne
 
 You can deploy n8n using either the Scaleway Console or the `scw` CLI. This guide uses the Console.
 
-### Create a namespace
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Serverless Compute** > **Containers**
+2. Click **Create namespace**:
+    1. Enter a name for the namespace (for example, `ns-automation-tools`).
+    2. Select the same region as your Database Instance.
 
-1. Navigate to **Serverless Containers** in the Scaleway Console.
-
-2. Click **Create a namespace** and enter a name (for example, `automation-tools`).
-
-3. Select your preferred region and click **Create**.
-
-### Create the container
-
-1. In your newly created namespace, click **Deploy a container**.
-
-2. Configure the container settings:
+3. Click **Create namespace and add container**.
    - Select **External** image
    - **Image**: `docker.io/n8nio/n8n:latest`
    - **Port**: `5678`
-   - **CPU**: At least 0.5 vCPU
+   - **CPU**: At least 500 mVCPU
    - **Memory**: At least 1024 MB (n8n requires more resources than a simple API)
    - **Minimum instances**: 1 (to avoid cold starts)
 
-3. In **Configure advanced options** > **Private Networks**, select the **same Private Network** you attached to your PostgreSQL Managed Database so the container can reach the database.
+4. In **Advanced options** > **Data** > **Environment Variables**, add the following variables. Replace the placeholders with the appropriate values.
 
-4. Configure environment variables under the **Environment variables** tab:
+    |         Variable         |                Value                 |                 Description                 |
+    | :----------------------- | :----------------------------------- | :------------------------------------------ |
+    | `DB_TYPE`                | `postgresdb`                         | Specifies PostgreSQL engine                 |
+    | `DB_POSTGRESDB_HOST`     | `<your-database-private-ip>`         | Private Network IP of PostgreSQL            |
+    | `DB_POSTGRESDB_PORT`     | `5432`                               | PostgreSQL port                             |
+    | `DB_POSTGRESDB_DATABASE` | `n8n`                                | Database name                               |
+    | `DB_POSTGRESDB_USER`     | `<your-database-username>`           | Database username                           |
+    | `N8N_WEBHOOK_URL`        | `https://<your-container-endpoint>/` | Public URL for webhooks and OAuth redirects |
+    | `N8N_PROXY_HOPS`         | `1`                                  | Informs n8n it runs behind Scaleway's proxy |
 
-| Variable | Value | Description |
-| :--- | :--- | :--- |
-| `DB_TYPE` | `postgresdb` | Specifies PostgreSQL engine |
-| `DB_POSTGRESDB_HOST` | `<your-database-private-ip>` | Private Network IP of PostgreSQL |
-| `DB_POSTGRESDB_PORT` | `5432` | PostgreSQL port |
-| `DB_POSTGRESDB_DATABASE` | `n8n` | Database name |
-| `DB_POSTGRESDB_USER` | `<your-database-username>` | Database username |
-| `N8N_WEBHOOK_URL` | `https://<your-container-endpoint>/` | Public URL for webhooks and OAuth redirects |
-| `N8N_PROXY_HOPS` | `1` | Informs n8n it runs behind Scaleway's proxy |
+    Or click **JSON** and copy these values:
 
-Or JSON to copy/paste:
+    ```json
+    {
+      "DB_TYPE": "postgresdb",
+      "DB_POSTGRESDB_HOST": "<your-database-private-ip>",
+      "DB_POSTGRESDB_PORT": "5432",
+      "DB_POSTGRESDB_DATABASE": "n8n",
+      "DB_POSTGRESDB_USER": "<your-database-username>",
+      "N8N_WEBHOOK_URL": "https://<your-container-endpoint>/",
+      "N8N_PROXY_HOPS": "1"
+    }
+    ```
 
-```json
-{
-  "DB_TYPE": "postgresdb",
-  "DB_POSTGRESDB_HOST": "<your-database-private-ip>",
-  "DB_POSTGRESDB_PORT": "5432",
-  "DB_POSTGRESDB_DATABASE": "n8n",
-  "DB_POSTGRESDB_USER": "<your-database-username>",
-  "N8N_WEBHOOK_URL": "https://<your-container-endpoint>/",
-  "N8N_PROXY_HOPS": "1"
-}
-```
+5. In **Advanced options** > **Data** > **Secrets**, add the following secrets. Replace the placeholders with the appropriate values.
 
-5. Configure secrets under the **Secrets** tab:
+    |          Secret          |           Value            |              Description               |
+    | :----------------------- | :------------------------- | :------------------------------------- |
+    | `DB_POSTGRESDB_PASSWORD` | `<your-database-password>` | PostgreSQL user password               |
+    | `N8N_ENCRYPTION_KEY`     | `<random-32-char-string>`  | Key used to encrypt stored credentials |
+    
+    Or click **JSON** and copy these values:
 
-| Secret | Value | Description |
-| :--- | :--- | :--- |
-| `DB_POSTGRESDB_PASSWORD` | `<your-database-password>` | PostgreSQL user password |
-| `N8N_ENCRYPTION_KEY` | `<random-32-char-string>` | Key used to encrypt stored credentials |
+    ```json
+    {
+      "DB_POSTGRESDB_PASSWORD": "<your-database-password>",
+      "N8N_ENCRYPTION_KEY": "<random-32-char-string>"
+    }
+    ```
+    
+    <Message type="tip">
+    For advanced configuration options and additional environment variables, refer to the [n8n official documentation](https://docs.n8n.io/hosting/configuration/environment-variables/).
+    </Message>
 
-Or JSON to copy/paste:
+    <Message type="important">
+    Store sensitive values like database passwords, encryption keys, and API secrets as **secrets** rather than plain environment variables. Secrets are encrypted and never exposed in logs.
+    </Message>
 
-```json
-{
-  "DB_POSTGRESDB_PASSWORD": "<your-database-password>",
-  "N8N_ENCRYPTION_KEY": "<random-32-char-string>"
-}
-```
+6. In **Advanced options** > **Private Networks**, select the **same Private Network** you attached to your PostgreSQL Managed Database so the container can reach the database.
 
-<Message type="important">
-Store sensitive values like database passwords, encryption keys, and API secrets as **secrets** rather than plain environment variables. Secrets are encrypted and never exposed in logs.
-</Message>
+7. Click **Deploy container**. The container is deployed and starts running.
 
-5. Click **Deploy** to create the container.
+## Access n8n
 
-<Message type="tip">
-For advanced configuration options and additional environment variables, refer to the [n8n official documentation](https://docs.n8n.io/hosting/configuration/environment-variables/).
-</Message>
-
-## Accessing n8n
-
-Once the container is deployed and running:
+After the container is deployed and running:
 
 1. Navigate to the **Endpoints** tab of your container.
-
 2. Copy the endpoint URL and open it in your web browser.
-
 3. You will be prompted to create an admin account for n8n on first access.
 
 ## Next steps

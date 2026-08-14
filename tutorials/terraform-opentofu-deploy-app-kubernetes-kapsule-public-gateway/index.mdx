@@ -223,77 +223,84 @@ resource "scaleway_k8s_pool" "full_isolation_pool" {
 		}
 	}
 	```
-2. Obtain the database host (`db_host`) value:
+2. Obtain the the database base64-encoded password (`db_password_base64`) and the database host (`db_host`) and values:
 
 		1. Run the following command against the configuration defined in `main.tf` (you can find a reference `main.tf` file in the [Appendix](#appendix-full-maintf-file)): 
 			```bash
 			terraform apply
 			```
 
-		2. Display the value of the output variable `db_host` by running the following command: 
+		2. Display the value of the output variable `db_password_base64` by running the following command: 
+			```bash
+			terraform output -raw db_password_base64
+			```
+
+		3. Note down the value returned, you will need it when creating the Kubernetes Secret for database credentials (`wordpress-db-secret.yaml`).	
+
+		4. Display the value of the output variable `db_host` by running the following command: 
 			```bash
 			terraform output -raw db_host
 			```
 
-		3. Note down the value returned, you will need it when creating the Kubernetes Deployment for WordPress (`wordpress-deployment.yaml`).
+		5. Note down the value returned, you will need it when creating the Kubernetes Deployment for WordPress (`wordpress-deployment.yaml`).	
 
-3. Create a Kubernetes Secret for database credentials (`wordpress-db-secret.yaml`).
+3. Create a Kubernetes Secret for database credentials (`wordpress-db-secret.yaml`). Remember to replace the value of `DB_PASSWORD` with your actual value (obtained in Step 2).
 
-	```yaml
-	apiVersion: v1
-	kind: Secret
-	metadata:
-		name: wordpress-db-credentials
-		namespace: default
-	type: Opaque
-	data:
-		DB_PASSWORD: "<base64-encoded-mysql-password>" 
-	# Ensure the DB_PASSWORD is the same password as set in the terraform.tfvars configuration
+    ```yaml
+    apiVersion: v1
+    kind: Secret
+    metadata:
+        name: wordpress-db-credentials
+        namespace: default
+    type: Opaque
+    data:
+        DB_PASSWORD: "<base64-encoded-mysql-password>" 
+        # Ensure the DB_PASSWORD is the same password as set in the terraform.tfvars configuration
 	```
 
 4. Create a Kubernetes Deployment for WordPress (`wordpress-deployment.yaml`). Remember to replace the `value` of `WORDPRESS_DB_HOST` with your actual value (obtained in Step 2).
 
-	```yaml
-	apiVersion: apps/v1
-	kind: Deployment
-	metadata:
-		name: wordpress
-		namespace: default
-	spec:
-		replicas: 1
-		selector:
-			matchLabels:
-				app.kubernetes.io/name: sitesecure-wordpress
-		template:
-			metadata:
-				labels:
-					app.kubernetes.io/name: sitesecure-wordpress
-			spec:
-				containers:
-				- name: wordpress
-				  image: wordpress:latest
-				  ports:
-				  - containerPort: 80
-				  env:
-				  - name: WORDPRESS_DB_HOST
-					value: "<value-obtained-in-step-2>"
-				  - name: WORDPRESS_DB_NAME
-					value: "wordpress"
-				  - name: WORDPRESS_DB_USER
-					value: "admin"
-				  - name: WORDPRESS_DB_PASSWORD
-					valueFrom:
-						secretKeyRef:
-							name: wordpress-db-credentials
-							key: DB_PASSWORD
-				  resources:
-					requests:
-					  cpu: "500m"
-					  memory: "512Mi"
-					limits:
-					  cpu: "1000m"
-					  memory: "1Gi"
-	```
+    ```yaml
+    apiVersion: apps/v1
+    kind: Deployment
+    metadata:
+      name: wordpress
+      namespace: default
+    spec:
+      replicas: 1
+      selector:
+        matchLabels:
+          app.kubernetes.io/name: sitesecure-wordpress
+      template:
+        metadata:
+          labels:
+            app.kubernetes.io/name: sitesecure-wordpress
+        spec:
+          containers:
+          - name: wordpress
+            image: wordpress:latest
+            ports:
+            - containerPort: 80
+            env:
+            - name: WORDPRESS_DB_HOST
+              value: "<wordpress-database-host>"
+            - name: WORDPRESS_DB_NAME
+              value: "wordpress"
+            - name: WORDPRESS_DB_USER
+              value: "admin"
+            - name: WORDPRESS_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: woocommerce-db-credentials
+                  key: DB_PASSWORD
+            resources:
+              requests:
+                cpu: "500m"
+                memory: "512Mi"
+              limits:
+                cpu: "1000m"
+                memory: "1Gi"
+    ```
 
 ## Deploy the services using Terraform
 
@@ -498,7 +505,18 @@ resource "scaleway_rdb_instance" "wordpress_db" {
     enable_ipam = true
   }
 }
+
+resource "scaleway_rdb_database" "database" {
+  instance_id = scaleway_rdb_instance.wordpress_db.id
+  name        = "wordpress"
+}
+
 output "db_host" {
   value = format("%s:%d", scaleway_rdb_instance.wordpress_db.private_network.0.ip, scaleway_rdb_instance.wordpress_db.private_network.0.port)
+}
+
+output "db_password_base64" {
+  value = base64encode(var.db_password)
+  sensitive = true
 }
 ```

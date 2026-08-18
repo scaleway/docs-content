@@ -1,0 +1,300 @@
+---
+title: How to create alerts programmatically for DevOps workflows
+description: Learn how to create alerting rules programmatically in Scaleway Cockpit using the Mimir and Loki HTTP APIs for automated DevOps workflows.
+tags: cockpit observability alerts api mimir loki devops automation
+dates:
+  validation: 2026-08-18
+  posted: 2026-08-18
+categories:
+  - monitoring
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+This guide shows you how to create and manage alerting rules programmatically in Scaleway Cockpit using the Mimir (metrics) and Loki (logs) HTTP APIs. This approach enables you to maintain automated DevOps workflows and implement infrastructure-as-code practices for your monitoring and alerting configuration.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Created a Cockpit token](/cockpit/how-to/create-token/) with the **Rules** permission
+- [Retrieved your data source URL](/cockpit/concepts/#data-sources) from the [Scaleway console](https://console.scaleway.com/cockpit/dataSource)
+- [Enabled the alert manager](/cockpit/how-to/enable-alert-manager/) in the same region as your data source
+- [Added contacts](/cockpit/how-to/enable-alert-manager/#how-to-add-contacts) in the Scaleway console or configured contact points in Grafana
+- `curl` or any HTTP client tool installed
+- A text editor for creating YAML configuration files
+
+## Understanding the API endpoints
+
+Scaleway Cockpit exposes a subset of the Mimir and Loki HTTP APIs for managing alerting rules. Both APIs use the same endpoint pattern for rule management.
+
+### Mimir API (metrics alerts)
+
+The Cockpit base URL pattern for metrics is:
+```
+https://<data-source-id>.metrics.cockpit.<region>.scw.cloud
+```
+
+Replace `<data-source-id>` with your data source ID and `<region>` with the region where your data source is located (e.g., `fr-par`, `nl-ams`, `pl-waw`).
+
+The Mimir rules endpoint is:
+```
+/prometheus/api/v1/rules
+```
+
+### Loki API (logs alerts)
+
+The Cockpit base URL pattern for logs is:
+```
+https://<data-source-id>.logs.cockpit.<region>.scw.cloud
+```
+
+The Loki rules endpoint is:
+```
+/loki/api/v1/rules
+```
+
+### Authentication
+
+All API requests must include the `X-Token` header with your Cockpit token secret key:
+```
+X-Token: <your-cockpit-token-secret-key>
+```
+
+<Message type="important">
+Make sure that you create your token in the same region as the data source you want to use it for, and that it has the **Rules** permission enabled.
+</Message>
+
+## Alert rule structure
+
+Alert rules are defined in YAML format and organized into groups. Each group can contain multiple rules that share the same evaluation interval.
+
+### Basic structure
+
+```yaml
+name: <group-name>
+interval: <evaluation-interval>
+rules:
+  - alert: <alert-name>
+    expr: <promql-or-logql-expression>
+    for: <pending-period>
+    labels:
+      <label-key>: <label-value>
+    annotations:
+      summary: <alert-summary>
+      description: <alert-description>
+```
+
+### Key components
+
+- **group**: A collection of alert rules that share the same evaluation interval
+- **name**: The name of the group
+- **interval**: How often the rules in the group are evaluated (e.g., `1m`, `30s`, `5m`)
+- **alert**: The name of your alert rule
+- **expr**: The PromQL (for Mimir) or LogQL (for Loki) expression that defines the alert condition
+- **for**: How long the condition must be true before the alert fires (pending period)
+- **labels**: Key-value pairs attached to the alert (used for routing notifications)
+- **annotations**: Additional information displayed in the alert notification
+
+## Create alerts for metrics (Mimir API)
+
+### Step 1: Create your alert rule configuration
+
+Create a YAML file (e.g., `metrics-alerts.yaml`) with your alert rules:
+
+```yaml
+name: instance-alerts
+rules:
+  - alert: HighCPUUsage
+    expr: avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) by (instance) < 0.2
+    for: 5m
+    labels:
+      severity: warning
+      team: infrastructure
+    annotations:
+      summary: "High CPU usage detected on {{ $labels.instance }}"
+      description: "CPU usage is above 80% for more than 5 minutes on instance {{ $labels.instance }}. Current value: {{ $value | printf \"%.2f\" }}"
+  
+  - alert: InstanceDown
+    expr: up{job="node-exporter"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      team: infrastructure
+    annotations:
+      summary: "Instance {{ $labels.instance }} is down"
+      description: "Instance {{ $labels.instance }} of job {{ $labels.job }} has been down for more than 1 minute."
+```
+
+### Step 2: Set the rule group via the API
+
+Use `curl` to send your alert rules to the Mimir API:
+
+```bash
+curl -X POST \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  -H "Content-Type: application/yaml" \
+  --data-binary @metrics-alerts.yaml \
+  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/config/v1/rules/<namespace>"
+```
+
+Replace:
+- `<YOUR_COCKPIT_TOKEN_SECRET_KEY>` with your Cockpit token secret key
+- `<data-source-id>` with your data source ID
+- `<region>` with your data source region
+- `<namespace>` with a namespace name to organize your rules (e.g., `infrastructure`, `production`)
+
+<Message type="note">
+ The `<namespace>` in the URL is a logical grouping for your rules within the API. It helps organize different sets of rules but is separate from the group names defined in your YAML file.
+</Message>
+
+### Step 3: Verify your alert rules
+
+Retrieve your configured alert rules to verify they were created successfully:
+
+```bash
+curl -X GET \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/api/v1/rules"
+```
+
+To retrieve rules from a specific namespace:
+
+```bash
+curl -X GET \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/api/v1/rules?namespace=<namespace>"
+```
+
+## Create alerts for logs (Loki API)
+
+### Step 1: Create your alert rule configuration
+
+Create a YAML file (e.g., `logs-alerts.yaml`) with your log-based alert rules:
+
+```yaml
+name: application-logs-alerts
+interval: 1m
+rules:
+  - alert: HighErrorRate
+    expr: sum(rate({app="my-app"} |= "ERROR" [5m])) by (app) > 10
+    for: 5m
+    labels:
+      severity: critical
+      team: backend
+    annotations:
+      summary: "High error rate detected in {{ $labels.app }}"
+      description: "Application {{ $labels.app }} is generating more than 10 errors per second for the last 5 minutes."
+  
+  - alert: DiskSpaceWarning
+    expr: sum(rate({resource_type="instance"} |= "disk space" |~ "warning|critical" [10m])) by (resource_id) > 0
+    for: 10m
+    labels:
+      severity: warning
+      team: infrastructure
+    annotations:
+      summary: "Disk space warning on instance {{ $labels.resource_id }}"
+      description: "Disk space warnings detected on instance {{ $labels.resource_id }}."
+```
+
+### Step 2: Set the rule group via the API
+
+Use `curl` to send your log alert rules to the Loki API:
+
+```bash
+curl -X POST \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  -H "Content-Type: application/yaml" \
+  --data-binary @logs-alerts.yaml \
+  "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/rules/<namespace>"
+```
+
+Replace the placeholders with your actual values as described in the Mimir section.
+
+### Step 3: Verify your alert rules
+
+Retrieve your configured Loki alert rules:
+
+```bash
+curl -X GET \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/rules/<namespace>"
+```
+
+## Managing alert rules
+
+### Update existing rules
+
+To update existing rules, send a new `POST` request with the updated YAML configuration to the same endpoint.
+
+Update a Mimir rule group:
+
+```bash
+curl -X POST \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  -H "Content-Type: application/yaml" \
+  --data-binary @metrics-alerts.yaml \
+  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/config/v1/rules/<namespace>"
+```
+
+Update a Loki rule group:
+
+```bash
+curl -X POST \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  -H "Content-Type: application/yaml" \
+  --data-binary @logs-alerts.yaml \
+  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/loki/config/v1/rules/<namespace>"
+```
+
+### Delete rules
+
+Delete a specific Mimir rule group in a specific namespace:
+
+```bash
+curl -X DELETE \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/config/v1/rules/<namespace>/<groupname>"
+```
+
+Delete all Mimir rules in a specific namespace:
+
+```bash
+curl -X DELETE \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/config/v1/rules/<namespace>/<groupname>"
+```
+
+Delete a specific Loki rule group in a specific namespace:
+
+```bash
+curl -X DELETE \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/rules/<namespace>"
+```
+
+Delete all Loki rules in a specific namespace:
+
+```bash
+curl -X DELETE \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/rules/<namespace>"
+```
+
+### View firing alerts
+
+Retrieve currently firing alerts from the Mimir API:
+
+```bash
+curl -X GET \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/api/v1/alerts"
+```
+
+Retrieve currently firing alerts from the Loki API:
+
+```bash
+curl -X GET \
+  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/alerts"
+```

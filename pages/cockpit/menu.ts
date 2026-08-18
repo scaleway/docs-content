@@ -100,6 +100,10 @@ export const cockpitMenu = {
           label: 'Retrieving logs programmatically using LogCLI',
           slug: 'querying-logs-with-logcli',
         },
+        {
+          label: 'Creating alerts programmatically using the Mimir and Loki APIs',
+          slug: 'create-alerts-programmatically',
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',

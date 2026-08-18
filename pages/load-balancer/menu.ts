@@ -134,10 +134,6 @@ export const loadBalancerMenu = {
           label: 'Migrating from AWS ELB',
           slug: 'migrating-aws',
         },
-        {
-          label: 'Deprecation of SNI routes with HTTP backends',
-          slug: 'sni-route-deprecation',
-        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

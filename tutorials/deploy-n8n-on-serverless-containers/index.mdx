@@ -1,0 +1,133 @@
+---
+title: Deploying n8n on Serverless Containers
+description: This tutorial provides a step-by-step guide for deploying n8n workflow automation platform on Scaleway Serverless Containers with Scaleway Managed Database.
+tags: n8n workflow serverless containers
+products:
+  - containers
+  - managed-databases
+dates:
+  validation: 2026-08-06
+  posted: 2026-08-06
+  validation_frequency: 12
+difficulty: beginner
+usecase:
+  - application-hosting
+  - automation
+ecosystem:
+  - third-party
+---
+
+import Requirements from '@macros/iam/requirements.mdx'
+
+This tutorial provides a step-by-step guide for deploying n8n, an open-source workflow automation platform, on the Scaleway cloud platform. It covers the process of setting up the required infrastructure, including Serverless Containers and a Managed Database, to configure and run n8n for workflow automation.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+
+## Create a PostgreSQL Managed Database
+
+n8n requires a database for persistent storage of workflows, executions, and configuration data.
+
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Databases** > **PostgreSQL and MySQL**.
+2. Click **Create Database Instance**.
+    1. Select the region for your Database Instance.
+    2. Select **PostgreSQL**.
+    3. Select a node type suitable for your needs (DB-PLAY2-PICO is sufficient for testing).
+    4. Enter a default username and password for the database. You will use these credentials to connect n8n to the database.
+    5. Enter the name `n8n` for the Database Instance.
+6. Click **Create Database Instance**. The database instance overview appears. It is ready to use after a few minutes.
+7. Go to the **Private Networks** tab and click **Attach to Private Network**.
+8. Select an existing Private Network or create a new one, then click **Attach to Private Network**.
+
+Store the database private host IP, username, and password securely. You will need these credentials to configure n8n environment variables.
+
+## Deploy n8n on Serverless Containers
+
+You can deploy n8n using either the Scaleway Console or the `scw` CLI. This guide uses the Console.
+
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Serverless Compute** > **Containers**
+2. Click **Create namespace**:
+    1. Enter a name for the namespace (for example, `ns-automation-tools`).
+    2. Select the same region as your Database Instance.
+
+3. Click **Create namespace and add container**.
+   - Select **External** image
+   - **Image**: `docker.io/n8nio/n8n:latest`
+   - **Port**: `5678`
+   - **CPU**: At least 500 mVCPU
+   - **Memory**: At least 1024 MB (n8n requires more resources than a simple API)
+   - **Minimum instances**: 1 (to avoid cold starts)
+
+4. In **Advanced options** > **Data** > **Environment Variables**, add the following variables. Replace the placeholders with the appropriate values.
+
+    |         Variable         |                Value                 |                 Description                 |
+    | :----------------------- | :----------------------------------- | :------------------------------------------ |
+    | `DB_TYPE`                | `postgresdb`                         | Specifies PostgreSQL engine                 |
+    | `DB_POSTGRESDB_HOST`     | `<your-database-private-ip>`         | Private Network IP of PostgreSQL            |
+    | `DB_POSTGRESDB_PORT`     | `5432`                               | PostgreSQL port                             |
+    | `DB_POSTGRESDB_DATABASE` | `n8n`                                | Database name                               |
+    | `DB_POSTGRESDB_USER`     | `<your-database-username>`           | Database username                           |
+    | `N8N_WEBHOOK_URL`        | `https://<your-container-endpoint>/` | Public URL for webhooks and OAuth redirects |
+    | `N8N_PROXY_HOPS`         | `1`                                  | Informs n8n it runs behind Scaleway's proxy |
+
+    Or click **JSON** and copy these values:
+
+    ```json
+    {
+      "DB_TYPE": "postgresdb",
+      "DB_POSTGRESDB_HOST": "<your-database-private-ip>",
+      "DB_POSTGRESDB_PORT": "5432",
+      "DB_POSTGRESDB_DATABASE": "n8n",
+      "DB_POSTGRESDB_USER": "<your-database-username>",
+      "N8N_WEBHOOK_URL": "https://<your-container-endpoint>/",
+      "N8N_PROXY_HOPS": "1"
+    }
+    ```
+
+5. In **Advanced options** > **Data** > **Secrets**, add the following secrets. Replace the placeholders with the appropriate values.
+
+    |          Secret          |           Value            |              Description               |
+    | :----------------------- | :------------------------- | :------------------------------------- |
+    | `DB_POSTGRESDB_PASSWORD` | `<your-database-password>` | PostgreSQL user password               |
+    | `N8N_ENCRYPTION_KEY`     | `<random-32-char-string>`  | Key used to encrypt stored credentials |
+    
+    Or click **JSON** and copy these values:
+
+    ```json
+    {
+      "DB_POSTGRESDB_PASSWORD": "<your-database-password>",
+      "N8N_ENCRYPTION_KEY": "<random-32-char-string>"
+    }
+    ```
+    
+    <Message type="tip">
+    For advanced configuration options and additional environment variables, refer to the [n8n official documentation](https://docs.n8n.io/hosting/configuration/environment-variables/).
+    </Message>
+
+    <Message type="important">
+    Store sensitive values like database passwords, encryption keys, and API secrets as **secrets** rather than plain environment variables. Secrets are encrypted and never exposed in logs.
+    </Message>
+
+6. In **Advanced options** > **Private Networks**, select the **same Private Network** you attached to your PostgreSQL Managed Database so the container can reach the database.
+
+7. Click **Deploy container**. The container is deployed and starts running.
+
+## Access n8n
+
+After the container is deployed and running:
+
+1. Navigate to the **Endpoints** tab of your container.
+2. Copy the endpoint URL and open it in your web browser.
+3. You will be prompted to create an admin account for n8n on first access.
+
+## Next steps
+
+After successfully deploying n8n, you can:
+
+- Create your first workflow using the n8n editor
+- Explore the [n8n template library](https://n8n.io/workflows) for pre-built automations
+- Configure webhooks to trigger workflows from external services
+- Set up credentials for secure API integrations
+- Monitor execution history and logs in the n8n dashboard

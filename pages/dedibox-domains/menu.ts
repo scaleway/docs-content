@@ -27,10 +27,6 @@ export const dediboxDomainsMenu = {
           slug: 'transfer-domain',
         },
         {
-          label: 'Change the ownership of a domain',
-          slug: 'change-ownership',
-        },
-        {
           label: 'File contact information',
           slug: 'file-contact-info',
         },

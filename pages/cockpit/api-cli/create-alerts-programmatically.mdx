@@ -1,5 +1,5 @@
 ---
-title: How to create alerts programmatically in Cockpit for automated DevOps workflows
+title: Creating alerts programmatically for automated DevOps workflows
 description: Learn how to create alerting rules programmatically in Scaleway Cockpit using the Mimir and Loki HTTP APIs for automated DevOps workflows.
 tags: cockpit observability alerts api mimir loki devops automation
 dates:
@@ -11,16 +11,16 @@ categories:
 import Requirements from '@macros/iam/requirements.mdx'
 
 
-This guide shows you the basics of how to create and manage alerting rules in Scaleway Cockpit using the Mimir (metrics) and Loki (logs) HTTP APIs. Using the API snippets and YAML templates from this guide enables you to set up and maintain automated monitoring and alerting workflows for your Scaleway resources.
+This guide shows you the basics of how to create and manage alerting rules in Scaleway Cockpit using the Mimir (metrics) and Loki (logs) HTTP APIs. Use the API snippets and YAML templates from this guide to set up and maintain automated monitoring and alerting workflows for your Scaleway resources.
 
 <Requirements />
 
 - Configured Prometheus so that it scrapes and sends metrics from your target Scaleway resources to Mimir {/* EDITORIAL COMMENT: Is this OK? */}
-- Configured Promtail so that it scrapes and sends logs from your target Scaleway resource to Loki {/* EDITORIAL COMMENT: Is this OK? */}
+- Configured Promtail so that it scrapes and sends logs from your target Scaleway resources to Loki {/* EDITORIAL COMMENT: Is this OK? */}
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- [Created a Cockpit token](/cockpit/how-to/create-token/) with the **Rules** > **Metrics** and  **Rules** > **Logs** permissions and saved it in a secure place {/* EDITORIAL COMMENT: Are there any other permissions that should be enabled? */}
-- [Retrieved your Metrics and Logs data source URLs](/cockpit/concepts/#data-sources) from the [Scaleway console](https://console.scaleway.com/cockpit/dataSource)
+- [Created a Cockpit token](/cockpit/how-to/create-token/) with the **Rules** > **Metrics** and  **Rules** > **Logs** permissions {/* EDITORIAL COMMENT: Are there any other permissions that should be enabled? */}
+- Retrieved your Metrics and Logs data source URLs from the [Scaleway console](https://console.scaleway.com/cockpit/dataSource) (**Cockpit** > **Data sources** tab > **Custom data sources** section)
 - [Enabled the Alert manager](/cockpit/how-to/enable-alert-manager/) in the same region as your data source
 - [Added contacts](/cockpit/how-to/enable-alert-manager/#how-to-add-contacts) in the Scaleway console or configured contact points in Grafana
 - `curl` or any HTTP client tool installed
@@ -40,13 +40,15 @@ Loki (logs alerts):
 - Cockpit base URL: `https://<data-source-id>.logs.cockpit.<region>.scw.cloud`
 - Rules endpoint: `/loki/api/v1/rules`
 
-Replace `<data-source-id>` with your data source ID and `<region>` with the region where your data source is located (e.g., `fr-par`, `nl-ams`, `pl-waw`).
+Replace `https://<data-source-id>.metrics/logs.cockpit.<region>.scw.cloud` with the Metrics/Logs API URL that you can find in the [Scaleway console](https://console.scaleway.com/), under **Cockpit** > **Data sources** tab > **Custom data sources** section.
 
 ### Authentication
 
-All API requests must include the `X-Token` header with your Cockpit token secret key:
-```
-X-Token: <your-cockpit-token-secret-key>
+All API requests must include the `X-Token` header with your Cockpit token secret key.
+
+It is best practice to configure an environment variable for your Cockpit token secret key (`export COCKPIT_TOKEN="<YOUR_COCKPIT_TOKEN_SECRET_KEY>"`) and then reference that in your commands, instead of passing the secret key in the clear.
+```bash
+X-Token: $COCKPIT_TOKEN
 ```
 
 Make sure that you create your token in the same region as the data source you want to use it for, and that it has the **Rules** > **Metrics** and **Rules** > **Logs** permissions.
@@ -90,7 +92,9 @@ For more information, see the following Grafana documentation:
 
 ### Step 1: Create your alert rule configuration
 
-Create a YAML file (e.g., `metrics-alerts.yaml`) with your alert rules:
+Create a YAML file (e.g., `metrics-alerts.yaml`) with your alert rules.
+
+Example:
 
 ```yaml
 name: instance-alerts
@@ -118,48 +122,45 @@ rules:
 
 ### Step 2: Set the rule group via the API
 
-Use `curl` to send your alert rules to the Mimir API:
+1. Configure an environment variable for your Cockpit token. Replace the placeholder value with your actual Cockpit token secret key.
 
-```bash
-curl -X POST \
-  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
-  -H "Content-Type: application/yaml" \
-  --data-binary @metrics-alerts.yaml \
-  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/config/v1/rules/<namespace>"
-```
+    ```bash
+    export COCKPIT_TOKEN="<YOUR_COCKPIT_TOKEN_SECRET_KEY>"
+    ```
 
-Replace:
-- `<YOUR_COCKPIT_TOKEN_SECRET_KEY>` with your Cockpit token secret key
-- `https://<data-source-id>.metrics.cockpit.<region>.scw.cloud` with the Metrics API URL that you can find in the [Scaleway console](https://console.scaleway.com/), under **Cockpit** > **Data sources** tab > **Custom data sources** section
-- `<namespace>` with a namespace name to organize your rules (e.g., `infrastructure`, `production`)
+2. Use `curl` to send your alert rules to the Mimir API:
 
-<Message type="note">
- The `<namespace>` in the URL is a logical grouping for your rules within the API. It helps organize different sets of rules but is separate from the group names defined in your YAML file.
-</Message>
+    ```bash
+    curl -X POST \
+      -H "X-Token: $COCKPIT_TOKEN" \
+      -H "Content-Type: application/yaml" \
+      --data-binary @metrics-alerts.yaml \
+      "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/config/v1/rules/<namespace>"
+    ```
+
+    Replace:
+    - `https://<data-source-id>.metrics.cockpit.<region>.scw.cloud` with the Metrics API URL that you can find in the [Scaleway console](https://console.scaleway.com/), under **Cockpit** > **Data sources** tab > **Custom data sources** section
+    - `<namespace>` with a namespace name to organize your rules (e.g., `infrastructure`, `production`)
+        
+        The `<namespace>` is a logical grouping for your rules within the API. It helps organize different sets of rules but is separate from the group name defined in your YAML file.
 
 ### Step 3: Verify your alert rules
 
-Retrieve your configured alert rules to verify they were created successfully:
+Retrieve your configured Mimir alert rules to verify they were created successfully:
 
 ```bash
 curl -X GET \
-  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  -H "X-Token: $COCKPIT_TOKEN" \
   "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/api/v1/rules"
-```
-
-Retrieve rules from a specific namespace:
-
-```bash
-curl -X GET \
-  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
-  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/api/v1/rules?namespace=<namespace>"
 ```
 
 ## Create alerts for logs (Loki API)
 
 ### Step 1: Create your alert rule configuration
 
-Create a YAML file (e.g., `logs-alerts.yaml`) with your log-based alert rules:
+Create a YAML file (e.g., `logs-alerts.yaml`) with your log-based alert rules.
+
+Example:
 
 ```yaml
 name: application-logs-alerts
@@ -188,87 +189,34 @@ rules:
 
 ### Step 2: Set the rule group via the API
 
-Use `curl` to send your log alert rules to the Loki API:
+1. Configure an environment variable for your Cockpit token. Replace the placeholder value with your actual Cockpit token secret key.
 
-```bash
-curl -X POST \
-  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
-  -H "Content-Type: application/yaml" \
-  --data-binary @logs-alerts.yaml \
-  "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/rules/<namespace>"
-```
+    ```bash
+    export COCKPIT_TOKEN="<YOUR_COCKPIT_TOKEN_SECRET_KEY>"
+    ```
 
-Replace:
-- `<YOUR_COCKPIT_TOKEN_SECRET_KEY>` with your Cockpit token secret key
-- `https://<data-source-id>.logs.cockpit.<region>.scw.cloud` with the Logs API URL that you can find in the [Scaleway console](https://console.scaleway.com/), under **Cockpit** > **Data sources** tab > **Custom data sources** section
-- `<namespace>` with a namespace name to organize your rules (e.g., `infrastructure`, `production`)
+2. Use `curl` to send your log alert rules to the Loki API:
+
+    ```bash
+    curl -X POST \
+      -H "X-Token: $COCKPIT_TOKEN" \
+      -H "Content-Type: application/yaml" \
+      --data-binary @logs-alerts.yaml \
+      "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/rules/<namespace>"
+    ```
+
+    Replace:
+    - `https://<data-source-id>.logs.cockpit.<region>.scw.cloud` with the Logs API URL that you can find in the [Scaleway console](https://console.scaleway.com/), under **Cockpit** > **Data sources** tab > **Custom data sources** section
+    - `<namespace>` with a namespace name to organize your rules (e.g., `infrastructure`, `production`)
+        
+        The `<namespace>` is a logical grouping for your rules within the API. It helps organize different sets of rules but is separate from the group name defined in your YAML file.
 
 ### Step 3: Verify your alert rules
 
-Retrieve your configured Loki alert rules:
+Retrieve your configured Loki alert rules to verify they were created successfully:
 
 ```bash
 curl -X GET \
-  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
-  "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/rules/<namespace>"
-```
-
-## Managing alert rules
-
-### Update existing rules
-
-To update existing rules, send a new `POST` request with the updated YAML configuration to the same endpoint.
-
-Update a Mimir rule group:
-
-```bash
-curl -X POST \
-  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
-  -H "Content-Type: application/yaml" \
-  --data-binary @metrics-alerts.yaml \
-  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/config/v1/rules/<namespace>"
-```
-
-Update a Loki rule group:
-
-```bash
-curl -X POST \
-  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
-  -H "Content-Type: application/yaml" \
-  --data-binary @logs-alerts.yaml \
-  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/loki/config/v1/rules/<namespace>"
-```
-
-### Delete rules
-
-Delete a specific Mimir rule group in a namespace:
-
-```bash
-curl -X DELETE \
-  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
-  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/config/v1/rules/<namespace>/<groupname>"
-```
-
-Delete all Mimir rule groups in a namespace (including the namespace itself):
-
-```bash
-curl -X DELETE \
-  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
-  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/config/v1/rules/<namespace>"
-```
-
-Delete a specific Loki rule group in a namespace:
-
-```bash
-curl -X DELETE \
-  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
-  "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/rules/<namespace>"
-```
-
-Delete all Loki rule groups in a namespace (including the namespace itself):
-
-```bash
-curl -X DELETE \
-  -H "X-Token: <YOUR_COCKPIT_TOKEN_SECRET_KEY>" \
+  -H "X-Token: $COCKPIT_TOKEN" \
   "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/rules/<namespace>"
 ```

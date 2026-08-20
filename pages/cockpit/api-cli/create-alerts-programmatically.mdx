@@ -1,0 +1,223 @@
+---
+title: Creating alerts programmatically for automated DevOps workflows
+description: Learn how to create alerting rules programmatically in Scaleway Cockpit using the Mimir and Loki HTTP APIs for automated DevOps workflows.
+tags: cockpit observability alerts api mimir loki devops automation
+dates:
+  validation: 2026-08-18
+  posted: 2026-08-18
+categories:
+  - monitoring
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+This guide shows you the basics of how to create and manage alerting rules in Scaleway Cockpit using the Mimir (metrics) and Loki (logs) HTTP APIs. Use the API snippets and YAML templates from this guide to set up and maintain automated monitoring and alerting workflows for your Scaleway resources.
+
+<Requirements />
+
+- Configured Prometheus so that it scrapes and sends metrics from your target Scaleway resources to Mimir {/* EDITORIAL COMMENT: Is this OK? */}
+- Configured Promtail so that it scrapes and sends logs from your target Scaleway resources to Loki {/* EDITORIAL COMMENT: Is this OK? */}
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Created a Cockpit token](/cockpit/how-to/create-token/) with the **Rules** > **Metrics** and  **Rules** > **Logs** permissions {/* EDITORIAL COMMENT: Are there any other permissions that should be enabled? */}
+- Retrieved your Metrics and Logs data source URLs from the [Scaleway console](https://console.scaleway.com/cockpit/dataSource) (**Cockpit** > **Data sources** tab > **Custom data sources** section)
+- [Enabled the Alert manager](/cockpit/how-to/enable-alert-manager/) in the same region as your data source
+- [Added contacts](/cockpit/how-to/enable-alert-manager/#how-to-add-contacts) in the Scaleway console or configured contact points in Grafana
+- `curl` or any HTTP client tool installed
+- A text editor for creating YAML configuration files
+
+## API endpoints and authentication
+
+### Endpoints
+
+Scaleway Cockpit exposes a subset of the Mimir and Loki HTTP APIs for managing alerting rules. Both APIs use the same endpoint pattern for rule management.
+
+Mimir (metrics alerts):
+- Cockpit base URL: `https://<data-source-id>.metrics.cockpit.<region>.scw.cloud`
+- Rules endpoint: `/prometheus/config/v1/rules`
+
+Loki (logs alerts):
+- Cockpit base URL: `https://<data-source-id>.logs.cockpit.<region>.scw.cloud`
+- Rules endpoint: `/loki/api/v1/rules`
+
+Replace `https://<data-source-id>.metrics/logs.cockpit.<region>.scw.cloud` with the Metrics/Logs API URL that you can find in the [Scaleway console](https://console.scaleway.com/), under **Cockpit** > **Data sources** tab > **Custom data sources** section.
+
+### Authentication
+
+All API requests must include the `X-Token` header with your Cockpit token secret key.
+
+It is best practice to configure an environment variable for your Cockpit token secret key (`export COCKPIT_TOKEN="<YOUR_COCKPIT_TOKEN_SECRET_KEY>"`) and then reference that in your commands, instead of passing the secret key in the clear.
+```bash
+X-Token: $COCKPIT_TOKEN
+```
+
+Make sure that you create your token in the same region as the data source you want to use it for, and that it has the **Rules** > **Metrics** and **Rules** > **Logs** permissions.
+
+## Alert rule structure
+
+Alert rules are defined in YAML format and organized into groups. Each group can contain multiple rules that share the same evaluation interval.
+
+The basic structure of a rule group is as follows:
+
+```yaml
+name: <group-name>
+interval: <evaluation-interval>
+rules:
+  - alert: <alert-name>
+    expr: <promql-or-logql-expression>
+    for: <pending-period>
+    labels:
+      <label-key>: <label-value>
+    annotations:
+      summary: <alert-summary>
+      description: <alert-description>
+```
+
+Where:
+
+- `name`: The name of the group 
+- `interval`: How often the rules in the group are evaluated (e.g., `1m`, `30s`, `5m`)
+- `alert`: The name of your alert rule
+- `expr`: The PromQL (for Mimir) or LogQL (for Loki) expression that defines the alert condition
+- `for`: How long the condition must be true before the alert fires (pending period)
+- `labels`: Key-value pairs attached to the alert (used for routing notifications)
+- `annotations`: Additional information displayed in the alert notification
+
+For more information, see the following Grafana documentation:
+
+- [Mimir - Set rule group](https://grafana.com/docs/mimir/latest/references/http-api/#set-rule-group)
+- [Loki - Set rule group](https://grafana.com/docs/loki/latest/reference/loki-http-api/#set-rule-group)
+
+## Create alerts for metrics (Mimir API)
+
+### Step 1: Create your alert rule configuration
+
+Create a YAML file (e.g., `metrics-alerts.yaml`) with your alert rules.
+
+Example:
+
+```yaml
+name: instance-alerts
+interval: 1m
+rules:
+  - alert: HighCPUUsage
+    expr: avg(rate(node_cpu_seconds_total{mode="idle"}[5m])) by (instance) < 0.2
+    for: 5m
+    labels:
+      severity: warning
+      team: infrastructure
+    annotations:
+      summary: "High CPU usage detected on {{ $labels.instance }}"
+      description: "CPU usage is above 80% for more than 5 minutes on instance {{ $labels.instance }}. Current value: {{ $value | printf \"%.2f\" }}"
+  
+  - alert: InstanceDown
+    expr: up{job="node-exporter"} == 0
+    for: 1m
+    labels:
+      severity: critical
+      team: infrastructure
+    annotations:
+      summary: "Instance {{ $labels.instance }} is down"
+      description: "Instance {{ $labels.instance }} of job {{ $labels.job }} has been down for more than 1 minute."
+```
+
+### Step 2: Set the rule group via the API
+
+1. Configure an environment variable for your Cockpit token. Replace the placeholder value with your actual Cockpit token secret key.
+
+    ```bash
+    export COCKPIT_TOKEN="<YOUR_COCKPIT_TOKEN_SECRET_KEY>"
+    ```
+
+2. Use `curl` to send your alert rules to the Mimir API:
+
+    ```bash
+    curl -X POST \
+      -H "X-Token: $COCKPIT_TOKEN" \
+      -H "Content-Type: application/yaml" \
+      --data-binary @metrics-alerts.yaml \
+      "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/config/v1/rules/<namespace>"
+    ```
+
+    Replace:
+    - `https://<data-source-id>.metrics.cockpit.<region>.scw.cloud` with the Metrics API URL that you can find in the [Scaleway console](https://console.scaleway.com/), under **Cockpit** > **Data sources** tab > **Custom data sources** section
+    - `<namespace>` with a namespace name to organize your rules (e.g., `infrastructure`, `production`)
+        
+        The `<namespace>` is a logical grouping for your rules within the API. It helps organize different sets of rules but is separate from the group name defined in your YAML file.
+
+### Step 3: Verify your alert rules
+
+Retrieve your configured Mimir alert rules to verify they were created successfully:
+
+```bash
+curl -X GET \
+  -H "X-Token: $COCKPIT_TOKEN" \
+  "https://<data-source-id>.metrics.cockpit.<region>.scw.cloud/prometheus/config/v1/rules/<namespace>"
+```
+
+## Create alerts for logs (Loki API)
+
+### Step 1: Create your alert rule configuration
+
+Create a YAML file (e.g., `logs-alerts.yaml`) with your log-based alert rules.
+
+Example:
+
+```yaml
+name: application-logs-alerts
+interval: 1m
+rules:
+  - alert: HighErrorRate
+    expr: sum(rate({app="my-app"} |= "ERROR" [5m])) by (app) > 10
+    for: 5m
+    labels:
+      severity: critical
+      team: backend
+    annotations:
+      summary: "High error rate detected in {{ $labels.app }}"
+      description: "Application {{ $labels.app }} is generating more than 10 errors per second for the last 5 minutes."
+  
+  - alert: DiskSpaceWarning
+    expr: sum(rate({resource_type="instance"} |= "disk space" |~ "warning|critical" [10m])) by (resource_id) > 0
+    for: 10m
+    labels:
+      severity: warning
+      team: infrastructure
+    annotations:
+      summary: "Disk space warning on instance {{ $labels.resource_id }}"
+      description: "Disk space warnings detected on instance {{ $labels.resource_id }}."
+```
+
+### Step 2: Set the rule group via the API
+
+1. Configure an environment variable for your Cockpit token. Replace the placeholder value with your actual Cockpit token secret key.
+
+    ```bash
+    export COCKPIT_TOKEN="<YOUR_COCKPIT_TOKEN_SECRET_KEY>"
+    ```
+
+2. Use `curl` to send your log alert rules to the Loki API:
+
+    ```bash
+    curl -X POST \
+      -H "X-Token: $COCKPIT_TOKEN" \
+      -H "Content-Type: application/yaml" \
+      --data-binary @logs-alerts.yaml \
+      "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/rules/<namespace>"
+    ```
+
+    Replace:
+    - `https://<data-source-id>.logs.cockpit.<region>.scw.cloud` with the Logs API URL that you can find in the [Scaleway console](https://console.scaleway.com/), under **Cockpit** > **Data sources** tab > **Custom data sources** section
+    - `<namespace>` with a namespace name to organize your rules (e.g., `infrastructure`, `production`)
+        
+        The `<namespace>` is a logical grouping for your rules within the API. It helps organize different sets of rules but is separate from the group name defined in your YAML file.
+
+### Step 3: Verify your alert rules
+
+Retrieve your configured Loki alert rules to verify they were created successfully:
+
+```bash
+curl -X GET \
+  -H "X-Token: $COCKPIT_TOKEN" \
+  "https://<data-source-id>.logs.cockpit.<region>.scw.cloud/loki/api/v1/rules/<namespace>"
+```

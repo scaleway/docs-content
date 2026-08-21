@@ -79,6 +79,10 @@ export const accountMenu = {
           slug: 'manage-notifications',
         },
         {
+          label: 'Use the resource explorer',
+          slug: 'use-resource-explorer',
+        },
+        {
           label: 'Use the search bar',
           slug: 'use-the-search-bar',
         },

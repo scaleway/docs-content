@@ -152,15 +152,15 @@ See [Writing Guidelines](.pages/guidelines.mdx) for the full documentation style
 - Code blocks: Use triple backticks with language specification (e.g., ```python).
 - Inline code: Use backticks for environment variables, placeholders, and short code snippets.
 - Links: Use descriptive link text (not "here" or "this page"). Use relative links with leading and trailing slashes for internal pages.
-- Admonitions: Use one of the following message boxes: Tip, Note, Important. Do not use tables in message boxes.
+- Admonitions: Use one of the following message boxes: Tip, Note, Important. Do not use tables or code blocks in message boxes.
 - Bold text: Use bold for console navigation elements and button names (e.g., Click Create Instance).
 - Capitalization: Capitalize product names (Instance, Load Balancer). Do not capitalize feature names unless they are Scaleway-specific terms (InstantApp, Easy Deploy). Use sentence-case capitalization in titles and headings.
-- Numbers: Write numbers 1-9 in full. Use numerals for 10+. Use commas to separate thousands.
-- Dates/Times: Use 24-hour format for times. Use day/month/year or DD/MM/YY for dates. Avoid ordinals (e.g., "14 January" not "14th January").
+- Numbers: Write all numbers as numerals. Use commas to separate thousands.
+- Dates/Times: Use 24-hour format for times. Use `Month Day, Year` format for dates (e.g., January 14, 2026). Avoid ordinals (e.g., "January 14" not "January 14th").
 
 ## Product categories
 
-The navigation of the documentation website [scaleway.com/en/docs](https://www.scaleway.com/en/docs/) is organized into these main categories (to match the navigation of the Scaleway console):
+The navigation of the documentation website [scaleway.com/en/docs](https://www.scaleway.com/en/docs/) is organized into the following main categories (to match the navigation of the Scaleway console).
 
 ### Management & Governance
 

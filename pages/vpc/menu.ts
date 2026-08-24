@@ -39,7 +39,7 @@ export const vpcMenu = {
           slug: 'manage-routing',
         },
         {
-          label: 'Configure private access for Object Storage',
+          label: 'Configure Object Storage private access',
           slug: 'enable-object-storage-private-access',
         },
         {

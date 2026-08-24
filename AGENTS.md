@@ -152,7 +152,7 @@ See [Writing Guidelines](.pages/guidelines.mdx) for the full documentation style
 - Code blocks: Use triple backticks with language specification (e.g., ```python).
 - Inline code: Use backticks for environment variables, placeholders, and short code snippets.
 - Links: Use descriptive link text (not "here" or "this page"). Use relative links with leading and trailing slashes for internal pages.
-- Admonitions: Use one of the following message boxes: Tip, Note, Important. Do not use tables nor code blocks in message boxes.
+- Admonitions: Use one of the following message boxes: Tip, Note, Important. Do not use tables or code blocks in message boxes.
 - Bold text: Use bold for console navigation elements and button names (e.g., Click Create Instance).
 - Capitalization: Capitalize product names (Instance, Load Balancer). Do not capitalize feature names unless they are Scaleway-specific terms (InstantApp, Easy Deploy). Use sentence-case capitalization in titles and headings.
 - Numbers: Write all numbers as numerals. Use commas to separate thousands.

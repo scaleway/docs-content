@@ -8,7 +8,7 @@ dates:
 ---
 import Requirements from '@macros/iam/requirements.mdx'
 
-An [Instance group](/instances/concepts/#instance-group) is a collection of identical Instances, created from an [Instance template](/instances/concepts/#instance-template) and managed together. A group can run at a fixed size for predictable workloads, or scale automatically between a minimum and maximum number of Instances based on CPU or RAM usage.<br/>
+An [Instance group](/instances/concepts/#instance-group) is a collection of identical Instances, created from an [Instance template](/instances/concepts/#instance-template) and managed together. A group can run at a fixed size for predictable workloads, or scale automatically between a minimum and maximum number of Instances based on usage metrics.<br/>
 When you attach a Load Balancer to a group, Scaleway keeps its backend up to date as the group scales, and can automatically replace Instances that fail their health check.
 
 <Message type="important">
@@ -57,11 +57,8 @@ You can start the Instance group creation wizard from 3 places in the console: t
     </Message>
 
 3. Enter a **name** for your Instance group, or keep the randomly-generated name. Optionally, add [tags](/instances/concepts/#tags).
-4. Select the **Availability Zone** and the **Instance template** to use. Every Instance in the group is created from this template.
-
-    <Message type="note">
-      Only CPU-only Instance templates are available for Instance groups in the console. GPU template support is available via the API or CLI only.
-    </Message>
+4. Select the **Availability Zone** and the **Instance template** to use. Every Instance in the group is created from this template.</br>
+    The console supports CPU-only Instance templates for Instance groups. GPU templates are available via the API or CLI, in fixed-size or autoscaling mode. However, autoscaling is not yet effective for GPU-based groups, since the currently supported metrics — CPU and RAM usage — are not meaningful for GPU workloads.
 
 5. Under **Choose capacity management**, select whether the group runs at a fixed size or uses autoscaling, and configure the corresponding settings. See [Choose capacity management](#choose-capacity-management) for details.
 6. (Optional) Enable **Use Load Balancer for traffic routing** to register the Instances of the group as backend servers and enable autohealing. See [Configure a Load Balancer for traffic routing and autohealing](#configure-a-load-balancer-for-traffic-routing-and-autohealing) for details.
@@ -72,28 +69,37 @@ Your Instance group is created, and you are taken to its **Overview** tab, where
 
 ### Choose capacity management
 
-An Instance group runs in one of two capacity modes: fixed size, or autoscaling. You choose the mode when you create the group, and can switch between modes later from the **Settings** tab of the group.
+An Instance group runs in one of two capacity modes: fixed size, or autoscaling. Both modes work through horizontal scaling — adjusting how many Instances are running — rather than vertical scaling, which means resizing the resources of an existing Instance.</br>
+You choose the mode when you create the group, and can switch between modes later from the group **Settings** tab
 
 #### Fixed size
 
 A fixed-size group always runs the same number of Instances, and is best suited to predictable workloads.
 
-- **Number of Instances**: set how many Instances the group runs. You can set between 1 and 50 Instances.
+**Number of Instances**: set how many Instances the group runs. You can set between 1 and 50 Instances.
+
+A fixed-size group does not automatically reduce its Instance count. To stop billing costs during periods when you do not need the fleet, stop its Instances manually.
 
 #### Autoscaling
 
 An autoscaling group dynamically adjusts its Instance count between a minimum and maximum value, based on the usage thresholds you define. This mode is best suited to unpredictable workloads.
 
 - **Minimum Instance count** and **Maximum Instance count**: set the range the group can scale between (from 1 to 50 Instances).
-- **Scaling thresholds**: for each metric, set a target usage percentage. The group scales up when usage exceeds the target, and scales down when it drops below it.
+
+- **Scaling targets**: for each metric, set a **Target usage** percentage. This target represents the usage level the group aims to maintain, not a strict on/off threshold. The group uses this target to calculate how many Instances it needs. A scaling event only happens when this calculation changes the number of Instances.</br>
+
+For this reason, usage can stay above or below the target without triggering any change. For example, a group can stay stable at 82% usage with an 80% target, or at 70% with the same target, if the number of Instances stays the same, or if a cooldown period from a previous scaling event is still active.
 
     <Message type="note">
-      CPU usage and RAM usage are the metrics currently supported in the console. When you set several metrics, the group scales to the maximum Instance count required by any of them.
+      CPU usage and RAM usage are the only metrics currently supported in the console. When you set several metrics, the group scales to the maximum Instance count required by any of them.
     </Message>
 
     Click **Add metric** to monitor an additional metric, or click <Icon name="delete" /> next to a metric to remove it.
 
-- **Cooldown period**: set the minimum wait time between scaling events. This gives new Instances time to start and stabilize before further scaling changes occur, so set it long enough to ensure they are ready to serve traffic.
+- **Scaling behavior**: configure how the group reacts for each scaling event.
+    - **Scale out**: set how many Instances to add when scaling out.
+    - **Scale in**: set how many Instances to remove when scaling in.
+    - **Cooldown period**: set how long the group waits after a scaling event before it can scale again. This gives new Instances time to start and stabilize before further scaling changes occur, so set it long enough to ensure they are ready to serve traffic.
 
 ### Configure a Load Balancer for traffic routing and autohealing
 
@@ -105,7 +111,7 @@ Attaching a Load Balancer to an Instance group lets Scaleway automatically regis
     Creating a Load Balancer from the Instance group flow is not supported. [Create a Load Balancer](/load-balancer/how-to/create-load-balancer/) beforehand if you do not have one yet.
 3. For each backend, select the **Network** and **IP type** to use to route traffic to your Instances.
 4. (Optional) Enable **Autohealing**. If a backend server fails its health check, the Instance group automatically replaces it.<br/>
-    Autohealing requires a Load Balancer. You cannot enable autohealing on an Instance group that does not have a Load Balancer configured for traffic routing.
+    You cannot enable autohealing on an Instance group that does not have a Load Balancer configured for traffic routing.
 
 While a Load Balancer or one of its backends is in use by an Instance group, the **Delete** action is disabled on the Load Balancer pages. Attach a different Load Balancer to the group before you can delete the one currently in use.
 
@@ -139,7 +145,9 @@ The placement group and tags inherited from the Instance template cannot be chan
     - Click **Reboot** to restart the Instance. Confirm by clicking **Reboot Instance** in the dialog box that appears.
     - Click **Delete** to remove the Instance from the group. Optionally, select **Delete associated IPs** and/or **Delete Block Storage volumes**, type **DELETE** to confirm, then click **Delete Instance**.<br/>
 
-    Deleting an Instance is irreversible. If autohealing is enabled, the Instance group may automatically create a replacement Instance to maintain its configured capacity.
+    <Message type="important">
+      Deleting an Instance is irreversible. The Instance group always provisions a new Instance if the count drops below its configured minimum, regardless of whether autohealing is enabled. Autohealing covers a different case — it automatically replaces an Instance that fails the Load Balancer's health check.
+    </Message>
 
 ### View Instance group logs
 
@@ -159,7 +167,7 @@ The **Logs** tab of an Instance group gives you access to Scaleway Observability
 ## Delete an Instance group
 
 <Message type="important">
-  Deleting an Instance group does not delete its associated resources. Instances, IPs, volumes, and Load Balancers remain active and continue to be billed. To delete them, scale the group down to zero Instances (or set the fixed size to zero), then remove the remaining resources manually.
+  Deleting an Instance group also deletes its Instances. Other associated resources, such as IPs, volumes, and Load Balancers, are not deleted automatically — they remain active and continue to be billed. Remove them manually if you no longer need them.
 </Message>
 
 ### Delete a single Instance group

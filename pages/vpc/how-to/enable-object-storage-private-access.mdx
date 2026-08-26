@@ -1,7 +1,7 @@
 ---
 title: Configuring Object Storage private access
 description: Learn how to enable Object Storage private access on a Scaleway VPC, and how to restrict bucket access to your VPC with an aws:SourceVpc bucket policy condition.
-tags: vpc object-storage private-access endpoint s3-integration bucket-policy aws-sourcevpc private-network
+tags: vpc object-storage private-access object-storage-private-access bucket-policy aws-sourcevpc private-network
 dates:
   validation: 2026-08-21
   posted: 2026-08-21
@@ -25,7 +25,7 @@ When the feature is enabled, all buckets in the region of the VPC are reachable 
 - A [VPC](/vpc/how-to/create-vpc/) with at least one [Private Network](/vpc/how-to/create-private-network/)
 - An [Object Storage bucket](/object-storage/how-to/create-a-bucket/) in the region of the VPC
 
-## How Object Storage private access works
+## Overview
 
 Object Storage private access relies on two components, configured in two different sections of the Scaleway console:
 
@@ -39,33 +39,33 @@ Both components are required to obtain private and restricted access. Neither co
 
 The two configuration steps are independent, and you can perform them in any order.
 
-## How to enable the Object Storage endpoint on a VPC
+## How to enable Object Storage private access on a VPC
 
-This step creates a dedicated access path to the Object Storage service from the VPC. It can be performed from the settings of your VPC in the [Scaleway console](https://console.scaleway.com/), or via the [VPC API](https://www.scaleway.com/en/developers/api/vpc/s3-integration/).
-
-<Message type="important">
-Enabling the Object Storage endpoint on a VPC triggers the billing of the feature.
+<Message type="note">
+Enabling Object Storage private access on a VPC triggers billing for the feature.
 </Message>
 
-1. Enable the endpoint on the VPC, using the [Enable S3 integration](https://www.scaleway.com/en/developers/api/vpc/s3-integration#enable-s3-integration) API call:
+1. Enable Object Storage private access on the VPC, listing the Private Networks to authorize:
 
     ```bash
     curl -X POST \
       -H "X-Auth-Token: $SCW_SECRET_KEY" \
-      "https://api.scaleway.com/vpc/v2/regions/{region}/s3-integration/{vpc_id}/enable"
+      -H "Content-Type: application/json" \
+      -d '{"private_network_ids":["example-7363-616c-6577-61792e636f6d"]}' \
+      "https://api.scaleway.com/vpc/v2/regions/{region}/object-storage-private-access/{vpc_id}/enable"
     ```
 
-2. Add each Private Network that must benefit from the private path:
+2. Add another Private Network, if needed:
 
     ```bash
     curl -X POST \
       -H "X-Auth-Token: $SCW_SECRET_KEY" \
       -H "Content-Type: application/json" \
       -d '{"private_network_id":"6170692e-7363-616c-6577-61792e636f6d"}' \
-      "https://api.scaleway.com/vpc/v2/regions/{region}/s3-integration/{vpc_id}/private-networks"
+      "https://api.scaleway.com/vpc/v2/regions/{region}/object-storage-private-access/{vpc_id}/private-networks"
     ```
 
-    The resources attached to these Private Networks can now reach the buckets of the region privately.
+Refer to the [VPC API documentation](https://www.scaleway.com/en/developers/api/vpc/object-storage-private-access/) for more information.
 
 ## How to restrict bucket access to a VPC
 
@@ -74,8 +74,8 @@ When the endpoint is enabled, every bucket of the region whose bucket policy all
 <ImportantBucketPolicy />
 
 1. Click **Object Storage** in the **Storage** section of the [Scaleway console](https://console.scaleway.com/) side menu. The list of your buckets displays.
-2. Click the name of the bucket to restrict, then open the **Bucket policy** tab.
-3. Create a bucket policy that allows access from your VPC only. In the example below, resources coming from the `vpc-1a2b3c4d` VPC are allowed to perform the `s3:ListBucket` and `s3:GetObject` actions:
+2. Click the name of the bucket, then click the **Bucket policy** tab.
+3. Create a bucket policy that allows access from your VPC only:
 
     ```json
     {
@@ -98,14 +98,14 @@ When the endpoint is enabled, every bucket of the region whose bucket policy all
     }
     ```
 
-4. Replace the `<BUCKET_NAME>` placeholders with the name of the bucket, and the `<VPC_ID>` placeholder with the ID of the VPC on which the endpoint is enabled.
-5. Save the bucket policy. Any request that does not come from the specified VPC is denied.
+4. Replace the `<BUCKET_NAME>` and `<VPC_ID>` placeholders with the name of your bucket and the ID of your VPC.
+5. Save the bucket policy. Requests that do not come from Private Networks within the VPC are denied.
 
 <Message type="note">
 See the [bucket policies overview](/object-storage/api-cli/bucket-policy/) for more information on the syntax and the elements of a bucket policy.
 </Message>
 
-## Behaviors to be aware of
+## Key considerations
 
 ### A bucket without a bucket policy remains publicly accessible
 
@@ -125,12 +125,4 @@ You select which Private Networks of the VPC use the private path, but a bucket 
 
 ## Troubleshooting
 
-- The bucket is still reachable from the internet. The Object Storage endpoint is enabled on the VPC, but no bucket policy restricts access to the bucket. Enabling the endpoint adds a private path, and does not remove public access. Apply a bucket policy with an `aws:SourceVpc` condition, as described in [How to restrict bucket access to a VPC](#how-to-restrict-bucket-access-to-a-vpc).
-
-- The bucket became publicly accessible again. The bucket policy that contained the VPC condition was deleted, which removes all restrictions on the bucket. Apply the bucket policy again.
-
-- Resources in the VPC cannot reach the bucket. Check that the Object Storage endpoint is enabled on the VPC, that the Private Network of the resource is added to the endpoint, and that the bucket is in the region of the VPC. A bucket policy that references the ID of a VPC on which the endpoint is not enabled never matches any request.
-
-- The Scaleway console no longer displays the objects, metrics, or logs of the bucket. The console accesses buckets over the internet, and the bucket policy denies requests that do not come from the VPC. Manage the bucket from a resource inside the VPC.
-
-- You lost access to the bucket. The bucket policy allows requests from the VPC only, and you have no management method from inside the VPC. The [Owner](/iam/concepts/#owner) of the Organization can always put and delete bucket policies, and can therefore restore access to the bucket.
+See [I am experiencing issues with Object Storage private access](/vpc/troubleshooting/object-storage-private-access-issues/) for solutions to the most common issues, such as buckets that remain publicly reachable, or resources in a VPC that cannot access a bucket.

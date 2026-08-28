@@ -1,0 +1,340 @@
+---
+title: Deploying a remote MCP server on Serverless Containers
+description: Build a Go-based Model Context Protocol (MCP) server, deploy it on Scaleway Serverless Containers, and connect AI agents like OpenCode to it.
+tags: MCP model context protocol serverless containers go docker opencode
+products:
+  - containers
+  - container-registry
+dates:
+  validation: 2026-08-28
+  posted: 2026-08-28
+  validation_frequency: 12
+difficulty: intermediate
+usecase:
+  - build-and-run-ai
+  - application-hosting
+ecosystem:
+  - third-party
+---
+
+import Requirements from '@macros/iam/requirements.mdx'
+
+[Model Context Protocol](https://modelcontextprotocol.io/introduction) (MCP) is an open protocol that standardizes how AI assistants and agents interact with external tools and data sources. An MCP server exposes tools, resources, and prompts over a JSON-RPC interface, allowing clients such as [OpenCode](https://opencode.ai/), Claude, or Cursor to call them securely.
+
+This tutorial shows you how to build a lightweight MCP server in Go, containerize it, push its image to the [Scaleway Container Registry](/container-registry/), deploy it on [Serverless Containers](/serverless-containers/), and connect it to OpenCode. You use the Scaleway console for most of the deployment steps, and Docker to build and push the image.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- [Docker](https://docs.docker.com/get-started/get-docker/) or [Docker Engine](https://docs.docker.com/engine/install/) installed on your local machine
+- A Scaleway [IAM API key](/iam/how-to/create-api-keys/) used to authenticate against the Container Registry
+- [Go 1.27 or newer](https://go.dev/doc/install) installed to generate the Go module files
+- [OpenCode](https://opencode.ai/docs/) installed to test the remote MCP server
+
+## Why host an MCP server on Serverless Containers
+
+Local MCP servers communicate with AI clients over standard input/output (`stdio`). Remote MCP servers instead expose an HTTP endpoint that AI agents can reach over the network.
+
+Hosting an MCP server on Serverless Containers offers several advantages:
+
+- **Scale-to-zero cost**: AI agents invoke tools in intermittent bursts. Serverless Containers scale to zero when idle, so you only pay for active execution time.
+- **Stateless architecture**: Remote MCP uses HTTP transports where each request carries its own execution context, so containers scale horizontally without sticky sessions.
+- **Built-in security**: You can make your container private, and the Scaleway API Gateway enforces `X-Auth-Token` authentication before any request reaches your container.
+- **Zero maintenance**: Scaleway handles automated OS patching, SSL termination, and horizontal scaling.
+
+## What the MCP server does
+
+The example server is a single Go binary built on the official [MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk) (`github.com/modelcontextprotocol/go-sdk/mcp`). It exposes three tools over the Streamable HTTP transport:
+
+| Tool | Description |
+| :--- | :--- |
+| `get_server_time` | Returns the current UTC time from the container. |
+| `echo` | Echoes back the input message. |
+| `get_app_name` | Returns the value of the `SCW_APPLICATION_NAME` environment variable. |
+
+The server exposes two endpoints:
+
+- `/mcp` - the JSON-RPC endpoint that MCP clients call (Streamable HTTP/SSE transport)
+- `/health` - a health check endpoint that returns `OK`
+
+## Prepare the MCP server source code
+
+1. In a terminal, create a new directory and navigate into it:
+    ```bash
+    mkdir mcp-go-server
+    cd mcp-go-server
+    ```
+
+2. Create a `main.go` file, then add the code below. It defines the three tools, registers them on an MCP server, and serves them on the `/mcp` endpoint using the official Go SDK:
+    ```go
+    package main
+
+    import (
+        "context"
+        "log/slog"
+        "net/http"
+        "os"
+        "time"
+
+        "github.com/modelcontextprotocol/go-sdk/mcp"
+    )
+
+    type echoArgs struct {
+        Message string `json:"message" jsonschema:"The string to echo back"`
+    }
+
+    func main() {
+        port := os.Getenv("PORT")
+        if port == "" {
+            port = "8080"
+        }
+
+        server := mcp.NewServer(&mcp.Implementation{
+            Name:    "scaleway-test-mcp",
+            Version: "1.1.0",
+        }, nil)
+
+        mcp.AddTool(server, &mcp.Tool{
+            Name:        "get_server_time",
+            Description: "Returns current UTC time from the Scaleway container",
+        }, func(_ context.Context, req *mcp.CallToolRequest, _ any) (*mcp.CallToolResult, any, error) {
+            return &mcp.CallToolResult{
+                Content: []mcp.Content{&mcp.TextContent{
+                    Text: "Scaleway Container UTC Time: " + time.Now().UTC().Format(time.RFC3339),
+                }},
+            }, nil, nil
+        })
+
+        mcp.AddTool(server, &mcp.Tool{
+            Name:        "echo",
+            Description: "Echoes back the input message",
+        }, func(_ context.Context, req *mcp.CallToolRequest, in echoArgs) (*mcp.CallToolResult, any, error) {
+            return &mcp.CallToolResult{
+                Content: []mcp.Content{&mcp.TextContent{
+                    Text: "Echo from Scaleway: " + in.Message,
+                }},
+            }, nil, nil
+        })
+
+        mcp.AddTool(server, &mcp.Tool{
+            Name:        "get_app_name",
+            Description: "Returns the SCW_APPLICATION_NAME environment variable from the container",
+        }, func(_ context.Context, _ *mcp.CallToolRequest, _ any) (*mcp.CallToolResult, any, error) {
+            appName := os.Getenv("SCW_APPLICATION_NAME")
+            if appName == "" {
+                appName = "[NOT_SET]"
+            }
+
+            return &mcp.CallToolResult{
+                Content: []mcp.Content{&mcp.TextContent{
+                    Text: "SCW_APPLICATION_NAME: " + appName,
+                }},
+            }, nil, nil
+        })
+
+        mux := http.NewServeMux()
+
+        mux.HandleFunc("GET /health", handleHealth)
+        mux.Handle("/mcp", mcp.NewStreamableHTTPHandler(func(_ *http.Request) *mcp.Server {
+            return server
+        }, &mcp.StreamableHTTPOptions{
+            Stateless:                  true,
+            DisableLocalhostProtection: true, // auth is enforced upstream by the Scaleway platform
+        }))
+
+        slog.Info("Starting MCP server", "port", port)
+
+        httpServer := &http.Server{
+            Addr:              ":" + port,
+            ReadHeaderTimeout: 10 * time.Second,
+            Handler:           mux,
+        }
+
+        err := httpServer.ListenAndServe()
+        if err != nil {
+            slog.Error("Server crashed", "error", err)
+            os.Exit(1)
+        }
+    }
+
+    func handleHealth(w http.ResponseWriter, _ *http.Request) {
+        w.WriteHeader(http.StatusOK)
+        _, _ = w.Write([]byte("OK"))
+    }
+    ```
+
+    <Message type="note">
+    The server disables localhost protection because authentication is enforced upstream by the Scaleway platform when you make the container private.
+    </Message>
+
+3. Initialize the Go module and download the MCP Go SDK dependency:
+    ```bash
+    go mod init mcp-go-server
+    go get github.com/modelcontextprotocol/go-sdk
+    go mod tidy
+    ```
+
+4. Create a `Dockerfile` at the root of your project:
+    ```dockerfile
+    # syntax=docker/dockerfile:1
+
+    # Step 1: Build binary using modern Go toolchain
+    FROM golang:1.27-alpine AS builder
+
+    WORKDIR /app
+
+    COPY go.mod go.sum ./
+
+    RUN go mod download
+
+    COPY main.go .
+
+    RUN CGO_ENABLED=0 GOOS=linux go build \
+        -trimpath \
+        -ldflags="-w -s" \
+        -o mcp-server main.go
+
+    # Step 2: Minimal non-root distroless runtime (~5MB final image)
+    FROM gcr.io/distroless/static-debian13:nonroot
+
+    WORKDIR /
+
+    COPY --from=builder /app/mcp-server /mcp-server
+
+    EXPOSE 8080
+    ENV PORT=8080
+
+    USER nonroot:nonroot
+
+    ENTRYPOINT ["/mcp-server"]
+    ```
+
+    <Message type="note">
+    **Why multi-stage builds?** The first stage compiles a statically linked Go binary. The final stage copies only that binary into a minimal [distroless](https://github.com/GoogleContainerTools/distroless) image that runs as a non-root user. The resulting image is about 5 MB, which keeps cold starts fast.
+    </Message>
+
+5. Test the image locally:
+    ```bash
+    docker build --platform linux/amd64 -t mcp-server:latest .
+    docker run --rm -p 8080:8080 mcp-server:latest
+    ```
+    Open [http://localhost:8080/health](http://localhost:8080/health) in your web browser to check the health endpoint.
+
+## Create a Container Registry namespace
+
+To store your container image, you need a [Container Registry namespace](/container-registry/concepts/#namespace). Namespaces allow you to manage and organize your images.
+
+1. Click **Container Registry** under the **Storage** or **Containers** sections of the [Scaleway console](https://console.scaleway.com) side menu.
+2. Click **Create namespace**.
+3. Enter a name for your namespace (for example, `mcp-go-server`), select the region, and click **Create namespace**.
+4. Copy the namespace endpoint from the **Settings** tab of your namespace (for example, `rg.fr-par.scw.cloud/mcp-go-server`).
+
+<Message type="note">
+For more information on creating a Container Registry namespace, see the [dedicated documentation](/container-registry/how-to/create-namespace/).
+</Message>
+
+## Build and push the image
+
+1. Sign in to your Container Registry namespace with the Docker CLI, using your Scaleway IAM secret key as the password:
+    ```bash
+    echo <SCW_SECRET_KEY> | docker login rg.<region>.scw.cloud/<namespace> -u nologin --password-stdin
+    ```
+    The message `Login Succeeded` appears once you are signed in.
+
+2. Build the image and tag it with your registry endpoint:
+    ```bash
+    docker build --platform linux/amd64 -t rg.<region>.scw.cloud/<namespace>/mcp-server:latest .
+    ```
+    Replace `<region>` and `<namespace>` with the region and name of the registry namespace you created.
+
+3. Push the image to the Container Registry:
+    ```bash
+    docker push rg.<region>.scw.cloud/<namespace>/mcp-server:latest
+    ```
+
+<Message type="note">
+Use [Scaleway Container Registry](/container-registry/) to avoid rate limiting errors and risks linked to pricing changes of external registries.
+</Message>
+
+## Deploy the container on Serverless Containers
+
+<Message type="tip">
+Deploy your container in the same region as your Container Registry namespace so Serverless Containers can pull the image.
+</Message>
+
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Serverless Compute** > **Containers**.
+2. Click **Create namespace**, enter a name for your namespace (for example, `mcp-go-server-ns`), and click **Create namespace and add container**. The container creation wizard displays.
+3. In **Container image configuration**, configure the following:
+    - Select **Scaleway Container Registry**.
+    - Select the **region** and **namespace** of the registry where you pushed the image.
+    - Select the `mcp-server` image and the `latest` tag.
+    - Enter **8080** as the **container port** (matches the `PORT` environment variable in the Dockerfile).
+    - Enter a name for your container (for example, `mcp-server`).
+4. In **Container resources and scaling**, configure the following:
+    - **CPU**: 250 mVCPU.
+    - **Memory**: 256 MB. Go binaries are lightweight.
+    - Keep the default **autoscaling** values, or set the **minimum instances** to 1 to avoid [cold starts](/serverless-containers/concepts/#cold-start).
+5. In **Advanced options** > **Security**, set the **Privacy policy** to **Private**. A private container rejects any request without a valid `X-Auth-Token` header, so only your AI agent can call it.
+6. Click **Deploy container**. The deployment can take up to a minute.
+
+## Test the deployment
+
+1. Once the container is **ready**, copy the container endpoint from the **Endpoints** tab of your container.
+2. Check the health endpoint:
+    ```bash
+    curl -H "X-Auth-Token: <SCW_SECRET_KEY>" https://<YOUR_CONTAINER_ENDPOINT>/health
+    ```
+    The response is `OK`.
+3. List the available tools by calling the `/mcp` endpoint:
+    ```bash
+    curl -X POST https://<YOUR_CONTAINER_ENDPOINT>/mcp \
+      -H "Content-Type: application/json" \
+      -H "X-Auth-Token: <SCW_SECRET_KEY>" \
+      -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'
+    ```
+    The response lists the three tools defined in the server.
+4. Call the `get_server_time` tool:
+    ```bash
+    curl -X POST https://<YOUR_CONTAINER_ENDPOINT>/mcp \
+      -H "Content-Type: application/json" \
+      -H "X-Auth-Token: <SCW_SECRET_KEY>" \
+      -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"get_server_time","arguments":{}}}'
+    ```
+    The response contains the current UTC time returned by the container.
+
+## Connect OpenCode to the MCP server
+
+1. Open your OpenCode configuration file (`opencode.json` in your project, or `~/.config/opencode/opencode.json`).
+2. Add the following configuration, replacing the placeholders:
+    ```json
+    {
+      "$schema": "https://opencode.ai/config.json",
+      "mcp": {
+        "scaleway-mcp-server": {
+          "type": "remote",
+          "url": "https://<YOUR_CONTAINER_ENDPOINT>/mcp",
+          "headers": {
+            "X-Auth-Token": "<YOUR_SCALEWAY_IAM_SECRET_KEY>"
+          }
+        }
+      }
+    }
+    ```
+    The `X-Auth-Token` header passes your Scaleway IAM secret key, which the API Gateway uses to authorize calls to your private container.
+3. Restart OpenCode, then ask the assistant to use one of the tools, for example:
+    - "What time is it?"
+    - "What is the application name?"
+
+## Going further
+
+- [Add a custom domain](/serverless-containers/how-to/add-a-custom-domain-to-a-container/) to your container.
+- [Monitor logs and metrics](/serverless-containers/how-to/monitor-container/) of your container.
+- Learn how to [build and push a container image](/serverless-containers/how-to/build-push-container-image/) in a CI/CD pipeline.
+
+## Clean up
+
+To avoid incurring costs, delete the resources you created:
+
+1. In the **Serverless Compute** > **Containers** section of the console, delete the container namespace `mcp-go-server-ns`.
+2. Click **Container Registry** under the **Storage** or **Containers** sections of the side menu, then delete the registry namespace `mcp-go-server`.

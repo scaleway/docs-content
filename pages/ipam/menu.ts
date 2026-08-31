@@ -19,7 +19,7 @@ export const ipamMenu = {
     {
       items: [
         {
-          label: 'List your private IP addresses',
+          label: 'List your IP addresses',
           slug: 'list-ips',
         },
         {

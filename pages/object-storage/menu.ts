@@ -232,10 +232,6 @@ export const objectStorageMenu = {
       slug: 'reference-content',
     },
     {
-      label: 'Videos',
-      slug: 'videos',
-    },
-    {
       label: 'Troubleshooting',
       slug: 'troubleshooting',
     },

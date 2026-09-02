@@ -80,6 +80,10 @@ export const siteToSiteVpnMenu = {
           label: 'Configuring a customer gateway device',
           slug: 'configuring-customer-gateway-device',
         },
+        {
+          label: 'Using BGP communities',
+          slug: 'bgp-communities',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

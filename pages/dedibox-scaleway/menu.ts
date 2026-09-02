@@ -16,6 +16,7 @@ export const dediboxScalewayMenu = {
       label: 'FAQ',
       slug: 'faq',
     },
+
     {
       items: [
         {
@@ -105,6 +106,10 @@ export const dediboxScalewayMenu = {
       ],
       label: 'Additional Content',
       slug: 'reference-content',
+    },
+    {
+      label: 'Troubleshooting',
+      slug: 'troubleshooting',
     },
   ],
   label: 'Dedibox',

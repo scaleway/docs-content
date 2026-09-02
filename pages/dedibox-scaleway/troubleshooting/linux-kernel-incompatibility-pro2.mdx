@@ -1,0 +1,73 @@
+---
+title: Troubleshooting I/O errors and read-only file systems on Dedibox Pro-2 servers
+description: Learn about Linux kernel incompatibility issues affecting Dedibox Pro-2 servers and how to resolve them.
+tags: dedibox server linux kernel incompatibility
+dates:
+  validation: 2026-09-03
+  posted: 2026-09-03
+---
+
+## Problem
+
+On machines built on the Dedibox Pro-2 line, you are encountering one or more of the following issues when running recent Linux kernels:
+
+- Disks experience I/O packet loss
+- The file system (e.g., EXT4) immediately switches to read‑only mode to protect the data
+- System logs show DMA errors related to the IOMMU subsystem
+- SATA link degradation (from 6.0 Gbps to 1.5 Gbps)
+
+### Typical log messages
+
+```
+ata2: SATA link up 1.5 Gbps (SStatus 113 SControl 310)
+EXT4-fs (md1): Remounting filesystem read-only
+DMAR: ERROR: DMA PTE for vPFN ... already set
+```
+
+This page explains the incompatibility causing the problem, lists the affected machines and operating systems, and provides a workaround.
+
+## Affected machines and operating systems
+
+The following **Dedibox Pro-2 servers** are affected by the incompatibility issue (all based on the HP ProLiant DL320e Gen8 v2 chassis):
+
+| Offer      |  Motherboard  |
+| -------------------- | ------------------- |
+| Pro-2-M-SATA         | DL320eGen8v2 (MD 2014) |
+| Pro-2-M-SSD          | DL320eGen8v2 (MD 2014 SSD) |
+| Pro-2-L-SATA         | DL320eGen8v2 (PRO 2014) |
+| Pro-2-L-10k          | DL320eGen8v2 (PRO 2014) |
+| Pro-2-L-SSD          | DL320eGen8v2 (PRO SSD 2014) |
+
+The following **operating systems and kernel versions** are affected:
+
+- **Debian** (kernels ≥ 6.17.13, e.g., Debian 13 "Trixie" and later versions)
+- **Ubuntu** (kernels 7.x.x, e.g., Ubuntu 26.04 and later versions)
+- **Proxmox VE** (kernels ≥ 6.17.13, based on Debian)
+
+> **Note:** This issue affects all Debian-based distributions using recent Linux kernels with the updated Intel IOMMU handling.
+
+## Cause
+
+A default change in the handling of Intel IOMMU in recent Linux kernels (Debian/Ubuntu) degrades the SATA link (drops to 1.5 Gbps, AHCI link resets) and generates I/O errors on the disk controller via the IOMMU subsystem (`DMAR: ERROR: DMA PTE …`).
+
+## Workaround
+
+To resolve the issue without completely disabling IOMMU virtualization (VT‑d), configure the IOMMU in passthrough mode (`iommu=pt`).
+
+1. Open a root terminal and create a dedicated GRUB configuration file:
+
+   ```bash
+   echo 'GRUB_CMDLINE_LINUX_DEFAULT="$GRUB_CMDLINE_LINUX_DEFAULT intel_iommu=on iommu=pt"' | sudo tee /etc/default/grub.d/iommu.cfg
+   ```
+
+2. Update the GRUB configuration:
+
+   ```bash
+   sudo update-grub
+   ```
+
+3. Reboot the server to apply the change:
+
+   ```bash
+   sudo reboot
+   ```

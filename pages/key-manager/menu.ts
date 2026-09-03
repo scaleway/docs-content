@@ -79,6 +79,10 @@ export const keyManagerMenu = {
           slug: 'https://www.scaleway.com/en/developers/api/key-manager/',
         },
         {
+          label: 'Using Bring Your Own Key with the Scaleway API and CLI',
+          slug: 'byok-api-cli',
+        },
+        {
           label:
             'Creating a data encryption key using the Scaleway API and the Scaleway CLI',
           slug: 'create-dek-api-cli',

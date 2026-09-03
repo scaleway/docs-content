@@ -16,7 +16,6 @@ export const dediboxScalewayMenu = {
       label: 'FAQ',
       slug: 'faq',
     },
-
     {
       items: [
         {

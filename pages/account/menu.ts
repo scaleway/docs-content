@@ -7,6 +7,10 @@ export const accountMenu = {
     {
       items: [
         {
+          label: 'Understanding Scaleway account',
+          slug: 'understanding-account',
+        },
+        {
           label: 'Glossary',
           slug: 'glossary',
         },

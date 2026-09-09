@@ -7,6 +7,10 @@ export const organizationsAndProjectsMenu = {
     {
       items: [
         {
+          label: 'Understanding Organizations and Projects',
+          slug: 'understanding-organization-project',
+        },
+        {
           label: 'Glossary',
           slug: 'glossary',
         },

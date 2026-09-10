@@ -11,101 +11,141 @@ import Requirements from '@macros/iam/requirements.mdx'
 import image from './assets/scaleway-cpt-k8s-terraform-logs.webp'
 
 
-In this page, we will show you how to send application logs from your Kubernetes cluster to your Cockpit using either a Helm chart or deploying a Helm chart with [Terraform](https://www.terraform.io/) or [OpenTofu](https://opentofu.org/).
+This tutorial shows you how to send application logs from your Kubernetes cluster to your Cockpit using either a Helm chart or deploying a Helm chart with [Terraform](https://www.terraform.io/) or [OpenTofu](https://opentofu.org/).
 
-We will use the [k8s-monitoring](https://artifacthub.io/packages/helm/grafana/k8s-monitoring/1.6.16) Helm Chart, which installs an Alloy Daemon set to export your Kubernetes cluster's logs to your Cockpit.
+We will use the [k8s-monitoring](https://artifacthub.io/packages/helm/grafana/k8s-monitoring/) Helm Chart, which installs an Alloy Daemon set to export the logs of your Kubernetes cluster to your Cockpit.
 
 <Requirements />
 
  - A Scaleway account logged into the [console](https://console.scaleway.com)
  - [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
- - [Created](/cockpit/how-to/create-external-data-sources/) a [custom data source](/cockpit/concepts/#custom-data) of the [logs type](/cockpit/concepts/#data-types)
- - [Created](/cockpit/how-to/create-token/) a Cockpit token in the same region as the logs data source
+ - [Created](/cockpit/how-to/create-external-data-sources/) a [custom data source](/cockpit/concepts/#custom-data) of [type **Logs**](/cockpit/concepts/#data-types)
+ - [Created](/cockpit/how-to/create-token/) a Cockpit token in the same region as the data source of the logs
  - A running Kubernetes cluster containing your deployed application
  - [Created](/iam/how-to/create-api-keys/) an API key and retrieved your API secret key
+ - Installed Helm
 
 <Message type="important">
- Sending logs for Scaleway resources or personal data using an external path is a billable feature. In addition, any data that you push yourself is billed, even if you send data from Scaleway products. Refer to the [product pricing](https://www.scaleway.com/en/pricing/?tags=available,managedservices-observability-cockpit) page for more information.
+ Sending logs for Scaleway resources or personal data using an external path is a billable feature. In addition, any data that you push yourself is billed, even if you send data from Scaleway products. See the [product pricing](https://www.scaleway.com/en/pricing/?tags=available,managedservices-observability-cockpit) page for more information.
 </Message>
 
 ## Configure the Helm chart
 
-Create a `values.yml` file to configure your Helm chart, using the example below. Make sure that you replace `$SCW_CLUSTER_NAME` with the name of your Scaleway Kubernetes cluster, `COCKPIT_CUSTOM_LOGS_DATASOURCE_URL` with the URL of your custom logs data source (you can find it under the "API URL" section in the [Data sources tab](https://console.scaleway.com/cockpit/dataSource) of the Scaleway console), and `$COCKPIT_TOKEN` with your Cockpit token.
+Create a `values.yml` file to configure your Helm chart to send logs from your Kubernetes cluster to Cockpit, using the following example. 
+
+Make sure that you replace:
+- `$SCW_CLUSTER_NAME` with the name of your Scaleway Kubernetes cluster
+- `COCKPIT_CUSTOM_LOGS_DATASOURCE_URL` with the URL of your custom log data source (you can find it under the "API URL" section in the [Data sources tab](https://console.scaleway.com/cockpit/dataSource) of the Scaleway console)
+- `$COCKPIT_TOKEN` with your Cockpit token
+
 
 ```yaml
+# Cluster identification (required)
 cluster:
   name: "$SCW_CLUSTER_NAME"
+
 global:
   scrape_interval: 60s
+
+# Destinations – a map (object)
 destinations:
-  - name: "my-cockpit-logs"
-    type: "loki"
-    protocol: "http"
-    logs:
-      enabled: true
+  my-cockpit-logs:
+    type: loki
+    protocol: http
     url: "$COCKPIT_CUSTOM_LOGS_DATASOURCE_URL/loki/api/v1/push" ##You can find your logs URL in the **Data sources** tab of the Scaleway console under the "API URL" section of the relevant data source
     tenantId: "$COCKPIT_TOKEN"
-
+    logs:
+      enabled: true
     metrics:
       enabled: false
     traces:
       enabled: false
+    extraLabels:
+      cluster: "$SCW_CLUSTER_NAME"  
+
+# Collectors – enable logs collector and set required mounts
+collectors:
+  logs:
+    enabled: true
+    controller:
+      type: daemonset          # required for nodeLogs
+    alloy:
+      mounts:
+        varlog: true           # <-- gives Alloy access to /var/log (node logs)
+        dockercontainers: true # optional – lets Alloy read container logs directly
+        # extra: []            # you can add custom hostPath mounts here if needed
+  metrics:
+    enabled: false
+  traces:
+    enabled: false
+
+# Event & log collection settings – reference the destination name
 clusterEvents:
   enabled: true
   destinations: ["my-cockpit-logs"]
-# -- Node logs.
+
+# Node logs
 nodeLogs:
-    enabled: true
-    destinations: ["my-cockpit-logs"]
-# -- Pod logs.
+  enabled: true
+  destinations: ["my-cockpit-logs"]
+
+# Pod logs
 podLogs:
   enabled: true
   destinations: ["my-cockpit-logs"]
   volumeGatherSettings:
     onlyGatherNewLogLines: true
-  # Prevent collecting the collector own logs
+  # Exclude logs generated by the collector itself  
   extraDiscoveryRules: |
     rule {
       source_labels = ["__meta_kubernetes_pod_name"]
       action = "drop"
       regex = ".*alloy-logs.*"
     }
-# An Alloy instance for collecting log data.
+
+# An Alloy instance for collecting log data
 alloy-logs:
   enabled: true
   logging:
     level: info
     format: logfmt
+
 alloy-singleton:
   enabled: true
 ```
+
 <Message type="tip">
  The `PodLogs` feature automatically discovers and collects logs from all pods.
  In the configuration above, we excluded the logs from the pod responsible for log collection itself.
  If you want to exclude additional pods, you can add more drop rules in the `extraDiscoveryRules` section.
 </Message>
 
-<Message type="note">
- The template above is for sending logs to your Cockpit. You can also configure it to send metrics to Cockpit using this Helm chart.
- Refer to our dedicated documentation to [send metrics from your cluster to Cockpit](/cockpit/how-to/send-metrics-from-k8s-to-cockpit).
-</Message>
+ This example Helm chart is for sending logs to your Cockpit. You can also configure it to send metrics to Cockpit. For details, see our documentation about [sending metrics from your Kubernetes cluster to Cockpit](/cockpit/how-to/send-metrics-from-k8s-to-cockpit).
 
 ## Send Kubernetes logs using Helm chart
 
-Once you have configured your `values.yml` file, you can use Helm to deploy the log-forwarding configuration to your Kubernetes cluster. Before installing the Helm chart, ensure that your `kubectl` tool is properly connected to your Kubernetes cluster. `kubectl` is the command-line tool for interacting with Kubernetes clusters.
+Once you have configured your `values.yml` file, you can use Helm to deploy the log-forwarding configuration to your Kubernetes cluster. 
 
-1. [Connect](/kubernetes/how-to/connect-cluster-kubectl/) `kubectl` to your Kubernetes cluster
-2. Run the commands below to install the `k8s-monitoring` Helm chart. Make sure that you replace `/your-path/to/values.yml` with the correct path where your `values.yml` file is stored. Make sure that you also replace `name-of-your-choice-for-your-log-ingester` with a clear name (ex. `alloy-logs-ingester`).
-    ```
-    helm repo add grafana https://grafana.github.io/helm-charts
-    helm repo update
-    helm install -f /your-path/to/values.yml name-of-your-choice-for-your-log-ingester grafana/k8s-monitoring --version 2.0.21
-    ```
-      <Message type="iam">
-        The `-f` flag specifies the path to your `values.yml` file, which contains the configuration for the Helm chart. <br /><br />
-        Helm installs the `k8s-monitoring` chart, which includes the Alloy DaemonSet configured to collect logs from your Kubernetes cluster. <br /><br />
-        The DaemonSet ensures that a Pod is running on each node in your cluster, which collects logs and forwards them to the specified Loki endpoint in your Cockpit.
-      </Message>
+Before installing the Helm chart, ensure that your `kubectl` tool is properly connected to your Kubernetes cluster. `kubectl` is the command-line tool for interacting with Kubernetes clusters.
+
+1. [Connect `kubectl` to your Kubernetes cluster](/kubernetes/how-to/connect-cluster-kubectl/).
+2. Run the following commands to install the `k8s-monitoring` Helm chart. 
+
+    Make sure that you replace:
+    - `/your-path/to/values.yml` with the correct path where your `values.yml` file is stored 
+    - `name-of-your-choice-for-your-log-ingester` with a clear name (e.g., `alloy-logs-ingester`)
+
+      ```bash
+      helm repo add grafana https://grafana.github.io/helm-charts
+      helm repo update
+      helm install -f /your-path/to/values.yml name-of-your-choice-for-your-log-ingester grafana/k8s-monitoring --version 4.5.0
+      ```
+
+        <Message type="iam">
+          The `-f` flag specifies the path to your `values.yml` file, which contains the configuration for the Helm chart. <br /><br />
+          Helm installs the `k8s-monitoring` chart, which includes the Alloy DaemonSet configured to collect logs from your Kubernetes cluster. <br /><br />
+          The DaemonSet ensures that a Pod is running on each node in your cluster, which collects logs and forwards them to the specified Loki endpoint in your Cockpit.
+        </Message>
 3. Optionally, run the following command to check the status of the release and ensure it was installed:
 
       ```
@@ -120,10 +160,10 @@ You can also use Terraform/OpenTofu to manage and deploy Helm charts, providing 
     ```terraform
     provider "helm" {
       kubernetes {
-        host = your_k8s_cluster_host # The URL of your Kubernetes API server.
-        token = your_k8s_cluster_token # Authentication token to access the cluster.
+        host = your_k8s_cluster_host # The URL of your Kubernetes API server
+        token = your_k8s_cluster_token # Authentication token to access the cluster
         cluster_ca_certificate = base64decode(
-        your_k8s_cluster_ca_certificate # The cluster's CA certificate.
+        your_k8s_cluster_ca_certificate # The CA certificate of the cluster
         )
       }
     }
@@ -134,7 +174,7 @@ You can also use Terraform/OpenTofu to manage and deploy Helm charts, providing 
       name = "name-of-your-log-ingester"
       repository = "https://grafana.github.io/helm-charts"
       chart = "k8s-monitoring"
-      version = "2.0.2"
+      version = "4.5.0"
 
       namespace = "log-ingester"
       create_namespace = true
@@ -148,13 +188,13 @@ You can also use Terraform/OpenTofu to manage and deploy Helm charts, providing 
 
 ## Explore your logs in Cockpit
 
-1. Click **Cockpit** in the **Monitoring** section of the Scaleway [console](https://console.scaleway.com/) side menu. The **Cockpit Overview** page displays.
-2. Click **Open dashboards** to open your preconfigured dashboards in Grafana. You are redirected to the Grafana website.
+1. In the Scaleway [console](https://console.scaleway.com/) side menu, go to **Monitoring** > **Cockpit**. The **Overview** page opens.
+2. Click **Access Grafana** to open your preconfigured dashboards in Grafana. You are redirected to the Grafana website.
 3. Log in to your Grafana account.
-4. Click the Grafana icon in the top left side of your screen to open the menu, then click **Explore**.
-5. Select your custom data source in the search drop-down on the upper left corner of your screen.
-6. In the **Labels filter** drop-down, select the `cluster` label and in the **Value** drop-down, select your cluster.
-7. Optionally, click the **Clock** icon on the top right corner of your screen and filter by time range.
+4. Click **Explore** in the Grafana main menu.
+5. Select your custom data source in the search dropdown.
+6. In the **Labels filter** dropdown, select the `cluster` label and in the **Value** dropdown, select your cluster.
+7. Optionally, click the **Clock** icon and filter by time range.
 8. Click **Run query** to see your logs. An output similar to the following should display.
 
 <Lightbox image={image} alt="" />

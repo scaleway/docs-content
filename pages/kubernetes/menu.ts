@@ -27,6 +27,10 @@ export const kubernetesMenu = {
           slug: 'edit-cluster',
         },
         {
+          label: 'Manage Kapsule node pools',
+          slug: 'manage-node-pools',
+        },
+        {
           label: 'Create a Kosmos cluster',
           slug: 'create-kosmos-cluster',
         },
@@ -41,10 +45,6 @@ export const kubernetesMenu = {
         {
           label: 'Connect to a cluster with kubectl',
           slug: 'connect-cluster-kubectl',
-        },
-        {
-          label: 'Manage Kapsule node pools',
-          slug: 'manage-node-pools',
         },
         {
           label: 'Deploy an image from Container Registry',

@@ -1,9 +1,9 @@
 ---
-title: How to use Private Networks with your Apache Spark™ cluster
+title: Use Private Networks with your Apache Spark™ cluster
 description: This page explains how to use Private Networks with Scaleway Clusters for Apache Spark™
 tags: private-networks private networks data lab spark apache cluster vpc
 dates:
-  validation: 2025-12-10
+  validation: 2026-09-10
   posted: 2025-12-10
 ---
 import Requirements from '@macros/iam/requirements.mdx'
@@ -24,30 +24,34 @@ For full information about Scaleway Private Networks and VPC, see our [dedicated
 - [Created a Private Network](/vpc/how-to/create-private-network/)
 - [Created an Ubuntu Instance](/instances/how-to/create-an-instance/) attached to a [Private Network](/instances/how-to/use-private-networks/)
 
-## How to use a cluster through a Private Network  
+## Use a cluster through a Private Network
 
-### Setting up your Instance
+### Set up your Instance with Python 3.13 and Spark tools
 
 1. [Connect to your Instance via SSH](/instances/how-to/connect-to-instance/).
 
-2. Run the command below from the shell of your Instance to install the required dependencies:
+2. Run the following commands from the shell of your Instance to install the required dependencies:
 
     ```bash
     sudo apt update
     sudo apt install -y \
-      build-essential curl git \
-      libssl-dev zlib1g-dev libbz2-dev libreadline-dev libsqlite3-dev \
-      libncursesw5-dev xz-utils tk-dev libxml2-dev libxmlsec1-dev libffi-dev liblzma-dev \
-      openjdk-17-jre-headless tmux
+      build-essential zlib1g-dev libssl-dev libbz2-dev libsqlite3-dev \
+      libreadline-dev libncurses-dev liblzma-dev libffi-dev \
+      openjdk-21-jre-headless
     ```
 
-3. Run the command below to install `pyenv`:
+    <Message type="note">
+    - Pyenv requires some dev packages for building a python version.
+    - Spark 4.0 runs on Java 17/21 (a too recent version of the Java runtime might not work).
+    </Message>
+
+3. Run the following command to install `pyenv`:
 
     ```bash
     curl https://pyenv.run | bash
     ```
 
-4. Run the command below to add `pyenv` to your Bash configuration:
+4. Run the following commands to add `pyenv` to your Bash configuration:
 
     ```bash
     echo 'export PATH="$HOME/.pyenv/bin:$PATH"' >> ~/.bashrc
@@ -55,18 +59,20 @@ For full information about Scaleway Private Networks and VPC, see our [dedicated
     echo 'eval "$(pyenv virtualenv-init -)"' >> ~/.bashrc
     ```
 
-5. Run the command below to reload your shell:
+5. Run the following command to reload your shell:
 
     ```bash
     exec $SHELL
     ```
 
-6. Run the command below to install **Python 3.13**, and activate a virtual environment:
+6. Run the following command to install **Python 3.13**:
 
     ```bash
-    pyenv install 3.13.0
-    pyenv virtualenv 3.13.0 jupyter-spark-3.13
-    pyenv activate jupyter-spark-3.13
+    # Download and install the latest Python 3.13
+    pyenv install 3.13
+    # Sets the default python version to 3.13
+    # If you prefer not to change this setting globally, use a pyenv local config.
+    pyenv global 3.13
     ```
 
     <Message type="note">
@@ -77,144 +83,46 @@ For full information about Scaleway Private Networks and VPC, see our [dedicated
     ```
     </Message>
 
-7. Run the command below to install JupyterLab and PySpark inside the virtual environment:
-
-    ```bash
-    pip install --upgrade pip
-    pip install jupyterlab "pyspark==4.0.0"
-    ```
-
-8. Run the command below to generate a configuration file for your JupyterLab:
-
-    ```bash
-    jupyter lab --generate-config
-    ```
-
-9. Open the configuration file you just created:
-
-    ```bash
-    nano ~/.jupyter/jupyter_lab_config.py
-    ```
-
-10. Set the following parameters (remember to remove the hashtags to uncomment the parameters):
-
-    ```python
-    # if running as root:
-    c.ServerApp.allow_root = True
-    c.ServerApp.port = 8888
-    # optional authentication token:
-    # c.ServerApp.token = "your-super-secure-password"
-    ```
-
-11. Run the command below to start JupyterLab:
-
-    ```bash
-    jupyter lab
-    ```
-
-12. In a new terminal, connect to your JupyterLab via SSH. The Instance public IP can be found in the **Overview** tab of your Instance:
-
-    ```bash
-    ssh -L 8888:127.0.0.1:8888 <user>@<instance-public-ip>
-    ```
-
-    <Message type="note">
-    Make sure to allow root connection in your configuration file if you log in as a root user.
-    </Message>
-
-13. Access [http://localhost:8888](http://localhost:8888), then enter the token generated while executing the `jupyter lab` command.
-
-    <Message type="tip">
-    To find the token, look for this line in the terminal: `http://127.0.0.1:8888/lab?token=<TOKEN_VALUE>`
-    </Message>
-
-You now have access to your Apache Spark™ cluster via a Private Network, using a JupyterLab notebook deployed on an Instance.
-
-### Running a sample workload over Private Networks
-
-1. In a new Jupyter notebook file, add the code below to a new cell:
-
-    ```python
-        from pyspark.sql import SparkSession
-
-        MASTER_URL = "<SPARK_MASTER_ENDPOINT>" # "spark://master-datalab-[...]:7077" format
-        DRIVER_HOST = "<INSTANCE_PN_IP>" # "XX.XX.XX.XX" format
-
-        spark = (
-            SparkSession.builder
-            .appName("jupyter-from-vpc-instance-test")
-            .master(MASTER_URL)
-            # make sure executors can talk back to this driver
-            .config("spark.driver.host", DRIVER_HOST)
-            .config("spark.driver.bindAddress", "0.0.0.0")
-            .config("spark.driver.port", "7078")
-            .config("spark.blockManager.port", "7079")
-            .config("spark.ui.port", "4040")
-            .getOrCreate()
-        )
-
-        spark.range(10).show()
-    ```
-
-2. Replace the placeholders with the appropriate values:
-    - `<SPARK_MASTER_ENDPOINT>` can be found in the **Overview** tab of your cluster, under **Private endpoint** in the **Network** section.
-    - `<INSTANCE_PN_IP>` can be found in the **Private Networks** tab of your Instance. Make sure to only copy the IP, and not the `/22` part.
-
-3. Run the cell.
-
-Your notebook hosted on an Instance is ready to be used over Private Networks.
-
-### Running an application over Private Networks using spark-submit
-
-1. [Connect to your Instance via SSH](/instances/how-to/connect-to-instance/).
-
-2. Run the command below from the shell of your Instance to install the required dependencies:
-
-    ```bash
-    sudo apt update
-    sudo apt install -y openjdk-17-jdk curl wget tar
-    java -version
-    ```
-
-3. Run the command below to install Apache Spark™:
+7. Run the following command to install Apache Spark™:
 
     ```bash
     cd ~
     wget https://archive.apache.org/dist/spark/spark-4.0.0/spark-4.0.0-bin-hadoop3.tgz
-    ```
-
-4. Run the command below to unzip the archive:
-
-    ```bash
     sudo mkdir -p /opt/spark
     sudo tar -xzf spark-4.0.0-bin-hadoop3.tgz -C /opt/spark --strip-components=1
     ```
 
-5. Run the command below to add Apache Spark™ to your Bash configuration, and reload your bash session:
+8. Run the following commands to add Apache Spark™ to your Bash configuration:
 
     ```bash
     echo 'export SPARK_HOME=/opt/spark' >> ~/.bashrc
     echo 'export PATH="$SPARK_HOME/bin:$PATH"' >> ~/.bashrc
-    source ~/.bashrc
     ```
 
-6. Install Python 3.13 if you have not done it yet, then set the environment variables below:
+9. Run the following command to reload your shell:
 
     ```bash
-    export PYSPARK_PYTHON=$(which python) //should be 3.13
-    export PYSPARK_DRIVER_PYTHON=$(which python)
+    exec $SHELL
     ```
 
-7. Run the command below to execute `spark-submit` to calculate pi for 100 iterations. Do not forget to replace the placeholders with the appropriate values.
+### Run a Python application using spark-submit
+
+1. [Connect to your Instance via SSH](/instances/how-to/connect-to-instance/).
+
+2. Verify that you are using Python 3.13.x:
 
     ```bash
+    python3 --version
+    ```
+
+3. Run `spark-submit` with the following command to calculate pi for 1000 iterations. Do not forget to replace the placeholders with the appropriate values.
+
+    ```bash
+    export SPARK_LOCAL_IP=<INSTANCE_PN_IP>
     spark-submit \
     --master spark://<SPARK_MASTER_ENDPOINT>:7077 \
     --deploy-mode client \
-    --conf spark.driver.port=7078 \
-    --conf spark.blockManager.port=7079 \
-    --conf spark.driver.host=<INSTANCE_PN_IP> \
-    $SPARK_HOME/examples/src/main/python/pi.py 100
+    $SPARK_HOME/examples/src/main/python/pi.py 1000
     ```
 
     <Message type="note">
@@ -222,6 +130,36 @@ Your notebook hosted on an Instance is ready to be used over Private Networks.
     - `<INSTANCE_PN_IP>` can be found in the **Private Networks** tab of your Instance. Make sure to only copy the IP, and not the `/22` part.
     </Message>
 
-8. [Access the Apache Spark™ UI](/apache-spark/how-to/access-spark-ui/) of your cluster. The list of completed applications displays. From here, you can inspect the jobs previously started using `spark-submit`.
+4. [Access the Apache Spark™ UI](/apache-spark/how-to/access-spark-ui/) of your cluster. The list of completed applications displays. From here, you can inspect the jobs previously started using `spark-submit`.
 
-You successfully run workloads on your cluster from an Instance over a Private Network.
+### Run a Jvm application using spark-submit (Java or Scala)
+
+1. [Connect to your Instance via SSH](/instances/how-to/connect-to-instance/).
+
+2. Run the SparkPi application in client mode with the following command:
+
+    ```bash
+    export SPARK_LOCAL_IP=<INSTANCE_PN_IP>
+    spark-submit \
+    --master spark://<SPARK_MASTER_ENDPOINT>:7077 \
+    --deploy-mode client \
+    --class org.apache.spark.examples.SparkPi \
+    $SPARK_HOME/examples/jars/spark-examples_2.13-4.0.0.jar 1000
+    ```
+
+3. Run the SparkPi application in cluster mode with the following command:
+
+    ```bash
+    UNSET SPARK_LOCAL_IP
+    spark-submit  \
+    --master spark://<SPARK_MASTER_ENDPOINT>:7077 \
+    --deploy-mode cluster \
+    --conf spark.driver.port=37000 --conf spark.blockManager.port=38000 \
+    --class org.apache.spark.examples.SparkPi \
+    $SPARK_HOME/examples/jars/spark-examples_2.13-4.0.0.jar 1000
+    ```
+
+    <Message type="note">
+    - `spark.driver.port` and `spark.blockManager.port` need to be in the 37000-38999 port range since only these ports are allowed in Spark clusters.
+    - The `spark-submit` command will exit as soon as the driver has been started on the cluster. Check out the Spark UI to get the Pi result.
+    </Message>

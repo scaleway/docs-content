@@ -168,10 +168,6 @@ export const kubernetesMenu = {
           slug: 'managed-kubernetes-service-definition',
         },
         {
-          label: 'Kubernetes decision tree',
-          slug: 'kubernetes-decision-tree',
-        },
-        {
           label: 'Kubernetes version support policy',
           slug: 'version-support-policy',
         },
@@ -239,10 +235,6 @@ export const kubernetesMenu = {
       ],
       label: 'Additional Content',
       slug: 'reference-content',
-    },
-    {
-      label: 'Videos',
-      slug: 'videos',
     },
     {
       label: 'Troubleshooting',

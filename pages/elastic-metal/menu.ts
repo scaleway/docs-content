@@ -175,6 +175,11 @@ export const elasticMetalMenu = {
             'End of VMware ESXi support on Elastic Metal and Dedibox servers',
           slug: 'end-of-support-esxi',
         },
+        {
+          label:
+            'Elastic Metal security features',
+          slug: 'elastic-metal-security-features',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

@@ -1,0 +1,191 @@
+---
+title: How to program Pasqal backends using QoolQit
+description: Access Pasqal neutral-atoms QPUs using QoolQit on Scaleway QaaS.
+tags: pasqal orion quantum pulser qaas qoolqit
+dates:
+  validation: 2026-09-14
+  posted: 2026-09-14
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+**Pasqal** is a full-stack quantum computing company based in France, pioneering the use of **Neutral Atoms** (manipulated by optical tweezers) to build quantum processors.
+
+Pasqal processors operate primarily in **Analog Mode** (applying pulses to the whole system to evolve the Hamiltonian), making them exceptionally powerful for quantum simulation and combinatorial optimization.
+
+The base SDK for programming Pasqal's processors is Pulser, but QoolQit adds an abstraction layer on top of it providing dimensionless programming, thus making potssible to write hardware-agnostic algorithms in the Rydberg Analog Model.
+
+<Message type="note">
+  Refer to the [Pasqal processors information page](/quantum-computing/additional-content/pasqal-qpus) for more details.
+</Message>
+
+## How to access Pasqal with Scaleway for QoolQit programs
+
+The following example shows how to instanciate a remote emulator to execute your defined computation onto.
+The same can be done with a QPU, see [QoolQit reference](https://docs.pasqal.com/qoolqit/).
+
+<Requirements />
+
+- A Scaleway account with a valid **Project ID**
+- A Scaleway **API Key** (Secret Key)
+- Python installed
+
+1. Install [pulser-scaleway](https://github.com/scaleway/pulser-scaleway) and [QoolQit](https://docs.pasqal.com/qoolqit/).
+
+    ```bash
+    pip install pulser-scaleway qoolqit
+    ```
+
+2. Create a file and instanciate a Scaleway connection. Replace `$SCW_PROJECT_ID` and `$SCW_SECRET_KEY` with your Scaleway Project ID and secret key.
+
+    ```python
+    from pulser_scaleway import ScalewayProvider
+    from qoolqit.devices import Device
+
+    # Initiate provider
+    qaas_connection = ScalewayProvider(
+        project_id="$SCW_PROJECT_ID",
+        secret_key="$SCW_SECRET_KEY",
+    )
+
+    # Retrieve all QPU devices (emulated or real) and select the one you desire (more on that [here](/quantum-computing/additional-content/pasqal-qpus))
+    devices = qaas_connection.fetch_available_devices()
+    device = Device.from_connection(qaas_connection, name="EMU-MPS-PASQAL") # Pick your device of choice. Here we select a MPS emulator.
+    ```
+
+3. Write and compile a QuantumProgram to your Device.
+
+    ```python
+    from qoolqit import Register, Drive, QuantumProgram
+
+    register = Register(...)
+    driver = Drive(...)
+    program = QuantumProgram(register, drive)
+
+    program.compile_to(device, profile="max_energy")
+    ```
+
+4. Configure the remote executor (In our case an emulator, but you can swap to QPU() if you wish to).
+
+    ```python
+    from qoolqit.execution import EmulationConfig, RemoteEmulator
+    from pasqal_cloud.backends import RemoteMPSBackend  # Adjust the backend to your choosen device
+
+    configuration = EmulationConfig(...)
+    emulator = RemoteEmulator(
+        backend_type=RemoteMPSBackend, connection=qaas_connection, emulation_config=configuration   # Adjust the backend to your choosen device
+    )
+    ```
+
+5. Run your program and fetch the job's result.
+
+    ```python
+    job = emulator.run(program)
+    results = job.results()
+    ```
+
+## Full example
+
+The following example is adapted from [QoolQit's quickstart documentation](https://docs.pasqal.com/qoolqit/get_started/programming_with_qoolqit/#example-rydberg-blockade-demonstration) to work on Scaleway.
+Install matplotlib `pip install matplotlib`.
+
+```python
+import os
+import time
+
+import numpy as np
+
+from qoolqit import Drive, QuantumProgram, Register
+from qoolqit.devices import Device
+from qoolqit.execution import BitStrings, EmulationConfig, JobStatus, RemoteEmulator
+from qoolqit.waveforms import ConstantWaveform
+
+from pasqal_cloud.backends import RemoteMPSBackend
+
+from pulser_scaleway import ScalewayProvider
+
+
+PROJECT_ID = os.environ["SCALEWAY_PROJECT_ID"]
+SECRET_KEY = os.environ["SCALEWAY_SECRET_KEY"]
+PLATFORM = os.environ["SCALEWAY_PLATFORM"]
+
+NUM_SHOTS = 1000
+
+qaas_connection = ScalewayProvider(
+    project_id=PROJECT_ID,
+    secret_key=SECRET_KEY,
+)
+print(qaas_connection.fetch_available_devices())    # Sanity check
+
+# Two qubits at unit distance => maximum interaction J = 1
+register = Register.from_coordinates([(0, 0), (1, 0)])
+
+duration = 10
+
+# Blockade regime: Omega << J => double excitation is suppressed
+drive_blockade = Drive(
+    amplitude=ConstantWaveform(duration, 0.3),  # Omega = 0.3 << 1
+    detuning=ConstantWaveform(duration, 0.0)
+)
+
+# Non-blockade regime: Omega >> J => drive dominates, both atoms can be excited
+drive_no_blockade = Drive(
+    amplitude=ConstantWaveform(duration, 2.0),  # Omega = 2.0 >> 1
+    detuning=ConstantWaveform(duration, 0.0)
+)
+
+# Build and compile programs
+program_blockade = QuantumProgram(register, drive_blockade)
+program_no_blockade = QuantumProgram(register, drive_no_blockade)
+
+device = Device.from_connection(qaas_connection, name=PLATFORM)
+print(device)
+
+program_blockade.compile_to(device, profile="max_energy")
+program_no_blockade.compile_to(device, profile="max_energy")
+
+# Configure emulation: sample bitstrings at 81 evaluation times
+eval_times = np.linspace(0.0, 1.0, 81)
+bitstrings = BitStrings(evaluation_times=list(eval_times), num_shots=NUM_SHOTS)
+configuration = EmulationConfig(observables=[bitstrings])
+
+emulator = RemoteEmulator(connection=qaas_connection, emulation_config=configuration)
+
+print("Running Blockade Job...", flush=True, end='')
+job_blockade = emulator.run(program_blockade)
+while not job_blockade.has_ended():
+    print('.', flush=True, end='')
+    time.sleep(1)
+assert job_blockade.get_status() == JobStatus.DONE
+print("Done!")
+result_blockade = job_blockade.results()
+
+print("Running No-Blockade Job...", flush=True, end='')
+job_no_blockade = emulator.run(program_no_blockade)
+while not job_no_blockade.has_ended():
+    print('.', flush=True, end='')
+    time.sleep(1)
+assert job_no_blockade.get_status() == JobStatus.DONE
+print("Done!")
+result_no_blockade = job_no_blockade.results()
+
+import matplotlib.pyplot as plt
+
+times=result_blockade.get_result_times(bitstrings)
+occupation=[result_blockade.get_result(bitstrings.tag,time=t).get("11", 0)/NUM_SHOTS
+             for k,t in enumerate(times)]
+plt.plot(times,occupation,
+         label="Blockade",
+         color="navy")
+times=result_no_blockade.get_result_times(bitstrings)
+occupation=[result_no_blockade.get_result(bitstrings.tag,time=t).get("11", 0)/NUM_SHOTS
+             for k,t in enumerate(times)]
+plt.plot(times,occupation,
+         label="No Blockade",
+         color="crimson")
+plt.xlabel(r"$t$",fontsize=22)
+plt.ylabel(r"$P_{rr}$",fontsize=22)
+plt.xticks(fontsize=18)
+plt.yticks(fontsize=18)
+plt.legend(fontsize=16)
+plt.show()
+```

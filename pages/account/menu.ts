@@ -5,16 +5,22 @@ export const accountMenu = {
       slug: '../account',
     },
     {
+      items: [
+        {
+          label: 'Understanding Scaleway account',
+          slug: 'understanding-account',
+        },
+        {
+          label: 'Glossary',
+          slug: 'glossary',
+        },
+        {
+          label: 'Quickstart',
+          slug: 'quickstart',
+        },
+      ],
       label: 'Concepts',
       slug: 'concepts',
-    },
-    {
-      label: 'Quickstart',
-      slug: 'quickstart',
-    },
-    {
-      label: 'FAQ',
-      slug: 'faq',
     },
     {
       items: [
@@ -27,28 +33,22 @@ export const accountMenu = {
           slug: 'verify-identity',
         },
         {
-          label: 'Log in to the console',
-          slug: 'log-in-to-the-console',
-        },
-        {
-          label: 'Change account ownership',
-          slug: 'change-ownership-organization',
-        },
-        {
-          label: 'Change the language',
-          slug: 'change-language',
-        },
-        {
           label: 'Switch from a personal to a corporate account',
           slug: 'switch-account-to-corporate',
         },
         {
-          label: 'Change the color theme of the console',
-          slug: 'change-console-appearance',
+          label: 'Close an account',
+          slug: 'close-account',
         },
+      ],
+      label: 'Setup and lifecycle',
+      slug: 'setup-lifecycle',
+    },
+    {
+      items: [
         {
-          label: 'Configure support plans',
-          slug: 'configure-support-plans',
+          label: 'Log in to the console',
+          slug: 'log-in-to-the-console',
         },
         {
           label: 'Use multifactor authentication',
@@ -62,29 +62,45 @@ export const accountMenu = {
           label: 'Recover a lost password',
           slug: 'recover-a-lost-password',
         },
+      ],
+      label: 'Login and credentials',
+      slug: 'login-credentials',
+    },
+    {
+      items: [
         {
-          label: 'Open a support ticket',
-          slug: 'open-a-support-ticket',
+          label: 'Change the language',
+          slug: 'change-language',
         },
         {
-          label: 'Manage my personal information (GDPR)',
-          slug: 'manage-my-personal-data-gdpr',
-        },
-        {
-          label: 'Download Scaleway contracts',
-          slug: 'download-scaleway-contracts',
+          label: 'Change the color theme of the console',
+          slug: 'change-console-appearance',
         },
         {
           label: 'Manage notifications',
           slug: 'manage-notifications',
         },
         {
-          label: 'Use the resource explorer',
-          slug: 'use-resource-explorer',
+          label: 'Manage my personal information (GDPR)',
+          slug: 'manage-my-personal-data-gdpr',
+        },
+      ],
+      label: 'Profile and preferences',
+      slug: 'profile-preferences',
+    },
+    {
+      items: [
+        {
+          label: 'Configure support plans',
+          slug: 'configure-support-plans',
         },
         {
-          label: 'Use the search bar',
-          slug: 'use-the-search-bar',
+          label: 'Open a support ticket',
+          slug: 'open-a-support-ticket',
+        },
+        {
+          label: 'Download Scaleway contracts',
+          slug: 'download-scaleway-contracts',
         },
         {
           label: 'Report abuse',
@@ -95,12 +111,20 @@ export const accountMenu = {
           slug: 'resolve-abuse',
         },
         {
-          label: 'Close an account',
-          slug: 'close-account',
+          label: 'Understanding support plans',
+          slug: 'understanding-support-plans',
+        },
+        {
+          label: 'Subscribing to Scaleway status updates',
+          slug: 'scaleway-status-updates',
+        },
+        {
+          label: 'Scaleway network information',
+          slug: 'scaleway-network-information',
         },
       ],
-      label: 'How to',
-      slug: 'how-to',
+      label: 'Support',
+      slug: 'support',
     },
     {
       items: [
@@ -113,34 +137,8 @@ export const accountMenu = {
       slug: 'api-cli',
     },
     {
-      items: [
-        {
-          label: 'Use case: informational website',
-          slug: 'use-case-informational-website',
-        },
-        {
-          label: 'Product availability overview',
-          slug: 'products-availability',
-        },
-        {
-          label: 'Scaleway network information',
-          slug: 'scaleway-network-information',
-        },
-        {
-          label: 'Subscribing to Scaleway status updates',
-          slug: 'scaleway-status-updates',
-        },
-        {
-          label: 'Understanding support plans',
-          slug: 'understanding-support-plans',
-        },
-        {
-          label: 'Protecting yourself against phishing and fraud',
-          slug: 'protecting-yourself-fraud-phishing',
-        },
-      ],
-      label: 'Additional Content',
-      slug: 'reference-content',
+      label: 'FAQ',
+      slug: 'faq',
     },
     {
       label: 'Troubleshooting',

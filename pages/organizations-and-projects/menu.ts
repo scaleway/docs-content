@@ -5,15 +5,29 @@ export const organizationsAndProjectsMenu = {
       slug: '../organizations-and-projects',
     },
     {
+      items: [
+        {
+          label: 'Understanding Organizations and Projects',
+          slug: 'understanding-organization-project',
+        },
+        {
+          label: 'Glossary',
+          slug: 'glossary',
+        },
+        {
+          label: 'Quickstart',
+          slug: 'quickstart',
+        },
+      ],
       label: 'Concepts',
       slug: 'concepts',
     },
     {
-      label: 'Quickstart',
-      slug: 'quickstart',
-    },
-    {
       items: [
+        {
+          label: 'Understanding Organization quotas',
+          slug: 'organization-quotas',
+        },
         {
           label: 'Manage Organizations',
           slug: 'manage-quotas',
@@ -23,20 +37,26 @@ export const organizationsAndProjectsMenu = {
           slug: 'set-organization-alias',
         },
         {
+          label: 'Enforce security requirements for Members',
+          slug: 'enforce-security-requirements-members',
+        },
+        {
+          label: 'Change the ownership of an Organization',
+          slug: 'change-ownership-organization',
+        },
+      ],
+      label: 'Organization',
+      slug: 'organization',
+    },
+    {
+      items: [
+        {
           label: 'Create a Project',
           slug: 'create-a-project',
         },
         {
           label: 'Change a Project name',
           slug: 'change-project-name',
-        },
-        {
-          label: 'Generate an SSH key',
-          slug: 'create-ssh-key',
-        },
-        {
-          label: 'Enforce multifactor authentication',
-          slug: 'enforce-mfa',
         },
         {
           label: 'Add resources to a Project',
@@ -47,18 +67,8 @@ export const organizationsAndProjectsMenu = {
           slug: 'delete-a-project',
         },
       ],
-      label: 'How to',
-      slug: 'how-to',
-    },
-    {
-      items: [
-        {
-          label: 'Understanding Organization quotas',
-          slug: 'organization-quotas',
-        },
-      ],
-      label: 'Additional Content',
-      slug: 'additional-content',
+      label: 'Project',
+      slug: 'project',
     },
     {
       items: [

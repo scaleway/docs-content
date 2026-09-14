@@ -3,6 +3,7 @@
 import { accountMenu } from '../pages/account/menu'
 import { appleSiliconMenu } from '../pages/apple-silicon/menu'
 import { auditTrailMenu } from '../pages/audit-trail/menu'
+import { annotationsMenu } from '../pages/annotations/menu'
 import { billingMenu } from '../pages/billing/menu'
 import { blockStorageMenu } from '../pages/block-storage/menu'
 import { classicHostingMenu } from '../pages/classic-hosting/menu'
@@ -78,6 +79,12 @@ export default [
         label: 'Account',
         category: 'console',
       },
+      {
+        icon: 'AnnotationsCategoryIcon',
+        items: [annotationsMenu],
+        label: 'Annotations',
+        category: 'console',
+      },      
       {
         icon: 'CostAndImpactManagementCategoryIcon',
         items: [billingMenu, environmentalFootprintMenu],

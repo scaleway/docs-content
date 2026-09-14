@@ -5,27 +5,25 @@ export const iamMenu = {
       slug: '../iam',
     },
     {
+      items: [
+        {
+          label: 'Understanding Scaleway IAM',
+          slug: 'overview',
+        },
+        {
+          label: 'Glossary',
+          slug: 'glossary',
+        },
+        {
+          label: 'Quickstart',
+          slug: 'quickstart',
+        },
+      ],
       label: 'Concepts',
       slug: 'concepts',
     },
     {
-      label: 'Quickstart',
-      slug: 'quickstart',
-    },
-    {
-      label: 'FAQ',
-      slug: 'faq',
-    },
-    {
       items: [
-        {
-          label: 'Log in as a Member',
-          slug: 'log-in-as-a-member',
-        },
-        {
-          label: 'Comply with security requirements as a Member',
-          slug: 'comply-with-sec-requirements-member',
-        },
         {
           label: 'Create API keys',
           slug: 'create-api-keys',
@@ -35,32 +33,22 @@ export const iamMenu = {
           slug: 'manage-api-keys',
         },
         {
-          label: 'Manage Members',
-          slug: 'manage-members',
-        },
-        {
-          label: 'Enforce security requirements for Members',
-          slug: 'enforce-security-requirements-members',
-        },
-        {
-          label: 'Set up identity federation',
-          slug: 'set-up-identity-federation',
-        },
-        {
-          label: 'Set up SSO with Authentik',
-          slug: 'set-up-sso-with-authentik',
-        },
-        {
-          label: 'Configure automatic user provisioning with SCIM',
-          slug: 'manage-users-with-scim',
-        },
-        {
-          label: 'Configure SCIM for Microsoft Entra ID',
-          slug: 'configure-scim-for-entra-id',
-        },
-        {
           label: 'Set and manage credential maximum duration',
           slug: 'set-credentials-maximum-duration',
+        },
+        {
+          label: 'Log in as a Member',
+          slug: 'log-in-as-a-member',
+        },
+      ],
+      label: 'Credentials',
+      slug: 'credentials',
+    },
+    {
+      items: [
+        {
+          label: 'Users, groups and applications',
+          slug: 'users-groups-and-applications',
         },
         {
           label: 'Create an application',
@@ -79,35 +67,19 @@ export const iamMenu = {
           slug: 'manage-groups',
         },
         {
-          label: 'Create a policy',
-          slug: 'create-policy',
+          label: 'Manage Members',
+          slug: 'manage-members',
         },
         {
-          label: 'Manage policies',
-          slug: 'manage-policies',
-        },
-        {
-          label: 'View event logs',
-          slug: 'view-logs',
-        },
-        {
-          label: 'View permission sets',
-          slug: 'view-permission-sets',
+          label: 'Auto-generated IAM resources',
+          slug: 'auto-generated-iam-resources',
         },
       ],
-      label: 'How to',
-      slug: 'how-to',
+      label: 'Principals',
+      slug: 'principals',
     },
     {
       items: [
-        {
-          label: 'Understanding Scaleway IAM',
-          slug: 'overview',
-        },
-        {
-          label: 'Users, groups and applications',
-          slug: 'users-groups-and-applications',
-        },
         {
           label: 'Understanding IAM Policies',
           slug: 'policy',
@@ -117,15 +89,15 @@ export const iamMenu = {
           slug: 'understanding-policy-conditions',
         },
         {
-          label: 'Request-level conditions',
+          label: 'Understanding request level conditions',
           slug: 'understanding-request-level-conditions',
         },
         {
-          label: 'Resource-level conditions',
+          label: 'Understanding resource level conditions',
           slug: 'understanding-resource-level-conditions',
         },
         {
-          label: 'Products supporting resource-level conditions',
+          label: 'Products supporting resource level conditions',
           slug: 'supported-products-resource-level',
         },
         {
@@ -133,16 +105,72 @@ export const iamMenu = {
           slug: 'permission-sets',
         },
         {
+          label: 'Create a policy',
+          slug: 'create-policy',
+        },
+        {
+          label: 'Manage policies',
+          slug: 'manage-policies',
+        },
+        {
+          label: 'View permission sets',
+          slug: 'view-permission-sets',
+        },
+        {
           label: 'Reproducing roles and Project-scoped API keys with IAM',
           slug: 'reproduce-roles-project-api-keys',
         },
+      ],
+      label: 'Policies and permissions',
+      slug: 'policies-permissions',
+    },
+    {
+      items: [
         {
-          label: 'Auto-generated IAM resources',
-          slug: 'auto-generated-iam-resources',
+          label: 'Configure automatic user provisioning with SCIM',
+          slug: 'manage-users-with-scim',
+        },
+        {
+          label: 'Configure SCIM for Microsoft Entra ID',
+          slug: 'configure-scim-for-entra-id',
+        },
+        {
+          label: 'Set up identity federation',
+          slug: 'set-up-identity-federation',
+        },
+        {
+          label: 'Set up SSO with Authentik',
+          slug: 'set-up-sso-with-authentik',
         },
       ],
-      label: 'Additional Content',
-      slug: 'reference-content',
+      label: 'User provisioning',
+      slug: 'user-provisioning',
+    },
+    {
+      items: [
+        {
+          label: 'Generate an SSH key pair',
+          slug: 'create-ssh-key',
+        },
+        {
+          label: 'Enforce multi-factor authentication',
+          slug: 'enforce-mfa',
+        },
+        {
+          label: 'Comply with security requirements as a Member',
+          slug: 'comply-with-sec-requirements-member',
+        },
+        {
+          label: 'View event logs',
+          slug: 'view-logs',
+        },
+        {
+          label: 'Protecting yourself against phishing and fraud',
+          slug: 'protecting-yourself-fraud-phishing',
+        },
+      ],
+      label: 'Security',
+      slug: 'security',
     },
     {
       items: [
@@ -157,6 +185,10 @@ export const iamMenu = {
       ],
       label: 'API/CLI',
       slug: 'api-cli',
+    },
+    {
+      label: 'FAQ',
+      slug: 'faq',
     },
     {
       label: 'Troubleshooting',

@@ -23,6 +23,10 @@ export const quantumComputingMenu = {
           slug: 'use-pasqal-qpus',
         },
         {
+          label: 'Use QoolQit on Pasqal platforms',
+          slug: 'use-qoolqit',
+        },
+        {
           label: 'Use IQM QPUs & emulators',
           slug: 'use-iqm-qpus',
         },

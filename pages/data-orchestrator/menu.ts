@@ -52,6 +52,10 @@ export const dataOrchestratorMenu = {
           label: 'Cron schedules',
           slug: 'cron-schedules',
         },
+        {
+          label: 'DSL reference',
+          slug: 'dsl-reference',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

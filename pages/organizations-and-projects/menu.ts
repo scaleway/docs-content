@@ -14,13 +14,13 @@ export const organizationsAndProjectsMenu = {
           label: 'Glossary',
           slug: 'glossary',
         },
-        {
-          label: 'Quickstart',
-          slug: 'quickstart',
-        },
       ],
       label: 'Concepts',
       slug: 'concepts',
+    },
+    {
+      label: 'Quickstart',
+      slug: 'quickstart',
     },
     {
       items: [

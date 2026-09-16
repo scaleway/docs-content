@@ -110,6 +110,10 @@ export const domainsAndDnsMenu = {
           label: 'Access your Domain migrated from BookMyName to Scaleway',
           slug: 'access-migrated-domain',
         },
+        {
+          label: 'Email verification request',
+          slug: 'email-verification-request',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

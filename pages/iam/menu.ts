@@ -47,7 +47,7 @@ export const iamMenu = {
     {
       items: [
         {
-          label: 'Users, groups and applications',
+          label: 'Users, groups, and applications',
           slug: 'users-groups-and-applications',
         },
         {

@@ -111,7 +111,7 @@ export const elasticMetalMenu = {
           slug: 'delete-server',
         },
         {
-          label: 'Change the billing period',
+          label: 'Manage commitment plan',
           slug: 'change-billing-period',
         },
         {

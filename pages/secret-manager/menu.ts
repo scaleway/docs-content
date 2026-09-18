@@ -94,6 +94,10 @@ export const secretManagerMenu = {
           label: 'Creating a database credentials secret type',
           slug: 'create-secret-with-type',
         },
+        {
+          label: 'Managing secrets with the Scaleway CLI',
+          slug: 'manage-secrets-with-scaleway-cli',
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',

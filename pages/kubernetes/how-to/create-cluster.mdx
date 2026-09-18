@@ -63,20 +63,103 @@ This section outlines the settings for your cluster pools. You can configure as 
     * Configure **pool options** or retain default settings. Configuration options include:
       * **Operations** tab: Configure node count and choose whether to enable [autoscaling](/kubernetes/concepts/#autoscale) and [autoheal](/kubernetes/concepts/#autoheal).
       * **Network** tab: Enable [full isolation](/kubernetes/reference-content/secure-cluster-with-private-network/#what-is-the-difference-between-controlled-isolation-and-full-isolation), if required.
-      * **Scheduling & Placement** tab: Configure [startup taints or taints](/kubernetes/how-to/manage-node-pools/#how-to-configure-startup-taints-or-taints), and add [node labels](/kubernetes/how-to/manage-node-pools/#how-to-configure-node-labels), if required. You can also link to a [placement group](/instances/concepts/#placement-groups).
-    * Configure an optional [cloud-init](/kubernetes/concepts/#cloud-init) script to customize your nodes on first boot:
-      * Use the toggle to enable cloud-init.
-      * Add your YAML-formatted script in the **Cloud-init configuration** box.
-        
-        Fore more information, see the following resources:
-        - See [How to configure a cloud-init script](/kubernetes/how-to/manage-node-pools/#how-to-configure-a-cloud-init-script) for an example script that adds a custom Certificate Authority (CA).
-        - See [cloud-config examples](https://docs.cloud-init.io/en/latest/reference/examples.html) in the cloud-init documentation for some practical examples.     
+      * **Scheduling & Placement** tab: Configure [startup taints or taints](#how-to-configure-startup-taints-or-taints), if required. You can also link the pool to a [placement group](/instances/concepts/#placement-groups).
+      * **Advanced options** tab: Configure an optional [cloud-init](#how-to-configure-a-cloud-init-script) script to customize your nodes on first boot.
     * Enter the pool's name and optional tags. 
+    * If required, add one or more [node labels](#how-to-configure-node-labels).  
 2. To add more pools, click **Add pool** and repeat the steps above.
     <Message type="tip">
       You can add or remove pools as needed before finalizing your cluster configuration. To remove a pool, click the <Icon name="delete" /> **Delete** icon next to the respective pool.
     </Message>
 3. Once all pools are configured, click **Review**.
+
+### How to configure startup taints or taints
+
+The [startup taints](/kubernetes/concepts/#startup-taints) and [taints](/kubernetes/concepts/#taints) you configure for your pool are automatically applied to any new node created within the pool.
+
+1. On the page of the pool that you are configuring, go to the **Scheduling & Placement** tab.
+2. Select the **Startup taints** or the **Taints** checkbox, depending on what you wish to configure. The **Key**, **Value**, and **Effect** fields display.
+3. Specify a key-value pair and an effect:
+    - **Key**: Acts as the identifier of the taint.
+    - **Value**: An optional string that further qualifies the taint. It allows you to distinguish between multiple taints that share the same key but represent different situations.
+    - **Effect**: Specifies what happens to Pods that do not tolerate the taint:
+      - `NoSchedule`: Pods that do not have a matching toleration are prevented from being scheduled on the node. Pods already running are left untouched.  
+      - `PreferNoSchedule`: The scheduler tries to avoid placing non‑tolerating Pods on the node, but it may still do so if no other suitable node exists.  
+      - `NoExecute`: Pods without a matching toleration are evicted from the node immediately, and new Pods that lack the toleration are blocked from being scheduled.
+4. Click the **+ Add startup taint** or **+ Add taint** button to add further startup taints or taints, respectively.     
+
+
+<Message type="note">
+  Managing tolerations in your Pod YAML manifests remains your responsibility. You must add the appropriate tolerations to any Pod that needs to run on a tainted node.
+</Message>
+
+### How to configure a cloud-init script
+
+[Cloud-init](/kubernetes/concepts/#cloud-init) enables you to set custom configuration that will be applied at boot time to the Instances acting as the nodes in your pool. 
+
+<Message type="important">
+Use cloud-init with caution, overriding some default configurations can break nodes. Scaleway does not offer support for troubleshooting custom cloud-init scripts.
+</Message>
+
+1. On the page of the pool that you are configuring, go to the **Advanced options** tab > **Cloud-init** section. 
+2. Click the **Enable cloud-init** button. The **Enable cloud-init** dialog box opens.
+3. Enter your YAML-formatted cloud-init script, and click **Enable cloud-init**.
+
+    The following example shows a script that adds a custom Certificate Authority (CA):
+
+    ```bash
+    #cloud-config
+    #
+    # This is an example file to configure an instance's trusted CA certificates
+    # system-wide for SSL/TLS trust establishment when the instance boots for the
+    # first time.
+    #
+    # Make sure that this file is valid yaml before starting instances.
+    # It should be passed as user-data when starting the instance.
+
+    ca_certs:
+      # If present and set to True, the 'remove_defaults' parameter will either
+      # disable all the trusted CA certifications normally shipped with
+      # Alpine, Debian or Ubuntu. On RedHat, this action will delete those
+      # certificates.
+      # This is mainly for very security-sensitive use cases - most users will not
+      # need this functionality.
+      remove_defaults: true
+
+      # If present, the 'trusted' parameter should contain a certificate (or list
+      # of certificates) to add to the system as trusted CA certificates.
+      # Pay close attention to the YAML multiline list syntax.  The example shown
+      # here is for a list of multiline certificates.
+      trusted: 
+      - |
+      -----BEGIN CERTIFICATE-----
+      YOUR-ORGS-TRUSTED-CA-CERT-HERE
+      -----END CERTIFICATE-----
+      - |
+      -----BEGIN CERTIFICATE-----
+      YOUR-ORGS-TRUSTED-CA-CERT-HERE
+      -----END CERTIFICATE-----
+    ```
+
+    See [cloud-config examples](https://docs.cloud-init.io/en/latest/reference/examples.html) in the cloud-init documentation for further practical examples.
+
+### How to configure node labels
+
+By attaching node labels to a pool, you can:
+
+- **Require** Pods to run only on nodes that match the label(s), or  
+- **Prefer** Pods to run on nodes that match the label(s).
+
+1. On the page of the pool that you are configuring, go to the **Node labels** section.
+2. Specify a **Key** and a **Value**.
+3. Click the **+ Add node label** button to add further node labels. 
+
+To implement the scheduling constraints related to the node labels you have just attached to your pool, remember to specify one or more corresponding node selection mechanisms in your Pod specification:
+
+- `nodeSelector`: The scheduler places the Pod only on nodes that contain all specified labels.
+- `nodeAffinity`: It lets you define how strict label‑based rules are:
+  - `requiredDuringSchedulingIgnoredDuringExecution`: The Pod cannot be scheduled unless the node satisfies the rule.
+  - `preferredDuringSchedulingIgnoredDuringExecution`: The scheduler tries to place the Pod on a matching node, but will fall back to any node if none match.
 
 ## Review configuration
 

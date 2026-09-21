@@ -11,7 +11,7 @@ Anyone who has a GitHub account can contribute to the documentation content:
 
 - Users within the Scaleway organization can [open pull requests directly in the docs-content repository](#contribution-procedure-for-internal-scaleway-users).
 
-- External users (i.e. not part of the Scaleway organization) must [fork the repository and open a pull request from the forked repository](#contribution-procedure-for-external-users).
+- External users (i.e., not part of the Scaleway organization) must [fork the repository and open a pull request from the forked repository](#contribution-procedure-for-external-users).
 
 ## Can I build the documentation locally?
 
@@ -93,12 +93,13 @@ No, this repository only hosts the documentation site **content**, and does not 
 >
 > - All rules below concern this repository.
 > - Any PRs which do not comply with the rules below will be rejected.
+> - We currently only accept PRs about fixes and minor updates. Please create a GitHub issue otherwise.
 
 1. Access the [docs-content repository](https://github.com/scaleway/docs-content/), and click **Fork** in the top right corner. A form appears.
 
 2. Keep the default values in the form, and click **Create Fork**.
 
-3. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to write or edit (e.g. tutorial, API/CLI documentation, additional content or troubleshooting).
+3. Make sure you have identified the [type of content](https://github.com/scaleway/docs-content#what-is-the-scaleway-documentation-platform) that you want to edit (e.g., tutorial, API/CLI documentation, additional content, or troubleshooting).
 
 4. Run the command below to create a local Git branch:
 
@@ -109,7 +110,7 @@ No, this repository only hosts the documentation site **content**, and does not 
    All branch names must comply with the following naming convention: `[source]-[action]-[product]`.
    - `source`: Either `int` (for internal Scaleway contributors) or `ext` (for external contributors).
 
-   - `action`: The action you will perform in the documentation, described in 3 letters or less: `add` for adding content, `rm` for removing content, or `fix` to fix typos.
+   - `action`: The action you will perform in the documentation, described in 3 letters or fewer: `add` for adding content, `rm` for removing content, or `fix` to fix typos.
 
    - `product`: the name of the product that corresponds to the documentation page you will edit.
 
@@ -148,9 +149,9 @@ No, this repository only hosts the documentation site **content**, and does not 
 
 - compare: `<your-branch-with-changes>`
 
-1. Click **Create pull request**.
+11. Click **Create pull request**.
 
-   All pull requests names must comply with the following naming convention:
+   All pull request names must comply with the following naming convention:
    `docs(product_name): description with some words`.
 
 > [!IMPORTANT]
@@ -250,4 +251,4 @@ Here starts the content…
 
 ## Writing Guidelines
 
-Refer to the [Scaleway Documentation Guidelines](https://www.scaleway.com/en/docs/guidelines/) for an extensive list of our writing guidelines.
+See the [Scaleway Documentation Guidelines](https://www.scaleway.com/en/docs/guidelines/) for an extensive list of our writing guidelines.

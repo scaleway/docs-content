@@ -93,7 +93,7 @@ No, this repository only hosts the documentation site **content**, and does not 
 >
 > - All rules below concern this repository.
 > - Any PRs which do not comply with the rules below will be rejected.
-> - We currently only accept PRs about fixes and minor updates. Please create a GitHub issue otherwise.
+> - We currently only accept PRs for bug fixes and minor updates. For all other requests, please open a GitHub issue.
 
 1. Access the [docs-content repository](https://github.com/scaleway/docs-content/), and click **Fork** in the top right corner. A form appears.
 

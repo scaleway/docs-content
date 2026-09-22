@@ -1,0 +1,1578 @@
+---
+title: Data Orchestrator DSL reference (based on Open Workflow Specification)
+description: Learn about the DSL reference specification for Scaleway Data Orchestrator.
+tags: data-orchestrator dsl reference
+dates:
+  posted: 2026-09-14
+---
+
+This page explains the concepts supported by the Data Orchestrator DSL with detailed definitions and property tables.
+Data Orchestrator is vendor-neutral and open-source as it is based on the [Open Workflow DSL Reference](https://github.com/open-workflow-specification/specification/blob/main/dsl-reference.md).
+
+Some concepts are exclusive to Data Orchestrator and are marked as such in the reference. Concepts that are not yet implemented in the current version are listed in the [Concepts not implemented in Data Orchestrator](#concepts-not-implemented-in-data-orchestrator) section.
+
+## Workflow
+
+A workflow is a blueprint outlining the series of [tasks](#task) required to execute a specific business operation. It details the sequence in which [tasks](#task) must be completed, guiding users through the process from start to finish, and helps streamline operations, ensure consistency, and optimize efficiency within an organization.
+
+**Properties**
+
+| Property&nbsp;name |              Type               | Required |                                                                                      Description                                                                                      |
+| :----------------- | :------------------------------ | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `document`         | [document](#document)           | yes      | Documents the defined workflow.                                                                                                                                                       |
+| `input`            | [input](#input)                 | no       | Configures the input of the workflow.                                                                                                                                                 |
+| `use`              | [use](#use)                     | no       | Defines the [reusable components](#use) of the workflow, if any.                                                                                                                      |
+| `do`               | map[string,&nbsp;[task](#task)] | yes      | The [task(s)](#task) that must be performed by the workflow.                                                                                                                          |
+| `timeout`          | string<br />[timeout](#timeout) | no       | The configuration, if any, of the timeout of the workflow.<br /> If a `string`, must be the name of a [timeout](#timeout) defined in the [reusable components](#use) of the workflow. |
+| `output`           | [output](#output)               | no       | Configures the output of the workflow.                                                                                                                                                |
+| `evaluate`         | [evaluate](#evaluate)           | no       | Configures runtime expression evaluation.                                                                                                                                             |
+
+### Document
+
+Documents the workflow definition.
+
+| Property&nbsp;name |        Type         | Required |                         Description                          |
+| :----------------- | :------------------ | :------- | :----------------------------------------------------------- |
+| `dsl`              | string              | yes      | The version of the DSL used to define the workflow.          |
+| `namespace`        | string              | yes      | The namespace of the workflow.                               |
+| `name`             | string              | yes      | The name of the workflow.                                    |
+| `version`          | string              | yes      | The [semantic version](https://semver.org/) of the workflow. |
+| `title`            | string              | no       | The title of the workflow.                                   |
+| `summary`          | string              | no       | The Markdown summary of the workflow.                        |
+| `tags`             | map[string, string] | no       | A key/value mapping of the tags of the workflow, if any.     |
+| `metadata`         | map                 | no       | Additional information about the workflow.                   |
+
+### Use
+
+Defines the reusable components of the workflow.
+
+| Property&nbsp;name |                      Type                      | Required |                          Description                          |
+| :----------------- | :--------------------------------------------- | :------- | :------------------------------------------------------------ |
+| `authentications`  | map[string, [authentication](#authentication)] | no       | A name/value mapping of the reusable authentication policies. |
+| `errors`           | map[string, [error](#error)]                   | no       | A name/value mapping of the reusable errors.                  |
+| `functions`        | map[string, [task](#task)]                     | no       | A name/value mapping of the reusable tasks.                   |
+| `retries`          | map[string, [retryPolicy](#retry)]             | no       | A name/value mapping of the reusable retry policies.          |
+| `secrets`          | string[]                                       | no       | A list containing the secrets of the workflow.                |
+| `timeouts`         | map[string, [timeout](#timeout)]               | no       | A name/value mapping of the reusable timeouts.                |
+
+### Evaluate
+
+Configures a runtime expression evaluation for the workflow.
+
+| Property&nbsp;name |  Type  | Required |                                                                                                                                                                   Description                                                                                                                                                                    |
+| :----------------- | :----- | :------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `language`         | string | no       | The language used for writing runtime expressions.<br />Defaults to `jq`.                                                                                                                                                                                                                                                                        |
+| `mode`             | string | no       | The runtime expression evaluation mode.<br />Supported values are:<br />- `strict`: requires all expressions to be enclosed within `${ }` for proper identification and evaluation.<br />- `loose`: evaluates any value provided. If the evaluation fails, it results in a string with the expression as its content.<br />Defaults to `strict`. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: order-pet
+  version: '0.1.0'
+  title: Order Pet - 1.0.0
+  summary: >
+    # Order Pet - 1.0.0
+    ## Table of Contents
+    - [Description](#description)
+    - [Requirements](#requirements)
+    ## Description
+    A sample workflow used to process an hypothetic pet order using the [PetStore API](https://petstore.swagger.io/)
+    ## Requirements
+    ## Secrets
+    - my-oauth2-secret
+use:
+  authentications:
+    petStoreOAuth2:
+      oauth2: 
+        authority: https://petstore.swagger.io/.well-known/openid-configuration
+        grant: client_credentials
+        client:
+          id: workflow-runtime
+          secret: "**********"
+        scopes: [ api ]
+        audiences: [ runtime ]
+  extensions:
+    - externalLogging:
+        extend: all
+        before:
+          - sendLog:
+              call: http
+              with:
+                method: post
+                endpoint: https://fake.log.collector.com
+                body:
+                  message: ${ "Executing task '\($task.reference)'..." }
+        after:
+          - sendLog:
+              call: http
+              with:
+                method: post
+                endpoint: https://fake.log.collector.com
+                body:
+                  message: ${ "Executed task '\($task.reference)'..." }
+  functions:
+    getAvailablePets:
+      call: openapi
+      with:
+        document:
+          endpoint: https://petstore.swagger.io/v2/swagger.json
+        operationId: findByStatus
+        parameters:
+          status: available
+  secrets:
+    - my-oauth2-secret
+do:
+  - getAvailablePets:
+      call: getAvailablePets
+      output:
+        as: "$input + { availablePets: [.[] | select(.category.name == \"dog\" and (.tags[] | .breed == $input.order.breed))] }"
+  - submitMatchesByMail:
+      call: http
+      with:
+        method: post
+        endpoint:
+          uri: https://fake.smtp.service.com/email/send
+          authentication: 
+            use: petStoreOAuth2
+        body:
+          from: noreply@fake.petstore.com
+          to: ${ .order.client.email }
+          subject: Candidates for Adoption
+          body: >
+            Hello ${ .order.client.preferredDisplayName }!
+
+            Following your interest to adopt a dog, here is a list of candidates that you might be interested in:
+
+            ${ .pets | map("-\(.name)") | join("\n") }
+
+            Please do not hesitate to contact us at info@fake.petstore.com if your have questions.
+
+            Hope to hear from you soon!
+
+            ----------------------------------------------------------------------------------------------
+            DO NOT REPLY
+            ----------------------------------------------------------------------------------------------
+```
+
+## Task
+
+A task within a [workflow](#workflow) represents a discrete unit of work that contributes to achieving the overall objectives defined by the [workflow](#workflow). 
+
+It encapsulates a specific action or set of actions that need to be executed in a predefined order to advance the workflow towards its completion. 
+
+[Tasks](#task) are designed to be modular and focused, each serving a distinct purpose within the broader context of the [workflow](#workflow). 
+
+By breaking down the [workflow](#workflow) into manageable [tasks](#task), organizations can effectively coordinate and track progress, enabling efficient collaboration and ensuring that work is completed in a structured and organized manner.
+
+The Open Workflow DSL defines a list of [tasks](#task) that must be supported by all runtimes:
+
+- [Call](#call), used to call services and/or functions.
+- [Do](#do), used to define one or more subtasks to perform in sequence.
+- [Fork](#fork), used to define one or more subtasks to perform concurrently.
+- [Raise](#raise), used to raise an [error](#error) and potentially fault the [workflow](#workflow).
+- [Run](#run), used to run a [Serverless container](#serverless-container-run-exclusive-to-data-orchestrator).
+- [Switch](#switch), used to dynamically select and execute one of multiple alternative paths based on specified conditions
+- [Set](#set), used to dynamically set the data of the workflow during its execution. 
+- [Try](#try), used to attempt executing a specified [task](#task), and to handle any resulting [errors](#error) gracefully, allowing the [workflow](#workflow) to continue without interruption.
+- [Wait](#wait), used to pause or wait for a specified duration before proceeding to the next task.
+
+**Properties**
+
+| Property&nbsp;name |               Type               | Required |                                                                                                                                                                                       Description                                                                                                                                                                                       |
+| :----------------- | :------------------------------- | :------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `if`               | string                           | no       | A [runtime expression](https://github.com/open-workflow-specification/specification/blob/main/dsl.md#runtime-expressions) used to determine whether the task should be run, if any.<br />The task is considered skipped if not run, and the *raw* task input becomes the task output. The expression is evaluated against the *raw* task input before any other expression of the task. |
+| `input`            | [input](#input)                  | no       | An object used to customize the task input and to document its schema, if any.                                                                                                                                                                                                                                                                                                          |
+| `output`           | [output](#output)                | no       | An object used to customize the task output and to document its schema, if any.                                                                                                                                                                                                                                                                                                         |
+| `export`           | [export](#export)                | no       | An object used to customize the content of the workflow context.                                                                                                                                                                                                                                                                                                                        |
+| `timeout`          | string<br />[timeout](#timeout)  | no       | The configuration of the task timeout, if any.<br />If a `string`, must be the name of a [timeout](#timeout) defined in the [reusable components](#use) of the workflow.                                                                                                                                                                                                                |
+| `then`             | [flowDirective](#flow-directive) | no       | The flow directive to execute next.<br />If not set, defaults to `continue`.                                                                                                                                                                                                                                                                                                            |
+| `metadata`         | map                              | no       | Additional information about the task.                                                                                                                                                                                                                                                                                                                                                  |
+
+### Call
+
+Enables the execution of a specified function within a workflow, allowing seamless integration with custom business logic or external services.
+
+**Properties**
+
+| Property&nbsp;name |  Type  | Required |                            Description                            |
+| :----------------- | :----- | :------- | :---------------------------------------------------------------- |
+| `call`             | string | yes      | The name of the function to call.                                 |
+| `with`             | map    | no       | A name/value mapping of the parameters to call the function with. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: call-example
+  version: '0.1.0'
+do:
+  - getPet:
+      call: http
+      with:
+        method: get
+        endpoint: https://petstore.swagger.io/v2/pet/{petId}
+```
+
+Open Workflow Specification defines several default functions that must be supported by all implementations and runtimes:
+
+- [HTTP](#http-call)
+- [Serverless-Job](#serverless-job-call-exclusive-to-data-orchestrator)
+- [Serverless-Function](#serverless-function-call-exclusive-to-data-orchestrator)
+- [Serverless-Container](#serverless-container-call-exclusive-to-data-orchestrator)
+
+#### HTTP Call
+
+The [HTTP Call](#http-call) lets you call any external service over HTTP.
+
+**Properties**
+
+| Property&nbsp;name |             Type              | Required |                                                                                                                                                                       Description                                                                                                                                                                       |
+| :----------------- | :---------------------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `method`           | string                        | yes      | The HTTP request method.                                                                                                                                                                                                                                                                                                                                |
+| `endpoint`         | string\|[endpoint](#endpoint) | yes      | An URI or object that describes the HTTP endpoint to call.                                                                                                                                                                                                                                                                                              |
+| `headers`          | map                           | no       | A name/value mapping of the HTTP headers to use, if any.                                                                                                                                                                                                                                                                                                |
+| `body`             | any                           | no       | The HTTP request body, if any.                                                                                                                                                                                                                                                                                                                          |
+| `query`            | map[string, any]              | no       | A name/value mapping of the query parameters to use, if any.                                                                                                                                                                                                                                                                                            |
+| `output`           | string                        | no       | The output format of the HTTP call.<br />Supported values are:<br />- `content`: output the content of the [HTTP response](#http-response), possibly deserialized.<br />- `raw`: output the base-64 encoded [HTTP response](#http-response) content, if any.<br />- `response`: output the [HTTP response](#http-response).<br />Defaults to `content`. |
+| `redirect`         | boolean                       | no       | Specifies whether to include or exclude status codes `300–399` from the error range.<br /> - If set to `true`, runtimes raise an error for status codes outside the `200–399` range.<br /> - If set to `false`, runtimes raise an error for response status codes outside the `200–299` range.<br />Defaults to `false`.                                |  
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: http-example
+  version: '0.1.0'
+do:
+  - getPet:
+      call: http
+      with:
+        method: get
+        endpoint: https://petstore.swagger.io/v2/pet/{petId}
+```
+
+#### Serverless-Job Call (exclusive to Data Orchestrator)
+
+The Scaleway Serverless Job Call lets you run recurring and autonomous tasks in the cloud.
+
+**Properties**
+
+| Property&nbsp;name |   Type   | Required |                                           Description                                            |
+| :----------------- | :------- | :------- | :----------------------------------------------------------------------------------------------- |
+| `id`               | string   | yes      | The ID of the Scaleway serverless job.                                                           |
+| `region`           | string   | yes      | The region of the Scaleway serverless job.<br /> Supported values: `fr-par`, `nl-ams`, `pl-waw`. |
+| `startupCommand`   | string[] | no       | The command to execute on the Scaleway Serverless Job.                                           |
+| `args`             | string[] | no       | Arguments to pass to the command.                                                                |
+
+<Message type="important">
+  The workflow and the Serverless Job must be in the same project.
+</Message>
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: mcp-example
+  version: '0.1.0'
+do:
+  - pushDataOnS3:
+      call: "serverless_job"
+      with:
+        id: "0dbc8c9f-e6f2-4dd5-88e0-a4b7a4743f02"
+        region: "fr-par"
+        startupCommand:
+          - "sh"
+          - "-c"
+        args:
+          - "echo 'print from workflow args'"
+```
+
+#### Serverless-Function Call (exclusive to Data Orchestrator)
+
+The Scaleway Serverless Function Call lets you call the default endpoint of a Serverless Function.
+
+Instead of using an HTTP endpoint (with potential authentication), you provide the function identifier (`id`) and the region (`region`) to invoke the function. The call handles authentication automatically.
+
+**Properties**
+
+| Property&nbsp;name |         Type          | Required |                                                                                                                                                                       Description                                                                                                                                                                       |
+| :----------------- | :-------------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`               | string                | yes      | The ID of the Serverless Function.                                                                                                                                                                                                                                                                                                                      |
+| `region`           | string                | yes      | The region where the Serverless Function is deployed.<br />Supported values: `fr-par`, `nl-ams`, `pl-waw`.                                                                                                                                                                                                                                                                                                   |
+| `method`           | string                | yes      | The HTTP request method.                                                                                                                                                                                                                                                                                                                                |
+| `headers`          | map                   | no       | A name/value mapping of the HTTP headers to use, if any.                                                                                                                                                                                                                                                                                                |
+| `body`             | any                   | no       | The HTTP request body, if any.                                                                                                                                                                                                                                                                                                                          |
+| `query`            | map[string,&nbsp;any] | no       | A name/value mapping of the query parameters to use, if any.                                                                                                                                                                                                                                                                                            |
+| `output`           | string                | no       | The output format of the HTTP call.<br />Supported values are:<br />- `content`: output the content of the [HTTP response](#http-response), possibly deserialized.<br />- `raw`: output the base-64 encoded [HTTP response](#http-response) content, if any.<br />- `response`: output the [HTTP response](#http-response).<br />Defaults to `content`. |
+
+<Message type="important">
+  The workflow and the Serverless Function must be in the same project.
+</Message>
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: function-example
+  version: '0.1.0'
+do:
+  - WeCallOurAwesomeServerlessFunction:
+      call: "serverless_function"
+      with:
+        method: GET
+        id: "c351de27-d595-44eb-8e4c-2f3d660baff8"
+        region: "fr-par"
+        output: "response"
+```
+
+#### Serverless-Container Call (exclusive to Data Orchestrator)
+
+The Scaleway Serverless Container Call lets you call the default endpoint of a Serverless Container.
+
+Instead of using an HTTP endpoint (with potential authentication), you provide the container identifier (`containerId`) - or the container name (`name`) together with the namespace identifier (`namespaceName` or `namespaceId`) - and region (`region`) to invoke the container. The call handles authentication automatically.
+
+**Properties**
+
+| Property&nbsp;name |         Type          | Required |                                                                                                                                                                       Description                                                                                                                                                                       |     |
+| :----------------- | :-------------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --- |
+| `containerId`      | string                | no       | The ID of the Serverless Container.<br />Required if `name` is not set.                                                                                                                                                                                                                                                                                 |     |
+| `name`             | string                | no       | The name of the Serverless Container.<br />Required if `containerId` is not set.                                                                                                                                                                                                                                                                        |     |
+| `namespaceId`      | string                | no       | The ID of the Serverless Container namespace.<br />Required if both `containerId` and `namespaceName` are not set.                                                                                                                                                                                                                                      |     |
+| `namespaceName`    | string                | no       | The name of the Serverless Container namespace.<br />Required if both `containerId` and `namespaceId` are not set.                                                                                                                                                                                                                                      |     |
+| `region`           | string                | yes      | The Scaleway region where the container is deployed.<br />Supported values: `fr-par`, `nl-ams`, `pl-waw`, `it-mil`.                                                                                                                                                                                                                                             |     |
+| `method`           | string                | yes      | The HTTP request method.                                                                                                                                                                                                                                                                                                                                |     |
+| `headers`          | map                   | no       | A name/value mapping of the HTTP headers to use, if any.                                                                                                                                                                                                                                                                                                |     |
+| `body`             | any                   | no       | The HTTP request body, if any.                                                                                                                                                                                                                                                                                                                          |     |
+| `query`            | map[string,&nbsp;any] | no       | A name/value mapping of the query parameters to use, if any.                                                                                                                                                                                                                                                                                            |     |
+| `output`           | string                | no       | The output format of the HTTP call.<br />Supported values are:<br />- `content`: output the content of the [HTTP response](#http-response), possibly deserialized.<br />- `raw`: output the base-64 encoded [HTTP response](#http-response) content, if any.<br />- `response`: output the [HTTP response](#http-response).<br />Defaults to `content`. |     |
+
+<Message type="important">
+  The workflow and the Serverless Container must be in the same project.
+</Message>
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: call-container-example
+  version: '0.1.0'
+do:
+  - WeCallOurAwesomeServerlessContainer:
+      call: "serverless_container"
+      with:
+        method: GET
+        name: "mycontainer"
+        namespaceId: "a351de27-d596-33eb-8e4c-2f3d120baff8"
+        region: "fr-par"
+        output: "response"
+```
+
+### Do
+
+Serves as a fundamental building block within workflows, enabling the sequential execution of multiple subtasks. By defining a series of subtasks to perform in sequence, the Do task facilitates the efficient execution of complex operations, ensuring that each subtask is completed before the next one begins.
+
+**Properties**
+
+| Property&nbsp;name |            Type            | Required |            Description             |
+| :----------------- | :------------------------- | :------- | :--------------------------------- |
+| `do`               | map[string, [task](#task)] | yes      | The tasks to perform sequentially. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: do-example
+  version: '0.1.0'
+use:
+  authentications:
+    fake-booking-agency-oauth2:
+      oauth2:
+        authority: https://fake-booking-agency.com
+        grant: client_credentials
+        client:
+          id: serverless-workflow-runtime
+          secret: secret0123456789
+do:
+  - bookHotel:
+      call: http
+      with:
+        method: post
+        endpoint: 
+          uri: https://fake-booking-agency.com/hotels/book
+          authentication: 
+            use: fake-booking-agency-oauth2
+        body:
+          name: Four Seasons
+          city: Antwerp
+          country: Belgium
+  - bookFlight:
+      call: http
+      with:
+        method: post
+        endpoint: 
+          uri: https://fake-booking-agency.com/flights/book
+          authentication: 
+            use: fake-booking-agency-oauth2
+        body:
+          departure:
+            date: '01/01/26'
+            time: '07:25:00'
+            from:
+              airport: BRU
+              city: Zaventem
+              country: Belgium
+          arrival:
+            date: '01/01/26'
+            time: '11:12:00'
+            to:
+              airport: LIS
+              city: Lisbon
+              country: Portugal
+```
+
+### Fork
+
+A Fork task lets you run multiple tasks at the same time in their respective branches.
+
+**Properties**
+
+| Property&nbsp;name |          Type          | Required |                                                                                                                                   Description                                                                                                                                    |
+| :----------------- | :--------------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `branches`         | map[string,&nbsp;task] | no       | The tasks to perform concurrently.                                                                                                                                                                                                                                               |
+| `compete`          | boolean                | no       | - If `false` (default), returns an array of outputs from all branches, in declaration order. <br/> - If `true`, only the branches following the first task to complete successfully will continue running. All other competing tasks are terminated whether they succeed or not. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: fork-example
+  version: '0.1.0'
+do:
+  - raiseAlarm:
+      fork:
+        compete: true
+        branches:
+          - callNurse:
+              call: http
+              with:
+                method: put
+                endpoint: https://fake-hospital.com/api/v3/alert/nurses
+                body:
+                  patientId: ${ .patient.fullName }
+                  room: ${ .room.number }
+          - callDoctor:
+              call: http
+              with:
+                method: put
+                endpoint: https://fake-hospital.com/api/v3/alert/doctor
+                body:
+                  patientId: ${ .patient.fullName }
+                  room: ${ .room.number }
+```
+
+### Raise
+
+Intentionally triggers and propagates errors. By employing the Raise task, workflows can deliberately generate error conditions, allowing for explicit error handling and fault management strategies to be implemented.
+
+**Properties**
+
+| Property&nbsp;name |            Type             | Required |                                                                          Description                                                                           |
+| :----------------- | :-------------------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `error`            | string<br />[error](#error) | yes      | Defines the [error](#error) to raise.<br />If a `string`, must be the name of an [error](#error) defined in the [reusable components](#use) of the workflow. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: raise-example
+  version: '0.1.0'
+do:
+  - processTicket:
+      switch:
+        - highPriority:
+            when: .ticket.priority == "high"
+            then: escalateToManager
+        - mediumPriority:
+            when: .ticket.priority == "medium"
+            then: assignToSpecialist
+        - lowPriority:
+            when: .ticket.priority == "low"
+            then: resolveTicket
+        - default:
+            then: raiseUndefinedPriorityError
+  - raiseUndefinedPriorityError:
+      raise:
+        error:
+          type: https://fake.com/errors/tickets/undefined-priority
+          status: 400
+          instance: /raiseUndefinedPriorityError
+          title: Undefined Priority
+  - escalateToManager:
+      call: http
+      with:
+        method: post
+        endpoint: https://fake-ticketing-system.com/tickets/escalate
+        body:
+          ticketId: ${ .ticket.id }
+  - assignToSpecialist:
+      call: http
+      with:
+        method: post
+        endpoint: https://fake-ticketing-system.com/tickets/assign
+        body:
+          ticketId: ${ .ticket.id }
+  - resolveTicket:
+      call: http
+      with:
+        method: post
+        endpoint: https://fake-ticketing-system.com/tickets/resolve
+        body:
+          ticketId: ${ .ticket.id }
+```
+
+### Run
+
+Provides the capability to execute external [Scaleway Serverless Containers](#serverless-container-run-exclusive-to-data-orchestrator).
+
+**Properties**
+
+|   Property&nbsp;name   |                                       Type                                       | Required |                                                                                                                            Description                                                                                                                             |
+| :--------------------- | :------------------------------------------------------------------------------- | :------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `serverless_container` | [serverless_container](#serverless-container-run-exclusive-to-data-orchestrator) | yes      | The definition of the Scaleway Serverless Container to run.                                                                                                                                                                                                        |
+| `await`                | boolean                                                                          | no       | Determines whether the process to run should be awaited for.<br />When set to `false`, the task cannot wait for the process to complete and thus cannot output the result. In this case, it should simply output its transformed input.<br />Defaults to `true`. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: run-example
+  version: '0.1.0'
+do:
+  - deployServerlessContainer:
+      run:
+        serverless_container:
+          action: deploy
+          name: my-api-container
+          namespaceName: production
+          region: fr-par
+          imageUrl: rg.fr-par.scw.cloud/my-registry/api:v2.1.0
+          port: 8080
+          minScale: 2
+          maxScale: 10
+          environmentVariables:
+            LOG_LEVEL: info
+            API_VERSION: v2
+          secretEnvironmentVariables:
+            DB_PASSWORD: 11111111-1111-1111-1111-111111111111
+          scalingOption:
+            ConcurrentRequestsThreshold: 100
+
+  - getServerlessContainer:
+      run:
+        serverless_container:
+          action: get
+          name: my-api-container
+          namespaceName: production
+          region: fr-par
+          await: false
+
+  - deleteServerlessContainer:
+      run:
+        serverless_container:
+          action: delete
+          name: old-container
+          namespaceName: staging
+          region: fr-par
+```
+
+#### Serverless Container Run (exclusive to Data Orchestrator)
+
+The Scaleway Serverless Container Run allows you to deploy, manage, and delete Scaleway Serverless Containers directly from your workflows.
+
+Instead of manually managing container infrastructure, `run: serverless_container` provides a declarative way to:
+- **Deploy** containers with automatic scaling and configuration
+- **Get** container status and information
+- **Delete** containers when they are no longer needed
+
+The task handles authentication, provisioning, and lifecycle management automatically.
+
+**Properties**
+
+|      Property&nbsp;name      |                                   Type                                   | Required |                                                                                              Description                                                                                               |
+| :--------------------------- | :----------------------------------------------------------------------- | :------- | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `action`                     | string                                                                   | yes      | The action to perform on the Serverless Container.<br />Supported values are:<br />- `deploy`: Deploys a container<br />- `get`: Retrieves container information<br />- `delete`: Deletes a container. |
+| `name`                       | string                                                                   | no       | The name of the Serverless Container.<br />Required for `deploy` action and else required if `containedId` not set.                                                                                    |
+| `namespaceId`                | string                                                                   | no       | The ID of the Serverless Container namespace.<br />Required if `namespaceName` is not set.                                                                                                             |
+| `namespaceName`              | string                                                                   | no       | The name of the Serverless Container namespace.<br />Required if `namespaceId` is not set.                                                                                                             |
+| `containerId`                | string                                                                   | no       | The ID of an existing Serverless Container.<br />Forbidden if action is `deploy`. Required if `name` not set.                                                                                          |
+| `region`                     | string                                                                   | yes      | The Scaleway region where the container is deployed.<br />Supported values: `fr-par`, `nl-ams`, `pl-waw`.                                                                                              |
+| `imageUrl`                   | string                                                                   | no       | The URL of the container image to deploy.<br />Required when action is `deploy` and `scalewayRegistryImage` is not set.<br />Format: `registry.region.scw.cloud/namespace/image:tag`.                  |
+| `scalewayRegistryImage`      | [ScalewayRegistryImage](#scaleway-registry-image)                        | no       | Alternative to `imageUrl` for specifying container images from Scaleway Container Registry.<br />Required when action is `deploy`, and `imageUrl` is not set.                                          |
+| `port`                       | uint32                                                                   | no       | The port exposed by the container.<br />Required when action is `deploy`.                                                                                                                              |
+| `minScale`                   | uint32                                                                   | no       | The minimum number of container instances.<br />Required when action is `deploy`.                                                                                                                      |
+| `maxScale`                   | uint32                                                                   | no       | The maximum number of container instances.<br />Required when action is `deploy`.                                                                                                                      |
+| `description`                | string                                                                   | no       | A human-readable description of the container.                                                                                                                                                         |
+| `environmentVariables`       | map[string, string]                                                      | no       | A key/value mapping of environment variables to inject into the container.                                                                                                                             |
+| `secretEnvironmentVariables` | map[string, string]                                                      | no       | A key/value mapping of secrets to inject as environment variables.<br />Format: `{ "SECRET_NAME": "secret-id-or-name" }`.                                                                              |
+| `scalingOption`              | [ServerlessContainerScalingOption](#serverless-container-scaling-option) | no       | Configuration for automatic scaling based on metrics.                                                                                                                                                  |
+| `cpuLimit`                   | uint32                                                                   | no       | The CPU limit in mVPCU.                                                                                                                                                                                |
+| `memoryLimitBytes`           | uint64                                                                   | no       | The memory limit in MB.                                                                                                                                                                                |
+| `timeout`                    | int64                                                                    | no       | The request timeout in seconds.                                                                                                                                                                        |
+| `privacy`                    | string                                                                   | no       | Container privacy setting.<br />Supported values: `public`, `private`<br />Defaults to `private`.                                                                                                      |
+| `protocol`                   | string                                                                   | no       | The HTTP protocol version.<br />Supported values: `http1`, `h2c`<br />Defaults to `http1`.                                                                                                             |
+| `httpsConnectionsOnly`       | bool                                                                     | no       | Forces HTTPS connections only.<br />Defaults to `true`.                                                                                                                                                |
+| `sandbox`                    | string                                                                   | no       | The sandbox runtime version.<br />Supported values: `v1`, `v2`<br />Defaults to `v2`.                                                                                                                  |
+| `command`                    | string[]                                                                 | no       | The command to execute in the container.                                                                                                                                                               |
+| `args`                       | string[]                                                                 | no       | Arguments to pass to the command.                                                                                                                                                                      |
+| `tags`                       | string[]                                                                 | no       | A list of tags to associate with the container.                                                                                                                                                        |
+| `privateNetworkId`           | string                                                                   | no       | The ID of the private network to attach the container to.                                                                                                                                              |
+| `localStorageLimitBytes`     | uint64                                                                   | no       | The local storage limit in bytes.                                                                                                                                                                      |
+| `mvcpuLimit`                 | uint32                                                                   | no       | The virtual CPU limit in milli-cores.                                                                                                                                                                  |
+| `livenessProbe`              | [ServerlessContainerProbe](#serverless-container-probe)                  | no       | Configuration for the liveness probe.                                                                                                                                                                  |
+| `startupProbe`               | [ServerlessContainerProbe](#serverless-container-probe)                  | no       | Configuration for the startup probe.                                                                                                                                                                   |
+| `ignoreErrors`               | [ServerlessContainerIgnoreErrors](#serverless-container-ignore-errors)   | no       | Configuration for ignoring specific errors.                                                                                                                                                            |
+| `await`                      | boolean                                                                  | no       | Determines whether to wait for the operation to complete.<br />When set to `false`, the task returns immediately.<br />Defaults to `true`.                                                             |
+
+#### Serverless Container Scaling Option
+
+| Property&nbsp;name |  Type  | Required |                                                         Description                                                          |
+| :----------------- | :----- | :------- | :--------------------------------------------------------------------------------------------------------------------------- |
+| `ScalingRule`      | string | yes      | The scaling rule to apply.<br />Supported values: `ConcurrentRequestsThreshold`, `CpuUsageThreshold`, `MemoryUsageThreshold` |
+| `ScalingValue`     | uint32 | yes      | The threshold value that triggers scaling.                                                                                   |
+
+#### Serverless Container Probe
+
+| Property&nbsp;name |  Type  | Required |                                 Description                                  |
+| :----------------- | :----- | :------- | :--------------------------------------------------------------------------- |
+| `failureThreshold` | uint32 | yes      | Number of consecutive failures before considering the probe failed.          |
+| `interval`         | string | yes      | Duration between probe attempts (e.g., `10s`).                               |
+| `timeout`          | string | yes      | Timeout for each probe attempt (e.g., `5s`).                                 |
+| `healthCheckProbe` | string | yes      | Type of health check probe.<br />Supported values: `http`, `tcp`.            |
+| `pathProbeHttp`    | string | no       | HTTP path for health check.<br />Required when `healthCheckProbe` is `http`. |
+
+#### Serverless Container Ignore Errors
+
+| Property&nbsp;name |                                        Type                                         | Required |                Description                |
+| :----------------- | :---------------------------------------------------------------------------------- | :------- | :---------------------------------------- |
+| `onDeploy`         | [ServerlessContainerIgnoreDeployErrors](#serverless-container-ignore-deploy-errors) | no       | Configuration for ignoring deploy errors. |
+| `onDelete`         | [ServerlessContainerIgnoreDeleteErrors](#serverless-container-ignore-delete-errors) | no       | Configuration for ignoring delete errors. |
+
+#### Scaleway Registry Image
+
+Alternative to `imageUrl` for specifying container images from Scaleway Container Registry.
+
+| Property&nbsp;name  |  Type  | Required |                  Description                  |
+| :------------------ | :----- | :------- | :-------------------------------------------- |
+| `registryNamespace` | string | yes      | The name of the Container Registry namespace. |
+| `registryRegion`    | string | yes      | The region where the registry is located.     |
+| `image`             | string | yes      | The name of the container image.              |
+| `tag`               | string | yes      | The image tag to deploy.                      |
+
+#### Serverless Container Ignore Deploy Errors
+
+| Property&nbsp;name | Type | Required |                Description                |
+| :----------------- | :--- | :------- | :---------------------------------------- |
+| `alreadyExists`    | bool | yes      | Ignore "container already exists" errors. |
+
+#### Serverless Container Ignore Delete Errors
+
+| Property&nbsp;name | Type | Required |             Description              |
+| :----------------- | :--- | :------- | :----------------------------------- |
+| `notExists`        | bool | yes      | Ignore "container not found" errors. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: examples
+  name: serverless-container-deploy
+  version: '1.0.0'
+do:
+  - deployMyContainer:
+      run:
+        serverless_container:
+          action: deploy
+          name: my-api
+          namespaceName: production
+          region: fr-par
+          imageUrl: rg.fr-par.scw.cloud/my-registry/api:v2.1.0
+          # OR use Scaleway Registry:
+          # scalewayRegistryImage:
+          #   registryNamespace: my-registry
+          #   registryRegion: fr-par
+          #   image: api
+          #   tag: v2.1.0
+          port: 8080
+          minScale: 2
+          maxScale: 10
+          cpuLimit: 2000
+          memoryLimitBytes: 2147483648
+          environmentVariables:
+            LOG_LEVEL: info
+            API_VERSION: v2
+          secretEnvironmentVariables:
+            DB_PASSWORD: 11111111-1111-1111-1111-111111111111
+            API_KEY: 22222222-2222-2222-2222-222222222222
+          scalingOption:
+            ScalingRule: ConcurrentRequestsThreshold
+            ScalingValue: 100
+          livenessProbe:
+            failureThreshold: 3
+            interval: 10s
+            timeout: 5s
+            healthCheckProbe: http
+            pathProbeHttp: /health
+```
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: examples
+  name: serverless-container-get
+  version: '1.0.0'
+do:
+  - getContainerStatus:
+      run:
+        serverless_container:
+          action: get
+          name: my-api
+          namespaceName: production
+          region: fr-par
+          await: false
+```
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: examples
+  name: serverless-container-delete
+  version: '1.0.0'
+do:
+  - deleteOldContainer:
+      run:
+        serverless_container:
+          action: delete
+          name: old-api
+          namespaceName: staging
+          region: fr-par
+          ignoreErrors:
+            onDelete:
+              notExists: true
+```
+
+### Set
+
+A task used to set data.
+
+**Properties**
+
+| Property&nbsp;name |       Type        | Required |                              Description                               |
+| :----------------- | :---------------- | :------- | :--------------------------------------------------------------------- |
+| `set`              | map <br /> string | yes      | The data to set.<br />Can be an object or a direct runtime expression. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: default
+  name: set-example
+  version: '0.1.0'
+do:
+  - setShape:
+      set:
+        shape: circle
+        size: ${ .configuration.size }
+        fill: ${ .configuration.fill }
+  - setColor:
+      set: ${ .configuration.color }      
+```
+
+### Switch
+
+Enables conditional branching within workflows, allowing them to dynamically select different paths based on specified conditions or criteria.
+
+**Properties**
+
+| Property&nbsp;name |          Type          | Required |                 Description                 |
+| :----------------- | :--------------------- | :------- | :------------------------------------------ |
+| `switch`           | [case[]](#switch-case) | yes      | A name/value map of the cases to switch on. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: switch-example
+  version: '0.1.0'
+do:
+  - processOrder:
+      switch:
+        - case1:
+            when: .orderType == "electronic"
+            then: processElectronicOrder
+        - case2:
+            when: .orderType == "physical"
+            then: processPhysicalOrder
+        - default:
+            then: handleUnknownOrderType
+  - processElectronicOrder:
+      do:
+        - validatePayment:
+            call: http
+            with:
+              method: post
+              endpoint: https://fake-payment-service.com/validate
+        - fulfillOrder:
+            call: http
+            with:
+              method: post
+              endpoint: https://fake-fulfillment-service.com/fulfill
+      then: exit
+  - processPhysicalOrder:
+      do:
+        - checkInventory:
+            call: http
+            with:
+              method: get
+              endpoint: https://fake-inventory-service.com/inventory
+        - packItems:
+            call: http
+            with:
+              method: post
+              endpoint: https://fake-packaging-service.com/pack
+        - scheduleShipping:
+            call: http
+            with:
+              method: post
+              endpoint: https://fake-shipping-service.com/schedule
+      then: exit
+  - handleUnknownOrderType:
+      do:
+        - logWarning:
+            call: http
+            with:
+              method: post
+              endpoint: https://fake-logging-service.com/warn
+        - notifyAdmin:
+            call: http
+            with:
+              method: post
+              endpoint: https://fake-notification-service.com/notify
+```
+
+#### Switch Case
+
+A switch case defines a condition to evaluate and an action to execute when that condition is met.
+
+| Property&nbsp;name |      Type       | Required |                                                                                                        Description                                                                                                        |
+| :----------------- | :-------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `when`             | string          | no       | A runtime expression used to determine whether the case matches.<br/> If not set, the case will be matched by default if no other case matches.<br/> There can be only one default case, all others must set a condition. |
+| `then`             | `flowDirective` | yes      | The flow directive to execute when the case matches.                                                                                                                                                                      |
+
+### Try
+
+A **Try-catch** task lets you handle known error types, such as authentication, authorization, and timeout. You can retry a failed task a set number of times before falling back to an alternative task if it keeps failing. 
+
+**Properties**
+
+| Property&nbsp;name |            Type            | Required |                 Description                 |
+| :----------------- | :------------------------- | :------- | :------------------------------------------ |
+| `try`              | map[string, [task](#task)] | yes      | The task(s) to perform.                     |
+| `catch`            | [catch](#catch)            | yes      | The errors to catch and how to handle them. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: try-example
+  version: '0.1.0'
+do:
+  - trySomething:
+      try:
+        - invalidHttpCall:
+            call: http
+            with:
+              method: get
+              endpoint: https://
+      catch:
+        errors:
+          with:
+            type: https://open-workflow-specification.org/dsl/errors/types/communication
+            status: 503
+        as: error
+        retry:
+          delay:
+            seconds: 3
+          backoff:
+            exponential: {}
+          limit:
+            attempt:
+              count: 5
+```
+
+#### Catch
+
+Defines the configuration of a catch clause, which a concept used to catch errors.
+
+**Properties**
+
+| Property&nbsp;name |               Type                | Required |                                                                                                                        Description                                                                                                                         |
+| :----------------- | :-------------------------------- | :------- | :--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `errors`           | [errorFilter](#error)             | no       | The definition of the errors to catch.                                                                                                                                                                                                                     |
+| `as`               | string                            | no       | The name of the runtime expression variable to save the error as. Defaults to `error`.                                                                                                                                                                     |
+| `when`             | string                            | no       | A runtime expression used to determine whether to catch the filtered error.                                                                                                                                                                                |
+| `exceptWhen`       | string                            | no       | A runtime expression used to determine whether to catch the filtered error.                                                                                                                                                                                |
+| `retry`            | string<br />[retryPolicy](#retry) | no       | The [retry policy](#retry) to use, if any, when catching [errors](#error).<br />If a `string`, must be the name of a [retry policy](#retry) defined in the [reusable components](#use) of the workflow.                                                    |
+| `do`               | map[string,&nbsp;[task](#task)]   | no       | The definition of the task(s) to run when catching an error.                                                                                                                                                                                               |
+| `then`             | [flowDirective](#flow-directive)  | no       | The [flow directive](#flow-directive) to execute for the error path after the error has been caught (and after executing any `do` tasks, if set). This determines the next transition for the catch path (overriding the try task normal completion flow). |
+
+### Wait
+
+Allows workflows to pause or delay their execution for a specified period of time.
+
+**Properties**
+
+| Property&nbsp;name |               Type                | Required |                                          Description                                          |
+| :----------------- | :-------------------------------- | :------- | :-------------------------------------------------------------------------------------------- |
+| `wait`             | string<br />[duration](#duration) | yes      | The amount of time to wait.<br />If a `string`, must be a valid ISO 8601 duration expression. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: wait-example
+  version: '0.1.0'
+do:
+  - waitAWhile:
+      wait:
+        seconds: 10
+```
+
+## Flow Directive
+
+Flow Directives are commands within a workflow that dictate its progression.
+
+| Flow&nbsp;directive |                                                                               Description                                                                               |
+| :------------------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `continue`          | Instructs the workflow to proceed with the next task in line. This may conclude the execution of a workflow or branch if there is no task defined after the `continue`. |
+| `end`               | Concludes the workflow execution and signal its completion with a `succeeded` status.                                                                                   |
+| `exit`              | Completes the current parent `do` execution. This may conclude the execution of a workflow or branch if there is no task defined after the parent `do` scope.           |
+| string              | Continues the workflow at the task with the specified name.                                                                                                             |
+| `task`              | Redirects to a task declared within the scope.                                                                                                                          |
+
+<Message type="note">
+  Flow directives may only redirect to tasks declared within their own scope. They cannot target tasks at a different depth.
+</Message>
+
+## Authentication
+
+Defines the mechanism used to authenticate users and workflows attempting to access a service or a resource.
+
+**Properties**
+
+| Property&nbsp;name |                      Type                      | Required |                                                          Description                                                           |
+| ------------------ | :--------------------------------------------- | :------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `use`              | string                                         | no       | The name of the top-level authentication definition to use. Cannot be used by authentication definitions defined at top level. |
+| `basic`            | [basicAuthentication](#basic-authentication)   | no       | The `basic` authentication scheme to use, if any.<br />Required if no other property has been set, otherwise ignored.          |
+| `bearer`           | [bearerAuthentication](#bearer-authentication) | no       | The `bearer` authentication scheme to use, if any.<br />Required if no other property has been set, otherwise ignored.         |
+| `digest`           | [digestAuthentication](#digest-authentication) | no       | The `digest` authentication scheme to use, if any.<br />Required if no other property has been set, otherwise ignored.         |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: authentication-example
+  version: '0.1.0'
+use:
+  secrets:
+    - usernamePasswordSecret
+  authentications:
+    sampleBasicFromSecret:
+      basic:
+        use: usernamePasswordSecret
+do:
+  - sampleTask:
+      call: http
+      with:
+        method: get
+        endpoint: 
+          uri: https://secured.fake.com/sample
+          authentication:
+            use: sampleBasicFromSecret
+```
+
+### Basic Authentication
+
+Defines the fundamentals of a `basic` authentication.
+
+**Properties**
+
+| Property&nbsp;name |  Type  | Required |     Description      |
+| ------------------ | :----- | :------- | -------------------- |
+| `username`         | string | yes      | The username to use. |
+| `password`         | string | yes      | The password to use. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: basic-authentication-example
+  version: '0.1.0'
+use:
+  authentications:
+    sampleBasic:
+      basic:
+        username: admin
+        password: password123
+do:
+  - sampleTask:
+      call: http
+      with:
+        method: get
+        endpoint: 
+          uri: https://secured.fake.com/sample
+          authentication: 
+            use: sampleBasic
+```
+
+### Bearer Authentication
+
+Defines the fundamentals of a `bearer` authentication.
+
+**Properties**
+
+| Property&nbsp;name |  Type  | Required |       Description        |
+| ------------------ | :----- | :------- | ------------------------ |
+| `token`            | string | yes      | The bearer token to use. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: bearer-authentication-example
+  version: '0.1.0'
+do:
+  - sampleTask:
+      call: http
+      with:
+        method: get
+        endpoint: 
+          uri: https://secured.fake.com/sample
+          authentication:
+            bearer:
+              token: ${ .user.token }
+```
+
+### Digest Authentication
+
+Defines the fundamentals of a `digest` authentication.
+
+**Properties**
+
+| Property&nbsp;name |  Type  | Required |     Description      |
+| ------------------ | :----- | :------- | -------------------- |
+| `username`         | string | yes      | The username to use. |
+| `password`         | string | yes      | The password to use. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: digest-authentication-example
+  version: '0.1.0'
+use:
+  authentications:
+    sampleDigest:
+      digest:
+        username: admin
+        password: password123
+do:
+  - sampleTask:
+      call: http
+      with:
+        method: get
+        endpoint: 
+          uri: https://secured.fake.com/sample
+          authentication: 
+            use: sampleDigest
+```
+
+## Error
+
+Defines the [Problem Details RFC](https://datatracker.ietf.org/doc/html/rfc7807) compliant description of an error.
+
+**Properties**
+
+| Property&nbsp;name |             Type              | Required |                                                                                                                                                                         Description                                                                                                                                                                          |
+| ------------------ | :---------------------------- | :------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `type`             | [uri-template](#uri-template) | yes      | A URI reference that identifies the [error](#error) type. <br />For cross-compatibility concerns, it is recommended to use [Standard Error Types](#standard-error-types) whenever possible.<br />Runtimes must ensure that the property has been set when raising or escalating the [error](#error).                                                         |
+| `status`           | integer                       | yes      | The status code generated by the origin for this occurrence of the [error](#error).<br />For cross-compatibility concerns, it is recommended to use [HTTP Status Codes](https://datatracker.ietf.org/doc/html/rfc7231#section-6) whenever possible.<br />Runtimes must ensure that the property has been set when raising or escalating the [error](#error). |
+| `instance`         | string                        | no       | A [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) used to reference the component the [error](#error) originates from.<br />Runtimes must set the property when raising or escalating the [error](#error). Otherwise ignore.                                                                                                                   |
+| `title`            | string                        | no       | A short, human-readable summary of the [error](#error) or a [runtime expression](https://github.com/open-workflow-specification/specification/blob/main/dsl.md#runtime-expressions)                                                                                                                                                                          |
+| `detail`           | string                        | no       | A human-readable explanation specific to this occurrence of the [error](#error) or a [runtime expression](https://github.com/open-workflow-specification/specification/blob/main/dsl.md#runtime-expressions)                                                                                                                                                 |
+
+**Examples**
+
+```yaml
+type: https://open-workflow-specification.org/spec/1.0.0/errors/communication
+title: Service Not Available
+status: 503
+```
+
+### Standard Error Types
+
+Standard error types serve the purpose of categorizing errors consistently across different runtimes, facilitating seamless migration from one runtime environment to another.
+
+|                                            Type                                            | Status&nbsp;code¹ |                                                                                                                                                            Description                                                                                                                                                            |
+| ------------------------------------------------------------------------------------------ | :---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| [configuration](https://open-workflow-specification.org/spec/1.0.0/errors/configuration)   | `400`             | Errors resulting from incorrect or invalid configuration settings, such as missing or misconfigured environment variables, incorrect parameter values, or configuration file errors.                                                                                                                                              |
+| [validation](https://open-workflow-specification.org/spec/1.0.0/errors/validation)         | `400`             | Errors arising from validation processes, such as validation of input data, schema validation failures, or validation constraints not being met. These errors indicate that the provided data or configuration does not adhere to the expected format or requirements specified by the workflow.                                  |
+| [expression](https://open-workflow-specification.org/spec/1.0.0/errors/expression)         | `400`             | Errors occurring during the evaluation of runtime expressions, such as invalid syntax or unsupported operations.                                                                                                                                                                                                                  |
+| [authentication](https://open-workflow-specification.org/spec/1.0.0/errors/authentication) | `401`             | Errors related to authentication failures.                                                                                                                                                                                                                                                                                        |
+| [authorization](https://open-workflow-specification.org/spec/1.0.0/errors/authorization)   | `403`             | Errors related to unauthorized access attempts or insufficient permissions to perform certain actions within the workflow.                                                                                                                                                                                                        |
+| [timeout](https://open-workflow-specification.org/spec/1.0.0/errors/timeout)               | `408`             | Errors caused by timeouts during the execution of tasks or during interactions with external services.                                                                                                                                                                                                                            |
+| [communication](https://open-workflow-specification.org/spec/1.0.0/errors/communication)   | `500`             | Errors encountered while communicating with external services, including network errors, service unavailable, or invalid responses.                                                                                                                                                                                               |
+| [runtime](https://open-workflow-specification.org/spec/1.0.0/errors/runtime)               | `500`             | Errors occurring during the runtime execution of a workflow, including unexpected exceptions, errors related to resource allocation, or failures in handling workflow tasks. These errors typically occur during the actual execution of workflow components and may require runtime-specific handling and resolution strategies. |
+
+¹ Default value. The `status code` that best describe the error should always be used.
+
+## Retry
+
+The Retry is used to define the strategy for retrying a failed task when an error is encountered during execution. This policy provides developers with control over how and when to retry failed tasks, enabling robust error handling and fault tolerance within workflows.
+
+**Properties**
+
+| Property&nbsp;name |         Type          | Required |                                               Description                                               |
+| ------------------ | :-------------------- | :------- | ------------------------------------------------------------------------------------------------------- |
+| `when`             | string                | no       | A a runtime expression used to determine whether to retry running the task, in a given context.         |
+| `exceptWhen`       | string                | no       | A runtime expression used to determine whether to retry running the task, in a given context.           |
+| `delay`            | [duration](#duration) | no       | The duration, if any, to wait between retry attempts.                                                   |
+| `limit`            | [retry](#retry-limit) | no       | The limits, if any, to impose to the retry policy.                                                      |
+| `backoff`          | [backoff](#backoff)   | no       | The backoff strategy to use, if any.                                                                    |
+| `jitter`           | [jitter](#jitter)     | no       | The parameters, if any, that control the randomness or variability of the delay between retry attempts. |
+
+### Retry Limit
+
+The definition of a retry policy.
+
+| Property&nbsp;name |         Type          | Required |                            Description                            |
+| ------------------ | :-------------------- | :------- | ----------------------------------------------------------------- |
+| `attempt.count`    | integer               | no       | The maximum attempts count.                                       |
+| `attempt.duration` | [duration](#duration) | no       | The duration limit, if any, for all retry attempts.               |
+| `duration`         | [duration](#duration) | no       | The maximum duration, if any, during which to retry a given task. |
+
+### Backoff
+
+The definition of a retry backoff strategy.
+
+| Property&nbsp;name |  Type  | Required |                                                            Description                                                             |
+| ------------------ | :----- | :------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `constant`         | object | no       | The definition of the constant backoff to use, if any.<br />Required if `exponential` and `linear` are not set, otherwise ignored. |
+| `exponential`      | object | no       | The definition of the exponential backoff to use, if any.<br />Required if `constant` and `linear` are not set, otherwise ignored. |
+| `linear`           | object | no       | The definition of the linear backoff to use, if any.<br />Required if `constant` and `exponential` are not set, otherwise ignored. |
+
+### Jitter
+
+Represents the definition of the parameters that control the randomness or variability of a delay, typically between retry attempts.
+
+| Property&nbsp;name |         Type          | Required |                Description                |
+| ------------------ | :-------------------- | :------- | ----------------------------------------- |
+| `from`             | [duration](#duration) | yes      | The minimum duration of the jitter range. |
+| `to`               | [duration](#duration) | yes      | The maximum duration of the jitter range. |
+
+## Input
+
+Documents the structure - and optionally configures the transformation of - workflow/task input data.
+
+It is crucial for authors to document the schema of input data whenever feasible. This documentation empowers consuming applications to provide contextual auto-suggestions when handling runtime expressions.
+
+When set, runtimes must validate raw input data against the defined schema before applying transformations, unless defined otherwise.
+
+**Properties**
+
+| Property&nbsp;name |        Type        | Required |                                                                                       Description                                                                                        |
+| ------------------ | :----------------- | :------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema`           | [schema](#schema)  | no       | The [schema](#schema) used to describe and validate raw input data.<br />Even though the schema is not required, it is strongly encouraged to document it, whenever feasible.            |
+| `from`             | string<br />object | no       | A [runtime expression](https://github.com/open-workflow-specification/specification/blob/main/dsl.md#runtime-expressions), if any, used to filter and/or mutate the workflow/task input. |
+
+**Examples**
+
+```yaml
+schema:
+  format: json
+  document:
+    type: object
+    properties:
+      order:
+        type: object
+        required: [ pet ]
+        properties:
+          pet:
+            type: object
+            required: [ id ]
+            properties:
+              id:
+                type: string
+from: .order.pet
+```
+
+## Output
+
+Documents the structure - and optionally configures the transformations of - workflow/task output data.
+
+It is crucial for authors to document the schema of output data whenever feasible. This documentation empowers consuming applications to provide contextual auto-suggestions when handling runtime expressions.
+
+When set, runtimes must validate output data against the defined schema after applying transformations, unless defined otherwise.
+
+**Properties**
+
+| Property&nbsp;name |        Type        | Required |                                                                                        Description                                                                                        |
+| ------------------ | :----------------- | :------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema`           | [schema](#schema)  | no       | The [schema](#schema) used to describe and validate output data.<br />Even though the schema is not required, it is strongly encouraged to document it, whenever feasible.                |
+| `as`               | string<br />object | no       | A [runtime expression](https://github.com/open-workflow-specification/specification/blob/main/dsl.md#runtime-expressions), if any, used to filter and/or mutate the workflow/task output. |
+
+**Examples**
+
+```yaml
+output:
+  schema:
+    format: json
+    document:
+      type: object
+      properties:
+        petId:
+          type: string
+      required: [ petId ]
+  as:
+    petId: '${ .pet.id }'
+```
+
+## Export
+
+Certain task needs to set the workflow context to save the task output for later usage. Users set the content of the context through a runtime expression. The result of the expression is the new value of the context. The expression is evaluated against the transformed task output.
+
+Optionally, the context might have an associated schema which is validated against the result of the expression.
+
+**Properties**
+
+| Property&nbsp;name |        Type        | Required |                                                              Description                                                               |
+| ------------------ | :----------------- | :------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema`           | [schema](#schema)  | no       | The [schema](#schema) used to describe and validate context.<br />Included to handle the case in which the context has a known format. |
+| `as`               | string<br />object | no       | A runtime expression, if any, used to export the output data to the context.                                                           |
+
+**Examples**
+
+Merge the task output into the current context.
+
+```yaml
+as: '$context+.'
+```
+
+Replace the context with the task output.
+
+```yaml
+as: '.'
+```
+
+### Schema
+
+Describes a data schema.
+
+**Properties**
+
+| Property&nbsp;name |  Type  | Required |                                                           Description                                                           |
+| ------------------ | :----- | :------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `format`           | string | yes      | The schema format.<br />Supported values are:<br />- `json`, which indicates the [JsonSchema](https://json-schema.org/) format. |
+| `document`         | object | no       | The inline schema document.<br />Required if `resource` has not been set, otherwise ignored.                                    |
+
+**Examples**
+
+*Example of an inline JsonSchema:*
+```yaml
+format: json
+document:
+  type: object
+  properties:
+    id:
+      type: string
+    firstName:
+      type: string
+    lastName:
+      type: string
+  required: [ id, firstName, lastName ]
+```
+
+*Example of a JsonSchema based on an external resource:*
+```yaml
+format: json
+resource:
+  endpoint: https://test.com/fake/schema/json/document.json
+```
+
+## Timeout
+
+Defines a workflow or task timeout.
+
+**Properties**
+
+| Property&nbsp;name |         Type          | Required |                       Description                        |
+| ------------------ | :-------------------- | :------- | -------------------------------------------------------- |
+| `after`            | [duration](#duration) | yes      | The duration after which the workflow or task times out. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: default
+  name: timeout-example
+  version: '0.1.0'
+do:
+  - waitAMinute:
+      wait:
+        seconds: 60
+timeout:
+  after:
+    seconds: 30
+```
+
+## Duration
+
+Defines a duration. Durations can be defined through properties, with an ISO 8601 string or with a runtime expression that is evaluated to an ISO 8601 string.
+
+**Properties**
+
+| Property&nbsp;name |  Type   | Required |           Description           |
+| ------------------ | :------ | :------- | ------------------------------- |
+| `days`             | integer | no       | Number of days, if any.         |
+| `hours`            | integer | no       | Number of hours, if any.        |
+| `minutes`          | integer | no       | Number of minutes, if any.      |
+| `seconds`          | integer | no       | Number of seconds, if any.      |
+| `milliseconds`     | integer | no       | Number of milliseconds, if any. |
+
+**Examples**
+
+*Example of a duration of 2 hours, 15 minutes and 30 seconds:*
+```yaml
+hours: 2
+minutes: 15
+seconds: 30
+```
+
+## Endpoint
+
+Describes an endpoint.
+
+**Properties**
+
+| Property&nbsp;name |               Type                | Required |            Description            |
+| ------------------ | :-------------------------------- | :------- | --------------------------------- |
+| `uri`              | string                            | yes      | The endpoint URI.                 |
+| `authentication`   | [authentication](#authentication) | no       | The authentication policy to use. |
+
+## HTTP Response
+
+Describes an HTTP response.
+
+**Properties**
+
+| Property&nbsp;name |           Type           | Required |                                                            Description                                                            |
+| ------------------ | :----------------------- | :------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `request`          | [request](#http-request) | yes      | The HTTP request associated with the HTTP response.                                                                               |
+| `statusCode`       | integer                  | yes      | The HTTP response status code.                                                                                                    |
+| `headers`          | map[string, string]      | no       | The HTTP response headers, if any.                                                                                                |
+| `content`          | any                      | no       | The HTTP response content, if any.<br />It can contain the deserialized response content or the base-64 encoded response content. |
+
+**Examples**
+
+```yaml
+request:
+  method: get
+  uri: https://petstore.swagger.io/v2/pet/1
+  headers:
+    Content-Type: application/json
+headers:
+  Content-Type: application/json
+statusCode: 200
+content:
+  id: 1
+  name: milou
+  status: pending
+```
+
+## HTTP Request
+
+Describes an HTTP request.
+
+**Properties**
+
+| Property&nbsp;name | Type | Required | Description |
+|----------|:----|:--------|-------------|
+| `method` | string | yes | The request method. |
+| `uri` | uri | yes | The request URI. |
+| `headers` | map[string, string] | no | The HTTP request headers, if any. |
+
+**Examples**
+
+```yaml
+method: get
+uri: https://petstore.swagger.io/v2/pet/1
+headers:
+  Content-Type: application/json
+```
+
+## URI Template
+
+The DSL has limited support for URI template syntax as defined by [RFC 6570](https://datatracker.ietf.org/doc/html/rfc6570). Specifically, only the [Simple String Expansion](https://datatracker.ietf.org/doc/html/rfc6570#section-3.2.2) is supported, which allows authors to embed variables in a URI.
+
+URI-typed string fields that use the schema `uriTemplate` type accept [URI-references](https://datatracker.ietf.org/doc/html/rfc3986#section-4.1) as defined by [RFC 3986](https://datatracker.ietf.org/doc/html/rfc3986), meaning both absolute URIs (e.g., `https://example.com/path`) and relative references (e.g., `openapi/petstore.json`, `/api/v1/users`) are accepted. In the JSON Schema, both `LiteralUri` and `LiteralUriTemplate` are validated using the RFC 3986 Appendix B URI-reference regex (with an extra guard to avoid matching runtime expressions).
+
+To substitute a variable within a URI, use the `{}` syntax. The identifier inside the curly braces will be replaced with its value during runtime evaluation. If no value is found for the identifier, an empty string will be used.
+
+This has the following limitations compared to runtime expressions:
+
+- Only top-level properties can be interpolated within strings, thus identifiers are treated verbatim. This means that `{pet.id}` will be replaced with the value of the `"pet.id"` property, not the value of the `id` property of the `pet` property.
+- The referenced variable must be of type `string`, `number`, `boolean`, or `null`. If the variable is of a different type an error with type `https://open-workflow-specification.org/spec/1.0.0/errors/expression` and status `400` will be raised.
+- Runtime expression arguments are not available for string substitution.
+
+**Examples**
+
+```yaml
+uri: https://petstore.swagger.io/v2/pet/{petId}
+```
+
+## Container Lifetime
+
+Configures the lifetime of a container.
+
+**Properties**
+
+| Property&nbsp;name |         Type          | Required |                                                                                                                                                        Description                                                                                                                                                         |
+| ------------------ | :-------------------- | :------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `cleanup`          | string                | yes      | The cleanup policy to use.<br />Supported values are:<br />- `always`: the container is deleted immediately after execution.<br />-`never`: the runtime should never delete the container.<br />-`eventually`: the container is deleted after a configured amount of time after its execution.<br />Defaults to `never`. |
+| `after`            | [duration](#duration) | no       | The [duration](#duration), if any, after which to delete the container once executed.<br />Required if `cleanup` has been set to `eventually`, otherwise ignored.                                                                                                                                                          |
+
+## Process Result
+
+Describes the result of a process.
+
+**Properties**
+
+| Property&nbsp;name |  Type   | Required |        Description         |
+| :----------------- | :------ | :------- | :------------------------- |
+| `code`             | integer | yes      | The process exit code.     |
+| `stdout`           | string  | yes      | The process STDOUT output. |
+| `stderr`           | string  | yes      | The process STDERR output. |
+
+**Examples**
+
+```yaml
+document:
+  dsl: '1.0.3'
+  namespace: test
+  name: run-container-example
+  version: '0.1.0'
+do:
+  - runContainer:
+      run:
+        container:
+          image: fake-image
+          lifetime:
+            cleanup: eventually
+            after:
+              minutes: 30
+        return: stderr
+
+  - runScript:
+      run:
+        script:
+          language: js
+          code: >
+            Some cool multiline script
+        return: code
+
+  - runShell:
+      run:
+        shell:
+          command: 'echo "Hello, ${ .user.name }"'
+        return: all
+
+  - runWorkflow:
+      run:
+        workflow:
+          namespace: another-one
+          name: do-stuff
+          version: '0.1.0'
+          input: {}
+        return: none
+```
+
+## Concepts not implemented in Data Orchestrator
+
+The following concepts are not supported in the current version:
+
+- Schedule
+- Call:
+  - AsyncAPI
+  - gRPC
+  - OpenAPI
+  - A2A
+  - MCP
+- Emit
+- For
+- Listen
+- Run:
+  - Container
+  - Script
+  - Shell
+  - Workflow
+- Lifecycle events
+- External resources
+- Authentication:
+  - OAuth2
+  - OpenIDConnect
+- Catalog
+- Extension
+- Event Consumption Strategy
+- Event Filter
+- Event Properties
+- AsyncAPI Outbound Message
+- AsyncAPI Server
+- AsyncAPI Subscription
+- Workflow Definition Reference
+- Subscription Iterator

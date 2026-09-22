@@ -1,0 +1,332 @@
+---
+title: Creating a Windows Server golden image
+description:  Find out how to create a windows server golden image that may be used to start new windows instances
+dates:
+  validation: 2026-09-22
+  posted: 2026-09-22
+tags: instance type production windows server golden image
+products:
+  - instances
+difficulty: beginner
+usecase:
+  - customisation
+ecosystem:
+  - scaleway
+---
+import Requirements from '@macros/iam/requirements.mdx'
+import image from './assets/qemu_install.webp'
+import delssh from './assets/delssh.webp'
+import launch from './assets/sysprep.webp'
+import running from './assets/sysprep-running.webp'
+
+
+In many circumpstances, it may be advisable to have a windows server golden image configured with a set of tools and options that will be present on each and every windows instance started.
+
+This document outlines the steps required to properly build a windows server golden image that may be used repetitively in a coherent manner.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com) with access to Instances and Block Storage.
+- SSH key configured for accessing Scaleway Instances.
+- Familiarity with command-line tools, including Scaleway CLI.
+
+Refer to [Scaleway’s Instance documentation](/instances/) for details on setting up Instances and related services.
+
+## Glossary
+
+| Term | Definition |
+|------|------------|
+| **Block Storage** | Scaleway’s persistent storage for Instance disks, used for snapshots and volumes. |
+| **Hypervisor** | Software that manages virtual machines, such as VMware ESXi or Scaleway’s KVM-based system. |
+| **QCOW2** | Disk image format used by Scaleway’s KVM-based hypervisor, optimized for cloud environments. |
+| **VirtIO Drivers** | Drivers allowing the guest OS to interact with Scaleway’s block storage and network devices. |
+
+## Definition of the unattended.xml file
+
+When creating a golden image, you will want to keep the customisation done on your running instance while creating a generic image that may be used repetitively.
+The `sysprep` tool is intended for that. In order to align the golden image with the basic requirement of the Scaleway ecosystem, the `sysprep` tool will need a 
+file called `unattend.xml`. This file needs to be created using the **Windows System Image Manager** and _cannot_ be modified manually.
+The next section will point you to the official Microsoft documentation.
+
+The first section of the `unattended.xml` file applies some speciallizations required for the instance to work correctly
+in the Scaleway ecosystem. They are :
+
+* Enablement of the KMS server for registration of the instance at boot time
+* Definition of the OEM information
+* Enablement of the Remote Desktop functionality
+* Addition of a firewall configuration to allow RDP connectivity
+
+The `unattended.xml` section would be similar to this :
+
+
+```xml
+    <settings pass="specialize">
+        <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <RunSynchronous>
+                <RunSynchronousCommand wcm:action="add">
+                    <Path>cmd.exe /c slmgr.vbs //b /skms 169.254.42.42:1688</Path>
+                    <Order>1</Order>
+                    <Description>Add internal kms server</Description>
+                </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Path>cmd.exe /c slmgr.vbs //b /ato</Path>
+                    <Order>2</Order>
+                    <Description>Activate Instance</Description>
+                </RunSynchronousCommand>
+            </RunSynchronous>
+        </component>
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <OEMInformation>
+                <Model>Instances</Model>
+                <Manufacturer>Scaleway</Manufacturer>
+            </OEMInformation>
+        </component>
+        <component name="Microsoft-Windows-TerminalServices-LocalSessionManager" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <fDenyTSConnections>false</fDenyTSConnections>
+        </component>
+        <component name="Microsoft-Windows-TerminalServices-RDP-WinStationExtensions" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <UserAuthentication>0</UserAuthentication>
+            <SecurityLayer>0</SecurityLayer>
+        </component>
+        <component name="Networking-MPSSVC-Svc" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <FirewallGroups>
+                <FirewallGroup wcm:action="add" wcm:keyValue="Remote Desktop">
+                    <Active>true</Active>
+                    <Group>Remote Desktop</Group>
+                    <Profile>all</Profile>
+                </FirewallGroup>
+            </FirewallGroups>
+        </component>
+    </settings>
+```
+
+
+The `sysprep` command will also enable the **Out Of The Box Experience (OOBE)** sequence at the first boot. To avoid the OOBE prompts, we will also provide the required information
+in the `unattended.xml` file. The OOBE statement will look like the following :
+```xml
+    <settings pass="oobeSystem">
+        <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <ExtendOSPartition>
+                <Extend>true</Extend>
+            </ExtendOSPartition>
+        </component>
+        <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <InputLocale>en-US</InputLocale>
+            <SystemLocale>en-US</SystemLocale>
+            <UILanguage>en-US</UILanguage>
+            <UILanguageFallback>en-US</UILanguageFallback>
+            <UserLocale>en-US</UserLocale>
+        </component>
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <OOBE>
+                <HideEULAPage>true</HideEULAPage>
+                <ProtectYourPC>1</ProtectYourPC>
+            </OOBE>
+            <UserAccounts>
+                <AdministratorPassword>
+                    <Value>{AdministratorPassword}</Value>
+                    <PlainText>false</PlainText>
+                </AdministratorPassword>
+            </UserAccounts>
+            <TimeZone>Romance Standard Time</TimeZone>
+        </component>
+    </settings>
+```
+It is important to note that the `<AdministratorPassword>` field needs to be filled with an appropriate value for the Administrator's password. If the definition of the password
+does not respect windows password definition rules, the execution of `sysprep` will fail. This value may be defined when creating the `unattended.xml`
+file using the **Windows System Image Manager**.
+
+One caveat of the tool is that it removes installed drivers that are mandatory for the instance to run properly.
+To avoid this removal, we add a section to the `unattended.xml` file that contains a statement that tells sysprep not to remove those drivers.
+The required statement is the following :
+```xml
+    <settings pass="generalize">
+        <component name="Microsoft-Windows-PnpSysprep" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <PersistAllDeviceInstalls>true</PersistAllDeviceInstalls>
+        </component>
+    </settings>
+```
+When assembled together the complete `unattended.xml` will will look like this :
+
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<unattend xmlns="urn:schemas-microsoft-com:unattend">
+    <settings pass="specialize">
+        <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <RunSynchronous>
+                <RunSynchronousCommand wcm:action="add">
+                    <Path>cmd.exe /c slmgr.vbs //b /skms 169.254.42.42:1688</Path>
+                    <Order>1</Order>
+                    <Description>Add internal kms server</Description>
+                </RunSynchronousCommand>
+                <RunSynchronousCommand wcm:action="add">
+                    <Path>cmd.exe /c slmgr.vbs //b /ato</Path>
+                    <Order>2</Order>
+                    <Description>Activate Instance</Description>
+                </RunSynchronousCommand>
+            </RunSynchronous>
+        </component>
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <OEMInformation>
+                <Model>Instances</Model>
+                <Manufacturer>Scaleway</Manufacturer>
+            </OEMInformation>
+        </component>
+        <component name="Microsoft-Windows-TerminalServices-LocalSessionManager" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <fDenyTSConnections>false</fDenyTSConnections>
+        </component>
+        <component name="Microsoft-Windows-TerminalServices-RDP-WinStationExtensions" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <UserAuthentication>0</UserAuthentication>
+            <SecurityLayer>0</SecurityLayer>
+        </component>
+        <component name="Networking-MPSSVC-Svc" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <FirewallGroups>
+                <FirewallGroup wcm:action="add" wcm:keyValue="Remote Desktop">
+                    <Active>true</Active>
+                    <Group>Remote Desktop</Group>
+                    <Profile>all</Profile>
+                </FirewallGroup>
+            </FirewallGroups>
+        </component>
+    </settings>
+    <settings pass="oobeSystem">
+        <component name="Microsoft-Windows-Deployment" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <ExtendOSPartition>
+                <Extend>true</Extend>
+            </ExtendOSPartition>
+        </component>
+        <component name="Microsoft-Windows-International-Core" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <InputLocale>en-US</InputLocale>
+            <SystemLocale>en-US</SystemLocale>
+            <UILanguage>en-US</UILanguage>
+            <UILanguageFallback>en-US</UILanguageFallback>
+            <UserLocale>en-US</UserLocale>
+        </component>
+        <component name="Microsoft-Windows-Shell-Setup" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <OOBE>
+                <HideEULAPage>true</HideEULAPage>
+                <ProtectYourPC>1</ProtectYourPC>
+            </OOBE>
+            <UserAccounts>
+                <AdministratorPassword>
+                    <Value>{AdministratorPassword}</Value>
+                    <PlainText>false</PlainText>
+                </AdministratorPassword>
+            </UserAccounts>
+            <TimeZone>Romance Standard Time</TimeZone>
+        </component>
+    </settings>
+    <settings pass="generalize">
+        <component name="Microsoft-Windows-PnpSysprep" processorArchitecture="amd64" publicKeyToken="31bf3856ad364e35" language="neutral" versionScope="nonSxS" xmlns:wcm="http://schemas.microsoft.com/WMIConfig/2002/State" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+            <PersistAllDeviceInstalls>true</PersistAllDeviceInstalls>
+        </component>
+    </settings>
+    <cpi:offlineImage cpi:source="wim:c:/users/administrator/desktop/install.wim#Windows Server 2025 SERVERDATACENTER" xmlns:cpi="urn:schemas-microsoft-com:cpi" />
+</unattend>
+
+```
+## Creating the unattended.xml file
+
+The entire creation of the `unattended.xml` file is out of the scope of this documentation. It is explained in details in
+Microsoft document [Answer files (unattended.xml)](https://learn.microsoft.com/en-us/windows-hardware/manufacture/desktop/update-windows-settings-and-scripts-create-your-own-answer-file-sxs?view=windows-11)
+
+## Building the golden image
+
+To build the golden image, the following steps must be done :
+
+* Start a Windows Instance with the version of the operating system you want to generalize (the **reference**).
+* Copy the `unattended.xml` file to the **reference** instance
+* Delete existing Administrator's ssh keys
+* Execute `sysprep`
+* Create a snapshot of the **reference** instance volume
+* Test the golden image
+
+The following example will use Scaleway CLI to build the golden image. Similar steps may be achieved using the Scaleway console.
+
+### Start the reference instance
+
+First of all, create the new instance. The tag `with-ssh` is used to enable SSH connectivity.
+```shell
+scw instance server create name=win2k25 image=windows-server-2025 type=POP2-4C-16G-WIN admin-password-encryption-ssh-key-id={IAM Id of the RSA ssh key} tags.0="with-ssh" -o template='{{ .ID}}
+{UUID of your instance}
+scw instance server get-rdp-password {UUID of your instance} key=~/.ssh/{your RSA ssh private key} -w
+Username           Administrator
+Password           {administrator's password}
+SSHKeyID           {IAM Id of the RSA ssh key}
+SSHKeyDescription  {description of the ssh key}
+$ scw instance server list
+ID                       NAME     TYPE             STATE    ZONE      PUBLIC IP     PRIVATE IP  TAGS        IMAGE NAME           ROUTED IP ENABLED
+{UUID of your instance}  win2k25  POP2-4C-16G-WIN  running  fr-par-2  {ip address}  -           [with-ssh]  Windows Server 2025  true
+
+```
+### Copy the unattended.xml file
+
+Copy the `unattended.xml` file that you generated previously to the new windows instance in the C:\Scaleway directory
+```shell
+scp unattended.xml Administrator@{ip address}:/Scaleway
+minimal-unattend.xml                                                                                                                    100% 5390   812.2KB/s   00:00
+```
+### Delete existing Administrator's ssh keys
+
+Now start a Remote Desktop session using the Administrator's password fetched previously and delete the existing ssh keys using a Powershell command window :
+```shell
+del c:\ProgramData\ssh\administrators_authorized_keys
+```
+<Lightbox image={delssh} alt="" />
+
+### Execute sysprep
+We are now ready to run the `sysprep` command to prepare the instance to become a golden image
+
+```shell
+cd c:\Windows\system32\sysprep
+./sysprep.exe /generalize /shutdown /oobe /unattend:c:\Scaleway\unattend.xml
+```
+<Lightbox image={launch} alt="" />
+
+When launched, sysprep will display the following box :
+
+<Lightbox image={running} alt="" />
+
+At the end of its execution, the instance will shutdown by itself and pass in standby Model
+```shell
+$ scw instance server list
+ID                       NAME     TYPE             STATE             ZONE      PUBLIC IP     PRIVATE IP  TAGS        IMAGE NAME
+{UUID of your instance}  win2k25  POP2-4C-16G-WIN  stopped in place  fr-par-2  78.232.2.199  -           [with-ssh]  Windows Server 2025
+```
+
+### Create a snapshot of the instance's volume
+
+Use the Scaleway CLI to create a snapshot of the volume
+```shell
+$ scw block volume list
+ID                                NAME                              TYPE    SIZE   PROJECT ID                            CREATED AT      UPDATED AT      REFERENCES
+{UUID of your instance's volume}  Windows Server 2025_sbs_volume_0  sbs_5k  25 GB  {Project iD}  55 minutes ago  55 minutes ago  1
+|main=|caribou@marvin:win2k25$ scw block snapshot create name=win2k25-golden-image volume-id={UUID of your instance's volume}
+ID                   {snapshot Id}
+Name                 win2k25-golden-image
+ParentVolume.ID      {UUID of your instance's volume}
+ParentVolume.Name    Windows Server 2025_sbs_volume_0
+ParentVolume.Type    sbs_5k
+ParentVolume.Status  in_use
+Size                 25 GB
+ProjectID            {Project ID}
+CreatedAt            now
+UpdatedAt            now
+Status               creating
+Zone                 fr-par-2
+Class                sbs
+```
+### Test the golden image
+We finally can test our golden image by starting a new instance using the newly created snapshot
+
+
+```shell
+scw instance server create name=win2k25-clone image=none root-volume=sbs:{snapshot Id} type=POP2-4C-16G-WIN admin-password-encryption-ssh-key-id={IAM Id of the RSA ssh key} tags.0="with-ssh" -o template='{{ .ID }}'
+{Instance UUID}
+scw instance server get-rdp-password {Instance UUID} key=~/.ssh/{your RSA ssh private key} -w
+Username           Administrator
+Password           {administrator's password}
+SSHKeyID           {IAM Id of the RSA ssh key}
+SSHKeyDescription  {description of the ssh key}
+```

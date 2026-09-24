@@ -155,6 +155,10 @@ export const generativeApisMenu = {
           slug: 'adding-ai-to-vscode-using-continue',
         },
         {
+          label: 'Adding AI to VS Code using GitHub Copilot',
+          slug: 'adding-ai-to-vscode-using-github-copilot',
+        },
+        {
           label: 'Adding AI to IntelliJ IDEA using Continue',
           slug: 'adding-ai-to-intellij-using-continue',
         },

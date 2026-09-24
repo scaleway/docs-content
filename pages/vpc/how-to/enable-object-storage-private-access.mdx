@@ -1,9 +1,9 @@
 ---
 title: Configuring Object Storage private access
-description: Learn how to enable Object Storage private access on a Scaleway VPC, and how to restrict bucket access to your VPC with an aws:SourceVpc bucket policy condition.
+description: Learn how to enable Object Storage private access on a Scaleway VPC, how to reach the VPC endpoint from a Private Network, and how to restrict bucket access with an aws:SourceVpc bucket policy condition.
 tags: vpc object-storage private-access object-storage-private-access bucket-policy aws-sourcevpc private-network
 dates:
-  validation: 2026-08-21
+  validation: 2026-09-24
   posted: 2026-08-21
 ---
 import Requirements from '@macros/iam/requirements.mdx'
@@ -19,14 +19,6 @@ import ObjectStoragePrivateAccess from '@macros/vpc/object-storage-private-acces
 - A valid [API key](/iam/how-to/create-api-keys/)
 - A [VPC](/vpc/how-to/create-vpc/) with at least one [Private Network](/vpc/how-to/create-private-network/)
 - An [Object Storage bucket](/object-storage/how-to/create-a-bucket/) in the region of the VPC
-
-## Overview
-
-The two components are configured in two different sections of the Scaleway console, and you can set them up in any order:
-
-- **Object Storage private access** is enabled on a VPC, for the Private Networks you select. It applies no restriction at bucket level: buckets remain reachable both from the internet and from the VPC.
-
-- The **bucket policy** is the authorization layer. To reject public traffic, apply a bucket policy with the `aws:SourceVpc` condition matching the ID of your VPC.
 
 ## How to enable Object Storage private access on a VPC
 
@@ -56,9 +48,37 @@ Enabling Object Storage private access on a VPC triggers billing for the feature
 
 Refer to the [VPC API documentation](https://www.scaleway.com/en/developers/api/vpc/object-storage-private-access/) for more information.
 
+## How to reach a bucket over the VPC endpoint
+
+Resources in an authorized Private Network reach Object Storage privately only when they target the VPC endpoint. A client configured with the public endpoint keeps sending its requests over the public internet.
+
+1. Connect to a resource attached to an authorized Private Network of the VPC.
+2. Point your Object Storage client at the VPC endpoint of the region. For the AWS CLI, set the `endpoint_url` in your `~/.aws/config` file:
+
+    ```
+    [default]
+    region = fr-par
+    output = json
+    services = scw-fr-par
+
+    [services scw-fr-par]
+    s3 =
+      endpoint_url = https://s3-vpc.fr-par.scw.eu
+    ```
+
+3. List the contents of your bucket, replacing `<BUCKET_NAME>` with the name of your bucket:
+
+    ```bash
+    aws s3 ls s3://<BUCKET_NAME>
+    ```
+
+    The same command run from a machine outside the VPC fails, as the VPC endpoint is not reachable from the public internet.
+
 ## How to restrict bucket access to a VPC
 
-To limit the access to a bucket to your VPC only, apply a bucket policy with the `StringEquals` condition and the `aws:SourceVpc` condition key.
+Object Storage private access adds a private path, and applies no restriction at bucket level. Access to a bucket remains governed by [IAM permissions](/object-storage/api-cli/combining-iam-and-object-storage/) and by its [bucket policy](/object-storage/api-cli/bucket-policy/). This step is therefore optional: use it when you want a bucket to accept requests coming from your VPC only.
+
+To do so, apply a bucket policy with the `StringEquals` condition operator and the `aws:SourceVpc` condition key.
 
 <ImportantBucketPolicy />
 
@@ -88,7 +108,11 @@ To limit the access to a bucket to your VPC only, apply a bucket policy with the
     ```
 
 4. Replace the `<BUCKET_NAME>` and `<VPC_ID>` placeholders with the name of your bucket and the ID of your VPC.
-5. Save the bucket policy. Requests that do not come from Private Networks within the VPC are denied.
+5. Save the bucket policy.
+
+<Message type="important">
+A statement with an `aws:SourceVpc` condition does not make a bucket private by itself: any other statement of the policy that allows the request still grants access. Review the whole policy to make sure no other statement allows requests coming from outside the VPC.
+</Message>
 
 <Message type="note">
 See the [bucket policies overview](/object-storage/api-cli/bucket-policy/) for more information on the syntax and the elements of a bucket policy.
@@ -96,9 +120,9 @@ See the [bucket policies overview](/object-storage/api-cli/bucket-policy/) for m
 
 ## Key considerations
 
-### A bucket without a bucket policy remains publicly accessible
+### Buckets remain publicly reachable by default
 
-Enabling the endpoint on a VPC does not restrict access on its own. Without a bucket policy, the bucket remains reachable from the internet, as well as from the Private Networks of the VPC.
+Enabling the feature on a VPC restricts nothing. Every bucket keeps its public endpoint, and its existing permissions apply unchanged. Use a bucket policy to reject requests coming from outside the VPC.
 
 ### The Scaleway console accesses buckets over the internet
 
@@ -106,7 +130,7 @@ When a bucket policy restricts access to a VPC ID, the Scaleway console can no l
 
 ### Bucket policies cannot target a single Private Network
 
-You select which Private Networks of the VPC use the private path, but a bucket policy cannot target a specific Private Network: the `aws:SourceVpc` condition key recognizes the ID of the VPC only.
+You select which Private Networks of the VPC reach the VPC endpoint, but a bucket policy cannot target a specific Private Network: the `aws:SourceVpc` condition key recognizes the ID of the VPC only.
 
 ## Troubleshooting
 

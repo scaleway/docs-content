@@ -1,0 +1,97 @@
+---
+title: Configuring Object Storage private access
+description: Learn how to enable Object Storage private access on a Scaleway VPC, and how to reach your buckets over the VPC endpoint from a Private Network.
+tags: vpc object-storage private-access object-storage-private-access private-network endpoint
+dates:
+  validation: 2026-09-24
+  posted: 2026-08-21
+---
+import Requirements from '@macros/iam/requirements.mdx'
+import ObjectStoragePrivateAccess from '@macros/vpc/object-storage-private-access.mdx'
+
+<Message type="important">
+Object Storage private access is currently in private beta, and is available in the Paris (`fr-par`) region only.
+</Message>
+
+<ObjectStoragePrivateAccess />
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/iam/how-to/create-api-keys/)
+- A [VPC](/vpc/how-to/create-vpc/) with at least one [Private Network](/vpc/how-to/create-private-network/)
+- An [Object Storage bucket](/object-storage/how-to/create-a-bucket/) in the region of the VPC
+
+## How to enable Object Storage private access on a VPC
+
+<Message type="note">
+Enabling Object Storage private access on a VPC triggers billing for the feature.
+</Message>
+
+1. Enable Object Storage private access on the VPC, listing the Private Networks to authorize:
+
+    ```bash
+    curl -X POST \
+      -H "X-Auth-Token: $SCW_SECRET_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"private_network_ids":["example-7363-616c-6577-61792e636f6d"]}' \
+      "https://api.scaleway.com/vpc/v2/regions/{region}/object-storage-private-access/{vpc_id}/enable"
+    ```
+
+2. Add another Private Network, if needed:
+
+    ```bash
+    curl -X POST \
+      -H "X-Auth-Token: $SCW_SECRET_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"private_network_id":"example-717b-6045-74503301df334"}' \
+      "https://api.scaleway.com/vpc/v2/regions/{region}/object-storage-private-access/{vpc_id}/private-networks"
+    ```
+
+Refer to the [VPC API documentation](https://www.scaleway.com/en/developers/api/vpc/object-storage-private-access/) for more information.
+
+## How to reach a bucket over the VPC endpoint
+
+Resources in an authorized Private Network reach Object Storage privately only when they target the VPC endpoint. A client configured with the public endpoint keeps sending its requests over the public internet.
+
+1. Connect to an Instance attached to an authorized Private Network of the VPC.
+
+2. Configure your Object Storage client to point at the VPC endpoint of the region. For the AWS CLI, set the `endpoint_url` in your `~/.aws/config` file:
+
+    ```
+    [default]
+    region = fr-par
+    output = json
+    services = scw-fr-par
+
+    [services scw-fr-par]
+    s3 =
+      endpoint_url = https://s3-vpc.fr-par.scw.eu
+    ```
+
+3. Run the command below to list your buckets present in the specified region:
+
+    ```bash
+    aws s3 ls
+    ```
+
+    The same command run from a machine outside the VPC fails, as the VPC endpoint is not reachable from the public internet.
+
+## Key considerations
+
+### Buckets remain publicly reachable
+
+Enabling the feature on a VPC does not restrict public connectivity. Every bucket keeps its public endpoint, and its existing permissions remain unchanged.
+
+### The feature applies to all buckets of the region
+
+Enabling Object Storage private access makes every bucket of the region reachable over the private endpoint, from the Private Networks you select. You cannot enable it for a single bucket.
+
+### Access rights are managed at bucket level
+
+Object Storage private access controls connectivity only. The requests allowed on a bucket are managed via [IAM permissions](/object-storage/api-cli/combining-iam-and-object-storage/) and [bucket policies](/object-storage/api-cli/bucket-policy/).
+
+## Troubleshooting
+
+See [I am experiencing issues with Object Storage private access](/vpc/troubleshooting/object-storage-private-access-issues/) for solutions to the most common issues, such as traffic that still transits over the public internet, or resources in a VPC that cannot reach a bucket.

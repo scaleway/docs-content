@@ -56,6 +56,10 @@ export const dataOrchestratorMenu = {
           label: 'DSL reference',
           slug: 'dsl-reference',
         },
+        {
+          label: 'Workflow schema',
+          slug: 'workflow-schema',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

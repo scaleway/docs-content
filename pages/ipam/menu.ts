@@ -59,6 +59,10 @@ export const ipamMenu = {
     {
       items: [
         {
+          label: 'Understanding IPAM',
+          slug: 'understanding-ipam',
+        },
+        {
           label: 'Public connectivity: best practices',
           slug: 'public-connectivity-best-practices',
         },

@@ -1,3 +1,9 @@
+"""Unit tests for the whole suite, ordered by module: corpus, frontmatter, structure, versions, report.
+
+Every test builds its `Page` in memory via the `page()` helper instead of reading the real corpus,
+so the tests stay fast and do not change meaning when documentation changes. The versions check is
+given a fake endoflife.date fetcher for the same reason - no network, fixed dates.
+"""
 from datetime import date
 
 from bin.sanitize.checks.frontmatter import check_frontmatter

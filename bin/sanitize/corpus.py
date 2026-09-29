@@ -1,3 +1,10 @@
+"""Turns .mdx files on disk into `Page` objects the checks can reason about.
+
+Does three things the checks should not each reinvent: splits YAML frontmatter from the body while
+tracking the line offset (so findings can point at real file lines), derives the public URL from the
+file path, and classifies each page by product and page type - which is what lets rules apply only
+to how-tos, only to tutorials, and so on.
+"""
 from __future__ import annotations
 
 import hashlib

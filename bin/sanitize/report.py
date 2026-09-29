@@ -1,3 +1,9 @@
+"""Turns a flat list of findings into something a person can work through.
+
+Findings arrive unordered and one-per-problem; a reviewer wants them grouped by file with the worst
+files first. Severity weights (error 3, warn 2, info 1) are summed per file to get that order.
+Renders to the console and to `findings.md`, which are intentionally the same content.
+"""
 from __future__ import annotations
 
 import os

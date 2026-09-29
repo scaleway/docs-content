@@ -1,3 +1,9 @@
+"""Shared vocabulary for the suite: what a page is, what a finding is, what a check is.
+
+Deliberately dependency-free so checks, the corpus loader and the reporter can all import it
+without cycles. `Page` is what the corpus loader produces, `Finding` is what every check emits,
+and `Check` is the only contract a new analyzer has to satisfy.
+"""
 from __future__ import annotations
 
 from dataclasses import dataclass

@@ -1,3 +1,9 @@
+"""Checks the YAML frontmatter block: required keys, date sanity, and title conventions.
+
+These are the rules Vale cannot see, because Vale lints prose and the frontmatter is metadata.
+Several rules are conditional on page type (landing pages need no dates; only how-tos have a title
+convention), which is why this runs on the classified `Page` rather than on raw text.
+"""
 from __future__ import annotations
 
 import re

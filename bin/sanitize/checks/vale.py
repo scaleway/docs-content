@@ -1,3 +1,10 @@
+"""Adapter around the Vale binary: runs it once over the pages and maps its alerts to findings.
+
+Prose rules live in Vale rather than Python because it already handles code-block skipping,
+vocabularies and severity levels. This file only translates - the rules themselves are the YAML in
+`vale/styles/Scaleway/`. Missing binary is not an error: the check warns once and yields nothing,
+so the rest of the suite still runs.
+"""
 from __future__ import annotations
 
 import json

@@ -1,3 +1,10 @@
+"""Checks page shape rather than wording: heading hierarchy, link syntax, required sections.
+
+All rules skip fenced code blocks, so an example containing `# comment` or a relative path is not
+mistaken for a heading or a broken link. The link rules encode the Scaleway conventions that a
+generic markdown linter does not know: internal links carry a leading and trailing slash, anchors
+carry no trailing slash, and `/en/docs/` never appears in a relative link.
+"""
 from __future__ import annotations
 
 import re

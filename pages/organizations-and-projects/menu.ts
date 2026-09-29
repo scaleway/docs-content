@@ -63,6 +63,14 @@ export const organizationsAndProjectsMenu = {
           slug: 'add-resources-project',
         },
         {
+          label: 'Use the resource explorer',
+          slug: 'use-resource-explorer',
+        },
+        {
+          label: 'Use the search bar',
+          slug: 'use-the-search-bar',
+        },
+        {
           label: 'Delete a Project',
           slug: 'delete-a-project',
         },

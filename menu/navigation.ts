@@ -74,8 +74,8 @@ export default [
     items: [
       {
         icon: 'OrganizationDashboardCategoryIcon',
-        items: [accountMenu],
-        label: 'Account',
+        items: [accountMenu, organizationsAndProjectsMenu],
+        label: 'Account & Organization',
         category: 'console',
       },
       {
@@ -89,7 +89,6 @@ export default [
         items: [
           iamMenu,
           keyManagerMenu,
-          organizationsAndProjectsMenu,
           secretManagerMenu,
         ],
         label: 'Security & Identity',

@@ -5,7 +5,7 @@ from bin.sanitize.checks.structure import check_headings, check_links, check_req
 from bin.sanitize.checks.versions import check_versions, extract_versions
 from bin.sanitize.corpus import classify, file_to_url, split_frontmatter
 from bin.sanitize.model import Finding, Page
-from bin.sanitize.report import group_by_file, score
+from bin.sanitize.report import csv_cell, format_csv_rows, group_by_file, score
 
 NOW = date(2026, 9, 16)
 
@@ -202,3 +202,17 @@ def test_ranking():
     c = Finding("h", "/", "c", "warn", "m")
     assert score(b) > score(c) > score(a)
     assert [g["file"] for g in group_by_file([a, b, c, a])] == ["g", "f", "h"]  # 3, 2, 2 -> tie by name
+
+
+def test_csv_cell_neutralizes_formulas():
+    for hostile in ("=1+1", "+1", "-1", "@SUM(A1)", "\tx", "\rx"):
+        assert csv_cell(hostile) == "'" + hostile
+    assert csv_cell("plain text") == "plain text"
+    assert csv_cell("a=b") == "a=b"  # only a leading character matters
+    assert csv_cell(3) == 3  # non-strings pass through
+
+
+def test_csv_rows_sanitize_untrusted_content():
+    f = Finding("f.mdx", "/f/", "structure/heading-case", "info", "msg", line=1, evidence="=HYPERLINK(\"http://x\")")
+    row = format_csv_rows([f])[0]
+    assert row[-1] == "\'=HYPERLINK(\"http://x\")"

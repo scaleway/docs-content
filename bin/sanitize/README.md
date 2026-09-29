@@ -35,7 +35,7 @@ Output goes to `bin/sanitize/report/` (gitignored):
 | --------------- | ------- |
 | `findings.md`   | Human-readable. Summary table, then one section per file, one line per finding. Read this one. |
 | `findings.json` | Grouped by file (`files[] -> findings[]`), files sorted by score. For tooling. |
-| `findings.csv`  | Flat, one row per finding. For spreadsheets. |
+| `findings.csv`  | Flat, one row per finding. For spreadsheets. Cells starting with `=`, `+`, `-`, `@`, tab or CR are prefixed with `'` so page content cannot inject formulas (`csv_cell()` in `report.py`). |
 
 The console prints the same content as `findings.md`. `--fail-on error|warn|info` exits 1 if any finding reaches that severity; otherwise the exit code is always 0.
 
@@ -167,3 +167,4 @@ Run modes once complete: PR CI (`--changed --fail-on error`), weekly full run pu
 - `Vale.Terms` disabled: it turned vocab entries into casing rules and produced false errors (`rsync` vs `Rsync`).
 - Heading-case and gerund-title checks are heuristics, so they are `info` only.
 - `--changed` is restricted to `pages/**` and `tutorials/**` so a PR cannot point the tool at arbitrary paths.
+- Page content is treated as untrusted (the repo takes external PRs): frontmatter goes through `yaml.safe_load`, subprocess calls use argument lists with `./`-prefixed paths, and CSV cells are escaped against spreadsheet formula injection.

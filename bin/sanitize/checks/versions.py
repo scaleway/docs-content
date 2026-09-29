@@ -12,7 +12,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from typing import Callable, Dict, List, Optional, Tuple
 
 from ..model import Check, Finding, Page
@@ -20,7 +20,6 @@ from ..model import Check, Finding, Page
 API_URL = "https://endoflife.date/api/{product}.json"
 CACHE_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), ".cache", "endoflife")
 CACHE_TTL_DAYS = 7
-EOL_SOON_DAYS = 90
 # A line that already says the version is dead is documenting it, not recommending it -> info instead of warn
 ACKNOWLEDGED_RE = re.compile(r"end of life|\bEOL\b|deprecated|no longer supported|unsupported|not supported", re.I)
 
@@ -120,10 +119,6 @@ def check_versions(page: Page, fetcher: Fetcher = fetch_cycles, now: Optional[da
             when = "" if eol == date(1970, 1, 1) else " on %s" % eol.isoformat()
             out.append(Finding(page.file, page.url, "versions/eol", "info" if acknowledged else "warn",
                                "%s reached end of life%s%s" % (name, when, times), line=line, evidence=evidence))
-        elif eol - now <= timedelta(days=EOL_SOON_DAYS):
-            out.append(Finding(page.file, page.url, "versions/eol-soon", "info",
-                               "%s reaches end of life on %s%s" % (name, eol.isoformat(), times),
-                               line=line, evidence=evidence))
     return out
 
 

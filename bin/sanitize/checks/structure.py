@@ -42,12 +42,6 @@ def check_headings(page: Page) -> List[Finding]:
             add("structure/heading-h1", "error", "H1 in body; the title comes from frontmatter")
         elif level > prev_level + 1:
             add("structure/heading-skip", "warn", "H%d follows H%d; do not skip heading levels" % (level, prev_level))
-        # Sentence-case heuristic: most words after the first are Capitalized (acronyms/code excluded)
-        words = re.sub(r"`[^`]*`", "", title).split()[1:]
-        suspicious = [w for w in words if re.match(r"^[A-Z][a-z]+$", w)]
-        if len(words) >= 2 and len(suspicious) >= -(-len(words) * 6 // 10):
-            add("structure/heading-case", "info",
-                "Heading looks like Title Case; guideline is sentence case (product names excepted)")
         prev_level = level
     return out
 

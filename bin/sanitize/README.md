@@ -29,15 +29,7 @@ pnpm sanitize:test
 
 No venv activation needed: the pnpm scripts call `bin/sanitize/.venv/bin/python` directly. Everything the suite generates (venv, caches, reports) stays under `bin/sanitize/` and is gitignored there; nothing is added at the repo root.
 
-Output goes to `bin/sanitize/report/` (gitignored):
-
-| File            | Purpose |
-| --------------- | ------- |
-| `findings.md`   | Human-readable. Summary table, then one section per file, one line per finding. Read this one. |
-| `findings.json` | Grouped by file (`files[] -> findings[]`), files sorted by score. For tooling. |
-| `findings.csv`  | Flat, one row per finding. For spreadsheets. Cells starting with `=`, `+`, `-`, `@`, tab or CR are prefixed with `'` so page content cannot inject formulas (`csv_cell()` in `report.py`). |
-
-The console prints the same content as `findings.md`. `--fail-on error|warn|info` exits 1 if any finding reaches that severity; otherwise the exit code is always 0.
+Output is `bin/sanitize/report/findings.md` (gitignored): summary table, then one section per file, one line per finding. The console prints the same content. JSON and CSV outputs existed for a page-view analytics join that was dropped; re-add them in `write_report()` if something needs to consume findings programmatically. `--fail-on error|warn|info` exits 1 if any finding reaches that severity; otherwise the exit code is always 0.
 
 ## What is checked
 
@@ -46,8 +38,7 @@ The console prints the same content as `findings.md`. `--fail-on error|warn|info
 | Check id                         | Severity   | Rule |
 | -------------------------------- | ---------- | ---- |
 | `frontmatter/required`           | error/warn | `title`, `description`, `dates.validation` (error); `tags` (warn). Landing pages (`index.mdx`) only need title + description. |
-| `frontmatter/description-length` | info       | 120–160 chars (SEO guideline). |
-| `frontmatter/title`              | warn/info  | How-to titles start with "How to" (warn), ≤ 5 words after it (info); tutorial titles start with a gerund (info). |
+| `frontmatter/title`              | warn       | How-to titles must start with "How to". |
 | `frontmatter/date-format`        | error      | `dates.*` must be `yyyy-mm-dd`. |
 | `frontmatter/date-order`         | error      | `validation` ≥ `posted`. |
 | `frontmatter/date-future`        | error      | `validation` not in the future. |
@@ -61,7 +52,6 @@ Skips fenced code blocks.
 | ----------------------------- | -------- | ---- |
 | `structure/heading-h1`        | error    | No `#` in body; the H1 is the frontmatter title. |
 | `structure/heading-skip`      | warn     | No skipped levels (H2 → H4). |
-| `structure/heading-case`      | info     | Title Case heuristic (≥ 60 % of following words capitalized). |
 | `structure/requirements`      | warn     | how-to, quickstart and tutorial pages must contain `<Requirements />` or `## Before you start`. |
 | `links/text`                  | warn     | Link text is not "here", "this page", … |
 | `links/trailing-slash`        | warn     | Internal links end with `/`. |
@@ -77,7 +67,6 @@ Flags software versions past end-of-life per [endoflife.date](https://endoflife.
 | Check id            | Severity  | Rule |
 | ------------------- | --------- | ---- |
 | `versions/eol`      | warn/info | Version is past EOL. One finding per page per version, with mention count. Downgraded to `info` when every mention sits on a line that already says "end of life", "EOL", "deprecated" or "not supported" (pages that list retired runtimes on purpose). |
-| `versions/eol-soon` | info      | EOL within 90 days. |
 
 Unknown cycles (typos, versions not tracked) are silent on purpose. API responses are cached 7 days in `bin/sanitize/.cache/endoflife/` (gitignored); offline, a stale cache is used, otherwise the product is skipped with a warning.
 
@@ -98,6 +87,8 @@ Prose rules from the [writing guidelines](https://www.scaleway.com/en/docs/guide
 | `Scaleway.HeadingCase`     | suggestion | Sentence-case headings; product names listed as `exceptions`. |
 
 Vale level → suite severity: error → `error`, warning → `warn`, suggestion → `info`.
+
+`MinAlertLevel = warning` in `.vale.ini`, so the four suggestion-level rules (`Pronouns`, `FutureTense`, `Passive`, `HeadingCase`) are **not reported**. Their `.yml` files are still on disk — lower `MinAlertLevel` to `suggestion` to surface them again.
 
 **Spelling is deliberately not checked here.** `Vale.Spelling` produced ~10k alerts on the corpus, nearly all product and tool names (Dedibox, Nginx, systemd, …) that cannot be whitelisted without a huge dictionary, and typo detection is already covered by [typos](https://github.com/crate-ci/typos). `Vale.Spelling` and `Vale.Terms` are set to `NO` in `.vale.ini`; `accept.txt` only feeds the remaining style rules. Heading false positives go into `HeadingCase.yml` exceptions. Run Vale alone on a folder to iterate quickly: `vale --config bin/sanitize/vale/.vale.ini pages/block-storage/`.
 
@@ -167,4 +158,5 @@ Run modes once complete: PR CI (`--changed --fail-on error`), weekly full run pu
 - `Vale.Terms` disabled: it turned vocab entries into casing rules and produced false errors (`rsync` vs `Rsync`).
 - Heading-case and gerund-title checks are heuristics, so they are `info` only.
 - `--changed` is restricted to `pages/**` and `tutorials/**` so a PR cannot point the tool at arbitrary paths.
-- Page content is treated as untrusted (the repo takes external PRs): frontmatter goes through `yaml.safe_load`, subprocess calls use argument lists with `./`-prefixed paths, and CSV cells are escaped against spreadsheet formula injection.
+- Page content is treated as untrusted (the repo takes external PRs): frontmatter goes through `yaml.safe_load` and subprocess calls use argument lists with `./`-prefixed paths. (A CSV formula-injection escape lived here too, and went away with the CSV output.)
+- Rules that only ever produced `info` were deleted rather than muted: `description-length` (1,785 findings), the two `title` heuristics (213), `heading-case` (213) and `eol-soon` (8). A rule nobody acts on is noise that hides the ~40 errors. Git history has them if the policy changes.

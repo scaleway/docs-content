@@ -10,8 +10,6 @@ from ..model import Check, Finding, Page
 DEFAULT_VALIDATION_FREQUENCY_MONTHS = 6
 # Review-date policy is not enforced yet; flip to True (or pass stale=True) to flag overdue pages
 ENABLE_STALE_CHECK = False
-DESCRIPTION_MIN = 120
-DESCRIPTION_MAX = 160
 DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 # Page types where dates/tags are not expected (landing pages)
 METADATA_EXEMPT = {"index"}
@@ -33,17 +31,11 @@ def _parse_date(value: Any) -> Optional[date]:
 def _check_title(page: Page, title: str) -> List[Finding]:
     out: List[Finding] = []
 
-    def f(message: str, severity: str = "warn") -> Finding:
-        return Finding(page.file, page.url, "frontmatter/title", severity, message, line=1, evidence=title)
+    def f(message: str) -> Finding:
+        return Finding(page.file, page.url, "frontmatter/title", "warn", message, line=1, evidence=title)
 
-    if page.page_type == "how-to":
-        if not title.startswith("How to "):
-            out.append(f('How-to titles must start with "How to"'))
-        words = len(title.replace("How to ", "", 1).split())
-        if words > 7:
-            out.append(f('How-to title has %d words after "How to" (guideline: 5 max)' % words, "info"))
-    if page.page_type == "tutorial" and not re.match(r"^[A-Z][a-z]+ing\b", title):
-        out.append(f('Tutorial titles should start with a gerund (e.g. "Deploying ...")', "info"))
+    if page.page_type == "how-to" and not title.startswith("How to "):
+        out.append(f('How-to titles must start with "How to"'))
     return out
 
 
@@ -61,15 +53,8 @@ def check_frontmatter(page: Page, now: Optional[date] = None, stale: bool = ENAB
     else:
         out.extend(_check_title(page, str(title)))
 
-    description = fm.get("description")
-    if not description:
+    if not fm.get("description"):
         add("frontmatter/required", "error", "Missing description")
-    else:
-        n = len(str(description))
-        if n < DESCRIPTION_MIN or n > DESCRIPTION_MAX:
-            add("frontmatter/description-length", "info",
-                "Description is %d chars (SEO guideline: %d-%d)" % (n, DESCRIPTION_MIN, DESCRIPTION_MAX),
-                str(description))
 
     if page.page_type in METADATA_EXEMPT:
         return out

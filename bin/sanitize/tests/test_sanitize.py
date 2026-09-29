@@ -5,7 +5,7 @@ from bin.sanitize.checks.structure import check_headings, check_links, check_req
 from bin.sanitize.checks.versions import check_versions, extract_versions
 from bin.sanitize.corpus import classify, file_to_url, split_frontmatter
 from bin.sanitize.model import Finding, Page
-from bin.sanitize.report import csv_cell, format_csv_rows, group_by_file, score
+from bin.sanitize.report import group_by_file, score
 
 NOW = date(2026, 9, 16)
 
@@ -90,10 +90,14 @@ def test_date_order_format_future():
     assert "frontmatter/date-future" in checks(check_frontmatter(page(dates={"validation": "2030-01-01"}), NOW))
 
 
-def test_description_length_and_howto_title():
-    c = checks(check_frontmatter(page(title="Create a cluster", description="short"), NOW))
-    assert "frontmatter/description-length" in c
-    assert "frontmatter/title" in c
+def test_howto_title_must_start_with_how_to():
+    assert "frontmatter/title" in checks(check_frontmatter(page(title="Create a cluster"), NOW))
+    assert check_frontmatter(page(title="How to create a cluster"), NOW) == []
+
+
+def test_long_descriptions_are_not_flagged():
+    # description-length was dropped: 1,785 info findings nobody acted on
+    assert check_frontmatter(page(description="short"), NOW) == []
 
 
 def test_landing_pages_need_no_dates():
@@ -104,10 +108,10 @@ def test_landing_pages_need_no_dates():
 
 def test_headings():
     p = page(body="# Title\n\n## Good heading\n\n#### Skipped\n\n## Deploy The Ingress Controller Now\n")
+    # Title Case is no longer flagged; only structural problems are
     assert [(f.check, f.line) for f in check_headings(p)] == [
         ("structure/heading-h1", 8),
         ("structure/heading-skip", 12),
-        ("structure/heading-case", 14),
     ]
 
 
@@ -176,10 +180,10 @@ def test_versions_eol_warn_and_dedupe():
     assert "2 mentions" in f[0].message
 
 
-def test_versions_eol_soon_and_supported():
+def test_versions_still_supported_are_silent():
+    # eol-soon was dropped; only versions already past EOL are reported
     p = page(body="Python 3.9 or Python 3.12")
-    f = check_versions(p, fetcher=fake_fetcher, now=NOW)
-    assert [(x.check, x.severity) for x in f] == [("versions/eol-soon", "info")]
+    assert check_versions(p, fetcher=fake_fetcher, now=NOW) == []
 
 
 def test_versions_unknown_cycle_or_product_is_silent():
@@ -202,17 +206,3 @@ def test_ranking():
     c = Finding("h", "/", "c", "warn", "m")
     assert score(b) > score(c) > score(a)
     assert [g["file"] for g in group_by_file([a, b, c, a])] == ["g", "f", "h"]  # 3, 2, 2 -> tie by name
-
-
-def test_csv_cell_neutralizes_formulas():
-    for hostile in ("=1+1", "+1", "-1", "@SUM(A1)", "\tx", "\rx"):
-        assert csv_cell(hostile) == "'" + hostile
-    assert csv_cell("plain text") == "plain text"
-    assert csv_cell("a=b") == "a=b"  # only a leading character matters
-    assert csv_cell(3) == 3  # non-strings pass through
-
-
-def test_csv_rows_sanitize_untrusted_content():
-    f = Finding("f.mdx", "/f/", "structure/heading-case", "info", "msg", line=1, evidence="=HYPERLINK(\"http://x\")")
-    row = format_csv_rows([f])[0]
-    assert row[-1] == "\'=HYPERLINK(\"http://x\")"

@@ -1,24 +1,12 @@
 from __future__ import annotations
 
-import csv
-import json
 import os
 from collections import Counter, OrderedDict
-from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from .model import SEVERITY_WEIGHT, Finding
 
 SEVERITY_ICON = {"error": "✖", "warn": "▲", "info": "·"}
-# Leading characters that make a spreadsheet treat a cell as a formula
-CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
-
-
-def csv_cell(value):
-    """Neutralizes spreadsheet formula injection: page content reaches this report untrusted."""
-    if isinstance(value, str) and value.startswith(CSV_FORMULA_PREFIXES):
-        return "'" + value
-    return value
 
 
 def score(f: Finding) -> int:
@@ -93,25 +81,7 @@ def format_markdown(findings: List[Finding], page_count: int) -> str:
     return "\n".join(lines) + "\n"
 
 
-def format_csv_rows(findings: List[Finding]) -> List[list]:
-    """Data rows for findings.csv, sanitized against spreadsheet formula injection."""
-    return [[csv_cell(v) for v in
-             (score(x), x.severity, x.check, x.file, x.url, x.line, x.message, x.evidence)]
-            for x in sorted(findings, key=lambda x: (-score(x), x.file, x.line or 0))]
-
-
 def write_report(findings: List[Finding], page_count: int, out_dir: str) -> None:
     os.makedirs(out_dir, exist_ok=True)
-    with open(os.path.join(out_dir, "findings.json"), "w", encoding="utf-8") as f:
-        json.dump({
-            "generated_at": datetime.now(timezone.utc).isoformat(),
-            "page_count": page_count,
-            "summary": summarize(findings),
-            "files": group_by_file(findings),
-        }, f, indent=2, ensure_ascii=False)
-    with open(os.path.join(out_dir, "findings.csv"), "w", encoding="utf-8", newline="") as f:
-        w = csv.writer(f)
-        w.writerow(["score", "severity", "check", "file", "url", "line", "message", "evidence"])
-        w.writerows(format_csv_rows(findings))
     with open(os.path.join(out_dir, "findings.md"), "w", encoding="utf-8") as f:
         f.write(format_markdown(findings, page_count))

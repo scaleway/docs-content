@@ -72,7 +72,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     write_report(findings, len(pages), OUT_DIR)
     print(format_console(findings, len(pages)))
-    print("\nReport written to %s/findings.{md,json,csv}" % os.path.relpath(OUT_DIR))
+    print("\nReport written to %s/findings.md" % os.path.relpath(OUT_DIR))
 
     if args.fail_on and any(SEVERITY_WEIGHT[f.severity] >= SEVERITY_WEIGHT[args.fail_on] for f in findings):
         return 1

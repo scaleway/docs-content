@@ -19,7 +19,7 @@ export const ipamMenu = {
     {
       items: [
         {
-          label: 'List your private IP addresses',
+          label: 'List your IP addresses',
           slug: 'list-ips',
         },
         {
@@ -29,6 +29,14 @@ export const ipamMenu = {
         {
           label: 'Reserve an IP address',
           slug: 'reserve-ip',
+        },
+        {
+          label: 'Attach a resource using a reserved IP',
+          slug: 'attach-resource',
+        },
+        {
+          label: 'Release a reserved IP address',
+          slug: 'release-ip',
         },
       ],
       label: 'How to',
@@ -50,6 +58,10 @@ export const ipamMenu = {
     },
     {
       items: [
+        {
+          label: 'Understanding IPAM',
+          slug: 'understanding-ipam',
+        },
         {
           label: 'Public connectivity: best practices',
           slug: 'public-connectivity-best-practices',

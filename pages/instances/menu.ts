@@ -175,6 +175,10 @@ export const instancesMenu = {
           slug: 'choosing-shared-vs-dedicated-cpus',
         },
         {
+          label: 'Creating a Windows Server golden image',
+          slug: 'creating-a-windows-golden-image',
+        },
+        {
           label: 'Instances datasheet',
           slug: 'instances-datasheet',
         },

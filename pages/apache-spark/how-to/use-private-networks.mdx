@@ -24,9 +24,7 @@ For full information about Scaleway Private Networks and VPC, see our [dedicated
 - [Created a Private Network](/vpc/how-to/create-private-network/)
 - [Created an Ubuntu Instance](/instances/how-to/create-an-instance/) attached to a [Private Network](/instances/how-to/use-private-networks/)
 
-## Use a cluster through a Private Network
-
-### Set up your Instance with Python 3.13 and Spark tools
+## Set up your Instance with Python 3.13 and Spark tools
 
 1. [Connect to your Instance via SSH](/instances/how-to/connect-to-instance/).
 
@@ -92,20 +90,31 @@ For full information about Scaleway Private Networks and VPC, see our [dedicated
     sudo tar -xzf spark-4.0.0-bin-hadoop3.tgz -C /opt/spark --strip-components=1
     ```
 
-8. Run the following commands to add Apache Spark™ to your Bash configuration:
+8. (Optional) Run the following command to install support for Object Storage/S3:
+
+    ```bash
+    cd /opt/spark/jars && curl -fSL --remote-name-all                                           \
+        https://repo1.maven.org/maven2/org/apache/hadoop/hadoop-aws/3.4.1/hadoop-aws-3.4.1.jar  \
+        https://repo1.maven.org/maven2/software/amazon/awssdk/bundle/2.24.6/bundle-2.24.6.jar   \
+        https://repo1.maven.org/maven2/org/wildfly/openssl/wildfly-openssl/1.1.3.Final/wildfly-openssl-1.1.3.Final.jar
+    ```
+
+9. Run the following commands to add Apache Spark™ to your Bash configuration:
 
     ```bash
     echo 'export SPARK_HOME=/opt/spark' >> ~/.bashrc
     echo 'export PATH="$SPARK_HOME/bin:$PATH"' >> ~/.bashrc
     ```
 
-9. Run the following command to reload your shell:
+10. Run the following command to reload your shell:
 
     ```bash
     exec $SHELL
     ```
 
-### Run a Python application using spark-submit
+## Run Spark examples on your cluster with spark-submit
+
+### Run a Python application
 
 1. [Connect to your Instance via SSH](/instances/how-to/connect-to-instance/).
 
@@ -132,11 +141,11 @@ For full information about Scaleway Private Networks and VPC, see our [dedicated
 
 4. [Access the Apache Spark™ UI](/apache-spark/how-to/access-spark-ui/) of your cluster. The list of completed applications displays. From here, you can inspect the jobs previously started using `spark-submit`.
 
-### Run a Jvm application using spark-submit (Java or Scala)
+### Run a Jvm application (Java or Scala)
 
 1. [Connect to your Instance via SSH](/instances/how-to/connect-to-instance/).
 
-2. Run the SparkPi application in client mode with the following command:
+2. Run the SparkPi application in **client mode** with the following command:
 
     ```bash
     export SPARK_LOCAL_IP=<INSTANCE_PN_IP>
@@ -147,7 +156,7 @@ For full information about Scaleway Private Networks and VPC, see our [dedicated
     $SPARK_HOME/examples/jars/spark-examples_2.13-4.0.0.jar 1000
     ```
 
-3. Run the SparkPi application in cluster mode with the following command:
+3. Run the SparkPi application in **cluster mode** with the following command:
 
     ```bash
     UNSET SPARK_LOCAL_IP
@@ -163,3 +172,81 @@ For full information about Scaleway Private Networks and VPC, see our [dedicated
     - `spark.driver.port` and `spark.blockManager.port` need to be in the 37000-38999 port range since only these ports are allowed in Spark clusters.
     - The `spark-submit` command will exit as soon as the driver has been started on the cluster. Check out the Spark UI to get the Pi result.
     </Message>
+
+## Use Object storage (S3)
+
+### Create a spark-defaults.conf file
+
+To avoid passing all options to `spark-submit`, let's create a `/opt/spark/conf/spark-defaults.conf` file with the following content:
+
+    ```xml
+    spark.master:                                 spark://<SPARK_MASTER_ENDPOINT>:7077
+    spark.driver.port:                            37000
+    spark.blockManager.port:                      38000
+    spark.hadoop.fs.s3a.aws.credentials.provider: org.apache.hadoop.fs.s3a.AnonymousAWSCredentialsProvider
+    spark.hadoop.fs.s3a.endpoint:                 https://s3.fr-par.scw.cloud
+    spark.hadoop.fs.s3a.endpoint.region:          fr-par
+    ```
+
+Remember to replace the following:
+- `<SPARK_MASTER_ENDPOINT>`: You can find the value of `<SPARK_MASTER_ENDPOINT>` in the **Overview** tab of your cluster, under **Private endpoint** in the **Network** section.
+- S3 endpoint and region: Note that these values must match the region of your Spark cluster if running spark-submit in cluster mode.
+
+### Run a Jvm application stored in S3
+
+1. Upload your jar file to [Object Storage](/object-storage/) and make it public. For the sake of this example, let's assume that we uploaded a file called `spark-examples_2.13-4.0.0.jar`.
+
+2. [Connect to your Instance via SSH](/instances/how-to/connect-to-instance/).
+
+3. Run your application in **client mode** with the following command:
+
+    ```bash
+    export SPARK_LOCAL_IP=<INSTANCE_PN_IP>
+    spark-submit \
+    --deploy-mode client \
+    --class org.apache.spark.examples.SparkPi \
+    s3a://<bucket_name>/spark-examples_2.13-4.0.0.jar 1000
+    ```
+
+    Remember to replace the placeholder values and the name of the jar file with your actual values.
+
+4. Run your application application in **cluster mode** with the following command:
+
+    ```bash
+    UNSET SPARK_LOCAL_IP
+    spark-submit  \
+    --deploy-mode cluster \
+    --class org.apache.spark.examples.SparkPi \
+    s3a://<bucket_name>/spark-examples_2.13-4.0.0.jar 1000
+    ```
+
+### Run a Jvm application stored in a private S3
+
+Running a Jvm application stored in a private S3 is only possible in **client mode**.
+
+1. Upload your jar file to [Object Storage](/object-storage/), make it private, and generate an IAM API key with at least the `ObjectStorageReadOnly` permission.
+
+2. Update your `/opt/spark/conf/spark-defaults.conf` file with the following content:
+
+    ```xml
+    spark.master:                                 spark://<SPARK_MASTER_ENDPOINT>:7077
+    spark.hadoop.fs.s3a.aws.credentials.provider: org.apache.hadoop.fs.s3a.SimpleAWSCredentialsProvider
+    spark.hadoop.fs.s3a.endpoint:                 https://s3.fr-par.scw.cloud
+    spark.hadoop.fs.s3a.endpoint.region:          fr-par
+    spark.hadoop.fs.s3a.access.key:               <SCW_ACCESS_KEY>
+    spark.hadoop.fs.s3a.secret.key:               <SCW_SECRET_KEY>
+    ```
+
+    Remember to replace the placeholder values and the region and endpoint information with your actual values.
+
+3. Run your application with the following command:
+
+    ```bash
+    export SPARK_LOCAL_IP=<INSTANCE_PN_IP>
+    spark-submit \
+    --deploy-mode client \
+    --class org.apache.spark.examples.SparkPi \
+    s3a://<bucket_name>/spark-examples_2.13-4.0.0.jar 1000
+    ```
+
+    Remember to replace the placeholder values and the name of the jar file with your actual values.

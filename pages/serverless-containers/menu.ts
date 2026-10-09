@@ -39,10 +39,6 @@ export const serverlessContainersMenu = {
           slug: 'add-a-custom-domain-to-a-container',
         },
         {
-          label: 'Modify container privacy',
-          slug: 'modify-container-privacy',
-        },
-        {
           label: 'Manage authentication for private containers',
           slug: 'create-auth-token-from-console',
         },

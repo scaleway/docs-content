@@ -3,7 +3,7 @@ title: Understanding Key Manager cryptography
 description: This page describes the cryptographic mechanisms used by Scaleway Key Manager, in accordance with ANSSI-PA-079 recommendations.
 tags: key-manager security
 dates:
-  validation: 2025-11-24
+  validation: 2026-10-08
   posted: 2025-05-23
 ---
 
@@ -37,20 +37,43 @@ Key Manager generates DEKs on-demand. They are then encrypted by a [key encrypti
 
 DEKs are **not stored in or managed by Key Manager**. Users are responsible for safely storing and managing DEKs. DEKs should have the same lifecycle as the [payload](#payload) they encrypt.
 
+### Key encapsulation
+
+Key encapsulation is a cryptographic operation used to securely wrap and unwrap keys, based on the module-lattice key encapsulation mechanism (KEM). KEM algorithms generate a shared secret and encrypt (wrap) a key with it, so that only the intended party can unwrap it. Scaleway Key Manager implements the following NIST-standardized post-quantum key encapsulation algorithms, as defined in [NIST FIPS 203](https://csrc.nist.gov/pubs/fips/203/final):
+
+- ML-KEM-768: Module-Lattice Key Encapsulation Mechanism (ML-KEM) with security category 3 (recommended)
+- ML-KEM-1024: ML-KEM with security category 5
+
+These algorithms allow you to wrap and unwrap [data encryption keys (DEKs)](/key-manager/concepts/#data-encryption-key-dek) using the corresponding [API endpoints](https://www.scaleway.com/en/developers/api/key-manager/keys#wrap-a-key).
+
 ### Signature
 
 Signature is a cryptographic technique used to ensure the authenticity and integrity of data. In this process, a digest (hash) of the message is created and then signed using a private key. This signature can later be verified by anyone with access to the corresponding public key.
-Signatures are widely used in scenarios like document signing, secure communication, and identity verification. They offer assurance that the data originated from a trusted source and has not been tampered with.
+
+Signatures are widely used in scenarios such as document signing, secure communication, and identity verification. They offer assurance that the data originated from a trusted source and has not been tampered with.
+
 As of now, Key Manager supports the following asymmetric signing algorithms:
 
-- EC-P256-SHA256: ECDSA signing with the P-256 curve and SHA-256. (recommended)
-- EC-P384-SHA256: ECDSA signing with the P-384 curve and SHA-384.
-- RSA-PSS-2048-SHA256: RSA-PSS signing with 2048-bit key and SHA-256.
-- RSA-PSS-3072-SHA256: RSA-PSS signing with 3072-bit key and SHA-256.
-- RSA-PSS-4096-SHA256: RSA-PSS signing with 4096-bit key and SHA-256.
-- RSA-PKCS1-2048-SHA256: RSA PKCS#1 v1.5 signing with 2048-bit key and SHA-256.
-- RSA-PKCS1-3072-SHA256: RSA PKCS#1 v1.5 signing with 3072-bit key and SHA-256.
-- RSA-PKCS1-4096-SHA256: RSA PKCS#1 v1.5 signing with 4096-bit key and SHA-256.
+- EC-P256-SHA256: ECDSA signing with the P-256 curve and SHA-256 (recommended)
+- EC-P384-SHA256: ECDSA signing with the P-384 curve and SHA-384
+- RSA-PSS-2048-SHA256: RSA-PSS signing with 2048-bit key and SHA-256
+- RSA-PSS-3072-SHA256: RSA-PSS signing with 3072-bit key and SHA-256
+- RSA-PSS-4096-SHA256: RSA-PSS signing with 4096-bit key and SHA-256
+- RSA-PKCS1-2048-SHA256: RSA PKCS#1 v1.5 signing with 2048-bit key and SHA-256
+- RSA-PKCS1-3072-SHA256: RSA PKCS#1 v1.5 signing with 3072-bit key and SHA-256
+- RSA-PKCS1-4096-SHA256: RSA PKCS#1 v1.5 signing with 4096-bit key and SHA-256
+- ML-DSA-44: Module-Lattice Digital Signature Algorithm (ML-DSA) signing with security category 2, as defined in [NIST FIPS 204](https://csrc.nist.gov/pubs/fips/204/final)
+- ML-DSA-65: ML-DSA signing with security category 3
+- ML-DSA-87: ML-DSA signing with security category 5
+
+  For ML-DSA keys, the following signing modes are supported:
+
+  - **Raw message mode**: send the full plaintext message (1 to 4096 bytes) in the `message` field. Key Manager computes the `mu` message representative internally.
+  - **External mu mode**: the hashing is performed externally. You apply your own hashing mechanism to the message beforehand and send the resulting 64-byte `mu` value (the SHAKE256-based digest, as defined in FIPS 204) in the `external_mu` field. This is the recommended mode for messages larger than 4096 bytes.
+
+<Message type="note">
+  When verifying an ML-DSA signature, send the full original message to the `Verify` endpoint — not its `mu`. A `mu` payload always fails verification. This is intentional: `external_mu` only protects the confidentiality of the message during signing, since Key Manager never sees the message. Verification always happens on the full message, performed by the party holding it — a `mu` that is not derived from a known message cannot be meaningfully verified, so verifying an external `mu` alone would prove nothing.
+</Message>
 
 ### Signature verification
 

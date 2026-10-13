@@ -38,6 +38,10 @@ export const ipamMenu = {
           label: 'Release a reserved IP address',
           slug: 'release-ip',
         },
+        {
+          label: 'Manage reverse DNS',
+          slug: 'set-ip-reverse',
+        },
       ],
       label: 'How to',
       slug: 'how-to',
@@ -47,10 +51,6 @@ export const ipamMenu = {
         {
           label: 'IPAM API Reference',
           slug: 'https://www.scaleway.com/en/developers/api/ipam/',
-        },
-        {
-          label: 'Set a reverse IPv6 DNS record',
-          slug: 'set-ip-reverse',
         },
       ],
       label: 'API/CLI',

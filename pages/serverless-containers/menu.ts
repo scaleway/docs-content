@@ -131,7 +131,7 @@ export const serverlessContainersMenu = {
           slug: 'containers-use-cases',
         },
         {
-          label:'Considerations to configure event retention for Queues trigger inputs',
+          label: 'Considerations to configure event retention for Queues trigger inputs',
           slug: 'configure-trigger-inputs',
         },
         {

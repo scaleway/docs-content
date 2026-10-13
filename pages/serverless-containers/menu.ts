@@ -131,8 +131,7 @@ export const serverlessContainersMenu = {
           slug: 'containers-use-cases',
         },
         {
-          label:
-            'Considerations to configure event retention for Queues trigger inputs',
+          label: 'Considerations to configure event retention for Queues trigger inputs',
           slug: 'configure-trigger-inputs',
         },
         {
@@ -142,6 +141,10 @@ export const serverlessContainersMenu = {
         {
           label: 'Containers autoscaling',
           slug: 'containers-autoscaling',
+        },
+        {
+          label: 'Containers request headers reference',
+          slug: 'request-headers',
         },
         {
           label: 'Containers billing',
@@ -170,10 +173,6 @@ export const serverlessContainersMenu = {
         {
           label: 'v1 migration guide',
           slug: 'v1-migration-guide',
-        },
-        {
-          label: 'Request headers reference',
-          slug: 'request-headers',
         },
         {
           label: 'Deploy AI projects on Containers',

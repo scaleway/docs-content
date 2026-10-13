@@ -143,6 +143,10 @@ export const serverlessFunctionsMenu = {
           slug: 'functions-sandbox',
         },
         {
+          label: 'Functions request headers reference',
+          slug: 'request-headers',
+        },
+        {
           label: 'Code examples',
           slug: 'code-examples',
         },

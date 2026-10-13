@@ -31,6 +31,10 @@ export const generativeApisMenu = {
           slug: 'query-vision-models',
         },
         {
+          label: 'Query OCR models',
+          slug: 'query-ocr-models',
+        },
+        {
           label: 'Query embedding models',
           slug: 'query-embedding-models',
         },

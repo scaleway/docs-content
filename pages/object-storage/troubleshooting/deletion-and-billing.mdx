@@ -1,0 +1,103 @@
+---
+title: I cannot delete my data or I am billed for objects I cannot see
+description: Solve bucket and object deletion issues, and understand unexpected Scaleway Object Storage billing caused by versioning, delete markers, and incomplete multipart uploads.
+tags: help troubleshooting object storage delete deletion bucket object lock versioning delete marker multipart billing billed cost fail unable
+dates:
+  validation: 2026-10-13
+  posted: 2026-10-13
+---
+import Requirements from '@macros/iam/requirements.mdx'
+import TroubleshootingTicket from '@macros/general/troubleshooting-ticket.mdx'
+
+Deletion and billing issues with Scaleway Object Storage usually come from the same sources: bucket policies, Object Lock, bucket versioning, or incomplete multipart uploads. Find the symptom that matches your situation below.
+
+<Requirements />
+
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+
+## I cannot delete my bucket
+
+You cannot delete your Scaleway Object Storage bucket.
+
+### Cause
+
+A [bucket policy](/object-storage/concepts/#bucket-policy) prevents you from deleting the bucket.
+
+### Solution
+
+1. Make sure that no bucket policy prevents you from deleting the bucket.
+2. If there is a bucket policy, make sure that it [explicitly allows you](/object-storage/api-cli/bucket-policy/) to perform the desired action.
+
+<Message type="note">
+- The effective deletion of the bucket starts 24 hours after the deletion request.
+- The bucket name then becomes available for other customers to use.
+- Scaleway recommends that you delete all objects and versions in the bucket before requesting the deletion.
+- Files larger than 1 GB can take longer to delete.
+</Message>
+
+## I cannot delete my objects
+
+You cannot delete objects, or deleted objects keep existing in the bucket.
+
+### Cause
+
+- The object you are trying to delete is protected by [Object Lock](/object-storage/how-to/use-object-lock/).
+- The bucket is [versioned](/object-storage/how-to/use-bucket-versioning/), and deleting an object adds a **delete marker** rather than deleting the object.
+
+### Solution
+
+#### Object Lock
+
+Check if the object is locked using the [HeadObject](/object-storage/api-cli/object-operations/#headobject) command. If it is locked with the **Governance** retention mode, you can bypass it with the [DeleteObject](/object-storage/api-cli/object-operations/#deleteobject) command using the `x-amz-bypass-governance-retention` header. You must also specify the `VersionId` of the object, as buckets with Object Lock enabled are automatically versioned.
+
+#### Bucket versioning
+
+A [DeleteObject](/object-storage/api-cli/object-operations/#deleteobject) operation on a versioned bucket with no `VersionId` specified creates a delete marker, and the targeted object keeps existing. To permanently delete it, list all its versions with [ListObjectVersions](/object-storage/api-cli/bucket-operations/#listobjectversions) (you can specify the name of your object as a prefix), then use the [DeleteObject](/object-storage/api-cli/object-operations/#deleteobject) operation on each version.
+
+## I am billed for objects that I cannot see
+
+The amount billed does not correspond to the objects present in your Scaleway Object Storage bucket.
+
+### Cause
+
+- Your [bucket is versioned](/object-storage/how-to/use-bucket-versioning/), and multiple versions of your objects are stored in it, incurring extra cost.
+- Some [multipart uploads](/object-storage/api-cli/multipart-uploads/) are ongoing or incomplete. The storage used during the upload is billed, but the object is not visible until the upload is complete.
+
+### Solution
+
+#### Bucket versioning
+
+1. Check the versioning status of your bucket via the [Scaleway console](https://console.scaleway.com/object-storage/buckets), or using the [GetBucketVersioning](/object-storage/api-cli/bucket-operations/#getbucketversioning) command:
+    ```bash
+    aws s3api get-bucket-versioning --bucket <BUCKET_NAME>
+    ```
+    - If versioning is `disabled`, the issue is not linked to versioning.
+    - If versioning is `enabled` or `suspended`, you may have multiple versions of your objects.
+2. List the versions of the objects in your bucket using the [ListObjectVersions](/object-storage/api-cli/bucket-operations/#listobjectversions) command:
+    ```bash
+    aws s3api list-object-versions --bucket <BUCKET_NAME>
+    ```
+    A list of all object versions and delete markers present in the bucket displays.
+3. Delete the unwanted versions and delete markers using the [DeleteObject](/object-storage/api-cli/object-operations/#deleteobject) command with a version ID specified:
+    ```bash
+    aws s3api delete-object --bucket <BUCKET_NAME> --key <OBJECT_NAME> --version-id <VERSION_ID>
+    ```
+
+Refer to the [official Amazon S3 documentation](https://docs.aws.amazon.com/AmazonS3/latest/userguide/versioning-workflows.html) for more information on how versioning works.
+
+#### Multipart uploads
+
+1. Check for ongoing multipart uploads using the [ListMultipartUploads](/object-storage/api-cli/multipart-uploads/#listing-multipart-uploads) command:
+    ```bash
+    aws s3api list-multipart-uploads --bucket <BUCKET_NAME>
+    ```
+    A list of ongoing multipart uploads displays.
+2. Abort the unwanted multipart uploads via the [Scaleway console](/object-storage/how-to/abort-incomplete-mpu/), or [using the CLI](/object-storage/api-cli/multipart-uploads/#aborting-a-multipart-upload).
+3. Optionally, [set up lifecycle rules](/object-storage/how-to/manage-lifecycle-rules/) to automatically abort incomplete multipart uploads after a given duration.
+
+## Going further
+
+- Refer to the [Object Storage concepts](/object-storage/concepts/#versioning) for more information on versioning.
+- When you contact the support team about Object Storage, include the endpoint (e.g. `s3.fr-par.scw.cloud`), the bucket name, and the object name if the request concerns an object.
+
+<TroubleshootingTicket />

@@ -88,6 +88,10 @@ export const blockStorageMenu = {
           label: 'Increasing volume size via the API',
           slug: 'increasing-volume-size',
         },
+        {
+          label: 'Encrypting volumes with Key Manager via the API',
+          slug: 'encrypt-volumes-with-key-manager',
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',

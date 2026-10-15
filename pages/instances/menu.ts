@@ -31,6 +31,10 @@ export const instancesMenu = {
           slug: 'create-manage-instance-groups',
         },
         {
+          label: 'Tag Instances hosting healthcare data (HDS)',
+          slug: 'tag-instances-hds',
+        },
+        {
           label: 'Manage Instance storage',
           slug: 'manage-storage',
         },
@@ -135,6 +139,10 @@ export const instancesMenu = {
         {
           label: 'Getting started with Autoscaling Groups',
           slug: 'getting-started-autoscaling-groups',
+        },
+        {
+          label: 'Tag Instances hosting healthcare data (HDS) using the CLI or API',
+          slug: 'tag-instances-hds-cli-api',
         },
         {
           label: 'Creating backups',

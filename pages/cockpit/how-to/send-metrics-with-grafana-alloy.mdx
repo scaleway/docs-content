@@ -1,9 +1,9 @@
 ---
 title: Send metrics to Cockpit using Grafana Alloy
-description: Learn to configure Grafana Alloy to push metrics and visualize them in your Grafana dashboard with this step-by-step tutorial.
+description: Learn how to configure Grafana Alloy to push metrics and visualize them in your Grafana dashboard with this step-by-step tutorial.
 tags: cockpit observability grafana-alloy agent push-metrics
 dates:
-  validation: 2026-01-21
+  validation: 2026-10-14
   posted: 2024-06-28
 ---
 import Requirements from '@macros/iam/requirements.mdx'
@@ -15,28 +15,52 @@ import AlloyDashboard from './assets/scaleway-alloy-dashboard.webp'
 
 The Grafana Alloy agent is a component used in observability and monitoring setups, to collect and send metrics, logs, and traces from your applications, services, and infrastructure to observability platforms, such as Cockpit.
 
-This page explains how to configure the Grafana Alloy agent to push your metrics and visualize them in Grafana. You can use it to **push your data from Scaleway resources or external/custom resources**.
+This page shows you how to configure the Grafana Alloy agent to push your metrics from a [Scaleway Instance](/instances/concepts/#instance) and visualize them in Grafana. You can also use this tutorial to **push your data from Scaleway resources or external/custom resources**.
 
-For the sake of this documentation, we are using Grafana Alloy on macOS. Refer to the [official Grafana documentation](https://grafana.com/docs/alloy/latest/get-started/) to find the commands to use depending on your operating system of choice.
+For the sake of this documentation, we are using Grafana Alloy on an Ubuntu instance. Refer to the [official Grafana documentation](https://grafana.com/docs/alloy/latest/get-started/) to find the commands to use depending on your operating system of choice.
 
 <Requirements />
 
   - [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
   - A Scaleway account logged into the [console](https://console.scaleway.com)
-  - [Installed Grafana Alloy](https://grafana.com/docs/alloy/latest/get-started/install/)
   - [Created a custom data source of the metrics type](/cockpit/how-to/create-external-data-sources/)
-  - A [token](/cockpit/how-to/create-token/) with push permissions for metrics in the **same region as your metrics**
+  - Created an IAM application with an API key and assigned it an IAM policy with the `ObservabilityFullAccess` permission set. For detailed instructions, see [Create an API secret key](#create-an-api-secret-key).
 
 <Message type="important">
- - Having the default configuration on your agents might lead to more of your resources' metrics being sent, a high consumption and a high bill at the end of the month.
+ - Using default agent settings may collect unnecessary metrics, driving up resource consumption and your monthly bill.
 
- - Sending metrics and logs for Scaleway resources or personal data using an external path is a billable feature. In addition, any data that you push yourself is billed, even if you send data from Scaleway products. Refer to the [product pricing](https://www.scaleway.com/en/pricing/managed-services/#cockpit) for more information.
+ - Sending metrics and logs for Scaleway resources or personal data using an external path is a billable feature. In addition, any data that you push yourself is billed, even if you send data from Scaleway products. See the [product pricing](https://www.scaleway.com/en/pricing/managed-services/#cockpit) for more information.
 </Message>
 
-## Configuring Grafana Alloy
+## Create an API secret key
 
-1. Create a folder named `config` on your local machine.
-2. Create a file named `cockpit.alloy` inside the `config` folder.
+Your Grafana Alloy configuration must include the `X-Auth-Token` header with your Scaleway API secret key.
+
+Follow these steps to create your API secret key:
+1. [Create an IAM application](/iam/principals/create-application/).
+2. [Create a policy](/iam/policies-permissions/create-policy/), making sure that:
+    - When selecting the principal type, you choose the application you created in step 1. 
+    - When adding rules, you select the **Resource management** > **Cockpit** > **ObservabilityFullAccess** permission set.
+3. Go back to your IAM application, select the **API keys** tab, and click **Generate an API key**. 
+4. In the **Generate an API keys** dialog box that appears:
+    1. Provide an optional key description, and select a key expiration time. 
+    2. Leave the Object Storage as **No, skip for now**. 
+    3. Click **Generate API key**. A screen appears showing the access key and secret key for your new API key. Save the secret key in a secure place, it will not be shown again after closing the screen.
+
+## Create your Instance and install Grafana Alloy
+
+1. In the Scaleway console side menu, go to **Compute** > **CPU & GPU Instances**, and [create an Instance](/instances/how-to/create-an-instance/).
+3. Open a terminal and execute the following command to connect to your Instance. You can retrieve the public IP address of your Instance from the **Overview** page > **Public Network** section of the Instance.
+
+            ```bash
+            ssh root@<YOUR_INSTANCE_PUBLIC_IP>
+            ```   
+4. [Install Grafana Alloy](https://grafana.com/docs/alloy/latest/get-started/install/) on the Instance.                     
+
+## Configure Grafana Alloy to send metrics to Prometheus
+
+1. Create a folder named `config` on the Instance.
+2. Inside the `config` folder, create a file named `cockpit.alloy`.
 3. Paste the following template inside `cockpit.alloy`:
         ```
         prometheus.exporter.unix "node" {
@@ -61,54 +85,46 @@ For the sake of this documentation, we are using Grafana Alloy on macOS. Refer t
 
         prometheus.remote_write "cockpit" {
             endpoint {
-                url = "https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.metrics.cockpit.fr-par.scw.cloud/api/v1/push"
+                url = "https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.metrics.cockpit.<REGION>.scw.cloud/api/v1/push"
                 headers = {
-                    "X-TOKEN" = "COCKPIT_TOKEN_SECRET_KEY",
+                    "X-Auth-Token" = "API_SECRET_KEY",
                 }
             }
         }
         ```
-4. Replace `https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.metrics.cockpit.fr-par.scw.cloud/api/v1/push` with your metrics' URL. You can retrieve it in the [Data sources tab](https://console.scaleway.com/cockpit/dataSource) of the Scaleway console.
-5. Replace `COCKPIT_TOKEN_SECRET_KEY` with your Cockpit token's secret key, then save your changes.
-        <Message type="important">
-          Make sure that your token and your metrics data source were both created in the same region.
-        </Message>
+4. Replace `https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.metrics.cockpit.<REGION>.scw.cloud/api/v1/push` with your metrics URL. You can retrieve it from the Scaleway console, from **Monitoring** > **Cockpit** > **Data sources** tab.
+5. Replace `API_SECRET_KEY` with the secret key of your API key, then save your changes.
 6. Open a terminal and [start Alloy](https://grafana.com/docs/alloy/latest/get-started/run/):
         ```
-        brew services start alloy
+        alloy
         ```
 7. In the same terminal, run the following command.
         ```
         alloy run config/cockpit.alloy
         ```
-        The two last lines of your output should look similar to the following.
+        The last two lines of your output should look similar to the following.
         ```
         ts=2026-01-23T14:23:05.542081Z level=info msg="now listening for http traffic" service=http addr=127.0.0.1:12345
         ts=2026-01-23T14:23:13.432896Z level=info msg="Done replaying WAL" component_path=/ component_id=prometheus.remote_write.cockpit subcomponent=rw remote_name=aa0551 url=https://xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx.metrics.cockpit.fr-par.scw.cloud/api/v1/push duration=12.900498616s
         ```
 
-## Visualizing your metrics
+## Visualize your metrics
 
-1. Click **Cockpit** in the **Monitoring** section of the [console](https://console.scaleway.com/) side menu. The **Cockpit** overview page displays.
-2. Click **Open dashboards** to open your preconfigured dashboards in Grafana. You are redirected to the Grafana website.
-3. Log in to your Grafana account. The Grafana overview page displays.
-4. Click the Grafana icon in the top left side of your screen to open the menu.
-5. Click **Dashboards**, then click **New** in the top right corner of your screen. A drop-down displays.
-6. Click **Import** to import a dashboard.
-7. In the **Import via grafana.com** field, enter `1860`, then click **Load**.
+1. In the [console](https://console.scaleway.com/) side menu, click **Monitoring** > **Cockpit**. The **Cockpit** overview page opens.
+2. Click **Access Grafana** to open your preconfigured dashboards in Grafana. You are redirected to the Grafana website.
+3. Log in to your Grafana account. The Grafana overview page opens.
+4. Click **Dashboards**, then click the **New** side menu. A dropdown appears.
+5. Click **Import** to import a dashboard.
+6. In the **Find and import dashboards for common applications at grafana.com/dashboards** field, enter `1860`, then click **Load**. 
 
-    <Message type="note">
-      `1860` is the ID of the [Node Exporter Full dashboard](https://grafana.com/grafana/dashboards/1860-node-exporter-full/) provided by Grafana.
-    </Message>
+        `1860` is the ID of the [Node Exporter Full dashboard](https://grafana.com/grafana/dashboards/1860-node-exporter-full/) provided by Grafana.
+7. Enter a name for your dashboard or use the default name.
+8. In the **Folder** field, select a folder in which to store your dashboard.
+9. Click **Import**. Your dashboard loads and opens.
+10. In the **Datasource** field, select the data source of your metrics from the dropdown.
+    <Lightbox image={AlloyDatasource} alt="A screenshot showing the imported dashboard with the Datasource field and a dropdown of available datasources." />
+11. By default, your dashboard retrieves the data of your data source from the last 24 hours. If your data source was created less than 24 hours ago, click the clock icon and adjust the time range to match its creation time.
 
-8. Enter a name for your dashboard or leave the default one.
-9. In the **Folder** field, select a folder in which to store your dashboard.
-10. In the **Prometheus** field, select your metrics data source in the drop-down.
-11. Click **Import**. Your dashboard should load and display.
-12. In the drop-down next to **Datasource**, select your metrics data source. By default, your dashboard retrieves your data source's data from the last 24 hours.
-    <Lightbox image={AlloyDatasource} alt="" />
-13. If your data source was created less than 24 hours ago, click the clock icon and adjust the time range to match its creation time.
+    Your dashboard should look similar to the one in the following screenshot.
 
-    Your dashboard should look similar to the one in the image below.
-
-    <Lightbox image={AlloyDashboard} alt="" />
+    <Lightbox image={AlloyDashboard} alt="A screenshot showing the imported dashboard, which displays metrics such as: CPU usage, network traffic, disk space usage." />

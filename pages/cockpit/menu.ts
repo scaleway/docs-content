@@ -100,6 +100,10 @@ export const cockpitMenu = {
           label: 'Retrieving logs programmatically using LogCLI',
           slug: 'querying-logs-with-logcli',
         },
+        {
+          label: 'Creating alerts programmatically for DevOps workflows',
+          slug: 'create-alerts-programmatically',
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',

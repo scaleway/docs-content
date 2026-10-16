@@ -5,6 +5,16 @@ export const organizationsAndProjectsMenu = {
       slug: '../organizations-and-projects',
     },
     {
+      items: [
+        {
+          label: 'Understanding Organizations and Projects',
+          slug: 'understanding-organization-project',
+        },
+        {
+          label: 'Glossary',
+          slug: 'glossary',
+        },
+      ],
       label: 'Concepts',
       slug: 'concepts',
     },
@@ -15,6 +25,10 @@ export const organizationsAndProjectsMenu = {
     {
       items: [
         {
+          label: 'Understanding Organization quotas',
+          slug: 'organization-quotas',
+        },
+        {
           label: 'Manage Organizations',
           slug: 'manage-quotas',
         },
@@ -22,6 +36,20 @@ export const organizationsAndProjectsMenu = {
           label: 'Set an Organization alias',
           slug: 'set-organization-alias',
         },
+        {
+          label: 'Enforce security requirements for Members',
+          slug: 'enforce-security-requirements-members',
+        },
+        {
+          label: 'Change the ownership of an Organization',
+          slug: 'change-ownership-organization',
+        },
+      ],
+      label: 'Organization',
+      slug: 'organization',
+    },
+    {
+      items: [
         {
           label: 'Create a Project',
           slug: 'create-a-project',
@@ -31,34 +59,24 @@ export const organizationsAndProjectsMenu = {
           slug: 'change-project-name',
         },
         {
-          label: 'Generate an SSH key',
-          slug: 'create-ssh-key',
-        },
-        {
-          label: 'Enforce multifactor authentication',
-          slug: 'enforce-mfa',
-        },
-        {
           label: 'Add resources to a Project',
           slug: 'add-resources-project',
+        },
+        {
+          label: 'Use the resource explorer',
+          slug: 'use-resource-explorer',
+        },
+        {
+          label: 'Use the search bar',
+          slug: 'use-the-search-bar',
         },
         {
           label: 'Delete a Project',
           slug: 'delete-a-project',
         },
       ],
-      label: 'How to',
-      slug: 'how-to',
-    },
-    {
-      items: [
-        {
-          label: 'Understanding Organization quotas',
-          slug: 'organization-quotas',
-        },
-      ],
-      label: 'Additional Content',
-      slug: 'additional-content',
+      label: 'Project',
+      slug: 'project',
     },
     {
       items: [

@@ -27,6 +27,10 @@ export const instancesMenu = {
           slug: 'create-manage-instance-templates',
         },
         {
+          label: 'Create and manage Instance groups',
+          slug: 'create-manage-instance-groups',
+        },
+        {
           label: 'Manage Instance storage',
           slug: 'manage-storage',
         },
@@ -169,6 +173,10 @@ export const instancesMenu = {
         {
           label: 'Choosing between shared or dedicated CPUs',
           slug: 'choosing-shared-vs-dedicated-cpus',
+        },
+        {
+          label: 'Creating a Windows Server golden image',
+          slug: 'creating-a-windows-golden-image',
         },
         {
           label: 'Instances datasheet',

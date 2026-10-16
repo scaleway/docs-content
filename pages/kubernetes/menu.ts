@@ -27,6 +27,10 @@ export const kubernetesMenu = {
           slug: 'edit-cluster',
         },
         {
+          label: 'Manage Kapsule node pools',
+          slug: 'manage-node-pools',
+        },
+        {
           label: 'Create a Kosmos cluster',
           slug: 'create-kosmos-cluster',
         },
@@ -41,10 +45,6 @@ export const kubernetesMenu = {
         {
           label: 'Connect to a cluster with kubectl',
           slug: 'connect-cluster-kubectl',
-        },
-        {
-          label: 'Manage Kapsule node pools',
-          slug: 'manage-node-pools',
         },
         {
           label: 'Deploy an image from Container Registry',
@@ -168,10 +168,6 @@ export const kubernetesMenu = {
           slug: 'managed-kubernetes-service-definition',
         },
         {
-          label: 'Kubernetes decision tree',
-          slug: 'kubernetes-decision-tree',
-        },
-        {
           label: 'Kubernetes version support policy',
           slug: 'version-support-policy',
         },
@@ -239,10 +235,6 @@ export const kubernetesMenu = {
       ],
       label: 'Additional Content',
       slug: 'reference-content',
-    },
-    {
-      label: 'Videos',
-      slug: 'videos',
     },
     {
       label: 'Troubleshooting',

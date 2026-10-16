@@ -39,6 +39,10 @@ export const vpcMenu = {
           slug: 'manage-routing',
         },
         {
+          label: 'Configure Object Storage private access',
+          slug: 'enable-object-storage-private-access',
+        },
+        {
           label: 'Use Network ACLs',
           slug: 'use-network-acl',
         },

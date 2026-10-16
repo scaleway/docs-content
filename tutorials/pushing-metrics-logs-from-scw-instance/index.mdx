@@ -6,7 +6,7 @@ products:
   - cockpit
   - instances
 dates:
-  validation: 2025-04-22
+  validation: 2026-10-15
   posted: 2023-06-28
   validation_frequency: 12
 difficulty: beginner
@@ -22,128 +22,836 @@ import image3 from './assets/scaleway-logs-display.webp'
 import Requirements from '@macros/iam/requirements.mdx'
 
 
-This page shows you how to push your metrics and logs from a [Scaleway Instance](/instances/concepts/#instance). You can also use this tutorial to **push metrics and logs from external Instances (i.e. Instances outside of Scaleway)**.
+This page shows you how to configure [Grafana Alloy](https://grafana.com/docs/alloy/latest/) to push your **Instance metrics and logs** (the systemd journal and `/var/log` files) from a Scaleway Instance to Cockpit (Prometheus + Loki), and visualize them in a single dashboard.
 
+It follows the same setup as the [Send metrics to Cockpit using Grafana Alloy](/cockpit/how-to/send-metrics-with-grafana-alloy/) article and extends it with logs collection and a curated dashboard.
 
 <Requirements />
 
 - A Scaleway account logged into the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- [Created custom data sources of the **Metrics** type and the **Logs** type](/cockpit/how-to/create-external-data-sources/)
+- Created an IAM application with an API key and assigned it an IAM policy with the `ObservabilityFullAccess` permission set. For detailed instructions, see [Create an API secret key](#create-an-api-secret-key).
 
 <Message type="important">
- - Having the default configuration on your agents might lead to more of your resources’ metrics being sent, a high consumption, and a high bill at the end of the month. Find out [how to avoid additional costs when using Cockpit](/cockpit/reference-content/understanding-cockpit-usage/).
- - Sending metrics and logs for Scaleway resources or personal data using an external path is a billable feature. In addition, any data that you push yourself is billed, even if you send data from Scaleway products. Refer to the [product pricing](https://www.scaleway.com/en/pricing/managed-services/#cockpit) for more information.
+ - Using default agent settings may collect unnecessary metrics, driving up resource consumption and your monthly bill. Find out [how to avoid additional costs when using Cockpit](/cockpit/reference-content/understanding-cockpit-usage/).
+ - Sending metrics and logs for Scaleway resources or personal data using an external path is a billable feature. In addition, any data that you push yourself is billed, even if you send data from Scaleway products. See the [product pricing](https://www.scaleway.com/en/pricing/managed-services/#cockpit) for more information.
 </Message>
 
-## Configure your environment
+## Create an API secret key
 
-1. [Create an Instance](/instances/how-to/create-an-instance/) from the **Compute** section of the Scaleway console.
-2. Copy your Instance's public IP as you will need it in the next steps.
-3. Open a terminal and type the following command to connect to your Instance:
+Your Grafana Alloy configuration must include an `X-Auth-Token` header with your Scaleway API secret key.
 
-            ```bash
-            ssh root@<your Instance public IP>
-            ```
-## Clone the GitHub repository
+Follow these steps to create your API secret key:
+1. [Create an IAM application](/iam/principals/create-application/).
+2. [Create a policy](/iam/policies-permissions/create-policy/), making sure that:
+    - When selecting the principal type, you choose the application you created in step 1. 
+    - When adding rules, you select the **Resource management** > **Cockpit** > **ObservabilityFullAccess** permission set (it includes the `cockpit:metric:create` and `cockpit:log:create` permissions).
+    - The scope of the policy includes the Project of your Cockpit, in the same region as your data sources.    
+3. Go back to your IAM application, select the **API keys** tab, and click **Generate an API key**. 
+4. In the **Generate an API keys** dialog box that appears:
+    1. Provide an optional key description, and select a key expiration time. 
+    2. Leave the Object Storage as **No, skip for now**. 
+    3. Click **Generate API key**. A screen displays the access key and secret key for your new API key. Save the secret key in a secure place; it will not be shown again after closing the screen.
 
-We have created a [GitHub repository](https://github.com/scaleway/tuto-cockpit-instance/tree/main) that contains all the code you need to configure the Grafana agent, to push your data.
+## Create your Instance and install Grafana Alloy
 
-### Files in the directory
-
-The `tuto-cockpit-instance` directory contains a `workshop` folder with several files inside of it:
-
-- `download.sh` is a script responsible for downloading the necessary binaries and tools you need for the monitoring setup. It fetches the Grafana agent, for example.
-- `agent.yaml` is the Grafana agent configuration file responsible for collecting metrics and logs from your data sources, and pushing them to your Cockpit.
-- `docker-compose.yaml` is the Docker compose configuration file
-- `setup.sh` ensures that all dependencies required for monitoring are properly installed and configured
-- `nginx.conf` specifies server settings
-- `run.sh` executes the Grafana agent with the specified configuration file (agent.yaml).
-
-The only file we will be editing in this tutorial is the `agent.yaml` file to add your Cockpit [token](/cockpit/concepts/#cockpit-tokens).
-
-1. Open another terminal and type the following command to clone our `tuto-cockpit-instance` directory on your local machine:
+1. In the Scaleway console side menu, go to **Compute** > **CPU & GPU Instances**, and [create an Instance](/instances/how-to/create-an-instance/).
+2. Open a terminal and execute the following command to connect to your Instance. You can retrieve the public IP address of your Instance from its **Overview** page > **Public Network** section.
 
             ```bash
-            git clone git@github.com:scaleway/tuto-cockpit-instance.git
-            ```
-2. In the same terminal, run the following command to send the `tuto-cockpit-instance` directory and its content into your Instance:
+            ssh root@<YOUR_INSTANCE_PUBLIC_IP>
+            ```   
+3. Install Grafana Alloy on the Instance. In this tutorial, we are using Grafana Alloy on an Ubuntu instance. See the [official Grafana documentation](https://grafana.com/docs/alloy/latest/set-up/install/) to find the commands to use depending on your operating system of choice.
 
-            ```bash
-            scp -r tuto-cockpit-instance root@<your Instance public IP>:~/
-            ```
-3. Make sure the `tuto-cockpit-instance` directory is inside your Instance with the following command:
+## Configure Grafana Alloy to send metrics and logs to Cockpit
 
-            ```bash
-            ls
-            ```
-4. Access the `workshop` folder inside `tuto-cockpit-instance`, using the following command:
+1. Create a folder named `config` on the Instance.
+2. Inside the `config` folder, create a file named `cockpit.alloy`.
+3. Paste the following configuration inside `cockpit.alloy`. Remember to replace:
 
-            ```bash
-            cd tuto-cockpit-instance/workshop
-            ```
-5. Install [Golang](https://go.dev/) on your Instance using the following commands:
+   - `<METRICS_DATASOURCE_URL>` with your Metrics data source URL (you can retrieve it from the Scaleway console, from the **Monitoring** > **Cockpit** > **Data sources** tab)
+   - `<LOGS_DATASOURCE_URL>` with your Logs data source URL (you can retrieve it from the Scaleway console, from the **Monitoring** > **Cockpit** > **Data sources** tab)
+   - `<REGION>` with your Cockpit region (e.g., fr-par)
+   - `<API_SECRET_KEY>` with your IAM API key secret key
 
-            ```bash
-            wget https://go.dev/dl/go1.20.linux-amd64.tar.gz
-            sudo tar -C /usr/local/ -xzf go1.20.linux-amd64.tar.gz
-            ```
-6. Run the following command to set Golang in your environment:
+   ```bash
+   // ---------------------------------------------------------------- METRICS
+   
+   prometheus.exporter.unix "node" {
+     set_collectors = [
+       "uname",
+       "cpu",
+       "cpufreq",
+       "loadavg",
+       "meminfo",
+       "filesystem",
+       "netdev",
+       "stat",
+     ]
+   }
+   
+   prometheus.scrape "node" {
+     scrape_interval = "10s"
+     scrape_timeout  = "4s"
+   
+     targets    = prometheus.exporter.unix.node.targets
+     forward_to = [prometheus.relabel.node.receiver]
+   }
+   
+   prometheus.relabel "node" {
+     // Constant labels so the dashboard job/instance variables match both
+     // metrics and logs.
+     rule {
+       source_labels = []
+       regex         = ""
+       target_label  = "job"
+       replacement   = "node"
+       action        = "replace"
+     }
+     rule {
+       source_labels = []
+       regex         = ""
+       target_label  = "instance"
+       replacement   = "scw-instance"
+       action        = "replace"
+     }
+   
+     forward_to = [prometheus.remote_write.cockpit.receiver]
+   }
+   
+   prometheus.remote_write "cockpit" {
+     endpoint {
+       url = "https://<METRICS_DATASOURCE_URL>.metrics.cockpit.<REGION>.scw.cloud/api/v1/push"
+       headers = {
+         "X-Auth-Token" = "<API_SECRET_KEY>",
+       }
+     }
+   }
+   
+   // ------------------------------------------------------------------- LOGS
+   
+   loki.write "cockpit" {
+     endpoint {
+       url = "https://<LOGS_DATASOURCE_URL>.logs.cockpit.<REGION>.scw.cloud/loki/api/v1/push"
+       headers = {
+         "X-Auth-Token" = "<API_SECRET_KEY>",
+       }
+     }
+   }
+   
+   // Systemd journal logs
+   loki.source.journal "journal" {
+     forward_to = [loki.relabel.add_dashboard_labels.receiver]
+     labels     = { job = "journal" }
+   }
+   
+   // Flat file logs (explicit paths, no glob)
+   loki.source.file "varlogs" {
+     targets = [
+       {__path__ = "/var/log/syslog",   job = "syslog"},
+       {__path__ = "/var/log/auth.log", job = "auth"},
+       {__path__ = "/var/log/kern.log", job = "kern"},
+       {__path__ = "/var/log/dpkg.log", job = "dpkg"},
+       {__path__ = "/var/log/dmesg",    job = "dmesg"},
+     ]
+     forward_to = [loki.relabel.add_dashboard_labels.receiver]
+   }
+   
+   // Normalize labels for the curated dashboard: it expects container_name,
+   // service_name and instance. container_name is set to "host" for Instance
+   // logs so the container_name="host" matcher of the dashboard selects them.
+   loki.relabel "add_dashboard_labels" {
+     rule {
+       source_labels = ["__meta_docker_container_name"]
+       regex         = "(.*)"
+       target_label  = "container_name"
+       action        = "replace"
+     }
+     rule {
+       source_labels = ["__meta_docker_container_name"]
+       regex         = ""
+       target_label  = "container_name"
+       replacement   = "host"
+       action        = "replace"
+     }
+   
+     // service_name: fall back to the job label so each source becomes its own row.
+     rule {
+       source_labels = ["job"]
+       regex         = "(.*)"
+       target_label  = "service_name"
+       action        = "replace"
+     }
+   
+     // instance: constant hostname so the dashboard instance variable/donut works.
+     rule {
+       source_labels = []
+       regex         = ""
+       target_label  = "instance"
+       replacement   = "scw-instance"
+       action        = "replace"
+     }
+   
+     forward_to = [loki.write.cockpit.receiver]
+   }
+   ```
 
-            ```bash
-            export PATH=$PATH:/usr/local/go/bin
-            ```
-7. Run the following command to install docker. Docker allows you to run the `docker-compose.yaml` file.
+4. Change directory to quit the `config` folder and start Grafana Alloy:
 
-            ```bash
-            apt install docker.io
-            ```
-8. Run the following command to unzip the files in the `workshop` folder:
+   ```bash
+   alloy
+   ```
 
-        ```bash
-        sudo apt-get install zip unzip
-        ```
+5. Run the configuration:
 
-## Configure the Grafana agent file and push your data
+   <Message type="note">
+   Reading the systemd journal (`loki.source.journal`) requires root access or membership in the `systemd-journal` group. Run Alloy with `sudo` if needed.
+   </Message>
 
-1. [Generate a token](/cockpit/how-to/create-token/) and select the push permissions for metrics and logs. Make note of your token's secret key, as you will need it in the following steps.
-2.  In the same terminal where you are connected to your Instance, run the following command to download the Grafana agent:
-        ```bash
-        bash ./download.sh
-        ```
-3. Run `vim agent.yaml` to access the Grafana agent configuration file.
-4. Type `i` to edit the file.
-5. Add your token's secret key next to `X-Token` in the `metrics` section.
-6. Add your token's secret key next to `tenant_id` in the `logs` section.
-7. Press `escape`, `:wq`, and `Enter` to save and exit the file.
-8. Run the following command to launch the Grafana agent:
-        ```bash
-        bash ./run.sh
-        ```
+   ```bash
+   alloy run config/cockpit.alloy
+   ```
+
+   You should see Alloy load the configuration and start pushing metrics and logs data. If you get a `403`, your API key is missing the **ObservabilityFullAccess** (`cockpit:metric:create`, `cockpit:log:create`) permission set, or is not in the same region or Project as your data sources.
+
 
 ## Visualize your metrics and logs
 
-1. Log in to the Scaleway console and click **Cockpit** in the side menu.
-2. Click **Open dashboards** in the top right corner of your screen.
-3. Log in to Grafana using your credentials.
-4. Click the downward pointing arrow in the top right corner of your screen and select **Import dashboard**.
-    <Lightbox image={image} alt="" />
-5. Paste the following dashboard ID `12486` in the **Import via grafana.com** section and click **Load**. Alternatively, download the [dashboard's JSON template](https://grafana.com/grafana/dashboards/12486-node-exporter-full/) and upload it in the **Import dashboard** section.
-6. Click **Import**.
-7. Configure your dashboard as you please.
-8. Select **Scaleway metrics** in the drop-down box and click **Import**.
+1. In the [console](https://console.scaleway.com/) side menu, click **Monitoring** > **Cockpit**. The **Cockpit** overview page opens.
+2. Click **Access Grafana** to open your preconfigured dashboards in Grafana. You are redirected to the Grafana website.
+3. Log in to your Grafana account. The Grafana overview page opens.
+4. Click **Dashboards**, then click the **New** side menu. A dropdown appears.
+5. Click **Import** to import a dashboard.
+6. Copy the dashboard JSON from the [Appendix: Dashboard specification](#appendix-dashboard-specification), paste it into the **Import via dashboard JSON model** field, and click **Load**.
 
-    <Message type="important">
-     Select **Metrics** if you are using custom data.
-    </Message>
+   The JSON code block specifies a dashboard called **Cockpit Instance - Host Metrics & Logs** (uid `cockpit-instance-metrics-logs`). 
+7. The following fields appear in the import form. Ensure that you select both data sources explicitly(**DS_PROMETHEUS** and **DS_LOKI**).
+   - **Name** — This is pre-filled with the name **Cockpit Instance - Host Metrics & Logs**.
+   - **Folder** — Use the dropdown to select a folder in which to store your dashboard. 
+   - **DS_PROMETHEUS** — Use the dropdown to select your custom Cockpit metrics (Prometheus) data source.
+   - **DS_LOKI** — Use the dropdown to select your custom Cockpit logs (Loki) data source.
 
-    Your metrics should display in the dashboard.
+   <Lightbox image={image} alt="A screenshot showing the Import dashboard form in Grafana with the Name, Folder, DS_PROMETHEUS, and DS_LOKI fields." />
+8. Click **Import**. 
 
-    <Lightbox image={image2} alt="" />
+   The dashboard opens with the **Host** panel showing Instance metrics (uptime, CPU, memory, network) and the **Logs** panel showing logs (log volume and live logs). 
+   
+   If your data sources were created less than 24 hours ago, click the clock icon and adjust the time range to match its creation time.
+   
+   The dashboard expects the `container_name`, `service_name`, and `instance` labels, which `config/cockpit.alloy` sets via its relabel stages (`container_name` is set to `host` for Instance logs). 
 
-9. Click **Toggle menu** and **Explore**.
-    <Message type="important">
-     Select **Logs** if you are using custom data.
-    </Message>
-10. Select the labels you want to apply in the **Label filters** section.
-11. Click **Run query** in the top right corner of your screen. Your logs should display.
-    <Lightbox image={image3} alt="" />
+   <Lightbox image={image2} alt="A screenshot showing the Instance dashboard with metrics displayed for uptime, CPU, memory, network." />
+
+   <Lightbox image={image3} alt="A screenshot showing the Instance dashboard with log volume and live logs data." />
+
+9. You can also explore your metrics and logs directly in Grafana **Explore**. 
+
+   Use **Label filters** to narrow down your queries (e.g., `instance = scw-instance` for metrics and `service_name = auth` or `syslog` or `auth` for logs).
+
+## (Optional) See your metrics and logs in action with a stress test
+
+The pipeline runs continuously: while Alloy is up, metrics and logs are scraped from your Instance, pushed to Cockpit, and shown in the dashboard. To see this live, run a short memory stress test with `stress-ng` (not installed by default) and watch the dashboard react within a few scrape intervals.
+
+1. Connect to your Instance and install `stress-ng`:
+
+   ```bash
+   ssh root@<YOUR_INSTANCE_PUBLIC_IP>
+   apt-get update && apt-get install -y stress-ng
+   ```
+
+2. Start a background stress that holds about 50% of your Instance RAM for 5 minutes, and log a few lines through the systemd journal (so you can see logs flowing too):
+
+   ```bash
+   total_kb=$(awk '/MemTotal/{print $2}' /proc/meminfo)
+   logger "Starting memory stress test: ${total_kb} KB total, allocating ~50% for 5 min"
+   nohup stress-ng --vm 1 --vm-bytes $((total_kb / 2))K --vm-keep -t 300 >/tmp/stress-ng.log 2>&1 &
+   ```
+
+3. In Grafana, open your dashboard and extend the time range to the last 5 minutes. Within 1 or 2 scrape intervals (10s each), you should see the following:
+   - the **Memory usage** panel climbs to ~50%
+   - the **Log volume** panel counts new `journal` entries (from `logger`), and the **Live logs** panel shows them in real time
+   - the **Uptime**, **CPU usage**, and **Network traffic** panels keep updating every 10 seconds, proving that metrics keep flowing
+
+4. When you are done, stop the test and log it:
+
+   ```bash
+   pkill stress-ng
+   logger "Memory stress test stopped"
+   ```
+
+   The `stress-ng` output is saved to `/tmp/stress-ng.log` (`successful run completed in 300s` when it ends).
+
+
+## Appendix: Dashboard specification
+
+```json
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Host metrics (node exporter) and instance logs (Loki) pushed from a Scaleway Instance to Cockpit with Grafana Alloy.",
+  "editable": true,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Host",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "time() - node_boot_time_seconds{instance=~\"$instance\"}",
+          "legendFormat": "uptime",
+          "refId": "A"
+        }
+      ],
+      "title": "Uptime",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 3,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "count(node_cpu_seconds_total{instance=~\"$instance\", mode=\"system\"})",
+          "legendFormat": "cores",
+          "refId": "A"
+        }
+      ],
+      "title": "CPU cores",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 6,
+        "y": 1
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "node_load1{instance=~\"$instance\"}",
+          "legendFormat": "load1",
+          "refId": "A"
+        }
+      ],
+      "title": "Load 1m",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 3,
+        "x": 9,
+        "y": 1
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "(1 - (node_memory_MemAvailable_bytes{instance=~\"$instance\"} / node_memory_MemTotal_bytes{instance=~\"$instance\"})) * 100",
+          "legendFormat": "memory",
+          "refId": "A"
+        }
+      ],
+      "title": "Memory usage",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 5
+      },
+      "id": 6,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "100 - (avg(rate(node_cpu_seconds_total{instance=~\"$instance\", mode=\"idle\"}[$__rate_interval])) * 100)",
+          "legendFormat": "CPU",
+          "refId": "A"
+        }
+      ],
+      "title": "CPU usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "max": 100,
+          "min": 0
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 5
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "(1 - (node_memory_MemAvailable_bytes{instance=~\"$instance\"} / node_memory_MemTotal_bytes{instance=~\"$instance\"})) * 100",
+          "legendFormat": "Memory",
+          "refId": "A"
+        }
+      ],
+      "title": "Memory usage",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${DS_PROMETHEUS}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "rate(node_network_receive_bytes_total{instance=~\"$instance\", device!=\"lo\"}[$__rate_interval])",
+          "legendFormat": "{{device}} rx",
+          "refId": "A"
+        },
+        {
+          "expr": "rate(node_network_transmit_bytes_total{instance=~\"$instance\", device!=\"lo\"}[$__rate_interval])",
+          "legendFormat": "{{device}} tx",
+          "refId": "B"
+        }
+      ],
+      "title": "Network traffic",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "id": 9,
+      "panels": [],
+      "title": "Logs",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({container_name=\"host\", service_name=~\"$service\", instance=~\"$instance\"} |~ \"(?i)$pattern\" [$__interval])) by (service_name)",
+          "legendFormat": "{{service_name}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Log volume",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${DS_LOKI}"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {}
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "id": 11,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "showTime": true,
+        "sortOrder": "Descending"
+      },
+      "targets": [
+        {
+          "expr": "{container_name=\"host\", service_name=~\"$service\", instance=~\"$instance\"} |~ \"(?i)$pattern\"",
+          "refId": "A"
+        }
+      ],
+      "title": "Live logs",
+      "type": "logs"
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": [
+    "cockpit",
+    "scaleway",
+    "instance",
+    "node-exporter",
+    "loki"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "selected": false,
+          "text": "${DS_PROMETHEUS}",
+          "value": "${DS_PROMETHEUS}"
+        },
+        "hide": 0,
+        "label": "Metrics data source",
+        "name": "DS_PROMETHEUS",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource",
+        "description": "Your custom Cockpit metrics data source (Prometheus)"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "${DS_LOKI}",
+          "value": "${DS_LOKI}"
+        },
+        "hide": 0,
+        "label": "Logs data source",
+        "name": "DS_LOKI",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "type": "datasource",
+        "description": "Your custom Cockpit logs data source (Loki)"
+      },
+      {
+        "allValue": ".+",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+        },
+        "definition": "label_values({container_name=\"host\"}, instance)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Instance",
+        "multi": false,
+        "name": "instance",
+        "options": [],
+        "query": {
+          "query": "label_values({container_name=\"host\"}, instance)",
+          "refId": "A"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "loki",
+          "uid": "${DS_LOKI}"
+        },
+        "definition": "label_values({container_name=\"host\"}, service_name)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Service",
+        "multi": true,
+        "name": "service",
+        "options": [],
+        "query": {
+          "query": "label_values({container_name=\"host\"}, service_name)",
+          "refId": "A"
+        },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Search pattern",
+        "name": "pattern",
+        "options": [
+          {
+            "selected": true,
+            "text": "",
+            "value": ""
+          }
+        ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "",
+  "title": "Cockpit Instance - Host Metrics & Logs",
+  "uid": "cockpit-instance-metrics-logs",
+  "version": 1,
+  "__inputs": [
+    {
+      "name": "DS_PROMETHEUS",
+      "label": "Metrics data source",
+      "description": "Your custom Cockpit metrics data source (Prometheus)",
+      "type": "datasource",
+      "pluginId": "prometheus",
+      "pluginName": "Prometheus"
+    },
+    {
+      "name": "DS_LOKI",
+      "label": "Logs data source",
+      "description": "Your custom Cockpit logs data source (Loki)",
+      "type": "datasource",
+      "pluginId": "loki",
+      "pluginName": "Loki"
+    }
+  ]
+}
+```

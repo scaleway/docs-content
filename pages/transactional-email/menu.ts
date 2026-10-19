@@ -115,6 +115,10 @@ export const transactionalEmailMenu = {
           label: 'Understanding webhook event payloads',
           slug: 'webhook-events-payloads',
         },
+        {
+          label: 'Data privacy',
+          slug: 'data-privacy',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

@@ -1,0 +1,158 @@
+---
+title: Tag Instances hosting healthcare data (HDS) using the CLI or API
+description: Learn how to add the HDS tag to Scaleway Instances using the Scaleway CLI, the Instances API, and Terraform.
+tags: hds healthcare data health compliance tags instances cli api terraform
+dates:
+  validation: 2026-10-15
+  posted: 2026-10-15
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+When hosting healthcare data using Scaleway Instances, you are legally obligated to add the `HDS` tag to every Instance within your HDS scope. This page explains how to add this tag using the Scaleway CLI, the Instances API, and Terraform.
+
+To tag Instances using the Scaleway console, see [Tag Instances hosting healthcare data](/instances/how-to/tag-hds-instances/).
+
+<Message type="important">
+  Updating tags replaces the whole tag list. There is no operation to add a single tag. To tag an existing Instance, you must send the complete list of tags: the existing tags and `HDS`. If you only send `HDS`, all other tags are deleted.
+</Message>
+
+<Requirements />
+
+- A Scaleway account logged in to the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- Signed an HDS contract with Scaleway for the guarantees outlined in the [shared responsibility model](/instances/reference-content/instances-shared-responsibility-model/) to apply
+- Installed and configured the [Scaleway CLI](/scaleway-cli/quickstart/) to use the CLI procedures
+- Created an [API key](/iam/how-to/create-api-keys/) to use the API procedures
+- Installed [jq](https://jqlang.org/) to run the scripts on this page
+
+<Message type="note">
+  The HDS scope is restricted to the **France - Paris** region. Check the default zone of your CLI profile, scripts, and automation tools. A volume, snapshot, or backup created in the `nl-ams`, `pl-waw`, or `it-mil` Availability Zones is outside the HDS scope, even if the Instance is correctly tagged.
+</Message>
+
+## Tag Instances using the Scaleway CLI
+
+### Tag a new Instance
+
+Run the following command to create an Instance with the `HDS` tag. Replace `<INSTANCE_TYPE>` with an [HDS-eligible Instance type](/instances/reference-content/instances-shared-responsibility-model/#authorized-instance-offers), and `<INSTANCE_NAME>` with the name of your Instance.
+
+```bash
+scw instance server create \
+  zone=fr-par-1 \
+  image=ubuntu_noble \
+  type=<INSTANCE_TYPE> \
+  name=<INSTANCE_NAME> \
+  tags.0=HDS
+```
+
+### Tag an existing Instance
+
+1. Run the following command to list the current tags of the Instance. Replace `<instance-id>` with the ID of your Instance.
+
+    ```bash
+    scw instance server get <instance-id> zone=fr-par-1 -o json | jq -r '.tags[]'
+    ```
+
+2. Run the following command to apply the complete list of tags: `HDS` and each existing tag.
+
+    ```bash
+    scw instance server update <INSTANCE_ID> \
+      zone=fr-par-1 \
+      tags.0=HDS \
+      tags.1=<EXISTING_TAG_1> \
+      tags.2=<EXISTING_TAG_2>
+    ```
+
+### Tag all Instances of a zone
+
+The following script adds the `HDS` tag to every Instance of the selected zone that does not have it yet, and keeps the existing tags.
+
+<Message type="important">
+This script tags all Instances of the zone. Only run it if all Instances of the zone are within your HDS scope.
+</Message>
+
+```bash
+ZONE=fr-par-1
+
+# List the IDs of the Instances without the HDS tag
+for id in $(scw instance server list zone=$ZONE -o json \
+  | jq -r '.[] | select((.tags | index("HDS")) | not) | .id'); do
+
+  # Read the existing tags, one per line
+  existing_tags=$(scw instance server get "$id" zone=$ZONE -o json | jq -r '.tags[]')
+
+  # Build the complete tag list: HDS first, then the existing tags
+  args=("tags.0=HDS")
+  if [[ -n "$existing_tags" ]]; then
+    i=1
+    while read -r tag; do
+      args+=("tags.$i=$tag")
+      i=$((i + 1))
+    done <<< "$existing_tags"
+  fi
+
+  scw instance server update "$id" "${args[@]}" zone=$ZONE
+done
+```
+
+### Check tagged Instances
+
+Run the following command to list the Instances with the `HDS` tag in a zone:
+
+```bash
+scw instance server list zone=fr-par-1 -o json | jq -r '.[] | select(.tags | index("HDS")) | .id'
+```
+
+Run the following command to display the details of an Instance, including its `tags` field:
+
+```bash
+scw instance server get <INSTANCE_ID> zone=fr-par-1
+```
+
+## Tag Instances using the Instances API
+
+1. Run the following commands to export the variables used in the API requests. Replace `<your-secret-key>` with the secret key of your API key, and `<instance-id>` with the ID of your Instance.
+    ```bash
+    export SCW_SECRET_KEY="<YOUR_SECRET_KEY>"
+    export SCW_ZONE="fr-par-1"
+    export SERVER_ID="<INSTANCE_ID>"
+    ```
+
+1. Run the following command to retrieve the current tags of the Instance. 
+
+    ```bash
+    curl -s \
+  -H "X-Auth-Token: $SCW_SECRET_KEY" \
+  "https://api.scaleway.com/instance/v2alpha1/zones/$SCW_ZONE/servers/$SERVER_ID" \
+  | jq '.tags'
+    ```
+
+2. Run the following command to apply the complete list of tags: `HDS` and each existing tag.
+
+    ```bash
+    curl -X PATCH \
+      -H "X-Auth-Token: $SCW_SECRET_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"tags": ["HDS", "<existing-tag-1>", "<existing-tag-2>"]}' \
+      "https://api.scaleway.com/instance/v2alpha1/zones/$SCW_ZONE/servers/$SERVER_ID"
+    ```
+
+To tag a new Instance, add `"tags": ["HDS"]` to the body of the `POST /instance/v2alpha1/zones/{zone}/servers` request.
+
+See the [Instances API documentation](https://www.scaleway.com/en/developers/api/instances/) for more information.
+
+## Tag Instances using Terraform
+
+Add the `HDS` tag to the `tags` argument of the `scaleway_instance_server` resource:
+
+```hcl
+resource "scaleway_instance_server" "hds_server" {
+  zone  = "fr-par-1"
+  type  = "<instance-type>"
+  image = "ubuntu_noble"
+  tags  = ["HDS"]
+}
+```
+
+<Message type="tip">
+  Add the `HDS` tag when you create your Instances, preferably through a template or Terraform module. This keeps the tag consistent across your HDS scope.
+</Message>

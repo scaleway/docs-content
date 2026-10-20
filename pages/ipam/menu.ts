@@ -23,7 +23,7 @@ export const ipamMenu = {
           slug: 'list-ips',
         },
         {
-          label: 'Manage your private IP addresses',
+          label: 'Manage your IP addresses',
           slug: 'manage-ips',
         },
         {

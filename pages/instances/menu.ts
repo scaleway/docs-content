@@ -59,6 +59,10 @@ export const instancesMenu = {
           slug: 'use-private-networks',
         },
         {
+          label: 'Use Private Network interfaces',
+          slug: 'use-private-network-interfaces',
+        },
+        {
           label: 'Configure reverse DNS',
           slug: 'configure-reverse-dns',
         },
@@ -233,6 +237,10 @@ export const instancesMenu = {
         {
           label: 'Understanding automatic network hot-reconfiguration',
           slug: 'understanding-automatic-network-hot-reconfiguration',
+        },
+        {
+          label: 'Understanding security groups for Private Network interfaces',
+          slug: 'understanding-security-groups-private-network-interfaces',
         },
         {
           label: 'Understanding Instance pricing',

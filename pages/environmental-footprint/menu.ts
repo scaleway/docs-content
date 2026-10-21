@@ -19,7 +19,7 @@ export const environmentalFootprintMenu = {
           slug: 'environmental-footprint-dashboard',
         },
         {
-          label: 'Track your monthly environmental footprint report',
+          label: 'Track your environmental footprint using reports',
           slug: 'track-monthly-footprint',
         },
       ],

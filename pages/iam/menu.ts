@@ -97,6 +97,10 @@ export const iamMenu = {
           slug: 'understanding-resource-level-conditions',
         },
         {
+          label: 'CEL conditions guide',
+          slug: 'cel-conditions-guide',
+        },
+        {
           label: 'Products supporting resource level conditions',
           slug: 'supported-products-resource-level',
         },

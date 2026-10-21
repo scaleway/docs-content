@@ -9,7 +9,7 @@ Mirrors how the docs website resolves content:
   of the importing page.
 
 Usage (from the docs-content root):
-    python3 bin/check-internal-links.py                 # scan pages/, tutorials/, macros/, blocks/, docs/, changelog/
+    python3 bin/check-internal-links.py                 # scan pages/, tutorials/, macros/, changelog/
     python3 bin/check-internal-links.py pages/instances # scan a subset
     python3 bin/check-internal-links.py --no-anchors    # skip #anchor checks
     python3 bin/check-internal-links.py --trailing-slash # also flag /page links without a trailing slash
@@ -34,11 +34,14 @@ DOCS_URL_PREFIXES = ("https://www.scaleway.com/en/docs", "http://www.scaleway.co
 # Routes served by the website app rather than by an MDX file
 APP_ROUTES = {"", "changelog", "faq", "troubleshooting", "tutorials", "ai-search"}
 
-FENCE_RE = re.compile(r"^\s*(```|~~~)")
-HEADING_RE = re.compile(r"^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$")
-MD_LINK_RE = re.compile(r"\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+FENCE_RE = re.compile(r"^\s*(`{3,}|~{3,})(.*)$")
+# MDX has no indented code blocks, so indented headings (inside JSX) are headings
+HEADING_RE = re.compile(r"^\s*(#{1,6})\s+(.*?)\s*#*\s*$")
+# One level of balanced parentheses is allowed in the URL
+MD_LINK_RE = re.compile(r"\]\(\s*<?((?:[^()\s<>]|\([^()\s]*\))+)>?(?:\s+\"[^\"]*\")?\s*\)")
+MALFORMED_LINK_RE = re.compile(r"\[([^\[\]]+)\((/[^()\s]*|https?://www\.scaleway\.com/en/docs[^()\s]*)\)")
 REF_LINK_RE = re.compile(r"^\s{0,3}\[[^\]]+\]:\s*(\S+)")
-HREF_RE = re.compile(r"""\b(?:href|to)\s*=\s*["']([^"']+)["']""")
+HREF_RE = re.compile(r"""\b(?:href|to|url)\s*=\s*["']([^"']+)["']""")
 BARE_DOCS_URL_RE = re.compile(r"https?://www\.scaleway\.com/en/docs[^\s)\"'<>`]*")
 HTML_ANCHOR_RE = re.compile(r"""<[a-zA-Z][^>]*\b(?:id|name)\s*=\s*["']([^"']+)["']""")
 MACRO_IMPORT_RE = re.compile(r"""^import\s+\w+\s+from\s+["'](@macros/[^"']+)["']""", re.M)
@@ -61,7 +64,9 @@ def heading_text(raw):
     text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
     text = re.sub(r"<[^>]+>", "", text)
     text = re.sub(r"`([^`]*)`", r"\1", text)
-    text = re.sub(r"(\*\*|__|\*|_)(\S(?:.*?\S)?)\1", r"\2", text)
+    text = re.sub(r"(\*\*|\*)(\S(?:.*?\S)?)\1", r"\2", text)
+    # Underscores inside words (max_tokens) are not emphasis
+    text = re.sub(r"(?<!\w)(__|_)(\S(?:.*?\S)?)\1(?!\w)", r"\2", text)
     return text.strip()
 
 
@@ -75,12 +80,19 @@ def strip_frontmatter(content):
 def content_lines(content):
     """Yield (line number, line) outside fenced code blocks, frontmatter removed."""
     body, offset = strip_frontmatter(content)
-    in_fence = False
+    fence = None
     for index, line in enumerate(body.split("\n"), start=offset + 1):
-        if FENCE_RE.match(line):
-            in_fence = not in_fence
-            continue
-        if not in_fence:
+        match = FENCE_RE.match(line)
+        if match:
+            marker, rest = match.groups()
+            if fence is None:
+                fence = marker
+                continue
+            # A fence closes on the same character, at least as long, with nothing after it
+            if marker[0] == fence[0] and len(marker) >= len(fence) and not rest.strip():
+                fence = None
+                continue
+        if fence is None:
             yield index, line
 
 
@@ -118,6 +130,54 @@ def page_anchors(path, _stack=()):
     return frozenset(anchors)
 
 
+@lru_cache(maxsize=None)
+def macro_importers():
+    """Map each macro to the files that import it."""
+    importers = {}
+    for path in iter_files([os.path.join(ROOT, d) for d in SCAN_DIRS]):
+        for specifier in MACRO_IMPORT_RE.findall(read(path)):
+            macro = os.path.normpath(os.path.join(ROOT, "macros", specifier[len("@macros/"):]))
+            importers.setdefault(macro, set()).add(path)
+    return importers
+
+
+def host_pages(macro, _stack=()):
+    """Return the non-macro files a macro ends up rendered in, through nested macros."""
+    pages = set()
+    for importer in macro_importers().get(macro, ()):
+        if is_macro(importer):
+            if importer not in _stack:
+                pages |= host_pages(importer, _stack + (macro,))
+        else:
+            pages.add(importer)
+    return pages
+
+
+def is_macro(path):
+    return os.path.relpath(path, ROOT).split(os.sep)[0] == "macros"
+
+
+@lru_cache(maxsize=None)
+def listdir(directory):
+    try:
+        return frozenset(os.listdir(directory))
+    except OSError:
+        return frozenset()
+
+
+def exists(path, base=ROOT):
+    """Case-sensitive existence check (macOS file systems ignore case, the web server does not)."""
+    rel = os.path.relpath(os.path.normpath(path), base)
+    if rel.startswith(".."):
+        return os.path.exists(path)
+    current = base
+    for part in rel.split(os.sep):
+        if part not in listdir(current):
+            return False
+        current = os.path.join(current, part)
+    return True
+
+
 def resolve_page(url_path):
     """Return the MDX file served at url_path, or None."""
     parts = [p for p in url_path.strip("/").split("/") if p]
@@ -129,7 +189,7 @@ def resolve_page(url_path):
         base = os.path.join(ROOT, "pages", *parts)
         candidates = [os.path.join(base, "index.mdx"), base + ".mdx"]
     for candidate in candidates:
-        if os.path.isfile(candidate):
+        if exists(candidate) and os.path.isfile(candidate):
             return candidate
     return None
 
@@ -150,16 +210,18 @@ def is_file_link(url_path):
 
 def check_file_link(url_path, source):
     """Static files: relative to the source, in docs-content, or in the app's public/ dir."""
+    if url_path.endswith("/"):
+        return "file link has a trailing slash"
     rel = unquote(url_path).lstrip("/")
     candidates = []
     if not url_path.startswith("/"):
-        candidates.append(os.path.join(os.path.dirname(source), rel))
+        candidates.append((os.path.join(os.path.dirname(source), rel), ROOT))
     else:
-        candidates.append(os.path.join(ROOT, rel))
+        candidates.append((os.path.join(ROOT, rel), ROOT))
         if rel.startswith("assets/"):
-            candidates.append(os.path.join(ROOT, rel[len("assets/"):]))
-        candidates.append(os.path.join(PUBLIC_DIR, rel))
-    if any(os.path.exists(c) for c in candidates):
+            candidates.append((os.path.join(ROOT, rel[len("assets/"):]), ROOT))
+        candidates.append((os.path.join(PUBLIC_DIR, rel), PUBLIC_DIR))
+    if any(exists(path, base) for path, base in candidates):
         return None
     if url_path.startswith("/") and not os.path.isdir(PUBLIC_DIR):
         return None  # cannot verify public assets outside the monorepo
@@ -186,10 +248,22 @@ def check_link(raw, source, check_anchors, check_slash):
         return check_file_link(path, source)
 
     if not path:
+        if is_macro(source):
+            # A same-page anchor in a macro points to the page that renders it
+            if not (fragment and check_anchors):
+                return None
+            missing = sorted(
+                os.path.relpath(page, ROOT)
+                for page in host_pages(source)
+                if fragment not in page_anchors(page)
+            )
+            if missing:
+                return "anchor #{} not found in {}".format(fragment, ", ".join(missing))
+            return None
         target = source
     else:
         if not path.startswith("/"):
-            if "macros" in os.path.relpath(source, ROOT).split(os.sep)[:1]:
+            if is_macro(source):
                 return "relative page link in a macro resolves differently on each page"
             path = os.path.normpath(os.path.join(url_of(source), path))
         segments = [s for s in path.split("/") if s]
@@ -222,6 +296,11 @@ def extract_links(line):
     return links
 
 
+def malformed_links(line):
+    """Internal links missing their closing bracket, e.g. [text(/page/)."""
+    return [m.group(0) for m in MALFORMED_LINK_RE.finditer(INLINE_CODE_RE.sub("", line))]
+
+
 def is_scanned(path):
     rel = os.path.relpath(path, ROOT).replace(os.sep, "/")
     return path.endswith(".mdx") and rel not in SKIP_FILES and not SKIP_FILE_RE.search(rel)
@@ -244,7 +323,7 @@ def iter_files(targets):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
-    parser.add_argument("paths", nargs="*", help="files or directories to scan (default: pages, tutorials, macros, blocks, docs, changelog)")
+    parser.add_argument("paths", nargs="*", help="files or directories to scan (default: pages, tutorials, macros, changelog)")
     parser.add_argument("--no-anchors", action="store_true", help="do not check #anchors")
     parser.add_argument(
         "--trailing-slash",
@@ -260,6 +339,9 @@ def main():
         files += 1
         rel = os.path.relpath(path, ROOT)
         for number, line in content_lines(read(path)):
+            for text in malformed_links(line):
+                errors += 1
+                print("{}:{}: {} -> malformed link, missing ]".format(rel, number, text))
             for link in extract_links(line):
                 message = check_link(link, path, not args.no_anchors, args.trailing_slash)
                 if message:

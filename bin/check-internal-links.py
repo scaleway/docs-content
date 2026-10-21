@@ -86,7 +86,7 @@ def content_lines(content):
 
 @lru_cache(maxsize=None)
 def read(path):
-    with open(path, encoding="utf-8") as f:
+    with open(path, encoding="utf-8", errors="replace") as f:
         return f.read()
 
 

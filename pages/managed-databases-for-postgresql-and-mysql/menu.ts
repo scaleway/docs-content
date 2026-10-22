@@ -170,6 +170,10 @@ export const managedDatabasesForPostgresqlAndMysqlMenu = {
           label: 'Connecting Managed Databases to Kubernetes clusters',
           slug: 'connecting-managed-databases-to-kubernetes-clusters',
         },
+        {
+          label: 'Advanced user permissions',
+          slug: 'advanced-user-permissions',
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',

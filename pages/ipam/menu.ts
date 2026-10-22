@@ -19,16 +19,28 @@ export const ipamMenu = {
     {
       items: [
         {
-          label: 'List your private IP addresses',
+          label: 'List your IP addresses',
           slug: 'list-ips',
         },
         {
-          label: 'Manage your private IP addresses',
+          label: 'Manage your IP addresses',
           slug: 'manage-ips',
         },
         {
           label: 'Reserve an IP address',
           slug: 'reserve-ip',
+        },
+        {
+          label: 'Attach a resource using a reserved IP',
+          slug: 'attach-resource',
+        },
+        {
+          label: 'Release a reserved IP address',
+          slug: 'release-ip',
+        },
+        {
+          label: 'Manage reverse DNS',
+          slug: 'set-ip-reverse',
         },
       ],
       label: 'How to',
@@ -40,16 +52,16 @@ export const ipamMenu = {
           label: 'IPAM API Reference',
           slug: 'https://www.scaleway.com/en/developers/api/ipam/',
         },
-        {
-          label: 'Set a reverse IPv6 DNS record',
-          slug: 'set-ip-reverse',
-        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',
     },
     {
       items: [
+        {
+          label: 'Understanding IPAM',
+          slug: 'understanding-ipam',
+        },
         {
           label: 'Public connectivity: best practices',
           slug: 'public-connectivity-best-practices',

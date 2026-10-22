@@ -27,8 +27,8 @@ export const publicGatewaysMenu = {
           slug: 'configure-a-public-gateway',
         },
         {
-          label: 'Upgrade a Public Gateway',
-          slug: 'upgrade-public-gateway',
+          label: 'Change a Public Gateway offer',
+          slug: 'change-public-gateway-offer',
         },
         {
           label: 'Use SSH bastion',

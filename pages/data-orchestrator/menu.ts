@@ -49,8 +49,8 @@ export const dataOrchestratorMenu = {
           slug: 'logic-tasks',
         },
         {
-          label: 'Use workflow components',
-          slug: 'use-components',
+          label: 'Use environment variables and secrets',
+          slug: 'use-environment-variable-and-secrets',
         },
         {
           label: 'Cron schedules',

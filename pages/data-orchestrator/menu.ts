@@ -49,6 +49,10 @@ export const dataOrchestratorMenu = {
           slug: 'logic-tasks',
         },
         {
+          label: 'Use workflow components',
+          slug: 'use-components',
+        },
+        {
           label: 'Cron schedules',
           slug: 'cron-schedules',
         },

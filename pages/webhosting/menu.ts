@@ -110,6 +110,10 @@ export const webhostingMenu = {
           label: 'Access your Web Hosting migrated from Dedibox to Scaleway',
           slug: 'access-migrated-webhosting',
         },
+        {
+          label: 'PHP 5.6 Migration Guide',
+          slug: 'php-5-6-migration-guide',
+        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

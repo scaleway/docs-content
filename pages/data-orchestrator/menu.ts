@@ -49,6 +49,14 @@ export const dataOrchestratorMenu = {
           slug: 'logic-tasks',
         },
         {
+          label: 'Injected environment variables',
+          slug: 'injected-environment-variables',
+        },
+        {
+          label: 'Use secrets from Secret Manager',
+          slug: 'use-secrets',
+        },
+        {
           label: 'Cron schedules',
           slug: 'cron-schedules',
         },

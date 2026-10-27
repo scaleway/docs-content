@@ -7,7 +7,7 @@ description: Restructures a scaleway/docs-content section from type-based folder
 
 Pointer guide for restructuring a documentation section in **scaleway/docs-content**, generalized from the IAM / Account / Organizations and Projects restructuring (PR #6877). The goal is to automate the mechanical, error-prone parts — mapping, migration, link-fixing, redirect handoff — while keeping the judgment calls (new architecture, `menu.ts` changes, redirect timing) as explicit human checkpoints. Skipping those checkpoints is how a restructuring silently breaks navigation or SEO.
 
-**Reference implementation**: PR #6877, sections `account/`, `iam/`, `organizations-and-projects/`. See also the `AGENTS.md` for repo structure, protected directories, and writing conventions — read it before touching any file in scope.
+**Reference implementation**: PR #6877, sections `account/`, `iam/`, `organizations-and-projects/`. See also the `AGENTS.md` and `llms.txt` for repo structure, protected directories, and writing conventions — read it before touching any file in scope.
 
 ---
 

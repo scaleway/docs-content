@@ -53,7 +53,7 @@ export const dataOrchestratorMenu = {
           slug: 'injected-environment-variables',
         },
         {
-          label: 'Use secrets stored in Secret Manager',
+          label: 'Use secrets from Secret Manager',
           slug: 'use-secrets',
         },
         {

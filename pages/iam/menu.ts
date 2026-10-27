@@ -36,10 +36,6 @@ export const iamMenu = {
           label: 'Set and manage credential maximum duration',
           slug: 'set-credentials-maximum-duration',
         },
-        {
-          label: 'Log in as a Member',
-          slug: 'log-in-as-a-member',
-        },
       ],
       label: 'Credentials',
       slug: 'credentials',

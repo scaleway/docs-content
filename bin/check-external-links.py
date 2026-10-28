@@ -53,7 +53,7 @@ base_url = "https://internal.invalid/"
 exclude = [
   '^https?://internal\.invalid',
   '^https?://www\.scaleway\.com/en/docs',
-  # Marketing site: its CDN blocks non-browser clients with 403
+  '^https?://virtualmedia\.online\.net',
   '^https?://www\.scaleway\.com/(en|fr)(/|$)',
   # Behind login or invite-only
   '^https?://console\.scaleway\.com',

@@ -34,6 +34,10 @@ export const auditTrailMenu = {
           label: 'Activate Audit Trail preconfigured alerts',
           slug: 'activate-adt-preconfigured-alerts',
         },
+        {
+          label: 'Configure Audit Trail custom alerts',
+          slug: 'configure-audit-trail-custom-alerts',
+        },        
       ],
       label: 'How to',
       slug: 'how-to',

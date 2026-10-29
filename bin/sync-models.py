@@ -16,12 +16,12 @@ TASK_MAPPING = {
 }
 
 def format_anchor(name: str) -> str:
-    """Génère l'ancre Markdown, ex : 'glm-5.3' -> '[glm-5.3](#glm-53)'"""
+    """Generates the Markdown anchor, e.g., 'glm-5.3' -> '[glm-5.3](#glm-53)'"""
     clean_anchor = re.sub(r"[^a-zA-Z0-9\-]", "", name).lower()
     return f"[{name}](#{clean_anchor})"
 
 def format_modalities(tasks: list) -> str:
-    """Mappe les tâches de l'API vers des libellés propres pour la doc."""
+    """Maps API tasks to clean labels for the documentation."""
     modalities = []
     for t in tasks:
         val = TASK_MAPPING.get(t.lower(), t.capitalize())
@@ -30,7 +30,7 @@ def format_modalities(tasks: list) -> str:
     return ", ".join(modalities) if modalities else "Text"
 
 def get_target_h2_section(tasks: list) -> str:
-    """Route vers l'une des 7 catégories de modèles selon les tâches."""
+    """Routes to one of the 7 model categories based on tasks."""
     task_set = set(t.lower() for t in tasks)
 
     # 1. Multimodal Text + Audio
@@ -53,7 +53,7 @@ def get_target_h2_section(tasks: list) -> str:
     elif "embeddings" in task_set:
         return r"##\s*Embeddings models"
     
-    # 6. Code Models (spécifique code sans chat)
+    # 6. Code Models (specific code without chat)
     elif "code" in task_set and "chat" not in task_set:
         return r"##\s*Code models"
     
@@ -62,7 +62,7 @@ def get_target_h2_section(tasks: list) -> str:
         return r"##\s*Text models"
 
 def fetch_catalog_models():
-    """Récupère l'ensemble des modèles de l'API Catalog en gérant la pagination."""
+    """Fetches all models from the Catalog API while handling pagination."""
     models = {}
     page = 1
     page_size = 100
@@ -98,13 +98,13 @@ def fetch_catalog_models():
     return models
 
 def append_to_markdown_table_under_heading(content: str, heading_pattern: str, new_rows: list) -> str:
-    """Ajoute les nouvelles lignes à la fin du premier tableau sous un titre donné."""
+    """Add new rows to the end of the first table under a given heading."""
     if not new_rows:
         return content
 
     match_heading = re.search(rf"(?m)^{heading_pattern}\s*$", content, re.IGNORECASE)
     if not match_heading:
-        print(f"⚠️ Titre introuvable avec le motif : {heading_pattern}")
+        print(f"⚠️ Heading not found with pattern: {heading_pattern}")
         return content
 
     heading_end = match_heading.end()
@@ -112,7 +112,7 @@ def append_to_markdown_table_under_heading(content: str, heading_pattern: str, n
 
     table_match = re.search(r"(\n(?:\s*\|[^\n]+\|\s*\n)+)", rest)
     if not table_match:
-        print(f"⚠️ Aucun tableau trouvé sous : {heading_pattern}")
+        print(f"⚠️ No table found under: {heading_pattern}")
         return content
 
     raw_table = table_match.group(1).rstrip()
@@ -123,16 +123,16 @@ def append_to_markdown_table_under_heading(content: str, heading_pattern: str, n
     return content[:heading_end] + new_rest
 
 def generate_model_detail_block(model: dict) -> str:
-    """Génère la fiche technique '###' pour un modèle actif."""
+    """Generates the '###' technical card for an active model."""
     name = model["name"]
     title = name.capitalize()
     provider = model["provider"]
     
-    # Formatage des efforts de reasoning
+    # Formatting reasoning efforts
     reasoning_vals = model.get("reasoning_values", [])
     reasoning_str = ", ".join(f"`{r}`" for r in reasoning_vals) if reasoning_vals else "None"
 
-    # Formats d'image si vision ou ocr
+    # Image formats if vision or OCR
     tasks = model.get("tasks", [])
     has_vision = any(t in tasks for t in ["vision", "ocr"])
     image_formats = "PNG, JPEG, WebP" if has_vision else "N/A"
@@ -157,33 +157,33 @@ def generate_model_detail_block(model: dict) -> str:
     )
 
 def insert_detail_block_into_section(content: str, heading_pattern: str, detail_block: str) -> str:
-    """Insère la fiche détaillée ### à la fin de la section H2 ciblée, juste avant le prochain H2."""
+    """Inserts the ### detail card at the end of the target H2 section, right before the next H2."""
     match_heading = re.search(rf"(?m)^{heading_pattern}\s*$", content, re.IGNORECASE)
     if not match_heading:
-        print(f"⚠️ Section introuvable : {heading_pattern}. Ajout en fin de document.")
+        print(f"⚠️ Section not found: {heading_pattern}. Adding at end of document.")
         return content + "\n\n" + detail_block + "\n"
 
     section_start = match_heading.end()
     rest = content[section_start:]
 
-    # Recherche du titre H2 suivant qui délimite la fin de la section actuelle
+    # Search for the next H2 heading that delimits the end of the current section
     next_h2_match = re.search(r"(?m)^##\s+", rest)
     if next_h2_match:
         insert_pos = next_h2_match.start()
         new_rest = rest[:insert_pos].rstrip() + "\n\n" + detail_block + "\n\n" + rest[insert_pos:]
         return content[:section_start] + new_rest
     else:
-        # Dernier H2 du document
+        # Last H2 in the document
         return content.rstrip() + "\n\n" + detail_block + "\n"
 
 def main():
     if not os.path.exists(DOC_FILE_PATH):
-        print(f"❌ Fichier non trouvé : {DOC_FILE_PATH}")
+        print(f"❌ File not found: {DOC_FILE_PATH}")
         sys.exit(1)
 
-    print("1. Récupération des modèles depuis l'API Catalog...")
+    print("1. Fetching models from the Catalog API...")
     catalog = fetch_catalog_models()
-    print(f"   {len(catalog)} modèles récupérés au total.")
+    print(f"   {len(catalog)} models fetched in total.")
 
     with open(DOC_FILE_PATH, "r", encoding="utf-8") as f:
         content = f.read()
@@ -196,43 +196,43 @@ def main():
     for m in catalog.values():
         name = m["name"]
         
-        # Si le modèle est déjà présent dans la page, on ne le touche pas
+        # If the model is already present on the page, leave it unchanged
         if name.lower() in content.lower():
             continue
 
         if m["status"] in ["end_of_life", "retired"]:
             new_eol_rows.append(f"| {m['provider']} | `{name}` | TBD | TBD | TBD |")
             added_summary.append(f"- **EOL/Retired** : `{name}` ({m['provider']})")
-            print(f"  ➕ Détecté pour EOL : {name}")
+            print(f"  ➕ Detected for EOL : {name}")
         else:
             name_anchor = format_anchor(name)
             modalities = format_modalities(m["tasks"])
             new_active_rows.append(f"| {name_anchor} | Yes | {modalities} | TBD | TBD |")
             
-            # Stocke le modèle actif pour insertion dans la bonne section H2
+            # Stores active model for insertion into the appropriate H2 section
             active_models_to_insert.append(m)
-            added_summary.append(f"- **Actif** : `{name}` ({m['provider']})")
-            print(f"  ➕ Détecté pour Actif : {name}")
+            added_summary.append(f"- **Active** : `{name}` ({m['provider']})")
+            print(f"  ➕ Detected for Active : {name}")
 
     if not new_active_rows and not new_eol_rows:
-        print("✅ La documentation est déjà synchronisée avec le catalogue.")
+        print("✅ Documentation is already in sync with the catalog.")
         sys.exit(0)
 
-    # 1. Mise à jour du tableau technique sous '## Models technical summary'
+    # 1. Update the technical table under '## Models technical summary'
     content = append_to_markdown_table_under_heading(
         content,
         r"##\s*Models technical summary",
         new_active_rows
     )
 
-    # 2. Insertion de chaque fiche '###' dans sa catégorie H2 respective
+    # 2. Insert each '###' card into its respective H2 category
     for m in active_models_to_insert:
         target_h2 = get_target_h2_section(m["tasks"])
         detail_block = generate_model_detail_block(m)
         content = insert_detail_block_into_section(content, target_h2, detail_block)
-        print(f"  📌 Fiche insérée pour `{m['name']}` sous : {target_h2}")
+        print(f"  📌 Card inserted for `{m['name']}` under : {target_h2}")
 
-    # 3. Mise à jour du tableau EOL sous '## End of life (EOL) models'
+    # 3. Update the EOL table under '## End of life (EOL) models'
     content = append_to_markdown_table_under_heading(
         content,
         r"##\s*End[- ]of[- ]life.*models",
@@ -242,15 +242,15 @@ def main():
     with open(DOC_FILE_PATH, "w", encoding="utf-8") as f:
         f.write(content)
 
-    print(f"\n📝 {DOC_FILE_PATH} mis à jour avec succès.")
+    print(f"\n📝 {DOC_FILE_PATH} updated successfully.")
 
-    # Synthèse pour la PR dans GitHub Actions
+    # Summary for the PR in GitHub Actions
     summary_path = os.getenv("GITHUB_STEP_SUMMARY")
     if summary_path:
         with open(summary_path, "a", encoding="utf-8") as sf:
-            sf.write("### 🤖 Nouveaux modèles détectés dans le catalogue\n\n")
+            sf.write("### 🤖 New models detected in the catalog\n\n")
             sf.write("\n".join(added_summary) + "\n\n")
-            sf.write("> ⚠️ Pensez à compléter les descriptions et les valeurs `TBD` avant de fusionner la PR.\n")
+            sf.write("> ⚠️ Remember to complete descriptions and `TBD` before merging the PR.\n")
 
 if __name__ == "__main__":
     main()

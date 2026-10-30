@@ -2,8 +2,8 @@
 // for its associated menu naming, to avoid breaking tooling
 import { accountMenu } from '../pages/account/menu'
 import { appleSiliconMenu } from '../pages/apple-silicon/menu'
-import { auditTrailMenu } from '../pages/audit-trail/menu'
 import { annotationsMenu } from '../pages/annotations/menu'
+import { auditTrailMenu } from '../pages/audit-trail/menu'
 import { billingMenu } from '../pages/billing/menu'
 import { blockStorageMenu } from '../pages/block-storage/menu'
 import { classicHostingMenu } from '../pages/classic-hosting/menu'
@@ -75,16 +75,10 @@ export default [
     items: [
       {
         icon: 'OrganizationDashboardCategoryIcon',
-        items: [accountMenu],
-        label: 'Account',
+        items: [accountMenu, organizationsAndProjectsMenu, annotationsMenu],
+        label: 'Account & Organization',
         category: 'console',
       },
-      {
-        icon: 'AnnotationsCategoryIcon',
-        items: [annotationsMenu],
-        label: 'Annotations',
-        category: 'console',
-      },      
       {
         icon: 'CostAndImpactManagementCategoryIcon',
         items: [billingMenu, environmentalFootprintMenu],
@@ -96,7 +90,6 @@ export default [
         items: [
           iamMenu,
           keyManagerMenu,
-          organizationsAndProjectsMenu,
           secretManagerMenu,
         ],
         label: 'Security & Identity',
@@ -132,18 +125,6 @@ export default [
         category: 'containers',
       },
       {
-        icon: 'DatabaseCategoryIcon',
-        items: [
-          managedDatabasesForPostgresqlAndMysqlMenu,
-          managedDatabasesForRedisMenu,
-          managedMongodbDatabasesMenu,
-          openSearchMenu,
-          serverlessSqlDatabasesMenu,
-        ],
-        label: 'Databases',
-        category: 'databases',
-      },
-      {
         icon: 'DataAndAnalyticsCategoryIcon',
         items: [
           dataOrchestratorMenu,
@@ -154,6 +135,18 @@ export default [
         ],
         label: 'Data & Analytics',
         category: 'data-and-analytics',
+      },
+      {
+        icon: 'DatabaseCategoryIcon',
+        items: [
+          managedDatabasesForPostgresqlAndMysqlMenu,
+          managedDatabasesForRedisMenu,
+          managedMongodbDatabasesMenu,
+          openSearchMenu,
+          serverlessSqlDatabasesMenu,
+        ],
+        label: 'Databases',
+        category: 'databases',
       },
       {
         icon: 'DevToolsCategoryIcon',
@@ -200,6 +193,12 @@ export default [
         category: 'network',
       },
       {
+        icon: 'LabsCategoryIcon',
+        items: [quantumComputingMenu],
+        label: 'Quantum',
+        category: 'quantum',
+      },
+      {
         icon: 'ServerlessComputeCategoryIcon',
         items: [
           serverlessContainersMenu,
@@ -208,12 +207,6 @@ export default [
         ],
         label: 'Serverless',
         category: 'serverless',
-      },
-      {
-        icon: 'LabsCategoryIcon',
-        items: [quantumComputingMenu],
-        label: 'Quantum',
-        category: 'quantum',
       },
       {
         icon: 'StorageCategoryIcon',

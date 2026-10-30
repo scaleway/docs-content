@@ -5,9 +5,15 @@ export const annotationsMenu = {
       slug: '../annotations',
     },
     {
+      items: [
+        {
+          label: 'Glossary',
+          slug: 'glossary',
+        },
+      ],
       label: 'Concepts',
       slug: 'concepts',
-    },
+    },    
     {
       label: 'Quickstart',
       slug: 'quickstart',

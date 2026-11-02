@@ -118,6 +118,10 @@ export const kubernetesMenu = {
           slug: 'https://www.scaleway.com/en/developers/api/kubernetes/',
         },
         {
+          label: 'Reaching the API server via the VPC endpoint',
+          slug: 'reach-api-server-via-vpc',
+        },
+        {
           label: 'Creating and managing a Kubernetes Kapsule',
           slug: 'creating-managing-kubernetes-lifecycle-cliv2',
         },

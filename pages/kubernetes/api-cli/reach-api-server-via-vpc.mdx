@@ -1,0 +1,94 @@
+---
+title: Reaching the API server via the VPC endpoint
+description: Download your kubeconfig with a private VPC endpoint to access the Kubernetes API server securely without public internet routing.
+tags: kubernetes kubeconfig api-server vpc private-network endpoint
+dates:
+  validation: 2026-11-02
+  posted: 2026-11-02
+draftedBy: cline 1.0
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+By default, the API server of your Kubernetes cluster is exposed via a public IP address. If this public endpoint becomes unavailable (such as during a Load Balancer outage), you lose access to cluster management.
+
+To ensure uninterrupted access, you can communicate with the API server from within your VPC. This page explains how to generate a kubeconfig configured with the private VPC endpoint of your cluster and use it to manage the control plane over your Private Network.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/iam/credentials/create-api-keys/)
+- Created a [Kubernetes cluster](/kubernetes/how-to/create-cluster/)
+- A machine connected to the VPC of the cluster, for example, an [Instance](/instances/quickstart/) attached to the Private Network, or a VPN connection to the VPC
+
+## Download a kubeconfig with the VPC endpoint
+
+1. Export your [API secret key](/iam/credentials/create-api-keys/):
+
+    ```bash
+    export SCW_SECRET_KEY=<your-API-secret-key>
+    ```
+
+2. Use the [Download the kubeconfig](https://www.scaleway.com/en/developers/api/kubernetes/clusters#download-the-kubeconfig-for-a-cluster) API endpoint, and set the `endpoint` query parameter to `vpc`. Remember to replace `<region>` and `<cluster-ID>` with the region and the ID of your cluster:
+
+    <Message type="tip">
+    Add `&dl=1` at the end of the URL to directly retrieve the base64-decoded kubeconfig. If you choose not to, the kubeconfig will be base64-encoded.
+    </Message>
+
+    ```bash
+    curl "https://api.scaleway.com/k8s/v1/regions/<region>/clusters/<cluster-ID>/kubeconfig?endpoint=vpc&dl=1" -H "X-Auth-Token: $SCW_SECRET_KEY"
+    ```
+
+    The command returns a `kubeconfig` file whose `server` field points to the private endpoint of the API server:
+
+    - The `.internal` suffix marks the URL as the internal endpoint of the API server. This endpoint is only reachable from inside the VPC of the cluster.
+    - Port `6443` is the default HTTPS port used by the Kubernetes API server.
+
+    Example kubeconfig file:
+
+    ```yaml
+    apiVersion: v1
+    clusters:
+    - name: "my-cluster"
+      cluster:
+        certificate-authority-data: LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSU...<truncated>...ZmV0YQ
+        server: https://a92d5ceb-21b9-...c101342c-0a0a-....internal:6443
+    contexts:
+    - name: admin@my-cluster
+      context:
+        cluster: "my-cluster"
+        user: my-cluster-admin
+    current-context: admin@my-cluster
+    kind: Config
+    preferences: {}
+    users:
+    - name: my-cluster-admin
+      user:
+        token: eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...<truncated>...c2lnbmF0dXJl
+    ```
+
+
+## Use the kubeconfig from inside the VPC
+
+The private endpoint of the API server is only reachable from inside the VPC of your cluster. If you run `kubectl` from a machine that is not attached to the VPC, the connection times out. Connect to the VPC first, for example from an Instance attached to the Private Network.
+
+1. [Create an Instance](/instances/how-to/create-an-instance/) and attach it to the same Private Network as your Kubernetes cluster.
+2. [SSH into the Instance](/instances/how-to/connect-to-instance/). Remember to replace `<Instace-IP-address>` with the IP of your Instance:
+
+    ```bash
+    ssh root@<Instace-IP-address>
+    ```
+
+3. [Install kubectl](https://kubernetes.io/docs/tasks/tools/) on the Instance.
+4. Copy the contents of the [kubeconfig downloaded via the API](#download-a-kubeconfig-with-the-VPC-endpoint), for example to `~/.kube/kapsule-vpc-config`.
+5. Point `kubectl` to the kubeconfig file:
+
+    ```bash
+    export KUBECONFIG=~/.kube/kapsule-vpc-config
+    ```
+
+6. Contact the API server:
+    ```bash
+    kubectl get nodes
+    ```
+    If the connection succeeds, the nodes of your cluster display. Your `kubectl` commands now reach the API server over the private VPC endpoint, giving you a reliable path to your cluster that does not depend on the public IP of the API server.

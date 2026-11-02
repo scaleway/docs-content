@@ -167,6 +167,10 @@ export const elasticMetalMenu = {
           slug: 'elastic-metal-networking',
         },
         {
+          label: 'Understanding dual attachment on Elastic Metal',
+          slug: 'elastic-metal-dual-attachment',
+        },
+        {
           label: 'Elastic Metal RV1 guidelines',
           slug: 'elastic-metal-rv1-guidelines',
         },

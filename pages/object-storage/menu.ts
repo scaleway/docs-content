@@ -29,6 +29,10 @@ export const objectStorageMenu = {
           slug: 'create-a-bucket',
         },
         {
+          label: 'Manage bucket settings',
+          slug: 'manage-bucket-settings',
+        },
+        {
           label: 'Migrate data',
           slug: 'migrate-data',
         },

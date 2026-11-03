@@ -149,6 +149,10 @@ export const objectStorageMenu = {
           slug: 'object-lock',
         },
         {
+          label: 'Understanding encryption',
+          slug: 'understanding-encryption',
+        },
+        {
           label: 'Using SSE-ONE',
           slug: 'sse-one',
         },

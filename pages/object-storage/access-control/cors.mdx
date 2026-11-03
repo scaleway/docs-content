@@ -1,0 +1,127 @@
+---
+title: Manage CORS rules on Object Storage buckets
+description: Set CORS rules to manage cross-origin requests in Scaleway Object Storage.
+tags: object storage object-storage aws-s3 bucket cors cors-rule
+dates:
+  validation: 2026-09-15
+  posted: 2021-05-19
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+[Cross-Origin Resource Sharing (CORS)](https://en.wikipedia.org/wiki/Cross-origin_resource_sharing) is a browser mechanism that controls whether a web page on one domain can request resources from another. Browsers block these cross-domain requests by default. Since Object Storage buckets are served from a Scaleway domain, a web application on your own domain cannot fetch or upload objects directly from the browser unless the bucket allows it.
+
+You can configure CORS rules per bucket using a JSON file. These rules define the allowed origins (domains), HTTP methods, headers, as well as the browser cache duration. When a browser sends a cross-origin request to the bucket, Object Storage checks these rules and returns the appropriate headers. The browser then allows or blocks the request accordingly.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- Installed and configured the [AWS CLI](/object-storage/api-clients/cli-tools-and-clients/) using a Scaleway API key
+- An [Object Storage bucket](/object-storage/buckets/create-a-bucket/)
+
+## Set CORS on an Object Storage bucket
+
+1. Create a new file called `cors.json` locally.
+2. Open the file and add the following content. Replace `YOUR_DOMAIN_NAME` with your domains (origins) or an asterisk (`*`) to allow all domains, and adjust the parameters as needed.
+
+    ```json
+    {
+      "CORSRules": [
+        {
+          "AllowedOrigins": ["https://YOUR_DOMAIN_NAME", "https://www.YOUR_DOMAIN_NAME"],
+          "AllowedHeaders": ["*"],
+          "AllowedMethods": ["GET", "HEAD", "POST", "PUT", "DELETE"],
+          "MaxAgeSeconds": 3000,
+          "ExposeHeaders": ["Etag"]
+        }
+      ]
+    }
+    ```
+
+3. Run the command below to apply the CORS configuration to the bucket with the AWS CLI. Replace `YOUR_BUCKET_NAME` with the name of the bucket.
+    ```sh
+    aws s3api put-bucket-cors --bucket YOUR_BUCKET_NAME --cors-configuration file://cors.json
+    ```
+
+    The command returns no output.
+
+## Get the CORS configuration of a bucket
+
+Run the command below to display the CORS configuration of a bucket:
+
+```sh
+aws s3api get-bucket-cors --bucket YOUR_BUCKET_NAME
+```
+
+If CORS rules are set for the bucket, the API returns a JSON list like this example:
+```json
+{
+  "CORSRules": [
+      {
+          "AllowedHeaders": [
+              "*"
+          ],
+          "AllowedMethods": [
+              "GET",
+              "HEAD",
+              "POST",
+              "PUT",
+              "DELETE"
+          ],
+          "AllowedOrigins": [
+              "https://YOUR_DOMAIN_NAME",
+              "https://www.YOUR_DOMAIN_NAME"
+          ],
+          "ExposeHeaders": [
+              "Etag"
+          ],
+          "MaxAgeSeconds": 3000
+      }
+  ]
+}
+```
+
+If no CORS rules are set for the bucket, the request returns the following error:
+
+```
+An error occurred (NoSuchCORSConfiguration) when calling the GetBucketCors operation: The CORS configuration does not exist
+```
+
+## Test the CORS configuration of a bucket
+
+To test the CORS rules of a bucket, use `curl` with the desired methods (`GET`, `POST`, etc.), as follows. Replace the placeholders with appropriate values.
+
+```sh
+curl -i -X OPTIONS -H 'Origin: https://YOUR_DOMAIN_NAME' https://YOUR_BUCKET_NAME.s3.YOUR_REGION.scw.cloud/YOUR_OBJECT_KEY -H "Access-Control-Request-Method: GET"
+```
+
+If the origin and method are allowed, the request returns a `200` response with the `Access-Control-*` headers derived from your configuration:
+
+```
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: https://YOUR_DOMAIN_NAME
+Access-Control-Allow-Methods: GET, HEAD, POST, PUT, DELETE
+Access-Control-Allow-Headers: *
+Access-Control-Expose-Headers: Etag
+Access-Control-Max-Age: 3000
+```
+
+If the origin or method is not allowed, or if no CORS configuration is set on the bucket, the request returns a `403` response with an `AccessForbidden` error and no `Access-Control-*` headers.
+
+## Delete the CORS configuration of a bucket
+
+Run the following command to delete the CORS rules of a bucket:
+
+```sh
+aws s3api delete-bucket-cors --bucket YOUR_BUCKET_NAME
+```
+
+If the operation is successful, the command returns no output. You can [retrieve the CORS configuration](#get-the-cors-configuration-of-a-bucket) of the bucket to ensure it was properly deleted.
+
+## Troubleshooting
+
+If you encounter errors while using CORS rules with Scaleway Object Storage, ensure that you have:
+
+- you have the `ObjectStorageBucketsWrite` or `ObjectStorageFullAccess` [IAM permissions](/iam/policies-permissions/view-permission-sets/).
+
+See the [Object Storage troubleshooting](/object-storage/troubleshooting/) documentation if you need more help.

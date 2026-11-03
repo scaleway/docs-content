@@ -1,0 +1,91 @@
+---
+title: How to use Object Storage with Private Networks
+description: Learn how to securely reach Scaleway Object Storage from resources attached to a Private Network.
+tags: object-storage private-networks private-network public-gateway vpc route
+dates:
+  validation: 2026-09-28
+  posted: 2021-05-27
+---
+import Requirements from '@macros/iam/requirements.mdx'
+import ObjectStoragePrivateAccess from '@macros/vpc/object-storage-private-access.mdx'
+
+By default, resources attached to a [Private Network](/vpc/concepts/#private-networks) reach Object Storage over the public internet, which requires them to hold a public IP address or to transit through a gateway.
+
+[Object Storage private access](/object-storage/concepts/glossary/#object-storage-private-access) keeps the traffic between your Private Networks and your buckets on the internal Scaleway network.
+
+Alternatively, you can use a [Public Gateway](/public-gateways/concepts/#public-gateway) to route traffic from resources in a Private Network to the public endpoint of an Object Storage bucket.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- An [Object Storage bucket](/object-storage/buckets/create-a-bucket/)
+
+## Use Object Storage private access
+
+Object Storage private access is the recommended method to securely reach a bucket from a Private Network.
+
+<ObjectStoragePrivateAccess />
+
+1. [Enable Object Storage private access on the VPC](/vpc/how-to/enable-object-storage-private-access/#enable-object-storage-private-access-on-a-vpc).
+
+2. [Select the Private Networks you want to authorize](vpc/how-to/enable-object-storage-private-access/#edit-the-private-networks-with-access) within this VPC.
+
+3. [Configure your Object Storage client](/vpc/how-to/enable-object-storage-private-access/#reach-a-bucket-over-the-private-endpoint) on the resources of the authorized Private Networks to use the private regional endpoint `s3-vpc.<YOUR_REGION>.scw.eu`.
+
+See [Configuring Object Storage private access](/vpc/how-to/enable-object-storage-private-access/) for more information.
+
+## Use Object Storage with a Public Gateway
+
+[Public Gateways](/public-gateways/concepts/#public-gateway) allow resources in a Private Network to securely reach the public internet without using a public IP address. Traffic to your buckets then transits over the public internet, and each resource requires a routing configuration. Use this method for the use cases that Object Storage private access does not cover.
+
+The procedure below shows how to create an Instance without a public IP address, attach it to a Private Network with a Public Gateway, and configure a route from the Instance to an Object Storage bucket.
+
+### Create an Instance and attach it to a Private Network
+
+1. Follow the instructions for [creating an Instance](/instances/how-to/create-an-instance/) in the same Region as your Object storage bucket. Make sure you disable public connectivity for your Instance.
+
+2. Follow the instructions for [creating a Private Network](/vpc/how-to/create-private-network/). Make sure you create it in the region that encompasses the Availability Zone of the Instance you previously created.
+3. Follow the instructions to [attach your Instance to the Private Network](/vpc/how-to/attach-resources-to-pn/).
+
+### Create a Public Gateway and attach it to the Private Network
+
+1. Follow the instructions for [creating a Public Gateway](/public-gateways/how-to/create-a-public-gateway/):
+
+    1. Select the same Availability Zone as for your previously created Instance.
+    2. Select a Public Gateway type according to your needs.
+    3. Select **Allocate a new IP**.
+    4. Enter a name and optional tags for your Public Gateway.
+
+2. Click the name of the new Public Gateway. The dashboard of the gateway opens.
+3. Click the **Private Networks** tab.
+4. Click **Attach to a new Private Network**. A dialog appears.
+5. Select **Attach to an existing Private Network** and pick a Private Network from the drop-down list.
+6. Click **Attach to Private Network**.
+
+### Set the Object Storage route
+
+1. Connect to your Instance via SSH, replacing `<INSTANCE_IP>` with the IP address of the Instance:
+
+    ```bash
+    ssh root@<INSTANCE_IP>
+    ```
+
+    <Message type="note">
+    As the Instance has no public IP address, you must connect to it from another Instance in the Private Network, or assign a temporary flexible IP address to it.
+    </Message>
+
+2. Configure the following route to the Object Storage platform:
+
+    ```bash
+    # set this to keep the network on the instance
+    ip route add 10.0.0.0/8 via `ip route | grep default | awk '{print $3} '` dev ens2
+    # dhcp on pn interface
+    dhclient ens5
+    # change the default route
+    ip route del default via `ip route | grep default | awk '{print $3} '` dev ens2
+    ip route add default via 192.168.42.1 dev ens5 # use the IP address of the gateway, shown on the gateway dashboard
+    curl https://s3.nl-ams.scw.cloud
+    ```
+
+    The Instance now reaches Object Storage through the Public Gateway, which handles the exchange of data between the Private Network and the public internet.

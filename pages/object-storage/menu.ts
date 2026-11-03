@@ -77,6 +77,10 @@ export const objectStorageMenu = {
     {
       items: [
         {
+          label: 'Understanding storage classes',
+          slug: 'understanding-storage-classes',
+        },
+        {
           label: 'Managing storage classes',
           slug: 'manage-storage-classes',
         },

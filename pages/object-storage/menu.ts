@@ -5,6 +5,16 @@ export const objectStorageMenu = {
       slug: '../object-storage',
     },
     {
+      items: [
+        {
+          label: 'Understanding Object Storage',
+          slug: 'understanding-object-storage',
+        },
+        {
+          label: 'Glossary',
+          slug: 'glossary',
+        },
+      ],
       label: 'Concepts',
       slug: 'concepts',
     },
@@ -13,219 +23,198 @@ export const objectStorageMenu = {
       slug: 'quickstart',
     },
     {
-      label: 'FAQ',
-      slug: 'faq',
-    },
-    {
       items: [
         {
           label: 'Create a bucket',
           slug: 'create-a-bucket',
         },
         {
-          label: 'Upload files into a bucket',
-          slug: 'upload-files-into-a-bucket',
-        },
-        {
-          label: 'Edit the storage class',
-          slug: 'edit-storage-class',
-        },
-        {
-          label: 'Restore an object from Glacier class',
-          slug: 'restore-an-object-from-glacier',
-        },
-        {
-          label: 'Download files from a bucket',
-          slug: 'download-files-from-a-bucket',
-        },
-        {
-          label: 'Manage object visibility',
-          slug: 'manage-object-visibility',
-        },
-        {
-          label: 'Access objects via HTTPS',
-          slug: 'access-objects-via-https',
-        },
-        {
-          label: 'Use versioning',
-          slug: 'use-bucket-versioning',
-        },
-        {
-          label: 'Create and manage bucket policies',
-          slug: 'create-bucket-policy',
-        },
-        {
-          label: 'Manage lifecycle rules',
-          slug: 'manage-lifecycle-rules',
-        },
-        {
-          label: 'Enable SSE-ONE',
-          slug: 'enable-sse-one',
-        },
-        {
-          label: 'Enable SSE-KMS',
-          slug: 'enable-sse-kms',
-        },
-        {
-          label: 'Use object lock',
-          slug: 'use-object-lock',
-        },
-        {
-          label: 'Host healthcare data (HDS)',
-          slug: 'host-healthcare-data',
-        },
-        {
-          label: 'View and abort incomplete multipart uploads',
-          slug: 'abort-incomplete-mpu',
-        },
-        {
-          label: 'Monitor your consumption',
-          slug: 'monitor-consumption',
-        },
-        {
-          label: 'Set up a static website',
-          slug: 'use-bucket-website',
-        },
-        {
-          label: 'Use Object Storage with Private Networks',
-          slug: 'use-obj-stor-with-private-networks',
-        },
-        {
-          label: 'Delete an object',
-          slug: 'delete-an-object',
+          label: 'Migrate data',
+          slug: 'migrate-data',
         },
         {
           label: 'Delete a bucket',
           slug: 'delete-a-bucket',
         },
+        {
+          label: 'Using bucket websites',
+          slug: 'bucket-website',
+        },
       ],
-      label: 'How to',
-      slug: 'how-to',
+      label: 'Buckets',
+      slug: 'buckets',
     },
     {
       items: [
         {
-          label: 'Using the Object Storage API',
-          slug: 'using-api-call-list',
+          label: 'Upload objects',
+          slug: 'upload-objects',
         },
         {
-          label: 'Understanding bucket operations',
-          slug: 'bucket-operations',
+          label: 'Download objects',
+          slug: 'download-objects',
         },
         {
-          label: 'Understanding object operations',
-          slug: 'object-operations',
+          label: 'Delete objects',
+          slug: 'delete-objects',
         },
         {
-          label: 'Using the AWS-CLI',
-          slug: 'object-storage-aws-cli',
-        },
-        {
-          label: 'Installing MinIO Client',
-          slug: 'installing-minio-client',
-        },
-        {
-          label: 'Installing rclone',
-          slug: 'installing-rclone',
-        },
-        {
-          label: 'Managing the lifecycle of objects',
-          slug: 'lifecycle-rules-api',
-        },
-        {
-          label: 'Managing Object Storage using using CLI tools',
-          slug: 'managing-lifecycle-cliv2',
-        },
-        {
-          label: 'Managing multipart uploads',
+          label: 'Manage multipart uploads',
           slug: 'multipart-uploads',
         },
         {
           label: 'Using conditional writes',
-          slug: 'using-conditional-writes',
+          slug: 'conditional-writes',
         },
         {
-          label: 'Enabling SSE-C',
-          slug: 'enable-sse-c',
-        },
-        {
-          label: 'Enabling SSE-ONE',
-          slug: 'enable-sse-one',
-        },
-        {
-          label: 'Enabling SSE-KMS',
-          slug: 'enable-sse-kms',
-        },
-        {
-          label: 'Setting CORS rules',
-          slug: 'setting-cors-rules',
-        },
-        {
-          label: 'Bucket policies overview',
-          slug: 'bucket-policy',
-        },
-        {
-          label: 'Creating and applying bucket policies',
-          slug: 'create-bucket-policy',
-        },
-        {
-          label: 'Combining IAM and bucket policies for granular access',
-          slug: 'combining-iam-and-object-storage',
-        },
-        {
-          label: 'Managing bucket permissions for IP addresses',
-          slug: 'manage-bucket-permissions-ip',
-        },
-        {
-          label: 'Hosting static websites on a bucket',
-          slug: 'bucket-website-api',
-        },
-        {
-          label: 'Generating an AWSv4 authentication signature',
-          slug: 'generate-aws4-auth-signature',
-        },
-        {
-          label: 'Migrating data from one bucket to another',
-          slug: 'migrating-buckets',
-        },
-        {
-          label: 'Adding objects to a bucket with POST',
-          slug: 'post-object',
+          label: 'Understanding checksums',
+          slug: 'checksums',
         },
       ],
-      label: 'API/CLI',
-      slug: 'api-cli',
+      label: 'Objects',
+      slug: 'objects',
     },
     {
       items: [
         {
-          label: 'Storage shared responsibility model',
-          slug: 'storage-shared-responsibility-model',
+          label: 'Managing storage classes',
+          slug: 'manage-storage-classes',
         },
         {
-          label: 'Optimize your Object Storage performance',
-          slug: 'optimize-object-storage-performance',
+          label: 'Restoring from Glacier',
+          slug: 'restore-from-glacier',
         },
         {
-          label:
-            'Equivalence between Object Storage actions and IAM permissions',
+          label: 'Managing lifecycle rules',
+          slug: 'lifecycle-rules',
+        },
+        {
+          label: 'Lifecycle rules reference',
+          slug: 'lifecycle-rules-reference',
+        },
+      ],
+      label: 'Storage classes and lifecycle',
+      slug: 'storage-classes',
+    },
+    {
+      items: [
+        {
+          label: 'Object visibility and sharing',
+          slug: 'object-visibility-and-sharing',
+        },
+        {
+          label: 'Understanding bucket policies',
+          slug: 'bucket-policies',
+        },
+        {
+          label: 'Managing bucket policies',
+          slug: 'manage-bucket-policies',
+        },
+        {
+          label: 'Bucket policy examples',
+          slug: 'bucket-policy-examples',
+        },
+        {
+          label: 'Amazon S3 / IAM permissions equivalence',
           slug: 's3-iam-permissions-equivalence',
         },
         {
-          label: 'Supported checksums',
-          slug: 'supported-checksums',
+          label: 'Setting CORS rules',
+          slug: 'cors',
         },
         {
-          label: 'Logs and metrics collected by Cockpit',
-          slug: 'logs-metrics-collection-cockpit',
+          label: 'Generating AWSv4 signatures',
+          slug: 'aws4-signature',
         },
       ],
-      label: 'Additional Content',
-      slug: 'reference-content',
+      label: 'Access control',
+      slug: 'access-control',
+    },
+    {
+      items: [
+        {
+          label: 'Managing versioning',
+          slug: 'versioning',
+        },
+        {
+          label: 'Managing object lock',
+          slug: 'object-lock',
+        },
+        {
+          label: 'Using SSE-ONE',
+          slug: 'sse-one',
+        },
+        {
+          label: 'Using SSE-KMS',
+          slug: 'sse-kms',
+        },
+        {
+          label: 'Using SSE-C',
+          slug: 'sse-c',
+        },
+        {
+          label: 'Hosting healthcare data',
+          slug: 'host-healthcare-data',
+        },
+        {
+          label: 'Shared responsibility model',
+          slug: 'shared-responsibility-model',
+        },
+        {
+          label: 'Using Object Storage with Private Networks',
+          slug: 'private-networks',
+        },
+      ],
+      label: 'Data protection and encryption',
+      slug: 'data-protection',
+    },
+    {
+      items: [
+        {
+          label: 'Optimizing performance',
+          slug: 'optimize-performance',
+        },
+        {
+          label: 'Monitor usage',
+          slug: 'monitor-usage',
+        },
+      ],
+      label: 'Optimization and monitoring',
+      slug: 'optimization-monitoring',
+    },
+    {
+      items: [
+        {
+          label: 'Amazon S3 API support',
+          slug: 's3-api-support',
+        },
+        {
+          label: 'Bucket operations',
+          slug: 'bucket-operations',
+        },
+        {
+          label: 'Object operations',
+          slug: 'object-operations',
+        },
+        {
+          label: 'CLI tools and clients',
+          slug: 'cli-tools-and-clients',
+        },
+        {
+          label: 'Scaleway CLI for Object Storage',
+          slug: 'scaleway-cli',
+        },
+      ],
+      label: 'API and clients',
+      slug: 'api-clients',
     },
     {
       label: 'Troubleshooting',
       slug: 'troubleshooting',
+    },
+    {
+      label: 'FAQ',
+      slug: 'faq',
     },
   ],
   label: 'Object Storage',

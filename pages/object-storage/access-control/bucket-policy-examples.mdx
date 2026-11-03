@@ -1,0 +1,232 @@
+---
+title: Bucket policy examples
+description: Use bucket policy examples to share Object Storage buckets in read-only mode, filter access by IP address, and combine IAM and bucket policies.
+tags: object storage bucket policy bucket-policy example iam read-only ip permission aws-cli
+dates:
+  validation: 2026-11-03
+  posted: 2026-11-03
+---
+import Requirements from '@macros/iam/requirements.mdx'
+import ImportantBucketPolicy from '@macros/storage/important-bucket-policy.mdx'
+
+import image from './assets/scaleway-bucket-policy-iam-table.webp'
+
+
+This page provides ready-to-use [bucket policies](/object-storage/api-cli/bucket-policy/) for common access control scenarios. Adapt each example to your resources, then apply it using the console or the AWS CLI as described in [How to manage bucket policies](/object-storage/access-control/manage-bucket-policies/).
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- An [Object Storage bucket](/object-storage/how-to/create-a-bucket/)
+- The [AWS CLI](/object-storage/api-cli/object-storage-aws-cli/) installed and configured with a Scaleway API key
+
+In the following examples, replace the placeholders with the appropriate values.
+
+## Share a bucket in read-only mode with another Project
+
+You can grant a Scaleway Organization or Project read rights to a bucket in a different Project.
+
+For example, you are logged in to Organization A and you have a bucket (A1) in Project A. You want to share bucket A1 in read-only mode with the users of Project B in Organization B. To do so, apply a policy to bucket A1 that grants access to Project B and lists the API calls its users can make.
+
+To make sure that the users of Project B can only view content, include only `s3:ListBucket` and `s3:GetObject` in the `Action` element. Specify which resources they can access in the `Resource` element:
+
+- `<BUCKET_NAME>`: grants access to the bucket, but not to the objects it contains. This resource is required for the `s3:ListBucket` action.
+- `<BUCKET_NAME>/*`: grants access to all objects in the bucket, but not to the bucket itself. This resource is required for the `s3:GetObject` action.
+- `<BUCKET_NAME>/<PREFIX>/*`: grants access only to objects with the specified prefix, but not to the bucket itself. For example, `my_files/movie/*` grants access to all objects with the `movie/` prefix, but not to other objects in the `my_files` bucket.
+
+1. Create a file named `bucket-policy.json` with the following content:
+    ```json
+    {
+        "Version": "2023-04-17",
+        "Id": "MyBucketPolicy",
+        "Statement": [
+            {
+                "Sid": "DelegateAccess",
+                "Effect": "Allow",
+                "Principal": {
+                    "SCW": "project_id:<PROJECT_ID>"
+                },
+                "Action": [
+                    "s3:ListBucket",
+                    "s3:GetObject"
+                ],
+                "Resource": [
+                    "<BUCKET_NAME>",
+                    "<BUCKET_NAME>/*"
+                ]
+            }
+        ]
+    }
+    ```
+
+2. Apply the policy using the [PutBucketPolicy](/object-storage/api-cli/bucket-operations/#putbucketpolicy) API call, or run the following AWS CLI command:
+    ```bash
+    aws s3api put-bucket-policy --bucket <BUCKET_NAME> --policy file://bucket-policy.json
+    ```
+
+3. Send the name of your bucket to the users of Project B.
+
+When the policy is applied, bucket A1 appears in the bucket list of the users of Project B when they run `ListBuckets`. If they know the name of an object, they can retrieve it with [GetObject](/object-storage/api-cli/object-operations/#getobject).
+
+<Message type="note">
+Bucket policy version `2012-10-17` is deprecated. See [Bucket policies versions](/object-storage/api-cli/bucket-policy/#bucket-policies-versions) for more information.
+</Message>
+
+## Allow or deny access based on IP addresses
+
+When a bucket has a bucket policy, Object Storage denies by default any action that the policy does not explicitly allow. Use the `IpAddress` or `NotIpAddress` condition with the `aws:SourceIp` condition key to control which IP addresses or IP ranges can perform operations on your bucket.
+
+The `aws:SourceIp` IPv4 and IPv6 values use the standard [CIDR notation](https://en.wikipedia.org/wiki/Classless_Inter-Domain_Routing). For IPv6, the double colon (`::`) represents one or more groups of consecutive `0`.
+
+The following policy allows the `198.51.100.0/24` IP range to perform the `s3:ListBucket` and `s3:GetObject` actions:
+
+```json
+{
+  "Version": "2023-04-17",
+  "Id": "MyBucketPolicy",
+  "Statement": [
+    {
+      "Sid": "Grant List and GET to specified IP",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": ["s3:ListBucket", "s3:GetObject"],
+      "Resource": ["<BUCKET_NAME>", "<BUCKET_NAME>/*"],
+      "Condition": {
+        "IpAddress": {
+          "aws:SourceIp": "198.51.100.0/24"
+        }
+      }
+    }
+  ]
+}
+```
+
+The following policy allows the same actions to every IP address except the `2001:db8::/32` range, using the `NotIpAddress` condition:
+
+```json
+{
+  "Version": "2023-04-17",
+  "Id": "MyBucketPolicy",
+  "Statement": [
+    {
+      "Sid": "Grant List and GET to everyone except specified IP",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": ["s3:ListBucket", "s3:GetObject"],
+      "Resource": ["<BUCKET_NAME>", "<BUCKET_NAME>/*"],
+      "Condition": {
+        "NotIpAddress": {
+          "aws:SourceIp": "2001:db8::/32"
+        }
+      }
+    }
+  ]
+}
+```
+
+## Combine IAM and bucket policies for granular access
+
+Object Storage manages access with 2 features:
+
+- **[Identity and Access Management (IAM)](/iam/concepts/glossary/#iam)** policies define the permissions of users, groups, and applications at the Project level. They apply to all Object Storage resources of the Project.
+- **Bucket policies** operate at the bucket level, and define who can perform which actions in each bucket.
+
+Use IAM alone when Project-level access is enough for your use case. To configure granular access to specific buckets, combine IAM and bucket policies.
+
+<Lightbox image={image} alt="Table showing how IAM permissions and bucket policies combine to grant or deny access to a bucket" />
+
+To perform actions on a bucket, a [principal](/object-storage/concepts/#principal) (user or application) must first have access through an IAM policy, and optionally through a bucket policy. All principals with Object Storage access in IAM can access all Object Storage resources of the Project. However, once a bucket policy restricts access to a principal, all other principals that need access to that bucket must be explicitly allowed in the bucket policy.
+
+To set up granular access to your Object Storage resources:
+
+1. List the users and applications that need access to Object Storage, the rights they need, and the buckets they can access.
+
+2. [Create an IAM group](/iam/principals/create-group/) that contains every user and application that must access Object Storage. You can create several groups to assign different permission sets to your users and applications.
+
+3. [Create an IAM policy](/iam/policies-permissions/create-policy/) for each group, select the appropriate permission sets (for example, `ObjectStorageReadOnly` or `ObjectStorageObjectsRead`), and [attach the policy to the group](/iam/principals/manage-groups/#attach-a-policy-to-a-group).
+
+4. [Create and apply a bucket policy](/object-storage/access-control/manage-bucket-policies/) to each bucket that requires fine-grained access.
+
+<ImportantBucketPolicy />
+
+### Example
+
+An Organization has a user and an application that must perform specific tasks with Object Storage in a [Project](/organizations-and-projects/concepts/glossary/#project) named `S3-project`:
+
+- The user must read ([GetObject](/object-storage/api-cli/object-operations/#getobject)) and write ([PutObject](/object-storage/api-cli/object-operations/#putobject)) objects in bucket A.
+- The application must read objects in bucket A, and write and delete ([DeleteObjects](/object-storage/api-cli/object-operations/#deleteobjects)) objects in bucket B.
+
+1. [Create a group](/iam/principals/create-group/) named `S3-group` that contains the user and the application, so that they are the only principals with access to Object Storage.
+
+2. [Create an IAM policy](/iam/policies-permissions/create-policy/) named `S3-policy` with `S3-group` as a [principal](/iam/concepts/glossary/#principal), and the `ObjectStorageFullAccess` permission set.
+
+3. Create a bucket policy to manage access to bucket A:
+    ```json
+    {
+        "Version": "2023-04-17",
+        "Id": "bucket-A-policy",
+        "Statement": [
+            {
+                "Sid": "Allow user to GET and PUT objects",
+                "Effect": "Allow",
+                "Principal": {
+                    "SCW": "user_id:<USER_ID>"
+                },
+                "Action": [
+                    "s3:GetObject",
+                    "s3:PutObject"
+                ],
+                "Resource": [
+                    "bucket-A",
+                    "bucket-A/*"
+                ]
+            },
+            {
+                "Sid": "Allow application to GET objects",
+                "Effect": "Allow",
+                "Principal": {
+                    "SCW": "application_id:<APPLICATION_ID>"
+                },
+                "Action": [
+                    "s3:GetObject"
+                ],
+                "Resource": [
+                    "bucket-A/*"
+                ]
+            }
+        ]
+    }
+    ```
+
+4. Create a bucket policy to manage access to bucket B:
+    ```json
+    {
+        "Version": "2023-04-17",
+        "Id": "bucket-B-policy",
+        "Statement": [
+            {
+                "Sid": "Allow application to PUT and DELETE objects",
+                "Effect": "Allow",
+                "Principal": {
+                    "SCW": "application_id:<APPLICATION_ID>"
+                },
+                "Action": [
+                    "s3:PutObject",
+                    "s3:DeleteObject",
+                    "s3:DeleteObjects"
+                ],
+                "Resource": [
+                    "bucket-B",
+                    "bucket-B/*"
+                ]
+            }
+        ]
+    }
+    ```
+
+5. [Apply the policies](/object-storage/access-control/manage-bucket-policies/) to the corresponding buckets.
+
+The user can now read and write objects in bucket A, and the application can read objects in bucket A. The application can also write and delete objects in bucket B. The user cannot perform any action in bucket B, because the bucket policy of bucket B does not explicitly allow it.
+
+See the [Bucket policies overview](/object-storage/api-cli/bucket-policy/#bucket-policies-description) for more information on the elements of a bucket policy.

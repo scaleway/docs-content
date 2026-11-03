@@ -1,0 +1,183 @@
+---
+title: How to manage lifecycle rules
+description: Create, disable, and delete Object Storage lifecycle rules using the Scaleway console or the AWS CLI to transition, expire, and clean up objects automatically.
+tags: object storage object-storage lifecycle lifecycle-rule transition expiration glacier abort incomplete multipart upload version aws-cli console
+dates:
+  validation: 2026-11-03
+  posted: 2026-11-03
+---
+import Requirements from '@macros/iam/requirements.mdx'
+import LifecycleMinimalDurationMessage from '@macros/object-storage/lifecycle-minimal-duration-message.mdx'
+
+
+Lifecycle rules automate the management of your objects over time to reduce storage costs. A lifecycle configuration is a set of rules that Object Storage applies to all the objects of a bucket, or to a subset of objects filtered by [prefix](/object-storage/concepts/#prefix) or [tags](/object-storage/concepts/#tags).
+
+Lifecycle rules let you:
+
+- Transition objects and their versions to a colder storage class
+- Delete objects and their versions on a specified date or after a specified duration
+- Expire delete markers that have no non-current versions
+- Abort [incomplete multipart uploads](/object-storage/how-to/abort-incomplete-mpu/)
+
+Lifecycle rules only allow the following transitions:
+
+- Standard Multi-AZ to Standard One Zone
+- Standard Multi-AZ to Glacier
+- Standard One Zone to Glacier
+
+<LifecycleMinimalDurationMessage />
+
+You can manage lifecycle rules from the [Scaleway console](https://console.scaleway.com) or with any Amazon S3-compatible tool, such as the AWS CLI or an SDK. See the [Lifecycle rules reference](/object-storage/storage-classes/lifecycle-rules-reference/) for the full list of configuration elements.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- An [Object Storage bucket](/object-storage/how-to/create-a-bucket/)
+- The [AWS CLI](/object-storage/api-cli/object-storage-aws-cli/) installed and configured, if you use the CLI
+
+## Create a lifecycle rule
+
+The following tabs describe how to create a lifecycle rule using the console or the AWS CLI.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the Scaleway console side menu, under **Storage**, click **Object Storage**. The list of your buckets appears.
+
+    2. Click the name of your bucket. The list of your objects appears.
+
+    3. Click the **Lifecycle rules** tab.
+
+    4. Click **Create Lifecycle rule**.
+
+    5. Enter a name for the rule.
+
+    6. Select the scope of the lifecycle rule:
+
+        - Apply the rule to all the objects in the bucket.
+        - Filter the objects to which the rule applies by one or both of the following criteria:
+            - **[Prefix](/object-storage/concepts/#prefix)**: the rule applies to all objects whose name starts with the specified prefix.
+            - **[Tags](/object-storage/concepts/#tags)**: a key and an associated value. Define tags on the bucket or the objects before you create the rule. You can add one or more tags to your filter.
+
+    7. Configure the behavior of the lifecycle rule:
+
+        - Transition the current version of your objects to a colder storage class on a specified date or after a specified number of days.
+        - Transition non-current versions of your objects to a colder storage class a specified number of days after they become non-current. Optionally, specify the number of non-current versions to retain.
+        - Expire and delete the current version of your objects on a specified date or after a specified number of days, or expire delete markers that have no non-current versions.
+        - Expire and delete non-current versions of an object a specified number of days after they become non-current. Optionally, specify the number of non-current versions to retain.
+        - Abort [incomplete multipart uploads](/object-storage/api-cli/multipart-uploads/#abort-a-multipart-upload) after a specified number of days.
+
+        You can add several transitions for current and non-current versions to the same rule.
+
+    8. Click **Next Step**.
+
+    9. Review the summary of your lifecycle rule, then click **Create lifecycle rule**. The new rule appears enabled in the lifecycle rules list.
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    1. Create a file named `my-lifecycle-rule.json`.
+
+    2. Add your rules to the file using the elements described in the [Lifecycle rules reference](/object-storage/storage-classes/lifecycle-rules-reference/). The following rule transitions all objects of the bucket to Glacier after 90 days:
+        ```json
+        {
+          "Rules": [
+            {
+              "ID": "TransitionToGlacierAfter90Days",
+              "Status": "Enabled",
+              "Filter": { "Prefix": "" },
+              "Transitions": [
+                {
+                  "Days": 90,
+                  "StorageClass": "GLACIER"
+                }
+              ]
+            }
+          ]
+        }
+        ```
+
+    3. Run the following command to apply the lifecycle configuration to your bucket. Replace `<BUCKET_NAME>` with the name of your bucket.
+        ```bash
+        aws s3api put-bucket-lifecycle-configuration \
+          --bucket <BUCKET_NAME> \
+          --lifecycle-configuration file://my-lifecycle-rule.json
+        ```
+        The command returns no output.
+
+    4. Run the following command to check that the configuration applies to the bucket:
+        ```bash
+        aws s3api get-bucket-lifecycle-configuration --bucket <BUCKET_NAME>
+        ```
+        The content of your rules appears. Active rules also appear in the **Lifecycle rules** tab of your bucket in the console.
+  </TabsTab>
+</Tabs>
+
+<Message type="important">
+`put-bucket-lifecycle-configuration` replaces the whole lifecycle configuration of the bucket. To add a rule to existing rules, include all the rules in the same file.
+</Message>
+
+## Abort incomplete multipart uploads automatically
+
+Incomplete [multipart uploads](/object-storage/api-cli/multipart-uploads/) keep their uploaded parts in the bucket, and you are billed for them. A lifecycle rule can stop multipart uploads that are not complete after a defined number of days, and delete their parts.
+
+1. Create a file named `incomplete-upload-lifecycle-policy.json` with the following content. Replace `1` with the number of days after which Object Storage aborts incomplete uploads.
+    ```json
+    {
+      "Rules": [{
+        "ID": "Remove incomplete multipart uploads",
+        "Status": "Enabled",
+        "Filter": {
+          "Prefix": ""
+        },
+        "AbortIncompleteMultipartUpload": {
+          "DaysAfterInitiation": 1
+        }
+      }]
+    }
+    ```
+
+2. Run the following command to apply the lifecycle configuration to your bucket:
+    ```bash
+    aws s3api put-bucket-lifecycle-configuration \
+      --bucket <BUCKET_NAME> \
+      --lifecycle-configuration file://incomplete-upload-lifecycle-policy.json
+    ```
+
+To configure the same rule with a [PutBucketLifecycleConfiguration](/object-storage/api-cli/bucket-operations/#putbucketlifecycleconfiguration) API call, see the [Lifecycle rules reference](/object-storage/storage-classes/lifecycle-rules-reference/#xml-example-for-incomplete-multipart-uploads). You can also configure this rule from the console, as described in [Create a lifecycle rule](#create-a-lifecycle-rule).
+
+## Disable a lifecycle rule
+
+1. In the Scaleway console side menu, under **Storage**, click **Object Storage**. The list of your buckets appears.
+
+2. Click the name of your bucket.
+
+3. Click the **Lifecycle rules** tab. The list of your rules appears.
+
+4. Click <Icon name="more" /> next to the name of the rule.
+
+5. Click **Disable**. A dialog box appears.
+
+6. Click **Disable lifecycle rule** to confirm.
+
+The disabled rule remains in the list. To enable it again, click <Icon name="more" /> next to its name, then click **Activate**.
+
+To disable a rule with the AWS CLI, set its `Status` to `Disabled` in your configuration file, then apply the configuration again with `put-bucket-lifecycle-configuration`.
+
+## Delete a lifecycle rule
+
+The following tabs describe how to delete lifecycle rules using the console or the AWS CLI.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the **Lifecycle rules** tab of your bucket, click <Icon name="more" /> next to the name of the rule.
+
+    2. Click **Delete**.
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    To delete a single rule, remove it from your configuration file and apply the configuration again with `put-bucket-lifecycle-configuration`.
+
+    To delete all the lifecycle rules of a bucket, run the following command:
+    ```bash
+    aws s3api delete-bucket-lifecycle --bucket <BUCKET_NAME>
+    ```
+  </TabsTab>
+</Tabs>

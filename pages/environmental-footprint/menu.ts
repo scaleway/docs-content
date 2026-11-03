@@ -7,12 +7,28 @@ export const environmentalFootprintMenu = {
     {
       label: 'Concepts',
       slug: 'concepts',
+      items: [
+        {
+          label: 'Understanding your environmental footprint estimation',
+          slug: 'environmental-footprint-calculator-estimation',
+        },
+        {
+          label: 'Calculation breakdown',
+          slug: 'environmental-footprint-calculator',
+        },
+        {
+          label: 'Calculator integration',
+          slug: 'environmental-footprint-integration',
+        },
+        {
+          label: 'Glossary',
+          slug: 'glossary',
+        },
+      ],
     },
     {
-      label: 'FAQ',
-      slug: 'faq',
-    },
-    {
+      label: 'Dashboards and reports',
+      slug: 'dashboards-reports',
       items: [
         {
           label: 'Use the Environmental Footprint dashboard',
@@ -23,62 +39,48 @@ export const environmentalFootprintMenu = {
           slug: 'track-monthly-footprint',
         },
       ],
-      label: 'How to',
-      slug: 'how-to',
     },
     {
+      label: 'Product footprint calculation',
+      slug: 'product-footprint-calculation',
       items: [
         {
-          label: 'Calculation breakdown',
-          slug: 'environmental-footprint-calculator',
-        },
-        {
-          label: 'Calculation reference values',
-          slug: 'calculation-values-reference',
-        },
-        {
-          label: 'Calculator product integration',
-          slug: 'environmental-footprint-integration',
-        },
-        {
-          label: 'Understanding your environmental footprint estimation',
-          slug: 'environmental-footprint-calculator-estimation',
-        },
-        {
-          label: 'Bare Metal footprint calculation',
+          label: 'Bare Metal footprint',
           slug: 'bare-metal-env-footprint',
         },
         {
-          label: 'Instances footprint calculation',
+          label: 'Instances footprint',
           slug: 'instances-env-footprint',
         },
         {
-          label: 'Block Storage footprint calculation',
+          label: 'Block Storage footprint',
           slug: 'block-storage-env-footprint',
         },
         {
-          label: 'Object Storage footprint calculation',
+          label: 'Object Storage footprint',
           slug: 'object-storage-env-footprint',
         },
         {
-          label: 'Load Balancer footprint calculation',
+          label: 'Load Balancer footprint',
           slug: 'load-balancer-env-footprint',
         },
         {
-          label: 'Kubernetes footprint calculation',
+          label: 'Kubernetes footprint',
           slug: 'kubernetes-env-footprint',
         },
         {
-          label: 'Managed Database footprint calculation',
+          label: 'Managed Database footprint',
           slug: 'managed-databases-env-footprint',
         },
         {
-          label: 'Generative APIs footprint calculation',
-          slug: 'generative-apis-dedicated-env-footprint'
-        }        
+          label: 'Generative APIs footprint',
+          slug: 'generative-apis-dedicated-env-footprint',
+        },
       ],
-      label: 'Additional Content',
-      slug: 'additional-content',
+    },
+    {
+      label: 'FAQ',
+      slug: 'faq',
     },
   ],
   label: 'Environmental Footprint',

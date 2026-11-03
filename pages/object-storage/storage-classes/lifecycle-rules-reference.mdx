@@ -1,0 +1,247 @@
+---
+title: Lifecycle rules reference
+description: Reference of the XML elements available to build Object Storage lifecycle configurations, with filter, transition, and expiration examples.
+tags: object storage object-storage lifecycle lifecycle-rule xml reference transition expiration storage-class
+dates:
+  validation: 2026-11-03
+  posted: 2026-11-03
+---
+import LifecycleMinimalDurationMessage from '@macros/object-storage/lifecycle-minimal-duration-message.mdx'
+
+
+A lifecycle configuration is a set of rules that defines the actions Object Storage performs on a group of objects during their lifetime. This page describes the elements available to build a lifecycle configuration. To create, disable, or delete rules, see [How to manage lifecycle rules](/object-storage/storage-classes/lifecycle-rules/).
+
+<LifecycleMinimalDurationMessage />
+
+## Lifecycle configuration structure
+
+A lifecycle configuration is an XML document that contains one or more rules:
+
+```xml
+<LifecycleConfiguration>
+  <Rule>
+  ...
+  </Rule>
+  <Rule>
+  ...
+  </Rule>
+  ...
+</LifecycleConfiguration>
+```
+
+Each `Rule` contains the following elements:
+
+- A `Filter` that identifies the subset of objects to which the rule applies
+- A `Status` that states whether the rule is in effect. A rule can be present but `Disabled`.
+- One or more lifecycle actions to perform on the selected objects
+
+The AWS CLI accepts the same elements in JSON format. See [How to manage lifecycle rules](/object-storage/storage-classes/lifecycle-rules/#create-a-lifecycle-rule) for an example.
+
+## Available XML elements
+
+### Rule
+
+**Description**
+: Container for a lifecycle rule. A bucket supports up to 1,000 rules.
+
+**Parent**
+: `LifecycleConfiguration`
+
+### ID
+
+**Description**
+: Unique identifier of the rule, up to 255 characters.
+
+**Parent**
+: `Rule`
+
+### Status
+
+**Description**
+: Whether the rule is enabled.
+
+**Parent**
+: `Rule`
+
+**Values**
+: `Enabled`, `Disabled`
+
+### Filter
+
+**Description**
+: Container for the elements that describe the subset of objects to which the rule applies. If the element is empty, the rule applies to all the objects of the bucket.
+
+**Parent**
+: `Rule`
+
+### And
+
+**Description**
+: Container for combining several filters. An object must match all the filters for the rule to apply.
+
+**Parent**
+: `Filter`
+
+**Sample**
+```xml
+<And>
+  <Prefix>myprefix</Prefix>
+  <Tag>
+    <Key>mytagkey1</Key>
+    <Value>mytagvalue1</Value>
+  </Tag>
+</And>
+```
+This filter applies the rule to objects that have both the `myprefix` prefix and the `mytagkey1` tag set to `mytagvalue1`.
+
+### Prefix
+
+**Description**
+: Object key prefix identifying one or more objects to which the rule applies. Object Storage supports 1 `Prefix` per filter.
+
+**Parent**
+: `Filter` or `And`
+
+### Tag
+
+**Description**
+: Container for a `Key` and a `Value`.
+
+**Parent**
+: `Filter` or `And`
+
+### Transition
+
+**Description**
+: Specifies when objects move to another storage class, and the destination storage class. Lifecycle rules only allow the following transitions:
+  - Standard Multi-AZ to Standard One Zone
+  - Standard Multi-AZ to Glacier
+  - Standard One Zone to Glacier
+
+**Parent**
+: `Rule`
+
+### Days
+
+**Description**
+: Number of days after the creation of the object when the rule takes effect.
+
+**Parent**
+: `Transition` or `Expiration`
+
+### StorageClass
+
+**Description**
+: Storage class to which the object transitions. The available values are `STANDARD`, `ONEZONE_IA`, and `GLACIER`.
+
+**Parent**
+: `Transition`
+
+### Expiration
+
+**Description**
+: Describes the end of the lifetime of the object. If versioning is enabled, this action only deletes the current version of an object.
+
+**Parent**
+: `Rule`
+
+### ExpiredObjectDeleteMarker
+
+**Description**
+: Enables the expiration of delete markers that have no non-current versions. Object Storage deletes expired delete markers automatically.
+
+**Parent**
+: `Expiration`
+
+### NoncurrentVersionExpiration
+
+**Description**
+: Describes the lifetime of non-current versions before they expire. Object Storage deletes expired versions automatically.
+
+**Parent**
+: `Rule`
+
+### NoncurrentVersionTransitions
+
+**Description**
+: Describes the lifetime of non-current versions before they transition to the specified storage class. See [Transition](#transition) for the allowed transitions.
+
+**Parent**
+: `Rule`
+
+### NoncurrentDays
+
+**Description**
+: Number of days after which non-current versions expire or transition.
+
+**Parent**
+: `NoncurrentVersionTransitions` or `NoncurrentVersionExpiration`
+
+### AbortIncompleteMultipartUpload
+
+**Description**
+: Container for the number of days after which Object Storage aborts an incomplete multipart upload and deletes its parts.
+
+**Parent**
+: `Rule`
+
+### DaysAfterInitiation
+
+**Description**
+: Number of days after the start of a multipart upload when Object Storage aborts the upload if it is not complete.
+
+**Parent**
+: `AbortIncompleteMultipartUpload`
+
+## Configuration examples
+
+### XML example with combined filters
+
+```xml
+<LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Rule>
+    <ID>id-1</ID>
+    <Expiration>
+      <Days>1</Days>
+    </Expiration>
+    <Filter>
+      <And>
+        <Prefix>myprefix</Prefix>
+        <Tag>
+          <Key>mytagkey1</Key>
+          <Value>mytagvalue1</Value>
+        </Tag>
+        <Tag>
+          <Key>mytagkey2</Key>
+          <Value>mytagvalue2</Value>
+        </Tag>
+      </And>
+    </Filter>
+    <Status>Enabled</Status>
+  </Rule>
+</LifecycleConfiguration>
+```
+
+The rule `id-1` deletes, 1 day after their creation, the objects that have the `myprefix` prefix, the `mytagkey1` tag set to `mytagvalue1`, and the `mytagkey2` tag set to `mytagvalue2`.
+
+### XML example for incomplete multipart uploads
+
+Send a [PutBucketLifecycleConfiguration](/object-storage/api-cli/bucket-operations/#putbucketlifecycleconfiguration) request with the following XML payload to abort multipart uploads that are not complete 1 day after they start. Replace `1` with the number of days of your choice.
+
+```xml no-copy
+<?xml version="1.0" encoding="UTF-8"?>
+<LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+  <Rule>
+    <ID>Remove uncompleted uploads</ID>
+    <Filter>
+      <Prefix></Prefix>
+    </Filter>
+    <Status>Enabled</Status>
+    <AbortIncompleteMultipartUpload>
+      <DaysAfterInitiation>1</DaysAfterInitiation>
+    </AbortIncompleteMultipartUpload>
+  </Rule>
+</LifecycleConfiguration>
+```
+
+See [Bucket operations](/object-storage/api-cli/bucket-operations/#putbucketlifecycleconfiguration) for more examples of lifecycle API requests.

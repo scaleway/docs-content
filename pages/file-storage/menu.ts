@@ -78,6 +78,16 @@ export const fileStorageMenu = {
       label: 'Additional content',
       slug: 'reference-content',
     },
+    {
+      items: [
+        {
+          label: 'I am experiencing locking issues',
+          slug: 'locking-issues',
+        },
+      ],
+      label: 'Troubleshooting',
+      slug: 'troubleshooting',
+    },
   ],
   label: 'File Storage',
   slug: 'file-storage',

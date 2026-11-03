@@ -103,6 +103,10 @@ export const objectStorageMenu = {
     {
       items: [
         {
+          label: 'Understanding access control',
+          slug: 'understanding-access-control',
+        },
+        {
           label: 'Object visibility and sharing',
           slug: 'object-visibility-and-sharing',
         },

@@ -57,7 +57,7 @@ def get_target_h2_section(tasks: list) -> str:
     elif "code" in task_set and "chat" not in task_set:
         return r"##\s*Code models"
     
-    # 7. Text Models (chat, text standard)
+    # 7. Text Models (chat, standard text)
     else:
         return r"##\s*Text models"
 
@@ -97,8 +97,63 @@ def fetch_catalog_models():
 
     return models
 
+def clean_name_for_comparison(row_str: str) -> str:
+    """Extracts raw model name from a markdown row for comparison only."""
+    cells = [c.strip() for c in row_str.strip().strip("|").split("|")]
+    if not cells:
+        return ""
+    match = re.search(r"\[([^\]]+)\]", cells[0])
+    val = match.group(1) if match else cells[0]
+    return val.strip().lower()
+
+def insert_row_alphabetically_in_table(content: str, heading_pattern: str, new_rows_with_names: list) -> str:
+    """Inserts rows into an already-sorted table at their exact alphabetical position without altering other rows."""
+    if not new_rows_with_names:
+        return content
+
+    match_heading = re.search(rf"(?m)^{heading_pattern}\s*$", content, re.IGNORECASE)
+    if not match_heading:
+        print(f"⚠️ Heading not found with pattern: {heading_pattern}")
+        return content
+
+    heading_end = match_heading.end()
+    rest = content[heading_end:]
+
+    table_match = re.search(r"(\n(?:\s*\|[^\n]+\|\s*\n)+)", rest)
+    if not table_match:
+        print(f"⚠️ No table found under: {heading_pattern}")
+        return content
+
+    table_lines = [line.strip() for line in table_match.group(1).strip().split("\n") if line.strip()]
+    if len(table_lines) < 2:
+        return content
+
+    header_lines = table_lines[:2]
+    data_rows = list(table_lines[2:])
+
+    sorted_new_items = sorted(new_rows_with_names, key=lambda x: x["name"].lower())
+
+    for item in sorted_new_items:
+        new_row_str = item["row_str"]
+        new_name_key = item["name"].lower()
+        
+        inserted = False
+        for i, existing_row in enumerate(data_rows):
+            existing_name_key = clean_name_for_comparison(existing_row)
+            if new_name_key < existing_name_key:
+                data_rows.insert(i, new_row_str)
+                inserted = True
+                break
+        
+        if not inserted:
+            data_rows.append(new_row_str)
+
+    updated_table = "\n" + "\n".join(header_lines + data_rows) + "\n"
+    new_rest = rest[:table_match.start(1)] + updated_table + rest[table_match.end(1):]
+    return content[:heading_end] + new_rest
+
 def append_to_markdown_table_under_heading(content: str, heading_pattern: str, new_rows: list) -> str:
-    """Add new rows to the end of the first table under a given heading."""
+    """Appends new rows to the end of the table (used for EOL models)."""
     if not new_rows:
         return content
 
@@ -128,11 +183,9 @@ def generate_model_detail_block(model: dict) -> str:
     title = name.capitalize()
     provider = model["provider"]
     
-    # Formatting reasoning efforts
     reasoning_vals = model.get("reasoning_values", [])
     reasoning_str = ", ".join(f"`{r}`" for r in reasoning_vals) if reasoning_vals else "None"
 
-    # Image formats if vision or OCR
     tasks = model.get("tasks", [])
     has_vision = any(t in tasks for t in ["vision", "ocr"])
     image_formats = "PNG, JPEG, WebP" if has_vision else "N/A"
@@ -166,14 +219,12 @@ def insert_detail_block_into_section(content: str, heading_pattern: str, detail_
     section_start = match_heading.end()
     rest = content[section_start:]
 
-    # Search for the next H2 heading that delimits the end of the current section
     next_h2_match = re.search(r"(?m)^##\s+", rest)
     if next_h2_match:
         insert_pos = next_h2_match.start()
         new_rest = rest[:insert_pos].rstrip() + "\n\n" + detail_block + "\n\n" + rest[insert_pos:]
         return content[:section_start] + new_rest
     else:
-        # Last H2 in the document
         return content.rstrip() + "\n\n" + detail_block + "\n"
 
 def main():
@@ -188,41 +239,48 @@ def main():
     with open(DOC_FILE_PATH, "r", encoding="utf-8") as f:
         content = f.read()
 
-    new_active_rows = []
+    new_active_items = []
     new_eol_rows = []
     active_models_to_insert = []
     added_summary = []
 
     for m in catalog.values():
         name = m["name"]
-        
-        # If the model is already present on the page, leave it unchanged
+        status = m["status"]
+
+        # Completely skip retired models
+        if status == "retired":
+            print(f"  ⏭️ Ignored (retired model) : {name}")
+            continue
+
+        # If the model is already present on the page, leave it untouched
         if name.lower() in content.lower():
             continue
 
-        if m["status"] in ["end_of_life", "retired"]:
+        # Only 'end_of_life' models go to the EOL table
+        if status == "end_of_life":
             new_eol_rows.append(f"| {m['provider']} | `{name}` | TBD | TBD | TBD |")
-            added_summary.append(f"- **EOL/Retired** : `{name}` ({m['provider']})")
+            added_summary.append(f"- **EOL** : `{name}` ({m['provider']})")
             print(f"  ➕ Detected for EOL : {name}")
         else:
             name_anchor = format_anchor(name)
             modalities = format_modalities(m["tasks"])
-            new_active_rows.append(f"| {name_anchor} | Yes | {modalities} | TBD | TBD |")
+            row_str = f"| {name_anchor} | Yes | {modalities} | TBD | TBD |"
             
-            # Stores active model for insertion into the appropriate H2 section
+            new_active_items.append({"name": name, "row_str": row_str})
             active_models_to_insert.append(m)
             added_summary.append(f"- **Active** : `{name}` ({m['provider']})")
             print(f"  ➕ Detected for Active : {name}")
 
-    if not new_active_rows and not new_eol_rows:
+    if not new_active_items and not new_eol_rows:
         print("✅ Documentation is already in sync with the catalog.")
         sys.exit(0)
 
-    # 1. Update the technical table under '## Models technical summary'
-    content = append_to_markdown_table_under_heading(
+    # 1. Insert new active models at their exact alphabetical position in '## Models technical summary'
+    content = insert_row_alphabetically_in_table(
         content,
         r"##\s*Models technical summary",
-        new_active_rows
+        new_active_items
     )
 
     # 2. Insert each '###' card into its respective H2 category
@@ -232,7 +290,7 @@ def main():
         content = insert_detail_block_into_section(content, target_h2, detail_block)
         print(f"  📌 Card inserted for `{m['name']}` under : {target_h2}")
 
-    # 3. Update the EOL table under '## End of life (EOL) models'
+    # 3. Append EOL models to the end of '## End of life (EOL) models' without sorting
     content = append_to_markdown_table_under_heading(
         content,
         r"##\s*End[- ]of[- ]life.*models",
@@ -244,7 +302,6 @@ def main():
 
     print(f"\n📝 {DOC_FILE_PATH} updated successfully.")
 
-    # Summary for the PR in GitHub Actions
     summary_path = os.getenv("GITHUB_STEP_SUMMARY")
     if summary_path:
         with open(summary_path, "a", encoding="utf-8") as sf:

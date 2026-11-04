@@ -85,6 +85,10 @@ export const objectStorageMenu = {
           slug: 'understanding-storage-classes',
         },
         {
+          label: 'Understanding Glacier',
+          slug: 'understanding-glacier',
+        },
+        {
           label: 'Managing storage classes',
           slug: 'manage-storage-classes',
         },

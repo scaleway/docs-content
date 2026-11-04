@@ -56,6 +56,10 @@ export const fileStorageMenu = {
           label: 'Using File Storage with the Scaleway CLI',
           slug: 'use-file-storage-cli',
         },
+        {
+          label: 'Managing snapshots using the Scaleway API',
+          slug: 'manage-snapshots-api',
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',

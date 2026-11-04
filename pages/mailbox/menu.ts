@@ -39,6 +39,10 @@ export const mailboxMenu = {
           slug: 'add-alias',
         },
         {
+          label: 'Set email forwarding',
+          slug: 'set-email-forwarding',
+        },
+        {
           label: 'Delete a Mailbox email account',
           slug: 'delete-email-account',
         },

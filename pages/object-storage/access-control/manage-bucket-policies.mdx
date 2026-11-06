@@ -1,0 +1,318 @@
+---
+title: How to manage bucket policies
+description: Create, apply, edit, duplicate, and delete Object Storage bucket policies using the Scaleway console or the AWS CLI to control access to your buckets.
+tags: bucket policy bucket-policy object storage object-storage aws-s3 aws-cli access console
+dates:
+  validation: 2026-11-03
+  posted: 2026-11-03
+---
+import Requirements from '@macros/iam/requirements.mdx'
+import StorageBucketPolicy from '@macros/storage/bucket-policy.mdx'
+import ImportantBucketPolicy from '@macros/storage/important-bucket-policy.mdx'
+
+
+You can create, apply, edit, and delete [bucket policies](/object-storage/concepts/glossary/#bucket-policy) from the [Scaleway console](https://console.scaleway.com) or with the AWS CLI. Each procedure on this page describes both methods.
+
+<StorageBucketPolicy />
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- An [Object Storage bucket](/object-storage/buckets/create-a-bucket/)
+- An [IAM policy](/iam/policies-permissions/create-policy/) granting access to your users and applications
+- The [AWS CLI](/object-storage/api-clients/cli-tools-and-clients/) installed and configured with a Scaleway API key, if you use the CLI
+
+## Create and apply a bucket policy
+
+The following tabs describe how to create a bucket policy and apply it to a bucket using the console or the AWS CLI.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the Scaleway console side menu, click **Object Storage**. The Object Storage dashboard appears.
+
+    2. Click the **Bucket policies** tab, then click **Create bucket policy**. A creation form appears.
+
+    3. Enter a name for your bucket policy.
+
+    4. Select the bucket to which you want to apply the policy.
+
+        <Message type="note">
+        You can only apply a policy to a single bucket, but you can [apply an existing policy to another bucket](#apply-an-existing-policy-to-another-bucket). If you change the target bucket of an existing policy, Object Storage removes the policy from the original bucket and applies it to the selected bucket.
+        </Message>
+
+    5. Select your preferred creation method:
+
+        - The **policy generator** to add [statements](/object-storage/access-control/bucket-policies/#statement) using a form
+        - The **JSON editor** to write or paste your bucket policy in a code editor
+
+    6. Keep the **Maintain access to bucket** box checked to prevent accidental lockout from your bucket. By default, the bucket policy contains a secure statement that allows every action to the user creating the policy.
+
+    7. Create a [statement](/object-storage/access-control/bucket-policies/#statement):
+
+        - **Policy generator**:
+            - Enter a unique [statement ID](/object-storage/access-control/bucket-policies/#sid) (Sid) describing the purpose of the statement.
+            - Select the types of [principals](/object-storage/access-control/bucket-policies/#principal) from the dropdown.
+            - Select the users and applications you want to grant access to.
+            - Select the [actions](/object-storage/access-control/bucket-policies/#action) to allow to the principals. To allow different sets of actions to different principals, create multiple statements.
+            - Select [resources](/object-storage/access-control/bucket-policies/#resource) by entering the prefix of the objects, followed by `/*`. Enter `*` to select every object in the bucket.
+            - Add [conditions](/object-storage/access-control/bucket-policies/#condition) by selecting them from the dropdown and adding a supported key-value pair.
+        - **JSON editor**:
+            - Enter a unique [statement ID](/object-storage/access-control/bucket-policies/#sid) (Sid) describing the purpose of the statement.
+            - Enter the types of [principals](/object-storage/access-control/bucket-policies/#principal) and the IDs of the users and applications you want to grant access to:
+              ```json
+              "Principal":{
+                  "SCW":[
+                      "user_id:<USER_ID>",
+                      "application_id:<APPLICATION_ID>"
+                  ]
+              },
+              ```
+            - Enter the [actions](/object-storage/access-control/bucket-policies/#action) to allow to the principals. Enter `s3:*` to allow all actions.
+              ```json
+              "Action":[
+                  "s3:ListBucket",
+                  "s3:GetObject"
+              ],
+              ```
+            - Grant access to [resources](/object-storage/access-control/bucket-policies/#resource) by entering the prefix of the objects. Enter `*` to select every object in the bucket. Add the bucket itself as a resource to allow operations on the bucket, such as `s3:ListBucket`.
+              ```json
+              "Resource":[
+                  "<BUCKET_NAME>",
+                  "<BUCKET_NAME>/photos/*"
+              ]
+              ```
+            - Add [conditions](/object-storage/access-control/bucket-policies/#condition):
+              ```json
+              "Condition": {
+                  "DateGreaterThan": {
+                      "aws:CurrentTime": "2020-01-01T00:00:00Z"
+                  },
+                  "StringLike": {
+                      "aws:Referer": "https://console.scaleway.com/*"
+                  },
+                  "IpAddress": {
+                      "aws:SourceIp": "192.0.2.0/24"
+                  }
+              }
+              ```
+
+    8. (Optional) Click **Add statement**, and repeat the previous step to add another statement to your bucket policy.
+
+    9. Review your bucket policy using the JSON preview.
+
+    10. Click **Create bucket policy** to create the policy and apply it to the selected bucket.
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    1. Create a file named `bucket-policy.json`.
+
+    2. Open the file in a code editor and paste the following content. This sample bucket policy contains a statement that only allows the specified user to list the bucket and read the objects it contains.
+        ```json
+        {
+            "Version": "2023-04-17",
+            "Id": "MyBucketPolicy",
+            "Statement": [
+                {
+                    "Sid": "DelegateAccess",
+                    "Effect": "Allow",
+                    "Principal": {
+                        "SCW": "user_id:<USER_ID>"
+                    },
+                    "Action": [
+                        "s3:ListBucket",
+                        "s3:GetObject"
+                    ],
+                    "Resource": [
+                        "<BUCKET_NAME>",
+                        "<BUCKET_NAME>/*"
+                    ]
+                }
+            ]
+        }
+        ```
+
+    3. Replace the placeholders with the appropriate values:
+        - `<USER_ID>`: the ID of the user to grant access to. You can also grant access to an [application](/object-storage/access-control/bucket-policies/#principal).
+        - `<BUCKET_NAME>`: the name of the [bucket](/object-storage/access-control/bucket-policies/#resource) to which the policy applies.
+
+    4. Open a terminal in the folder containing the `bucket-policy.json` file.
+
+    5. Run the following command to apply the policy to your bucket:
+        ```bash
+        aws s3api put-bucket-policy --bucket <BUCKET_NAME> --policy file://bucket-policy.json
+        ```
+
+    6. Run the following command to check the bucket policy applied to your bucket:
+        ```bash
+        aws s3api get-bucket-policy --bucket <BUCKET_NAME> --query Policy --output text | jq
+        ```
+        An output similar to the following appears:
+        ```json
+        {
+          "Version": "2023-04-17",
+          "Id": "MyBucketPolicy",
+          "Statement": [
+            {
+              "Sid": "DelegateAccess",
+              "Effect": "Allow",
+              "Action": [
+                "s3:ListBucket",
+                "s3:GetObject"
+              ],
+              "Principal": {
+                "SCW": "user_id:f3e2-example-8e51-0fd3299d5d70"
+              },
+              "Resource": [
+                "my-bucket",
+                "my-bucket/*"
+              ]
+            }
+          ]
+        }
+        ```
+  </TabsTab>
+</Tabs>
+
+<ImportantBucketPolicy />
+
+See the [Bucket policies overview](/object-storage/access-control/bucket-policies/) for a description of each element of a bucket policy, and [Bucket policy examples](/object-storage/access-control/bucket-policy-examples/) for common use cases.
+
+### Bucket policy example
+
+The following bucket policy was generated using the console. It grants 2 different sets of permissions on 2 prefixes of the same bucket.
+
+```json
+{
+  "Id": "my-bucket-policy",
+  "Version": "2023-04-17",
+  "Statement": [
+    {
+      "Principal": {
+        "SCW": [
+          "user_id:example-c5cc-4862-8506-e09dfe5b9d1c",
+          "application_id:example-3967-f6rc-2064-b9d1ce09dfe5"
+        ]
+      },
+      "Sid": "my-statement-1",
+      "Action": [
+        "s3:DeleteObject",
+        "s3:DeleteObjectTagging",
+        "s3:GetBucketTagging",
+        "s3:GetObject"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "my-bucket",
+        "my-bucket/photos/*"
+      ],
+      "Condition": {
+        "IpAddress": {
+          "aws:SourceIp": "192.0.2.0/24"
+        }
+      }
+    },
+    {
+      "Principal": {
+        "SCW": [
+          "application_id:example-c5cc-4862-8506-e0969drses3d"
+        ]
+      },
+      "Sid": "my-statement-2",
+      "Action": [
+        "s3:PutObject",
+        "s3:PutBucketTagging",
+        "s3:PutBucketVersioning"
+      ],
+      "Effect": "Allow",
+      "Resource": [
+        "my-bucket",
+        "my-bucket/documents/*"
+      ],
+      "Condition": {
+        "StringLike": {
+          "aws:Referer": "https://console.scaleway.com/*"
+        }
+      }
+    }
+  ]
+}
+```
+
+## Edit a bucket policy
+
+The following tabs describe how to edit a bucket policy using the console or the AWS CLI.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the Scaleway console side menu, click **Object Storage**. The Object Storage dashboard appears.
+
+    2. Click the **Bucket policies** tab.
+
+    3. Click the name of the bucket policy you want to edit.
+
+    4. Click **Edit policy**.
+
+    You can also edit a bucket policy from the **Settings** tab of your bucket, or by clicking <Icon name="more" /> next to its name in the **Bucket policies** tab.
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    1. Edit your local `bucket-policy.json` file.
+
+    2. Run the `put-bucket-policy` command again. The new policy replaces the existing one.
+        ```bash
+        aws s3api put-bucket-policy --bucket <BUCKET_NAME> --policy file://bucket-policy.json
+        ```
+  </TabsTab>
+</Tabs>
+
+## Apply an existing policy to another bucket
+
+The console lets you duplicate an existing policy and apply it to another bucket.
+
+1. In the Scaleway console side menu, click **Object Storage**. The Object Storage dashboard appears.
+
+2. Click the **Bucket policies** tab.
+
+3. Click the name of the bucket policy you want to apply to another bucket.
+
+4. Click **Apply to another bucket**. A dialog box appears.
+
+5. Select a bucket from the dropdown, then enter a name for the policy.
+
+6. Click **Apply policy**.
+
+<ImportantBucketPolicy />
+
+## Delete a bucket policy
+
+<Message type="important">
+After you delete a bucket policy, the objects of the bucket become accessible to all the users of your Organization that have [IAM permissions](/object-storage/access-control/bucket-policy-examples/#combine-iam-and-bucket-policies-for-granular-access) for Object Storage.
+</Message>
+
+The following tabs describe how to delete a bucket policy using the console or the AWS CLI.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the Scaleway console side menu, click **Object Storage**. The Object Storage dashboard appears.
+
+    2. Click the **Bucket policies** tab.
+
+    3. Click the name of the bucket policy you want to delete.
+
+    4. Click **Delete policy** to permanently delete the policy.
+
+    You can also delete a bucket policy by clicking <Icon name="more" /> next to its name in the **Bucket policies** tab.
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    Run the following command to delete the policy of a bucket. Replace `<BUCKET_NAME>` with the name of your bucket.
+
+    ```bash
+    aws s3api delete-bucket-policy --bucket <BUCKET_NAME>
+    ```
+  </TabsTab>
+</Tabs>
+
+## Troubleshooting
+
+- If you lost access to your bucket after applying a bucket policy, see [I cannot access my buckets or objects](/object-storage/troubleshooting/access-and-authentication/#i-lost-access-to-a-bucket-after-applying-a-bucket-policy).
+- If an error appears when you validate your bucket policy, check its formatting. See the [Bucket policies overview](/object-storage/access-control/bucket-policies/) for the syntax of each element.
+- If you cannot delete a bucket policy, check that you have [Owner](/iam/concepts/glossary/#owner) status or the necessary [IAM permissions](/object-storage/access-control/s3-iam-permissions-equivalence/).

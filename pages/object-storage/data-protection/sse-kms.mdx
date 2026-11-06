@@ -1,0 +1,199 @@
+---
+title: How to use server-side encryption with Key Management Service (SSE-KMS)
+description: Enable SSE-KMS on Object Storage buckets and objects with Key Manager keys using the Scaleway console or the AWS CLI, and disable it safely.
+tags: object storage server side encryption sse kms sse-kms key manager aws-cli console own keys
+dates:
+  validation: 2026-11-03
+  posted: 2026-11-03
+---
+import Requirements from '@macros/iam/requirements.mdx'
+import SseKmsIntroduction from '@macros/object-storage/sse-kms-introduction.mdx'
+
+
+<SseKmsIntroduction />
+
+You can enable SSE-KMS on a bucket from the [Scaleway console](https://console.scaleway.com) or with the AWS CLI. The AWS CLI also lets you enable SSE-KMS for a single object upload or copy.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- An [Object Storage bucket](/object-storage/buckets/create-a-bucket/), unless you enable SSE-KMS during bucket creation
+- The [AWS CLI](/object-storage/api-clients/cli-tools-and-clients/) installed and configured, if you use the CLI
+- [Key Manager permission sets](/iam/policies-permissions/permission-sets/#key-manager) for every [principal](/iam/concepts/glossary/#principal) that reads or writes objects in the bucket:
+    - `KeyManagerKeyEncrypt` for `PutObject`, `UploadPart`, `CompleteMultipartUpload`, `CopyObject`, and `UploadPartCopy`
+    - `KeyManagerKeyDecrypt` for `GetObject`, `HeadObject`, `CopyObject`, `UploadPartCopy`, and `PostObject`
+
+<Message type="important">
+Object Storage permission sets alone are not sufficient to read (`ObjectStorageReadOnly`, `ObjectStorageObjectsRead`) and write (`ObjectStorageObjectsWrite`, `ObjectStorageObjectsDelete`) objects encrypted with SSE-KMS. For example, when a principal has only `ObjectStorageFullAccess` and no Key Manager permission set, it receives an "access denied" error when it uploads an object to a bucket that has default encryption enabled, even when the KEK and the bucket are in the same Project.
+</Message>
+
+## Enable SSE-KMS during bucket creation
+
+When you [create a bucket](/object-storage/buckets/create-a-bucket/) in the console:
+
+1. Check the **Enable bucket encryption** box and select the **SSE-KMS** encryption type.
+
+2. Select the KMS key to use as the key encryption key (KEK):
+
+    - **Select an existing key**: select a key that you [created in Key Manager](/key-manager/how-to/create-km-key/) from the dropdown.
+    - **Create a new KMS key**: enter a name for the new key. When you click **Create bucket**, Key Manager creates the key.
+
+    A new KMS key has the Protected status. You cannot delete it from the console or the API, which prevents accidental deletion. You can only disable key protection from [Key Manager](/key-manager/).
+
+Object Storage automatically encrypts the objects you upload to the bucket at rest, with your Key Manager key.
+
+<Message type="tip">
+Scaleway recommends using a dedicated KMS key for each bucket, rather than sharing a single key across several buckets.
+</Message>
+
+## Enable SSE-KMS on an existing bucket
+
+<Message type="important">
+Encryption happens when you upload an object. Objects uploaded to the bucket before you enable SSE-KMS remain unencrypted. To encrypt them, see [Enable SSE-KMS for a single object](#enable-sse-kms-for-a-single-object).
+</Message>
+
+The following tabs describe how to enable SSE-KMS on an existing bucket using the console or the AWS CLI.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the Scaleway console side menu, under **Storage**, click **Object Storage**. The list of your buckets appears.
+
+    2. Click the name of the bucket. The **Overview** tab of the bucket appears.
+
+    3. Click the **Settings** tab.
+
+    4. Under **Bucket encryption**, click **Edit encryption mode**. A dialog box appears.
+
+    5. Check the **Enable bucket encryption** box, then select **SSE-KMS**.
+
+    6. Select the KMS key to use as the KEK:
+
+        - **Select an existing key**: select a key that you [created in Key Manager](/key-manager/how-to/create-km-key/) from the dropdown.
+        - **Create a new KMS key**: enter a name for the new key. When you click **Confirm**, Key Manager creates the key.
+
+    7. Click **Confirm**.
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    Scaleway recommends setting default bucket encryption with a Bucket Key enabled. Object Storage then creates a Bucket Key encrypted with your KMS key (the KEK). The Bucket Key encrypts the data encryption keys (DEKs) that protect each object.
+
+    1. Run the following command to enable SSE-KMS on your bucket. Replace `<BUCKET_NAME>` with the name of your bucket, and `<KMS_KEY_ID>` with the ID of your Key Manager key.
+        ```bash
+        aws s3api put-bucket-encryption \
+          --bucket <BUCKET_NAME> \
+          --server-side-encryption-configuration '{
+            "Rules": [
+              {
+                "ApplyServerSideEncryptionByDefault": {
+                  "SSEAlgorithm": "aws:kms",
+                  "KMSMasterKeyID": "<KMS_KEY_ID>"
+                },
+                "BucketKeyEnabled": true
+              }
+            ]
+          }'
+        ```
+
+    2. Run the following command to check the encryption configuration of the bucket:
+        ```bash
+        aws s3api get-bucket-encryption --bucket <BUCKET_NAME>
+        ```
+  </TabsTab>
+</Tabs>
+
+Object Storage automatically encrypts each object you upload to the bucket from now on, with your Key Manager key.
+
+## Enable SSE-KMS for a single object
+
+You can enable SSE-KMS for a single upload or copy operation with the AWS CLI. Use this method to encrypt objects stored without SSE-KMS, for example objects uploaded before you enabled bucket encryption.
+
+In the following commands, replace the placeholders with the appropriate values.
+
+### Upload an object with SSE-KMS
+
+Run the following command:
+```bash
+aws s3api put-object \
+  --bucket <BUCKET_NAME> \
+  --key <OBJECT_KEY> \
+  --server-side-encryption aws:kms \
+  --bucket-key-enabled \
+  --ssekms-key-id <KMS_KEY_ID> \
+  --body <PATH_TO_FILE>
+```
+An output similar to the following appears:
+```json
+{
+  "ETag": "\"<object-metadata>\"",
+  "ChecksumCRC64NVME": "<checksum-value>",
+  "ChecksumType": "FULL_OBJECT",
+  "ServerSideEncryption": "aws:kms",
+  "SSEKMSKeyId": "<KMS_KEY_ID>",
+  "BucketKeyEnabled": true
+}
+```
+
+### Encrypt an existing object with a copy operation
+
+Run the following command, using the same bucket and key as the source and the destination:
+```bash
+aws s3api copy-object \
+  --copy-source <BUCKET_NAME>/<OBJECT_KEY> \
+  --key <OBJECT_KEY> \
+  --bucket <BUCKET_NAME> \
+  --server-side-encryption aws:kms \
+  --bucket-key-enabled \
+  --ssekms-key-id <KMS_KEY_ID>
+```
+An output similar to the following appears:
+```json
+{
+  "ServerSideEncryption": "aws:kms",
+  "SSEKMSKeyId": "<KMS_KEY_ID>",
+  "BucketKeyEnabled": true,
+  "CopyObjectResult": {
+    "ETag": "\"<object-metadata>\"",
+    "LastModified": "yyyy-MM-ddTHH:mm:ss.SSSZ",
+    "ChecksumCRC64NVME": "<checksum-value>"
+  }
+}
+```
+
+## Disable SSE-KMS on a bucket
+
+<Message type="important">
+After you disable SSE-KMS, the KEK no longer appears in the bucket view, but objects encrypted with the previous SSE-KMS configuration still depend on it. Do not delete the key from Key Manager: deleting it makes all previously encrypted objects permanently inaccessible.
+</Message>
+
+After you disable SSE-KMS, Object Storage no longer encrypts new objects. Objects uploaded while SSE-KMS was enabled remain encrypted.
+
+The following tabs describe how to disable SSE-KMS using the console or the AWS CLI.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the Scaleway console side menu, under **Storage**, click **Object Storage**. The list of your buckets appears.
+
+    2. Click the name of the bucket. The **Overview** tab of the bucket appears.
+
+    3. Click the **Settings** tab.
+
+    4. Under **Bucket encryption**, click **Edit encryption mode**. A dialog box appears.
+
+    5. Uncheck the **Enable bucket encryption** box.
+
+    6. Click **Confirm**. The **Disable encryption for my bucket** dialog box appears.
+
+    7. Type **DISABLE**, then click **Confirm**.
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    1. Run the following command to disable SSE-KMS on your bucket:
+        ```bash
+        aws s3api delete-bucket-encryption --bucket <BUCKET_NAME>
+        ```
+
+    2. Run the following command to check the encryption configuration of the bucket:
+        ```bash
+        aws s3api get-bucket-encryption --bucket <BUCKET_NAME>
+        ```
+  </TabsTab>
+</Tabs>

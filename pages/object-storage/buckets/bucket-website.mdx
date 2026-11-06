@@ -1,0 +1,165 @@
+---
+title: How to host a static website on a bucket
+description: Enable the bucket website feature, configure index and error documents, and make your static website public using the Scaleway console or the AWS CLI.
+tags: bucket website static-website object-storage object storage aws-cli console hosting
+dates:
+  validation: 2026-11-03
+  posted: 2026-11-03
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+The bucket website feature lets you host [static websites](https://en.wikipedia.org/wiki/Static_web_page) on an Object Storage bucket. You can enable and configure it from the [Scaleway console](https://console.scaleway.com), or with the AWS CLI and the Amazon S3 API.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- An [Object Storage bucket](/object-storage/buckets/create-a-bucket/)
+- The [AWS CLI](/object-storage/api-clients/cli-tools-and-clients/) installed and configured, if you use the CLI
+
+## Enable the bucket website feature
+
+A static website requires an index document, commonly named `index.html`, and can include an error document, commonly named `error.html`. You specify their names when you enable the feature, and you can upload them before or after.
+
+<Message type="important">
+The index and error documents must be at the root of your bucket, not in a folder.
+</Message>
+
+The following tabs describe how to enable the bucket website feature using the console or the AWS CLI.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the Scaleway console side menu, under **Storage**, click **Object Storage**. The list of your buckets appears.
+
+    2. Click the name of the bucket that hosts your website.
+
+    3. In the **Bucket settings** tab, click **Enable bucket website**. A dialog box appears.
+
+    4. Click the toggle to enable the feature.
+
+    5. Enter the names of the index and error documents of your website.
+
+    6. Click **Save configuration**. The details of your website configuration appear.
+
+    When you enable the bucket website feature from the console, Object Storage applies a default [bucket policy](/object-storage/concepts/glossary/#bucket-policy) that makes all the objects of the bucket public. To change this behavior, [create your own bucket policy](/object-storage/access-control/manage-bucket-policies/).
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    1. Create a file named `bucket-website.json` with the names of your index and error documents:
+        ```json
+        {
+            "IndexDocument": {
+                "Suffix": "index.html"
+            },
+            "ErrorDocument": {
+                "Key": "error.html"
+            }
+        }
+        ```
+        - `IndexDocument` (required): the suffix of the key of the HTML index document.
+        - `ErrorDocument` (optional): the document that Object Storage returns when access to the requested key is denied or the key does not exist.
+
+    2. Run the following command to enable the bucket website feature. Replace `<BUCKET_NAME>` with the name of your bucket.
+        ```bash
+        aws s3api put-bucket-website --bucket <BUCKET_NAME> --website-configuration file://bucket-website.json
+        ```
+
+    3. Run the following command to check the website configuration of your bucket:
+        ```bash
+        aws s3api get-bucket-website --bucket <BUCKET_NAME>
+        ```
+
+    The equivalent API calls are [PutBucketWebsite](/object-storage/api-clients/bucket-operations/#putbucketwebsite) and [GetBucketWebsite](/object-storage/api-clients/bucket-operations/#getbucketwebsite).
+  </TabsTab>
+</Tabs>
+
+## Upload your website files
+
+[Upload](/object-storage/objects/upload-objects/) the index and error documents to the root of your bucket, if you have not already done so, as well as the other files of your static website. In the console, you can use the drag and drop area to upload several files and folders at the same time.
+
+To create test files, use the following samples.
+
+`index.html`:
+
+```html
+<!doctype html>
+<html>
+  <head>
+    <title>My Website</title>
+  </head>
+  <body>
+    <div id="main">
+        <h1>Hi! Welcome to my website.</h1>
+    </div>
+  </body>
+</html>
+```
+
+`error.html`:
+
+```html
+<!doctype html>
+<html>
+  <head>
+    <title>Oops!</title>
+  </head>
+  <body>
+    <div id="main">
+        <h1>Oops! Something went wrong.</h1>
+    </div>
+  </body>
+</html>
+```
+
+## Make your website public
+
+When you enable the bucket website feature with the AWS CLI or the API, your website is not public until you apply a bucket policy that allows the `s3:GetObject` action to everyone.
+
+1. Create a file named `bucket-policy.json` with the following content:
+    ```json
+    {
+        "Version": "2023-04-17",
+        "Id": "MyBucketPolicy",
+        "Statement": [
+            {
+                "Sid": "DelegateAccess",
+                "Effect": "Allow",
+                "Principal": "*",
+                "Action": [
+                    "s3:GetObject"
+                ],
+                "Resource": [
+                    "<BUCKET_NAME>/*"
+                ]
+            }
+        ]
+    }
+    ```
+    In the `Resource` element, specify which objects are public:
+    - `<BUCKET_NAME>/*`: all the objects of the bucket, but not the bucket itself
+    - `<BUCKET_NAME>/<PREFIX>/*`: only the objects with the specified prefix. For example, `my_files/movie/*` makes all objects with the `movie/` prefix public, but not the other objects of the `my_files` bucket.
+
+2. Run the following command to apply the policy, or use the [PutBucketPolicy](/object-storage/api-clients/bucket-operations/#putbucketpolicy) API call:
+    ```bash
+    aws s3api put-bucket-policy --bucket <BUCKET_NAME> --policy file://bucket-policy.json
+    ```
+
+## Access your website
+
+Object Storage generates a website endpoint for your bucket in the following format:
+
+`https://<BUCKET_NAME>.s3-website.<REGION>.scw.cloud`
+
+In the console, click the **Website URL** in the **Bucket settings** tab of your bucket to open the website.
+
+To access the website through a domain name of your choice, [configure a CNAME record](/tutorials/s3-customize-url-cname/) for your bucket URL. To serve your website with a custom domain, an SSL/TLS certificate, and caching, see the [Edge Services Quickstart](/edge-services/quickstart/).
+
+## Disable the bucket website feature
+
+To disable the bucket website feature with the AWS CLI, run the following command. The command returns no output.
+
+```bash
+aws s3api delete-bucket-website --bucket <BUCKET_NAME>
+```
+
+The equivalent API call is [DeleteBucketWebsite](/object-storage/api-clients/bucket-operations/#deletebucketwebsite).

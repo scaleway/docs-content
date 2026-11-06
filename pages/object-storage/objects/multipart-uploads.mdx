@@ -1,0 +1,293 @@
+---
+title: Manage multipart uploads
+description: Upload large objects to Object Storage in multiple parts with the AWS CLI, then monitor or abort incomplete multipart uploads from the console or the CLI.
+tags: object storage object-storage multipart multipart-upload mpu aws-cli console large-file upload-part abort incomplete
+dates:
+  validation: 2026-11-03
+  posted: 2026-11-03
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+Multipart uploads let you upload a single object as a set of independent parts. Each part is a contiguous portion of the object data. You can upload parts in parallel and in any order, and retry a failed part without restarting the whole upload. Once all parts are uploaded, Object Storage assembles them into a single object that you can access like any other object in the bucket.
+
+Scaleway recommends using multipart uploads for objects larger than 50 MB. Multipart uploads are mandatory for objects larger than 5 GB, as a single `PUT` request cannot exceed this size.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- An [Object Storage bucket](/object-storage/buckets/create-a-bucket/)
+- The [AWS CLI](/object-storage/api-clients/cli-tools-and-clients/) installed and configured
+
+## Multipart uploads overview
+
+A multipart upload is composed of 3 steps:
+
+1. Initiate the upload. Object Storage returns a unique **upload ID**. You must include this identifier in every subsequent request related to the upload.
+
+2. Upload the parts. Each part has a part number that defines its position in the final object. For each part uploaded, Object Storage returns an **ETag** that identifies the content of the part.
+
+3. Complete the upload by sending the list of part numbers and their ETags. Object Storage assembles the parts in ascending part number order and creates the object.
+
+Alternatively, you can abort the upload at any point. Aborting deletes all uploaded parts, and no object is created.
+
+If you upload a part using a part number that already exists, the new part overwrites the previous one.
+
+Object Storage stores the uploaded parts until you complete or abort the upload, and bills them as regular storage. Incomplete multipart uploads that you do not abort remain billed indefinitely. See [Abort a multipart upload](#abort-a-multipart-upload) for more information.
+
+## Limits and part sizing
+
+The following technical specifications apply to multipart uploads:
+
+Number of parts per upload
+: 1 to 1,000
+
+Part size
+: 5 MB to 5 GB (the last part can be smaller)
+
+Maximum object size
+: 5 TB
+
+As an upload cannot exceed 1,000 parts, the part size determines the maximum size of the object you can upload. To find the minimum part size for your object, divide the object size by 1,000.
+
+## Perform a multipart upload automatically with the AWS CLI
+
+The high-level `aws s3` commands perform multipart uploads automatically. When a file exceeds the multipart threshold, the AWS CLI splits it into parts, uploads them in parallel, and completes the upload.
+
+1. Open your `~/.aws/config` file, and set the `multipart_chunksize` value to at least the size of your largest file divided by 1,000:
+
+    ```ini
+      multipart_chunksize = 100MB # Allows uploads up to 100 GB
+    ```
+
+2. Run the following command to upload your file. Replace `<BUCKET_NAME>` with the name of your bucket.
+
+    ```bash
+    aws s3 cp large-file.tar.gz s3://<BUCKET_NAME>/large-file.tar.gz
+    ```
+
+If the upload is interrupted, the uploaded parts remain stored and billed. [List the incomplete multipart uploads](#list-incomplete-multipart-uploads) of your bucket to find and [abort](#abort-a-multipart-upload) them.
+
+<Message type="tip">
+  [Rclone](/object-storage/api-clients/cli-tools-and-clients/) and [MinIO Client](/object-storage/api-clients/cli-tools-and-clients/) also perform multipart uploads automatically.
+</Message>
+
+## Perform a multipart upload manually
+
+The low-level `aws s3api` commands give you full control over each step of a multipart upload. Use them to integrate multipart uploads in your own scripts, or to resume an upload part by part.
+
+Unlike the `aws s3` commands, the `aws s3api` commands do not split your file. You must split it into parts that respect the [multipart upload limits](#limits-and-part-sizing) before uploading them. You must create each part file, for example using the `split` command, or a custom script.
+
+In the following procedure, replace `<BUCKET_NAME>` with the name of your bucket, and `<UPLOAD_ID>` with the upload ID returned when you initiate the upload.
+
+### Initiate a multipart upload
+
+1. Run the following command to initiate the multipart upload:
+
+    ```bash
+    aws s3api create-multipart-upload --bucket <BUCKET_NAME> --key large-file.tar.gz
+    ```
+
+    An output similar to the following appears:
+
+    ```json no-copy
+    {
+      "Bucket": "<BUCKET_NAME>",
+      "Key": "large-file.tar.gz",
+      "UploadId": "Y2VhZDUxYjAtNjVjMC00NTIxLWEwNWUtNWM3NDAyOTQ4ZWYz"
+    }
+    ```
+
+    Keep the `UploadId` value, as you need it to upload the parts, and to complete or abort the upload.
+
+### Upload a part
+
+1. Run the following command to upload the first part:
+
+    ```bash
+    aws s3api upload-part --bucket <BUCKET_NAME> --key large-file.tar.gz --upload-id <UPLOAD_ID> --part-number 1 --body part-aa
+    ```
+
+    An output similar to the following appears:
+
+    ```json no-copy
+    {
+      "ETag": "\"4cb0d956600bab287520b442e83035a6\""
+    }
+    ```
+
+2. Repeat the previous step for each part, incrementing the `--part-number` value and changing the `--body` value accordingly (`--part-number 2 --body part-ab`, and so on).
+
+    <Message type="note">
+      If a part fails to upload, run the command again for this part only, using the same part number.
+    </Message>
+
+### Complete a multipart upload
+
+1. Run the following command to save the number and ETag of each uploaded part in a file named `parts.json`:
+
+    ```bash
+    aws s3api list-parts --bucket <BUCKET_NAME> --key large-file.tar.gz --upload-id <UPLOAD_ID> --query '{Parts: Parts[].{PartNumber: PartNumber, ETag: ETag}}' > parts.json
+    ```
+
+2. Run the following command to complete the upload. Object Storage assembles the parts and creates the object.
+
+    ```bash
+    aws s3api complete-multipart-upload --bucket <BUCKET_NAME> --key large-file.tar.gz --upload-id <UPLOAD_ID> --multipart-upload file://parts.json
+    ```
+
+    An output similar to the following appears:
+
+    ```json no-copy
+    {
+      "Location": "https://<BUCKET_NAME>.s3.fr-par.scw.cloud/large-file.tar.gz",
+      "Bucket": "<BUCKET_NAME>",
+      "Key": "large-file.tar.gz",
+      "ETag": "\"6eb393dac21d595a813f0c8bf4e9bc23-2\""
+    }
+    ```
+
+    <Message type="note">
+      The ETag of an object created with a multipart upload is not the MD5 hash of the object. The suffix after the hyphen indicates the number of parts of the object.
+    </Message>
+
+
+## Monitor incomplete multipart uploads
+
+An incomplete multipart upload is an upload that you initiated, but did not complete or abort yet. Object Storage bills its parts as regular storage.
+
+### List incomplete multipart uploads
+
+The following tabs describe how to list the incomplete multipart uploads of a bucket using the console or the AWS CLI.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the Scaleway console side menu, under **Storage**, click **Object Storage**. The list of your buckets appears.
+
+    2. Click the name of your bucket. The list of your objects appears.
+
+    3. Click the **Incomplete MPU** tab. The list of your incomplete multipart uploads appears.
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    Run the following command to list the incomplete multipart uploads of a bucket. The AWS CLI returns them in alphabetical order of their object key.
+
+    ```bash
+    aws s3api list-multipart-uploads --bucket <BUCKET_NAME>
+    ```
+
+    An output similar to the following appears:
+
+    ```json no-copy
+    {
+      "Uploads": [
+        {
+          "UploadId": "Y2VhZDUxYjAtNjVjMC00NTIxLWEwNWUtNWM3NDAyOTQ4ZWYz",
+          "Key": "large-file.tar.gz",
+          "Initiated": "2026-10-12T09:14:44.000Z",
+          "StorageClass": "STANDARD",
+          "Owner": {
+            "DisplayName": "a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527",
+            "ID": "a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527"
+          },
+          "Initiator": {
+            "ID": "a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527",
+            "DisplayName": "a6a05c73-fa53-46a4-9ea1-e53b4f625527:a6a05c73-fa53-46a4-9ea1-e53b4f625527"
+          }
+        }
+      ]
+    }
+    ```
+
+    Use the `--prefix` option to only list the uploads of objects whose key starts with a given prefix:
+
+    ```bash
+    aws s3api list-multipart-uploads --bucket <BUCKET_NAME> --prefix videos/
+    ```
+  </TabsTab>
+</Tabs>
+
+### View the details of a multipart upload
+
+The following tabs describe how to view the details and the uploaded parts of a multipart upload using the console or the AWS CLI.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the **Incomplete MPU** tab of your bucket, click <Icon name="more" /> next to the object you want to consult.
+
+    2. Click **More info**. The information page of the incomplete multipart upload opens.
+
+    The information page displays the name, upload ID, creation date, and storage class of the upload, and the list of parts uploaded so far.
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    Run the following command to list the parts already uploaded for a multipart upload. Replace `<OBJECT_KEY>` and `<UPLOAD_ID>` with the values returned by the `list-multipart-uploads` command.
+
+    ```bash
+    aws s3api list-parts --bucket <BUCKET_NAME> --key <OBJECT_KEY> --upload-id <UPLOAD_ID>
+    ```
+
+    An output similar to the following appears:
+
+    ```json no-copy
+    {
+      "Parts": [
+        {
+          "PartNumber": 1,
+          "LastModified": "2026-10-12T09:15:02.000Z",
+          "ETag": "\"4cb0d956600bab287520b442e83035a6\"",
+          "Size": 104857600
+        },
+        {
+          "PartNumber": 2,
+          "LastModified": "2026-10-12T09:15:03.000Z",
+          "ETag": "\"d41d8cd98f00b204e9800998ecf8427e\"",
+          "Size": 104857600
+        }
+      ],
+      "StorageClass": "STANDARD"
+    }
+    ```
+
+    Use this output to identify missing parts and upload them before [completing the upload](#complete-a-multipart-upload).
+  </TabsTab>
+</Tabs>
+
+## Abort a multipart upload
+
+<Message type="important">
+Aborting a multipart upload permanently deletes all its uploaded parts, and stops the billing of these parts.
+</Message>
+
+Abort the multipart uploads that you do not intend to complete. The following tabs describe how to abort a multipart upload using the console or the AWS CLI.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the **Incomplete MPU** tab of your bucket, click <Icon name="more" /> next to the object you want to abort. You can also abort the upload from its information page.
+
+    2. Click **Abort**. A dialog box appears.
+
+    3. Type **ABORT**, then click **Abort multipart upload** to confirm.
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    1. Run the following command to abort the upload. Replace `<OBJECT_KEY>` and `<UPLOAD_ID>` with the values returned by the [`list-multipart-uploads` command](#list-incomplete-multipart-uploads).
+
+        ```bash
+        aws s3api abort-multipart-upload --bucket <BUCKET_NAME> --key <OBJECT_KEY> --upload-id <UPLOAD_ID>
+        ```
+
+    2. Run the following command to check that the upload no longer appears in the list of incomplete uploads:
+
+        ```bash
+        aws s3api list-multipart-uploads --bucket <BUCKET_NAME>
+        ```
+
+        If the bucket has no other incomplete uploads, an output similar to the following appears:
+
+        ```json no-copy
+        {
+          "Uploads": []
+        }
+        ```
+  </TabsTab>
+</Tabs>
+
+To abort incomplete multipart uploads automatically after a given number of days, [create a lifecycle rule for incomplete multipart uploads](/object-storage/storage-classes/lifecycle-rules/#abort-incomplete-multipart-uploads-automatically).

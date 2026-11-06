@@ -50,7 +50,7 @@ export const gpuMenu = {
       items: [
         {
           label: 'Instances API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/instances/',
+          slug: 'https://www.scaleway.com/en/developers/api/instances',
         },
       ],
       label: 'API/CLI',

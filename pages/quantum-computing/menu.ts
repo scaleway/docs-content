@@ -70,7 +70,7 @@ export const quantumComputingMenu = {
       items: [
         {
           label: 'QaaS API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/qaas/',
+          slug: 'https://www.scaleway.com/en/developers/api/qaas',
         },
       ],
       label: 'API/CLI',

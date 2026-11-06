@@ -78,7 +78,7 @@ export const webhostingMenu = {
       items: [
         {
           label: 'Web Hosting API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/webhosting/hosting-api/',
+          slug: 'https://www.scaleway.com/en/developers/api/webhosting/hosting-api',
         },
       ],
       label: 'API/CLI',

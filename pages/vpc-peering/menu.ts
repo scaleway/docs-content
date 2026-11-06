@@ -42,7 +42,7 @@ export const vpcPeeringMenu = {
       items: [
         {
           label: 'VPC Peering API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/vpc/',
+          slug: 'https://www.scaleway.com/en/developers/api/vpc',
         },
       ],
       label: 'API/CLI',

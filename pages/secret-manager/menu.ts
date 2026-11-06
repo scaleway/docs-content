@@ -80,7 +80,7 @@ export const secretManagerMenu = {
       items: [
         {
           label: 'Secret Manager API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/secret-manager/',
+          slug: 'https://www.scaleway.com/en/developers/api/secret-manager',
         },
         {
           label: 'Deploying the Scaleway Secret Manager CSI provider on Kubernetes',

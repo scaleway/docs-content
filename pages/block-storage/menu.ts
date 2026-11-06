@@ -74,7 +74,7 @@ export const blockStorageMenu = {
       items: [
         {
           label: 'Block Storage API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/block-storage/',
+          slug: 'https://www.scaleway.com/en/developers/api/block-storage',
         },
         {
           label: 'Using Block Storage with the Scaleway CLI',

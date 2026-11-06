@@ -78,7 +78,7 @@ export const loadBalancerMenu = {
       items: [
         {
           label: 'Load Balancer API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/load-balancer/zoned-api/',
+          slug: 'https://www.scaleway.com/en/developers/api/load-balancer/zoned-api',
         },
         {
           label: 'Setting up SSL offloading',

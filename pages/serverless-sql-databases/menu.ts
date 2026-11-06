@@ -62,7 +62,7 @@ export const serverlessSqlDatabasesMenu = {
       items: [
         {
           label: 'Serverless SQL Database API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/serverless-sql-databases/',
+          slug: 'https://www.scaleway.com/en/developers/api/serverless-sql-databases',
         },
         {
           label: 'Importing data into Serverless SQL Databases',

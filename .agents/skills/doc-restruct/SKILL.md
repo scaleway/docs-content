@@ -26,7 +26,7 @@ Rules:
 - Report counts, not impressions: files moved, links rewritten, redirect lines generated, entries skipped.
 - Report what was skipped or flagged as well as what succeeded. An empty "Found" must say "nothing unexpected", not be left out.
 - When a step fails or stops on a validation, say which check failed and on which entries, and stop there rather than moving on.
-- After Step 9, give one final status table: each step with its state and its key number.
+- After Step 8, give one final status table: each step with its state and its key number.
 
 ---
 
@@ -167,19 +167,7 @@ Images are moved with their pages in Step 3. This step only lists the ones left 
 
 **Report: number of images checked, number of candidates listed, number flagged as referenced only from protected directories, and the path of the file produced.**
 
-## Step 8 — Deploy a preview and verify
-
-Deploy a preview environment for cross-review before opening the PR. Checklist before requesting review:
-
-- [ ] Dry-run link fix re-run = 0 remaining replacements
-- [ ] Repo-wide grep for old paths = 0 (excluding console/API URLs)
-- [ ] No orphaned double-remaps (`glossary/glossary`, `quickstart/quickstart`...)
-- [ ] Preview reviewed by the doc team
-- [ ] Redirects file handed to the user, who has opened the MR in the website repo, and the MR is scheduled to go live with (or before) the docs PR
-
-**Report: each checklist item as checked or not, with the reason when not.**
-
-## Step 9 — Deliverables
+## Step 8 — Deliverables
 
 - Old → new URL mapping (CSV), kept as the single source of truth for Steps 4, 5, and 6.
 - The redirects file (`redirects-<project-name>.txt`), with the planned removal condition of the redirects.

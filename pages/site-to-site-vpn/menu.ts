@@ -42,7 +42,7 @@ export const siteToSiteVpnMenu = {
       items: [
         {
           label: 'Site-to-Site VPN API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/site-to-site-vpn/',
+          slug: 'https://www.scaleway.com/en/developers/api/site-to-site-vpn',
         },
       ],
       label: 'API/CLI',
@@ -79,6 +79,10 @@ export const siteToSiteVpnMenu = {
         {
           label: 'Configuring a customer gateway device',
           slug: 'configuring-customer-gateway-device',
+        },
+        {
+          label: 'Using BGP communities',
+          slug: 'bgp-communities',
         },
       ],
       label: 'Additional Content',

@@ -74,7 +74,7 @@ export const blockStorageMenu = {
       items: [
         {
           label: 'Block Storage API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/block-storage/',
+          slug: 'https://www.scaleway.com/en/developers/api/block-storage',
         },
         {
           label: 'Using Block Storage with the Scaleway CLI',
@@ -87,6 +87,10 @@ export const blockStorageMenu = {
         {
           label: 'Increasing volume size via the API',
           slug: 'increasing-volume-size',
+        },
+        {
+          label: 'Encrypting volumes with Key Manager via the API',
+          slug: 'encrypt-volumes-with-key-manager',
         },
       ],
       label: 'API/CLI',

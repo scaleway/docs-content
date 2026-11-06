@@ -11,15 +11,15 @@ This section contains usage limits that apply when using Serverless Containers.
 
 | Resources                                         | Criteria       | Limits            | Scope                       |
 |---------------------------------------------------|-------------   |------------------ |-----------------------------|
-| Namespaces                                        | Max number     | 100*              | Project                     |
-| Containers                                        | Max number     | 1000*             | Organization                |
+| Namespaces                                        | Max number     | 100\*             | Project                     |
+| Containers                                        | Max number     | 1000\*            | Organization                |
 | Total container memory\**                         | Max size       | 600 GiB           | Organization                |
 | Custom domains                                    | Max number     | 50                | Container                   |
 | Recommended maximum uncompressed image size       | Max size       | 1 GB              | Container                   |
 | Temporary disk size                               | Max size       | 24 000 MiB        | Container                   |
 | Invocation rate                                   | Max number     | 5000 per second   | Container                   |
-| Concurrency                                       | Max            | 80                | Container Instance          |
-| Max Scale (simultaneous Container instances)      | Max            | 50                | Container                   |
+| Concurrency\***                                   | Max            | 80                | Container Instance          |
+| Max Scale (simultaneous Container instances)      | Max            | 200               | Container                   |
 | CPU                                               | Min/max        | 70 to 6000 mvCPU  | Container                   |
 | Memory                                            | Min/Max        | 128 to 12228 MB   | Container                   |
 | Environment variables                             | Max number     | 200               | Container + namespace       |
@@ -28,17 +28,19 @@ This section contains usage limits that apply when using Serverless Containers.
 | Secret environment variables                      | Max size       | 65536 bytes       | Secret environment variable |
 | Time before scale to zero                         | Time           | 15 minutes        | Instance                    |
 | Time before scale down                            | Time           | 30 seconds        | Instance                    |
-| HTTP request duration (timeout)\***               | Min/max        | 10 seconds to 60 minutes | Request              |
+| HTTP request duration (timeout)\****              | Min/max        | 10 seconds to 60 minutes | Request              |
 | Private Networks attached                         | Max            | 1                 | Container                   |
 | Logs                                              | Logs           | 30000 per minute  | Project                     |
 
-\* Lower limits may apply before account verification. Contact our Support team if you have any questions.
+\* Lower limits may apply before account verification. Contact [Scaleway Support](https://console.scaleway.com/support) if you have any questions.
 
 \** Total container memory is the sum of the memory allocated to all your containers at their maximum Scale.
 
-\*** Use [Serverless Jobs](/serverless-jobs/) for tasks up to 24h.
+\*** Maximum concurrency is a soft limit used as an autoscaling target, not a strict per-instance cap. See the [Containers concurrency](/serverless-containers/reference-content/containers-concurrency/) page for more information.
 
-These limits are enforced as [Organization quotas](/organizations-and-projects/additional-content/organization-quotas/#serverless-containers).
+\**** Use [Serverless Jobs](/serverless-jobs/) for tasks up to 24h.
+
+These limits are enforced as [Organization quotas](/organizations-and-projects/organization/organization-quotas/#serverless-containers).
 
 During the execution of the container, if the limits are exceeded, a restart occurs.
 
@@ -54,144 +56,145 @@ We recommend keeping your image size **below 1 GB** to ensure faster deployment 
 * Use multi-stage builds to keep only runtime essentials. Examples:
 
 <Tabs>
-<TabsTab label="Node.js">
-```dockerfile
-# Build stage
-FROM node:22-alpine AS builder
+    <TabsTab label="Node.js">
+    ```dockerfile
+    # Build stage
+    FROM node:22-alpine AS builder
 
-WORKDIR /app
+    WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+    # Copy package files
+    COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+    # Install dependencies
+    RUN npm ci --only=production
 
-# Copy source code
-COPY . .
+    # Copy source code
+    COPY . .
 
-# Runtime stage
-FROM node:22-alpine
+    # Runtime stage
+    FROM node:22-alpine
 
-WORKDIR /app
+    WORKDIR /app
 
-# Copy built artifacts from builder
-COPY --from=builder /app/node_modules ./node_modules
-COPY --from=builder /app .
+    # Copy built artifacts from builder
+    COPY --from=builder /app/node_modules ./node_modules
+    COPY --from=builder /app .
 
-# Expose the port the app listens on
-ENV PORT=8080
+    # Expose the port the app listens on
+    ENV PORT=8080
 
-# Start the application
-CMD ["node", "index.js"]
-```
-</TabsTab>
-<TabsTab label="Go">
-```dockerfile
-# Build stage
-FROM golang:1.23-alpine AS builder
+    # Start the application
+    CMD ["node", "index.js"]
+    ```
+    </TabsTab>
+    <TabsTab label="Go">
+    ```dockerfile
+    # Build stage
+    FROM golang:1.23-alpine AS builder
 
-WORKDIR /app
+    WORKDIR /app
 
-# Copy Go module files
-COPY go.mod go.sum ./
+    # Copy Go module files
+    COPY go.mod go.sum ./
 
-# Download dependencies
-RUN go mod download
+    # Download dependencies
+    RUN go mod download
 
-# Copy source code
-COPY . .
+    # Copy source code
+    COPY . .
 
-# Build the binary
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
+    # Build the binary
+    RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o main .
 
-# Runtime stage
-FROM scratch
+    # Runtime stage
+    FROM scratch
 
-WORKDIR /app
+    WORKDIR /app
 
-# Copy the binary from builder
-COPY --from=builder /app/main .
+    # Copy the binary from builder
+    COPY --from=builder /app/main .
 
-# Expose the port the app listens on
-ENV PORT=8080
+    # Expose the port the app listens on
+    ENV PORT=8080
 
-# Run the binary
-CMD ["./main"]
-```
-</TabsTab>
-<TabsTab label="Python">
-```dockerfile
-# Build stage
-FROM python:3.13-slim AS builder
+    # Run the binary
+    CMD ["./main"]
+    ```
+    </TabsTab>
 
-WORKDIR /app
+    <TabsTab label="Python">
+    ```dockerfile
+    # Build stage
+    FROM python:3.13-slim AS builder
 
-# Install build dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    gcc \
-    && rm -rf /var/lib/apt/lists/*
+    WORKDIR /app
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
-RUN pip install --no-cache-dir --user -r requirements.txt
+    # Install build dependencies
+    RUN apt-get update && apt-get install -y --no-install-recommends \
+        gcc \
+        && rm -rf /var/lib/apt/lists/*
 
-# Runtime stage
-FROM python:3.13-slim
+    # Copy requirements and install dependencies
+    COPY requirements.txt .
+    RUN pip install --no-cache-dir --user -r requirements.txt
 
-WORKDIR /app
+    # Runtime stage
+    FROM python:3.13-slim
 
-# Copy installed packages from builder
-COPY --from=builder /root/.local /root/.local
-COPY . .
+    WORKDIR /app
 
-# Make sure scripts in .local are usable
-ENV PATH=/root/.local/bin:$PATH
+    # Copy installed packages from builder
+    COPY --from=builder /root/.local /root/.local
+    COPY . .
 
-# Expose the port the app listens on
-ENV PORT=8080
+    # Make sure scripts in .local are usable
+    ENV PATH=/root/.local/bin:$PATH
 
-# Run the application
-CMD ["python", "app.py"]
-```
-</TabsTab>
-<TabsTab label="Rust">
-```dockerfile
-# Build stage
-FROM rust:1.94-alpine AS builder
+    # Expose the port the app listens on
+    ENV PORT=8080
 
-WORKDIR /app
+    # Run the application
+    CMD ["python", "app.py"]
+    ```
+    </TabsTab>
+    <TabsTab label="Rust">
+    ```dockerfile
+    # Build stage
+    FROM rust:1.94-alpine AS builder
 
-# Copy Cargo configuration
-COPY Cargo.toml Cargo.lock ./
+    WORKDIR /app
 
-# Create a minimal src directory to cache dependencies
-RUN mkdir src && \
-    echo "fn main() {}" > src/main.rs && \
-    cargo build --release && \
-    rm -rf src
+    # Copy Cargo configuration
+    COPY Cargo.toml Cargo.lock ./
 
-# Copy the actual source code
-COPY src ./src
+    # Create a minimal src directory to cache dependencies
+    RUN mkdir src && \
+        echo "fn main() {}" > src/main.rs && \
+        cargo build --release && \
+        rm -rf src
 
-# Build the application
-RUN cargo build --release
+    # Copy the actual source code
+    COPY src ./src
 
-# Runtime stage
-FROM scratch
+    # Build the application
+    RUN cargo build --release
 
-WORKDIR /app
+    # Runtime stage
+    FROM scratch
 
-# Copy the compiled binary from the builder stage
-COPY --from=builder /app/target/release/my-app .
+    WORKDIR /app
 
-# Expose the port the app listens on
-ENV PORT=8080
+    # Copy the compiled binary from the builder stage
+    COPY --from=builder /app/target/release/my-app .
 
-# Run the binary
-CMD ["./my-app"]
-```
-</TabsTab>
+    # Expose the port the app listens on
+    ENV PORT=8080
+
+    # Run the binary
+    CMD ["./my-app"]
+    ```
+    </TabsTab>
 </Tabs>
 
 ## Configuration Restrictions
@@ -226,11 +229,11 @@ Do not have your containers listen on these ports, as they are used by our servi
 
 ### Protocols
 
-Serverless Containers support HTTP/1.1 and HTTP/2 connections. HTTP/1.0 is not supported. Refer to the [dedicated troubleshooting page](/serverless-containers/troubleshooting/http1-errors/) for more information on how to solve HTTP/1.0 issues.
+Serverless Containers support HTTP/1.1 and HTTP/2 connections. HTTP/1.0 is not supported. See the [troubleshooting page on how to resolve HTTP/1.0 issues](/serverless-containers/troubleshooting/http1-errors/) for more information.
 
 ## Private Networks and Virtual Private Cloud (VPC)
 
-Refer to the [dedicated documentation](/serverless-containers/reference-content/containers-private-networks/) on VPC and Serverless Containers integration for more information.
+See the [Serverless Containers and Private Networks integration](/serverless-containers/reference-content/containers-private-networks/) page for more information.
 
 ## Default values for CPU and memory limits
 
@@ -274,4 +277,4 @@ leading to service disruption until a new successful deployment is made.
 
 ## Containers sandbox
 
-Refer to the [dedicated documentation](/serverless-containers/reference-content/containers-sandbox/) for more information on the limitations of sandbox environments for Serverless Containers.
+See the [Containers sandbox](/serverless-containers/reference-content/containers-sandbox/) page for more information on the limitations of sandbox environments for Serverless Containers.

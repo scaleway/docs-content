@@ -27,8 +27,8 @@ export const publicGatewaysMenu = {
           slug: 'configure-a-public-gateway',
         },
         {
-          label: 'Upgrade a Public Gateway',
-          slug: 'upgrade-public-gateway',
+          label: 'Change a Public Gateway offer',
+          slug: 'change-public-gateway-offer',
         },
         {
           label: 'Use SSH bastion',
@@ -54,7 +54,7 @@ export const publicGatewaysMenu = {
       items: [
         {
           label: 'Public Gateway API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/public-gateways/',
+          slug: 'https://www.scaleway.com/en/developers/api/public-gateways',
         },
       ],
       label: 'API/CLI',

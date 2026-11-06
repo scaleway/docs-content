@@ -70,7 +70,7 @@ export const transactionalEmailMenu = {
       items: [
         {
           label: 'Transactional Email API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/transactional-email/',
+          slug: 'https://www.scaleway.com/en/developers/api/transactional-email',
         },
         {
           label: 'Sending an email using the Transactional Email API',
@@ -114,6 +114,10 @@ export const transactionalEmailMenu = {
         {
           label: 'Understanding webhook event payloads',
           slug: 'webhook-events-payloads',
+        },
+        {
+          label: 'Data privacy',
+          slug: 'data-privacy',
         },
       ],
       label: 'Additional Content',

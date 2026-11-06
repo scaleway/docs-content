@@ -42,7 +42,7 @@ export const clustersForKafkaMenu = {
       items: [
         {
           label: 'Clusters for Apache Kafka® API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/clusters-for-kafka/',
+          slug: 'https://www.scaleway.com/en/developers/api/clusters-for-kafka',
         },
       ],
       label: 'API/CLI',

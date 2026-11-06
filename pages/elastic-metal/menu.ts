@@ -134,7 +134,7 @@ export const elasticMetalMenu = {
       items: [
         {
           label: 'Elastic Metal API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/elastic-metal/',
+          slug: 'https://www.scaleway.com/en/developers/api/elastic-metal',
         },
         {
           label: 'Creating and managing Elastic Metal servers with the CLI',
@@ -167,6 +167,10 @@ export const elasticMetalMenu = {
           slug: 'elastic-metal-networking',
         },
         {
+          label: 'Understanding dual attachment on Elastic Metal',
+          slug: 'elastic-metal-dual-attachment',
+        },
+        {
           label: 'Elastic Metal RV1 guidelines',
           slug: 'elastic-metal-rv1-guidelines',
         },
@@ -174,6 +178,11 @@ export const elasticMetalMenu = {
           label:
             'End of VMware ESXi support on Elastic Metal and Dedibox servers',
           slug: 'end-of-support-esxi',
+        },
+        {
+          label:
+            'Elastic Metal security features',
+          slug: 'elastic-metal-security-features',
         },
       ],
       label: 'Additional Content',

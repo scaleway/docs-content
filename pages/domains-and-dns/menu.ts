@@ -86,7 +86,7 @@ export const domainsAndDnsMenu = {
       items: [
         {
           label: 'Domains and DNS API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/domains-and-dns/',
+          slug: 'https://www.scaleway.com/en/developers/api/domains-and-dns',
         },
       ],
       label: 'API/CLI',
@@ -105,6 +105,14 @@ export const domainsAndDnsMenu = {
         {
           label: 'Understanding DNS record types',
           slug: 'understanding-dns-records',
+        },
+        {
+          label: 'Access your Domain migrated from BookMyName to Scaleway',
+          slug: 'access-migrated-domain',
+        },
+        {
+          label: 'Email verification request',
+          slug: 'email-verification-request',
         },
       ],
       label: 'Additional Content',

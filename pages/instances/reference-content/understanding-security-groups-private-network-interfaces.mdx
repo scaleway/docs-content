@@ -1,0 +1,67 @@
+---
+title: Understanding security groups for Private Network interfaces
+description: Learn how security groups filter Private Network traffic on Scaleway Instances, and how they compare to VPC network ACLs for defense in depth.
+tags: security-group private-network-interface pnic private-networks nacl micro-segmentation stateful instance vpc
+dates:
+  validation: 2026-10-19
+  posted: 2026-10-19
+---
+
+[Security groups](/instances/concepts/#security-group) let you filter traffic on your Instances with rules that allow or drop traffic based on its protocol, port range, and IP address. You can apply a security group to the public network interface of an Instance to filter internet traffic, or to a [Private Network interface](/instances/concepts/#private-network-interface) to filter traffic coming to and from a [Private Network](/vpc/concepts/#private-networks).
+
+This page explains how security groups filter Private Network traffic, how they compare to Virtual Private Cloud (VPC) [network access control lists](/vpc/reference-content/understanding-nacls/) (network ACLs), and how to use them to isolate your workloads. See the [Use Private Network interfaces](/instances/how-to/use-private-network-interfaces/) page for instructions.
+
+## How security groups filter Private Network traffic
+
+A Private Network interface is the virtual network interface that connects an Instance to a Private Network. When you apply a security group to a Private Network interface, the hypervisor that hosts the Instance enforces the rules of the security group on that interface:
+- Inbound rules filter traffic coming from the Private Network before it reaches the Instance.
+- Outbound rules filter traffic leaving the Instance before it reaches the Private Network.
+
+Because the hypervisor enforces the rules, they apply regardless of the operating system or the firewall configuration of the Instance. You do not need to configure `iptables`, `nftables`, or another firewall inside the Instance to filter Private Network traffic.
+
+Security groups filter traffic between Instances attached to the same Private Network. This lets you isolate sensitive workloads, such as databases, from other resources that share their Private Network.
+
+### Stateful filtering
+
+Private Network interfaces only accept [stateful security groups](/instances/concepts/#stateful-security-groups). When your rules allow a connection, the response traffic is automatically allowed. You do not need to create rules for return traffic.
+
+<Message type="note">
+  The default security group that Scaleway creates automatically in each Availability Zone is [stateless](/instances/concepts/#stateless-security-groups). To use it on a Private Network interface, first [enable stateful mode](/instances/how-to/use-security-groups/#enabling-stateful-groups), or create a dedicated security group.
+</Message>
+
+### Rule format for Private Network traffic
+
+Rules on a Private Network interface use the same format as public rules: action, protocol, port, and IP range. To target Private Network traffic, use private IP addresses or ranges in Classless Inter-Domain Routing (CIDR) notation. For example, use the private IP address of a specific Instance, such as `172.16.16.8/32`, to allow traffic from that Instance only, or the [CIDR block](/vpc/concepts/#cidr-block) of the Private Network, such as `172.16.16.0/22`, to allow traffic from all resources on the Private Network.
+
+## Limits
+
+| Element | Limit |
+|---|---|
+| Security groups per Private Network interface | 1 |
+| Private Network interfaces per security group | Several. You can apply the same security group to several Private Network interfaces and Instances. |
+| Private Network interfaces per Instance | Up to 8, each on a different Private Network |
+| Private Networks per Private Network interface | 1 |
+| Security group type | Stateful only |
+
+## Private Network interfaces as independent resources
+
+Private Network interfaces exist independently of Instances. A Private Network interface keeps its private IP addresses and its security group when you detach it from an Instance. When you attach it to another Instance, the new Instance uses the same private IP addresses and security group rules, without any reconfiguration.
+
+This lets you replace an Instance without reconfiguring your network. For example, when you upgrade an application server, detach its Private Network interface from the old Instance and attach it to the new one. You can also prepare network access in advance: create a Private Network interface and apply a security group to it before you create the Instance that uses it.
+
+## Security groups and VPC Network ACLs
+
+Security groups and network ACLs both filter Private Network traffic, but they operate at different levels of your infrastructure.
+
+| | Security groups on Private Network interfaces | VPC Network ACLs |
+|---|---|---|
+| Scope | One Private Network interface of one Instance | Traffic between the Private Networks of a VPC |
+| Enforcement point | The hypervisor that hosts the Instance | The VPC network layer, when traffic enters or leaves a Private Network |
+| Traffic between resources on the same Private Network | Filtered | Not filtered |
+| State tracking | Stateful: return traffic is allowed automatically | Stateless: you must define rules for both directions |
+
+Security groups and Network ACLs are not mutually exclusive. You can use them together:
+
+- Use security groups for micro-segmentation and precise access control for each Instance on each Private Network, including traffic between Instances on the same Private Network.
+- Use Network ACLs for broad isolation between the Private Networks of a VPC.
+- Use both for defense in depth. Network ACLs control traffic at the boundaries of your Private Networks, and security groups protect specific Instances through their Private Network interfaces.

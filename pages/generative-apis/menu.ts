@@ -31,6 +31,10 @@ export const generativeApisMenu = {
           slug: 'query-vision-models',
         },
         {
+          label: 'Query OCR models',
+          slug: 'query-ocr-models',
+        },
+        {
           label: 'Query embedding models',
           slug: 'query-embedding-models',
         },
@@ -153,6 +157,10 @@ export const generativeApisMenu = {
         {
           label: 'Adding AI to VS Code using Continue',
           slug: 'adding-ai-to-vscode-using-continue',
+        },
+        {
+          label: 'Adding AI to VS Code using GitHub Copilot',
+          slug: 'adding-ai-to-vscode-using-github-copilot',
         },
         {
           label: 'Adding AI to IntelliJ IDEA using Continue',

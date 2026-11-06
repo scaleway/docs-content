@@ -23,6 +23,18 @@ export const instancesMenu = {
           slug: 'create-an-instance',
         },
         {
+          label: 'Create and manage Instance templates',
+          slug: 'create-manage-instance-templates',
+        },
+        {
+          label: 'Create and manage Instance groups',
+          slug: 'create-manage-instance-groups',
+        },
+        {
+          label: 'Tag Instances hosting healthcare data (HDS)',
+          slug: 'tag-instances-hds',
+        },
+        {
           label: 'Manage Instance storage',
           slug: 'manage-storage',
         },
@@ -45,6 +57,10 @@ export const instancesMenu = {
         {
           label: 'Use Private Networks',
           slug: 'use-private-networks',
+        },
+        {
+          label: 'Use Private Network interfaces',
+          slug: 'use-private-network-interfaces',
         },
         {
           label: 'Configure reverse DNS',
@@ -114,7 +130,7 @@ export const instancesMenu = {
       items: [
         {
           label: 'Instances API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/instances/',
+          slug: 'https://www.scaleway.com/en/developers/api/instances',
         },
         {
           label: 'Scaleway CLI Cheatsheet',
@@ -123,6 +139,14 @@ export const instancesMenu = {
         {
           label: 'Creating and Managing Instances',
           slug: 'creating-managing-instances-with-cliv2',
+        },
+        {
+          label: 'Getting started with Autoscaling Groups',
+          slug: 'getting-started-autoscaling-groups',
+        },
+        {
+          label: 'Tag Instances hosting healthcare data (HDS) using the CLI or API',
+          slug: 'tag-instances-hds-cli-api',
         },
         {
           label: 'Creating backups',
@@ -161,6 +185,10 @@ export const instancesMenu = {
         {
           label: 'Choosing between shared or dedicated CPUs',
           slug: 'choosing-shared-vs-dedicated-cpus',
+        },
+        {
+          label: 'Creating a Windows Server golden image',
+          slug: 'creating-a-windows-golden-image',
         },
         {
           label: 'Instances datasheet',
@@ -209,6 +237,10 @@ export const instancesMenu = {
         {
           label: 'Understanding automatic network hot-reconfiguration',
           slug: 'understanding-automatic-network-hot-reconfiguration',
+        },
+        {
+          label: 'Understanding security groups for Private Network interfaces',
+          slug: 'understanding-security-groups-private-network-interfaces',
         },
         {
           label: 'Understanding Instance pricing',

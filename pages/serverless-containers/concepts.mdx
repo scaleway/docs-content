@@ -48,7 +48,7 @@ The startup process steps are:
 
 ## Commands and arguments
 
-Serverless Containers allows you to customize the `command` and `args` instructions of your container image directly from the [Scaleway console](https://console.scaleway.com) and via the [Scaleway API](https://www.scaleway.com/en/developers/api/serverless-containers/).
+Serverless Containers allows you to customize the `command` and `args` instructions of your container image directly from the [Scaleway console](https://console.scaleway.com) and via the [Scaleway API](https://www.scaleway.com/en/developers/api/serverless-containers).
 
 - The `command` instruction defines the command, process, or script executed when your container starts.
 - The `args` instruction defines the arguments passed to the `command` instruction. Arguments can reference environment variables, as shown in the example below.
@@ -79,6 +79,14 @@ Refer to the [dedicated documentation](/serverless-containers/reference-content/
 
 A container is a package of software that includes all dependencies: code, runtime, configuration, and system libraries so that it can run on any host system.
 
+## Container instance
+
+Serverless Containers can [autoscale](#autoscaling) based on parameters like the request volume, min scale, and max scale, so multiple replicas of your application can run at the same time. Each replica runs in its own isolated environment and is named a Container instance.
+
+Each Container instance has a unique name, which you can find:
+  - in the `hostname` of the Container instance.
+  - in the `resource_instance` label of logs and metrics.
+    
 ## Container image
 
 A container image is a file that includes all the requirements and instructions of a complete and executable version of an application. Container images can be easily stored using [Scaleway Container Registry](/container-registry/quickstart/).
@@ -113,7 +121,19 @@ Refer to the [dedicated documentation](/serverless-containers/reference-content/
 
 ## Endpoint
 
-An endpoint is the URL generated to access your resource. It can be customized with [custom domains](#custom-domain).
+The endpoint is the URL generated to access your Serverless Container. A container can have a public endpoint and a private endpoint if it is attached to a [Private Network](/serverless-containers/concepts/#private-networks).
+
+### Public endpoint
+
+A public endpoint is the URL generated to access your resource via the public internet. It can be customized with [custom domains](#custom-domain). The public endpoint can be disabled to isolate the container from the public internet.
+
+### Private endpoint
+
+A Serverless Container attached to a Private Network can have a private endpoint to securely communicate only with other resources attached to Private Networks within the same VPC.
+
+### Private endpoint certificate
+
+The private endpoint certificate is a TLS certificate generated for the private endpoint. You must use `https://` to call the private endpoint.
 
 ### Custom domain
 
@@ -132,21 +152,35 @@ Scaleway Serverless Containers automatically inject several HTTP headers into ev
 
 ## Health check
 
-To determine the status of a container, the default health check automatically checks if basic requirements are met, to define the status as `ready`. You can customize the following elements to better fit your use case:
-- The **probe type** defines the type of check to perform to define if your container is ready:
-    - The **TCP** probe will check if the TCP connection of your Serverless Container is opened on the specified port
-    - The **HTTP** probe allows you to define a custom path to your Serverless Container to get the readiness status. It can be useful to check if all requirements are met, such as the connection to the database, etc.
-- The **failure threshold** corresponds to the maximum number of checks that can fail before declaring the Serverless Container in error. Defaults to 30.
-- The **interval** corresponds to the duration in seconds between every check. Defaults to 10 seconds.
-- The **path** (HTTP probe type only) corresponds to the endpoint to call your Serverless Container (example: `/health`).
+Serverless Containers supports two types of health checks:
+* **Startup probe**: checks that your application has started successfully. The liveness probe does not run until the startup probe succeeds. This is useful for applications with a long startup time.
+* **Liveness probe**: checks that your application is ready to receive traffic. If the probe fails repeatedly, the container is considered in error: Scaleway does not restart the container, but stops routing traffic to it.
 
-You can define custom health check rules via the [Scaleway console](/serverless-containers/how-to/manage-a-container/) or set a [specific endpoint via the Scaleway API](https://www.scaleway.com/en/developers/api/serverless-containers/#path-containers-create-a-new-container).
+Both probe types share the same configuration options:
+- **Probe type**: defines the type of check to perform.
+    - The **TCP** probe checks whether the TCP connection of your Serverless Container is open on the specified port.
+    - The **HTTP** probe lets you define a custom path to your Serverless Container. Use it to check that all requirements are met, such as the connection to the database.
+- **Failure threshold**: the maximum number of checks that can fail before declaring the Serverless Container in error. Defaults to 30 for liveness probe.
+- **Interval**: the duration in seconds between every check. Defaults to 10 seconds for liveness probe.
+- **Timeout** the maximum amount of time to wait for a check to complete. If the check does not complete within this time, it is considered failed. Defaults to 1 second for liveness probe.
+- **Path** (HTTP probe type only): the endpoint to call your Serverless Container (example: `/health`).
+
+**Additional information for the startup probe**
+
+Your application must listen on all network interfaces (`0.0.0.0`) for the startup probe to succeed. For example, if your application listens on port `8080`, it should bind to `0.0.0.0:8080` rather than `127.0.0.1:8080`.
+
+**How many times can a health check fail before the container is considered in error?**
+
+The maximum time before a container enters the `error` state depends on the configured **interval** and **failure threshold**:
+
+For example, with the following configuration, the container enters the `error` state after **300 seconds (5 minutes)** of consecutive failed health checks:
+
+- **Interval:** 30 seconds
+- **Failure threshold:** 10
+
+You can define custom health check rules via the [Scaleway console](/serverless-containers/how-to/manage-a-container/) or set a [specific endpoint via the Scaleway API](https://www.scaleway.com/en/developers/api/serverless-containers#path-containers-create-a-new-container).
 
 See FAQ: [How do Serverless Containers health checks work?](/serverless-containers/faq/#how-do-serverless-containers-health-checks-work)
-
-## Instance
-
-A Serverless Container instance handles incoming requests based on factors like the request volume, min scale, and max scale parameters.
 
 ## Load balancing
 
@@ -178,7 +212,7 @@ Refer to the [dedicated documentation](/serverless-containers/reference-content/
 
 ## Privacy policy
 
-A container's privacy policy defines whether a container may be invoked anonymously (**public**) or only via an authentication mechanism provided by the [Scaleway API](https://www.scaleway.com/en/developers/api/serverless-containers/#authentication) (**private**).
+A container's privacy policy defines whether a container may be invoked anonymously (**public**) or only via an authentication mechanism provided by the [Scaleway API](https://www.scaleway.com/en/developers/api/serverless-containers#authentication) (**private**).
 
 ### IAM authentication
 
@@ -323,6 +357,10 @@ gRPC is supported on Serverless Containers, as long as you have enabled http2 (`
 
 Units are standardized measures of the computational resources, such as processing power and memory, allocated to run your service. The quantity of units you assign determines your application's performance capacity and directly influences its cost.
 
+### GB-s
+
+Unit used to measure the RAM consumption of a container. It reflects the amount of memory consumed over time in seconds.
+
 ### vCPU
 
 vCPU is the abbreviation for **v**irtual **C**entralized **P**rocessing **U**nit. A vCPU represents a portion or share of the underlying physical CPU assigned to a particular container.
@@ -335,10 +373,6 @@ A [vCPU](#vcpu) (Virtual Central Processing Unit) is equivalent to 1000 mvCPU.
 ### vCPU-s
 
 Unit used to measure the resource consumption of a container. It reflects the amount of vCPU used over time in seconds.
-
-### GB-s
-
-Unit used to measure the RAM consumption of a container. It reflects the amount of memory consumed over time in seconds.
 
 ## Versions of the product
 

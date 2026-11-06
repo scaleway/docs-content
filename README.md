@@ -27,6 +27,6 @@ You will find several types of content:
 
 - [How to contribute](./docs/CONTRIBUTING.md)
 - [How to write documentation](https://www.scaleway.com/en/docs/guidelines/)
-- [MDX components reference](https://scaleway.com/en/docs/components/)
+- [MDX components reference](https://storybook-docs.scaleway.com/?path=/docs/mdx-accordion--docs)
 - [Scaleway documentation website](https://www.scaleway.com/en/docs/)
 - [Documentation page template](./docs/DOC_PAGE_TEMPLATE.mdx)

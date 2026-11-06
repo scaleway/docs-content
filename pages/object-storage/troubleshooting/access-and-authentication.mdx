@@ -1,0 +1,146 @@
+---
+title: I cannot access my buckets or objects
+description: Solve API key, IAM permission, bucket policy, and presigned URL issues that prevent you from accessing your Scaleway Object Storage buckets and objects.
+tags: help troubleshooting object storage access denied forbidden 403 api key iam permission bucket policy presigned url signature locked fail unable
+dates:
+  validation: 2026-10-13
+  posted: 2026-10-13
+---
+import Requirements from '@macros/iam/requirements.mdx'
+import ImportantBucketPolicy from '@macros/storage/important-bucket-policy.mdx'
+import TroubleshootingTicket from '@macros/general/troubleshooting-ticket.mdx'
+
+Most access issues with Scaleway Object Storage come from one of the following sources: the API key, the IAM permissions of its bearer, or a bucket policy. Find the symptom that matches your situation in the following sections.
+
+<Requirements />
+
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+
+## My API key does not work
+
+When using third-party API or CLI tools, such as the [AWS CLI](/object-storage/api-cli/object-storage-aws-cli/), [MinIO Client](/object-storage/api-cli/installing-minio-client/), or [Rclone](/object-storage/api-cli/installing-rclone/) to manage your Object Storage resources, you experience one of the following issues:
+
+- Listing your buckets with a third-party tool returns nothing, but you have at least one bucket in the [Scaleway console](https://console.scaleway.com/object-storage/buckets).
+- The tool returns `An error occurred (Forbidden) when calling the ListObjectsV2 operation: Forbidden` or a similar message.
+- The tool returns a `403` error.
+
+### Cause
+
+The API key you used to configure the third-party tool has a [preferred Project](/iam/concepts/glossary/#preferred-project) assigned.
+
+If you perform Object Storage operations in a Project that is **not** the preferred Project of the API key using a third-party tool, you cannot access your resources, and the tool returns an error message or an empty response.
+
+### Solution
+
+1. Make sure that you are using a valid [API key](https://console.scaleway.com/iam/api-keys).
+2. Make sure that the bearer of the API key (IAM [user](/iam/concepts/glossary/#user) or [application](/iam/concepts/glossary/#application)) has the appropriate [IAM permissions](/iam/policies-permissions/view-permission-sets/) to perform the desired actions.
+3. Make sure that the [preferred Project](/iam/concepts/glossary/#preferred-project) of the API key is the Project where you are performing actions. You can change the preferred Project of your API key:
+    - by [editing it from the Scaleway console](/iam/credentials/manage-api-keys/#how-to-edit-an-api-key)
+    - by [overriding it when making an API call](/iam/api-cli/using-api-key-object-storage/#overriding-the-preferred-project-when-making-a-call)
+4. Make sure that no [bucket policy](/object-storage/concepts/#bucket-policy) prevents the action. If there is one, [update the bucket policy](/object-storage/how-to/create-bucket-policy/) to allow the desired actions to the bearer of the API key.
+
+See the documentation on [using IAM API keys with Object Storage](/iam/api-cli/using-api-key-object-storage/) for more information.
+
+## I get error messages when accessing a bucket
+
+One of the following messages displays when an application tries to access your bucket:
+
+- `Failed to preprocess target Error: S3 error: Access Denied`
+- `Error: Shared memory connection was closed.`
+- `Failed to upload disk 'shadowSpec>'`
+- `Agent failed to process method {DataTransfer.SyncDisk}.`
+
+### Cause
+
+The application cannot access the Object Storage resource.
+
+<Message type="note">
+  The `Shared memory connection was closed.` and `Agent failed to process method {DataTransfer.SyncDisk}.` messages can also indicate that your application reached the request rate limit. If the solution below does not solve the issue, refer to the [request rate errors troubleshooting](/object-storage/troubleshooting/performance-and-rate-limits/#i-get-request-rate-errors).
+</Message>
+
+### Solution
+
+1. Check for issues with your API key by following the [API key troubleshooting procedure](#my-api-key-does-not-work).
+2. Make sure that you have the `ObjectStorageFullAccess` [IAM permission set](/iam/concepts/glossary/#permission).
+3. Make sure that no [bucket policy](/object-storage/api-cli/bucket-policy/) prevents the application from accessing your bucket.
+
+## I lost access to a bucket after applying a bucket policy
+
+After [creating and applying a bucket policy](/object-storage/api-cli/create-bucket-policy/) to a bucket, you can no longer access the resources within the bucket, and one of the following messages displays:
+
+- \[CLI\] - `An error occurred (AccessDenied) when calling the ListObjectsV2 operation: Access Denied`
+- \[CLI\] - `403 AccessDenied`
+- \[Console\] - `Failed to update bucket. Retry.`
+- \[Console\] - `Failed to load data. Try refreshing the page.`
+
+### Cause
+
+[Bucket policies](/object-storage/api-cli/bucket-policy/) automatically deny actions to users who are not explicitly allowed by a [statement](/object-storage/api-cli/bucket-policy/#statement). If the bucket policy does not explicitly allow you, you lose access to the resources in the bucket.
+
+<ImportantBucketPolicy />
+
+### Solution
+
+If you have permission to apply a bucket policy, you can edit or delete the bucket policy to regain access.
+
+<Tabs>
+<TabsTab label="Scaleway console">
+
+1. Click **Object Storage** on the left side menu of the console. The Object Storage dashboard displays.
+2. Click the **Bucket policies** tab.
+3. Click the name of the bucket policy applied to the bucket.
+4. Edit the bucket policy to grant yourself access, or delete it and [create a new one](/object-storage/how-to/create-bucket-policy/).
+</TabsTab>
+<TabsTab label="AWS CLI">
+
+Do one of the following:
+
+- Delete the current bucket policy using the following command. The bucket becomes available to every user with the appropriate [IAM permissions](/iam/concepts/glossary/#permission).
+    ```bash
+    aws s3api delete-bucket-policy --bucket <BUCKET_NAME>
+    ```
+- [Apply a new bucket policy](/object-storage/api-cli/create-bucket-policy/) to the bucket to allow yourself, or a principal, to perform the desired [storage operations](/object-storage/api-cli/using-api-call-list/).
+
+</TabsTab>
+</Tabs>
+
+See the [bucket policies overview](/object-storage/api-cli/bucket-policy/) for more information on the different elements of a bucket policy.
+
+## I get presigned URL errors
+
+You receive an error when using a presigned URL to access an object.
+
+### Cause
+
+- A clock skew of more than 15 minutes between the host and the client triggers an `InvalidSignatureException` or a `RequestTimeTooSkewed` error.
+- The presigned URL of your [private object](/object-storage/concepts/) has expired.
+
+### Solution
+
+- Make sure that the clock skew between the host and client machines is less than 15 minutes.
+- Make sure that the presigned URL has not expired. If it has, generate a new one.
+
+See the documentation on [sharing objects](/object-storage/how-to/access-objects-via-https/) for more information on presigned URLs.
+
+## I cannot access my objects
+
+You experience issues accessing your buckets and objects, and none of the symptoms mentioned previously match your situation.
+
+### Solution
+
+- Go to the [Status page](https://status.scaleway.com/) to see if there is an ongoing incident on the Scaleway infrastructure.
+- Make sure that you are using a valid [API key](https://console.scaleway.com/iam/api-keys).
+- Make sure that the bearer of the API key (IAM [user](/iam/concepts/glossary/#user) or [application](/iam/concepts/glossary/#application)) has the appropriate [IAM permission set](/iam/policies-permissions/view-permission-sets/) to perform the desired actions.
+- Make sure that no [bucket policy](/object-storage/concepts/#bucket-policy) prevents you from accessing the bucket. If there is one, make sure that it [explicitly allows you](/object-storage/api-cli/bucket-policy/) to perform the desired action.
+- Retrieve the logs of your buckets using any Amazon S3-compatible tool to identify the cause of the problem:
+    - [Rclone](https://rclone.org/docs/#logging)
+    - [S3cmd](https://s3tools.org/usage)
+    - [MinIO Client](https://min.io/docs/minio/linux/reference/minio-mc-admin/mc-admin-logs.html#mc-admin-logs)
+    - [AWS CLI](https://docs.aws.amazon.com/cli/latest/reference/logs/get-log-events.html)
+
+## Going further
+
+- Refer to the [Amazon S3 and IAM permissions equivalence](/object-storage/reference-content/s3-iam-permissions-equivalence/) to find the IAM permission set required for each operation.
+- When you contact the Support team about Object Storage, include the endpoint (e.g., `s3.fr-par.scw.cloud`), the bucket name, and the object name if the request concerns an object.
+
+<TroubleshootingTicket />

@@ -13,6 +13,10 @@ export const mailboxMenu = {
       slug: 'quickstart',
     },
     {
+      label: 'FAQ',
+      slug: 'faq',
+    },
+    {
       items: [
         {
           label: 'Create your Mailbox domain',
@@ -29,6 +33,14 @@ export const mailboxMenu = {
         {
           label: 'Manage a Mailbox subscription',
           slug: 'manage-mailbox-subscription',
+        },
+        {
+          label: 'Add an alias to a Mailbox email account',
+          slug: 'add-alias',
+        },
+        {
+          label: 'Set email forwarding',
+          slug: 'set-email-forwarding',
         },
         {
           label: 'Delete a Mailbox email account',

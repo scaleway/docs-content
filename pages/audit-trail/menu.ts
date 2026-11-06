@@ -46,7 +46,7 @@ export const auditTrailMenu = {
       items: [
         {
           label: 'Audit Trail API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/audit-trail/',
+          slug: 'https://www.scaleway.com/en/developers/api/audit-trail',
         },
       ],
       label: 'API/CLI',

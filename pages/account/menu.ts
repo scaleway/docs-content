@@ -130,7 +130,7 @@ export const accountMenu = {
       items: [
         {
           label: 'Account API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/account/project-api/',
+          slug: 'https://www.scaleway.com/en/developers/api/account/project-api',
         },
       ],
       label: 'API/CLI',

@@ -115,7 +115,7 @@ export const kubernetesMenu = {
       items: [
         {
           label: 'Kubernetes API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/kubernetes/',
+          slug: 'https://www.scaleway.com/en/developers/api/kubernetes',
         },
         {
           label: 'Creating and managing a Kubernetes Kapsule',

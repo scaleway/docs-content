@@ -76,7 +76,7 @@ export const keyManagerMenu = {
       items: [
         {
           label: 'Key Manager API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/key-manager/',
+          slug: 'https://www.scaleway.com/en/developers/api/key-manager',
         },
         {
           label: 'Using Bring Your Own Key with the Scaleway API and CLI',

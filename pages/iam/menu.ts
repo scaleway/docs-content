@@ -176,7 +176,7 @@ export const iamMenu = {
       items: [
         {
           label: 'IAM API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/iam/',
+          slug: 'https://www.scaleway.com/en/developers/api/iam',
         },
         {
           label: 'Using IAM API keys with Object Storage',

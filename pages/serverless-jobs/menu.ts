@@ -78,7 +78,7 @@ export const serverlessJobsMenu = {
       items: [
         {
           label: 'Jobs API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/serverless-jobs/',
+          slug: 'https://www.scaleway.com/en/developers/api/serverless-jobs',
         },
         {
           label: 'Migrate images to the Scaleway Registry',

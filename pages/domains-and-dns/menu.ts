@@ -86,7 +86,7 @@ export const domainsAndDnsMenu = {
       items: [
         {
           label: 'Domains and DNS API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/domains-and-dns/',
+          slug: 'https://www.scaleway.com/en/developers/api/domains-and-dns',
         },
       ],
       label: 'API/CLI',

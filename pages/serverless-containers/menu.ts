@@ -86,7 +86,7 @@ export const serverlessContainersMenu = {
       items: [
         {
           label: 'Containers API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/serverless-containers/',
+          slug: 'https://www.scaleway.com/en/developers/api/serverless-containers',
         },
         {
           label: 'Create and deploy a container with the Scaleway API',

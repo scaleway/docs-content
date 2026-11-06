@@ -94,7 +94,7 @@ export const cockpitMenu = {
       items: [
         {
           label: 'Cockpit API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/cockpit/regional-api/',
+          slug: 'https://www.scaleway.com/en/developers/api/cockpit/regional-api',
         },
         {
           label: 'Retrieving logs programmatically using LogCLI',

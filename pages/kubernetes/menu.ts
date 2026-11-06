@@ -115,7 +115,7 @@ export const kubernetesMenu = {
       items: [
         {
           label: 'Kubernetes API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/kubernetes/',
+          slug: 'https://www.scaleway.com/en/developers/api/kubernetes',
         },
         {
           label: 'Creating and managing a Kubernetes Kapsule',
@@ -141,6 +141,10 @@ export const kubernetesMenu = {
           label: 'Changing the control plane offer',
           slug: 'changing-control-plane-offer',
         },
+        {
+          label: 'Reaching the API server via the VPC endpoint',
+          slug: 'reach-api-server-via-vpc',
+        },        
       ],
       label: 'API/CLI',
       slug: 'api-cli',

@@ -236,8 +236,6 @@ tags: compute baremetal bare metal cloud server dedicated
 dates:
   validation: 2021-06-22
   posted: 2020-03-12
-categories:
-  - compute
 ---
 
 Here starts the content…

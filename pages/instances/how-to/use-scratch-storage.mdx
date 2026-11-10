@@ -1,0 +1,109 @@
+---
+title: Use scratch storage
+description: Learn how to attach ephemeral NVMe scratch storage to Standard3-x, Compute3-x, and Memory3-x Instances, format the file system, and safely remove it.
+tags: instance scratch scratch-storage local nvme ephemeral temporary storage volume
+dates:
+  validation: 2026-11-09
+  posted: 2026-11-09
+---
+import Requirements from '@macros/iam/requirements.mdx'
+import ScratchStorageDataLoss from '@macros/compute/scratch-storage-data-loss.mdx'
+
+[Scratch storage](/instances/reference-content/understanding-scratch-storage/) is fast, temporary local Non-Volatile Memory Express (NVMe) storage for your Instance. It is available on Standard3-x, Compute3-x, and Memory3-x Instances.
+
+Use scratch storage only for data you can afford to lose, such as caches or temporary files.
+
+<ScratchStorageDataLoss />
+
+<Requirements />
+
+- A Scaleway account logged in to the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+
+## Add scratch storage when creating an Instance
+
+1. In the Scaleway console side menu, go to **Compute** > **CPU & GPU Instances**. The [Instances dashboard](https://console.scaleway.com/instance/servers) opens.
+2. Click **Create Instance** > **Create CPU Instance**. The Instance creation wizard opens.
+3. Select a Standard3-x, Compute3-x, or Memory3-x offer, and follow the steps to [create an Instance](/instances/how-to/create-an-instance/) until you reach the **Configure storage** section.
+4. Click **Add volume**. The **Add volume** dialog box appears.
+5. Enter a name for the volume, or keep the randomly generated name.
+6. Enter the size of the volume in GB.
+7. Select **Scratch storage** as the volume type. The monthly price of the volume appears next to the volume type, and a message lists the actions that erase scratch storage data.
+8. (Optional) Add tags to the volume.
+9. Click **Add volume**. The scratch volume appears in the list of volumes of your Instance.
+10. (Optional) Repeat steps 4 to 9 to add more scratch volumes.
+11. Finish configuring your Instance, then click **Create Instance**.
+
+<Message type="tip">
+  Before you create the Instance, you can still change the name, size, and tags of a scratch volume, or delete it. Click <Icon name="edit" /> or <Icon name="delete" /> next to the volume in the **Configure storage** section. You cannot resize a scratch volume after the Instance is created.
+</Message>
+
+## Add scratch storage to an existing Instance
+
+1. In the Scaleway console side menu, go to **Compute** > **CPU & GPU Instances**. The [Instances dashboard](https://console.scaleway.com/instance/servers) opens.
+2. Select the Availability Zone (AZ) from the dropdown (e.g., `PAR1`) to view resources in the selected AZ.
+3. Click the Standard3-x, Compute3-x, or Memory3-x Instance to which you want to add scratch storage. The **Overview** page of the Instance opens.
+4. Click the **Storage** tab.
+5. Click **Add volume** in the **Volumes** section. The **Add volume** dialog box appears.
+6. Enter a name for the volume, or keep the randomly generated name.
+7. Enter the size of the volume in GB.
+8. Select **Scratch storage** as the volume type. The monthly price of the volume appears next to the volume type, and a message lists the actions that erase scratch storage data.
+9. (Optional) Add tags to the volume.
+10. Click **Add volume**. The scratch volume appears in the **Volumes** section, with the volume type **Scratch storage**.
+
+## Create a file system on a scratch volume
+
+Scratch volumes are attached to your Instance as raw block devices, without a partition table or a file system. Before you can store data on a scratch volume, you must create a file system on it and mount it.
+
+When you power off and power on your Instance, its scratch volumes are empty and unformatted again. You must repeat this procedure every time you power on the Instance. To avoid doing it manually, you can automate it with [cloud-init](/instances/how-to/use-cloud-init/) or a systemd unit.
+
+<Message type="important">
+  Make sure you select the correct device before you create the file system. Running `mkfs` on another volume erases all its data.
+</Message>
+
+1. [Connect to your Instance](/instances/how-to/connect-to-instance/) using SSH.
+2. List the block devices of your Instance to identify the scratch volume:
+    ```bash
+    lsblk -o NAME,SIZE,TYPE,FSTYPE,MOUNTPOINT
+    ```
+
+    Scratch volumes appear as `/dev/sdX` devices with the size you defined and no file system (the `FSTYPE` column is empty). You can also list the stable device paths of your volumes in `/dev/disk/by-id/`:
+    ```bash
+    ls -l /dev/disk/by-id/
+    ```
+
+    For more information, see [Identifying devices of a Scaleway Instance](/instances/reference-content/identify-devices/).
+3. Create a file system on the scratch volume. Replace `<DEVICE_NAME>` with the device name of your scratch volume, for example `sdb`:
+    ```bash
+    mkfs.ext4 /dev/<DEVICE_NAME>
+    ```
+
+4. Create a mount point:
+    ```bash
+    mkdir -p /mnt/scratch
+    ```
+
+5. Mount the scratch volume:
+    ```bash
+    mount /dev/<DEVICE_NAME> /mnt/scratch
+    ```
+
+6. (Optional) Add an entry to the `/etc/fstab` file to mount the volume automatically when the Instance reboots. Use the `nofail` option so that the Instance can still boot if the file system no longer exists, for example after a power-off:
+    ```
+    /dev/disk/by-id/<SCRATCH_VOLUME_ID> /mnt/scratch ext4 defaults,nofail 0 2
+    ```
+
+    Replace `<SCRATCH_VOLUME_ID>` with the identifier of your scratch volume in `/dev/disk/by-id/`.
+
+## Delete a scratch volume
+
+Deleting a scratch volume permanently erases all the data it contains. You cannot undo this action.
+
+1. In the Scaleway console side menu, go to **Compute** > **CPU & GPU Instances**. The [Instances dashboard](https://console.scaleway.com/instance/servers) opens.
+2. Select the Availability Zone (AZ) from the dropdown (e.g., `PAR1`) to view resources in the selected AZ.
+3. Click the Instance that uses the scratch volume. The **Overview** page of the Instance opens.
+4. Click the **Storage** tab.
+5. Click <Icon name="more" /> next to the scratch volume you want to delete.
+6. Click **Delete**. A dialog box appears asking you to confirm the action.
+7. Confirm the deletion.
+Scratch volumes are always deleted with their Instance. When you [delete an Instance](/instances/how-to/delete-instance/), you cannot keep its scratch volumes.

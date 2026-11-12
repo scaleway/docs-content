@@ -19,10 +19,6 @@ export const annotationsMenu = {
       slug: 'quickstart',
     },
     {
-      label: 'FAQ',
-      slug: 'faq',
-    },
-    {
       items: [
         {
           label: 'Configure Annotations permission sets',
@@ -40,13 +36,9 @@ export const annotationsMenu = {
           label: 'Manage keys and values',
           slug: 'manage-keys-values',
         },
-        {
-          label: 'Delete keys and values',
-          slug: 'delete-keys-values',
-        },
       ],
-      label: 'How to',
-      slug: 'how-to',
+      label: 'Setup and lifecycle',
+      slug: 'setup-lifecycle',
     },
     {
       items: [
@@ -72,6 +64,10 @@ export const annotationsMenu = {
       label: 'Additional Content',
       slug: 'reference-content',
     },
+    {
+      label: 'FAQ',
+      slug: 'faq',
+    },    
   ],
   label: 'Annotations',
   slug: 'annotations',

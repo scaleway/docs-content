@@ -78,16 +78,10 @@ export default [
         items: [accountMenu, organizationsAndProjectsMenu],
         label: 'Account & Organization',
         category: 'console',
-      },
-      {
-        icon: 'AnnotationsCategoryIcon',
-        items: [annotationsMenu],
-        label: 'Annotations',
-        category: 'console',
-      },      
+      },     
       {
         icon: 'CostAndImpactManagementCategoryIcon',
-        items: [billingMenu, environmentalFootprintMenu],
+        items: [billingMenu, environmentalFootprintMenu, annotationsMenu],
         label: 'Cost & Impact Management',
         category: 'console',
       },

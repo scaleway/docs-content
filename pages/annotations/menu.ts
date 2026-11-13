@@ -7,6 +7,10 @@ export const annotationsMenu = {
     {
       items: [
         {
+          label: 'Understanding Annotations',
+          slug: 'understanding-annotations',
+        },        
+        {
           label: 'Glossary',
           slug: 'glossary',
         },
@@ -25,16 +29,12 @@ export const annotationsMenu = {
           slug: 'configure-annotations-permissions',
         },
         {
-          label: 'Create annotations',
-          slug: 'create-annotations',
-        },
+          label: 'Create and manage annotation keys and values',
+          slug: 'create-manage-annotations',
+        },        
         {
           label: 'Bind and detach annotations',
           slug: 'bind-and-detach-annotations',
-        },
-        {
-          label: 'Manage keys and values',
-          slug: 'manage-keys-values',
         },
       ],
       label: 'Setup and lifecycle',
@@ -53,15 +53,15 @@ export const annotationsMenu = {
     {
       items: [
         {
-          label: 'Scaleway Resource Name',
-          slug: 'scaleway-resource-name',
+          label: 'Scaleway Resource Names',
+          slug: 'scaleway-resource-names',
         },
         {
           label: 'Technical rules and limits',
           slug: 'technical-rules-limits',
         },
       ],
-      label: 'Additional Content',
+      label: 'Reference content',
       slug: 'reference-content',
     },
     {

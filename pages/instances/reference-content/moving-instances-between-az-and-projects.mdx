@@ -1,118 +1,196 @@
 ---
 title: Moving Scaleway Instances between Availability Zones and Projects
-description:  Find out how to move Scaleway Instances between Availability Zones and Projects.
+description:  Learn how to move a Scaleway Instance to another Availability Zone or Project by exporting its snapshots to Object Storage, using the console or the CLI.
+tags: instance migration move availability-zone project snapshot
 dates:
-  validation: 2025-07-15
-tags: instance migration
+  validation: 2026-11-09
+  posted: 2025-07-15
 ---
 import Requirements from '@macros/iam/requirements.mdx'
 
-This guide explains how to move a Scaleway Instance (Virtual Machine) from one Availability Zone (AZ) to another or from one Project to another, regardless of whether the Instance uses Local Storage or Block Storage.  
-You can perform these actions using the Scaleway console, CLI, or API.
+You cannot move a running Instance directly to another Availability Zone (AZ). To move an Instance, you create snapshots of its volumes, export them to Object Storage, import them in the destination AZ, and create a new Instance from them.
+
+You can use the same process to move an Instance to another Project, which transfers the ownership of the Instance or its snapshots.
+
+This process works for Instances that use Local Storage or Block Storage. You can perform it with the Scaleway console or the CLI.
 
 <Requirements />
-- A Scaleway account logged into the [console](https://console.scaleway.com)
-- An [Instance](/instances/how-to/create-an-instance/)
-- The [Scaleway CLI](/scaleway-cli/quickstart/) installed (for CLI-based instructions)
-- A valid [API key](/iam/credentials/create-api-keys/) with sufficient permissions (for API-based instructions)
+- A Scaleway account logged in to the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- An [Instance](/instances/how-to/create-an-instance/)
+- An [Object Storage bucket](/object-storage/how-to/create-a-bucket/) in the same region as the source and destination AZs
+- The [Scaleway CLI](/scaleway-cli/quickstart/) installed, for CLI-based instructions
+- A valid [API key](/iam/credentials/create-api-keys/) with sufficient permissions, for CLI-based instructions
 
-<Message type="important">
-- Moving an Instance between AZs requires creating a snapshot of the Instance’s data and launching a new Instance in the target AZ, as direct migration of a running Instance is not supported.
-- Moving an Instance between Projects involves transferring ownership of the Instance or its snapshot.
-- Local Storage is tied to the Instance’s hypervisor and cannot be directly moved across AZs. Block Storage volumes can be detached and reattached within the same AZ but require additional steps for cross-AZ migration.
-- Ensure the target AZ supports the desired Instance type. Refer to the [Instances datasheet](/instances/reference-content/instances-datasheet/) for details.
+Check the following points before you move your Instance:
+
+- The destination AZ must support the Instance type you want to use. See the [Instances datasheet](/instances/reference-content/instances-datasheet/) for more information.
+- Local Storage is tied to the hypervisor of the Instance. You cannot move Local Storage volumes directly to another AZ.
+- You can detach Block Storage volumes and attach them to another Instance in the same AZ. To move them to another AZ, you must use snapshots.
+- You cannot snapshot [scratch storage](/instances/reference-content/understanding-scratch-storage/). The new Instance does not contain the data stored on the scratch volumes of the original Instance.
+
+## Move an Instance to another Availability Zone
+
+### Create snapshots of the Instance volumes
+
+<Message type="tip">
+  You can create snapshots without stopping the Instance. To keep your data consistent, pause heavy write operations before you create the snapshots.
 </Message>
 
-## Moving an Instance between Availability Zones
+1. In the Scaleway console side menu, go to **Compute** > **CPU & GPU Instances**. The [Instances dashboard](https://console.scaleway.com/instance/servers) opens.
+2. Click the Instance you want to move. The **Overview** page of the Instance opens.
+3. Click the **Storage** tab. The **Volumes** section lists the Local Storage and Block Storage volumes of the Instance.
+4. Click **+ Create snapshot**. A dialog box appears.
+5. Select the volume to snapshot.
+6. Enter a name for the snapshot.
+7. Select the snapshot type: **LSSD** for Local Storage or **BSSD** for Block Storage.
+8. Click **Create snapshot**.
+9. (Optional) Repeat steps 4 to 8 for each volume of the Instance to create a full backup.
 
-### Creating a snapshot
+### Export the snapshots to Object Storage
 
-1. In the Scaleway console, navigate to **Compute > CPU Instances**, select your Instance, and go to the **Storage** tab to view attached volumes (Local or Block Storage).
+To move snapshots across AZs, you must export them to an Object Storage bucket in the same region as the source and destination AZs.
 
-2. From the Instance’s **Storage** tab, click **+ Create snapshot**. A popup displays.
-     - Select the volume to snapshot, choose a name, and select the snapshot type (LSSD for Local Storage, BSSD for Block Storage).
-     - Click **Create snapshot**.
-     - Repeat for all volumes attached to the Instance if you need a full backup.
-     <Message type="note">
-        Snapshots can be created without stopping the Instance. However, for data consistency, pause heavy write operations if possible.
-    </Message>
+#### Export Local Storage snapshots with the console
 
-### Exporting the snapshot to Object Storage
+1. In the Scaleway console side menu, go to **Storage** > **Local Storage**.
+2. Click the **Snapshots** tab.
+3. Click the snapshot you want to export.
+4. Click **Actions** > **Copy to bucket**. A dialog box appears.
+5. Enter a name for the QCOW2 file. The name must end with `.qcow` or `.qcow2`.
+6. Select an Object Storage bucket in the same region.
+7. Click **Copy snapshot to bucket**. The export starts. When the export is complete, the status of the snapshot turns green.
 
-Snapshots must be exported to a Scaleway Object Storage bucket in the same region as the source and destination AZs to move them across AZs.
+#### Export Block Storage snapshots with the CLI
 
-#### Exporting Local Storage snapshots via the console
-   - Navigate to **Local Storage > Snapshots**, select the snapshot, and click **Actions > Copy to bucket**.
-   - Enter a file name for the QCOW2 export (ensure it ends with `.qcow` or `.qcow2`) and select an Object Storage bucket in the same region.
-   - Click **Copy snapshot to bucket**. Wait for the export to complete (status turns green).
+The command depends on the API that manages your snapshot.
 
-#### Exporting Block Storage snapshots via the CLI
-- For recent snapshots, managed by the Block Storage API, use the following command to export the snapshot to an Object Storage bucket in the same AZ as the snapshot.
-     ```bash
-     scw block snapshot export-to-object-storage zone=<zone-to-target> snapshot-id=<snapshot-id> bucket=<bucket-name> key=<qcow2-file-name>.qcow2
-     ```
-    Replace `<zone-to-target>` with the desired AZ, `<snapshot-id>` with the snapshot ID, `<bucket-name>` with your Object Storage bucket name, and `<qcow2-file-name>` with the desired file name.
+- To export a snapshot managed by the Block Storage API, run the following command:
+    ```bash
+    scw block snapshot export-to-object-storage zone=<ZONE> snapshot-id=<SNAPSHOT_ID> bucket=<BUCKET_NAME> key=<FILE_NAME>.qcow2
+    ```
 
+- To export a legacy Block Storage snapshot or a Local Storage snapshot managed by the Instances API, run the following command:
+    ```bash
+    scw instance snapshot export-to-object-storage zone=<ZONE> snapshot-id=<SNAPSHOT_ID> bucket=<BUCKET_NAME> key=<FILE_NAME>.qcow2
+    ```
 
-- For legacy Block Storage volumes or Local Storage volumes, managed by the Instances API, usee the following command:
-     ```bash
-     scw instance snapshot export-to-object-storage zone=<zone-to-target> snapshot-id=<snapshot-id> bucket=<bucket-name> key=<qcow2-file-name>.qcow2
-     ```
-     Replace `<zone-to-target>` with the desired AZ, `<snapshot-id>` with the snapshot ID, `<bucket-name>` with your Object Storage bucket name, and `<qcow2-file-name>` with the desired file name.
+Replace the following placeholders with their respective values:
 
+`<ZONE>`
+: the AZ of the snapshot (e.g., `fr-par-1`)
 
-### Importing the Snapshot into the destination AZ
+`<SNAPSHOT_ID>`
+: the ID of the snapshot
 
-Import your QCOW2 object as a Local Storage or Block Storage snapshot. You can then deploy an Instance from it.
+`<BUCKET_NAME>`
+: the name of your Object Storage bucket
 
-#### Importing snapshots via the console
+`<FILE_NAME>`
+: the name of the QCOW2 file to create
 
-1. Navigate to **Object Storage** and select the region you have exported your snapshot to.
-2. Click the name of the bucket containing your snapshot to display its content.
-3. Click <Icon name="more" /> next to the name of the snapshot to view the object menu.
-4. Click **Import as snapshot**. A pop-up displays.
-5. Enter a name for the snapshot or keep the suggested name, choose the destination AZ for the snapshot to be imported into and select the snapshot type.
-    - Imported snapshots can be either Local Storage or Block Storage.
-6. Click **Import object as snapshot**.
+### Import the snapshots into the destination AZ
 
-#### Importing snapshots via CLI
+Import each QCOW2 object as a Local Storage or Block Storage snapshot in the destination AZ.
 
-Import snapshots via the CLI using the following command:
+#### Import snapshots with the console
+
+1. In the Scaleway console side menu, go to **Storage** > **Object Storage**.
+2. Click the name of the bucket that contains your exported snapshot. The content of the bucket appears.
+3. Click <Icon name="more" /> next to the name of the snapshot file.
+4. Click **Import as snapshot**. A dialog box appears.
+5. Enter a name for the snapshot, or keep the suggested name.
+6. Select the destination AZ.
+7. Select the snapshot type: Local Storage or Block Storage.
+8. Click **Import object as snapshot**.
+
+#### Import snapshots with the CLI
+
+Run the following command to import a snapshot:
 
 ```bash
-scw block snapshot import-from-object-storage name=<snapshot-name> bucket=<bucket-name> key=<qcow2-file-name>.qcow2 size=<size-in-GB> project-id=<project-id-to-target> zone=<zone-to-target>
+scw block snapshot import-from-object-storage name=<SNAPSHOT_NAME> bucket=<BUCKET_NAME> key=<FILE_NAME>.qcow2 size=<SIZE_IN_GB> project-id=<PROJECT_ID> zone=<ZONE>
 ```
-     Replace `<snapshot-name>` with the name for the snapshot to import, `<bucket-name>` with your Object Storage bucket name, and `<qcow2-file-name>` with the desired file name.
-     Replace `<size-in-GB>` with the desired size for the new snapshot, `<project-id>` with the Project ID to import the snapshot to (optional), `<zone-to-target>` with the AZ to import the snapshot into.
 
-### Creating a new Instance in the destination AZ
+Replace the following placeholders with their respective values:
 
-#### Creating a new Instance via the console
-   - Navigate to **Compute > CPU & GPU Instances** and click **+ Create Instance > Create CPU Instance**.
-   - Select the destination AZ and desired Instance type.
-   - At the **Choose an image** step, go to the **My snapshots** tab and select the imported snapshot.
-   - Configure additional volumes, network settings, and flexible IPs as needed. To retain the original public IP, select it under **Select existing IPv4(s)**.
-   - Click **Create Instance**.
+`<SNAPSHOT_NAME>`
+: the name of the imported snapshot
 
-#### Creating a new Instance via CLI
+`<BUCKET_NAME>`
+: the name of your Object Storage bucket
+
+`<FILE_NAME>`
+: the name of the QCOW2 file
+
+`<SIZE_IN_GB>`
+: the size of the new snapshot, in GB
+
+`<PROJECT_ID>`
+: (optional) the ID of the Project to import the snapshot into
+
+`<ZONE>`
+: the destination AZ (e.g., `fr-par-2`)
+
+### Create a new Instance in the destination AZ
+
+#### Create an Instance with the console
+
+1. In the Scaleway console side menu, go to **Compute** > **CPU & GPU Instances**. The [Instances dashboard](https://console.scaleway.com/instance/servers) opens.
+2. Click **Create Instance** > **Create CPU Instance**. The Instance creation wizard opens.
+3. Select the destination AZ.
+4. Select the Instance type.
+5. In the **Choose an image** step, click the **My snapshots** tab.
+6. Select the imported snapshot.
+7. Configure additional volumes, network settings, and flexible IP addresses according to your requirements. To keep the original public IP address, select it under **Select existing IPv4(s)**.
+8. Click **Create Instance**. The new Instance appears in the list of your Instances.
+
+#### Create an Instance with the CLI
 
 Run the following command to create a new Instance with a Block Storage root volume from an imported snapshot:
 
 ```bash
-scw instance server create image=none root-volume=block:<snapshot-id> type=<commercial-type> zone=<zone-to-target> project-id=<project-to-target>
+scw instance server create image=none root-volume=block:<SNAPSHOT_ID> type=<COMMERCIAL_TYPE> zone=<ZONE> project-id=<PROJECT_ID>
 ```
 
-    Replace `<snapshot-id>` with the ID of the imported snapshot, `<commercial-type>` with the commercial type of the Instance to create, `<zone-to-target>` with the AZ to create the Instance in, and `<project-to-target>` with the ID of the project to target.
+Replace the following placeholders with their respective values:
 
-## Considerations for storage types
-- **Local Storage (LSSD)**:
-  - Snapshots are created and managed via the Instance API.
-  - Local Storage is tied to the Instance’s hypervisor and cannot be detached independently. Use snapshots to move data to a new Instance.
-- **Block Storage (SBS)**:
-  - Block Storage volumes can be detached and reattached to another Instance in the same AZ without snapshotting, if moving within the same Project and AZ:
+`<SNAPSHOT_ID>`
+: the ID of the imported snapshot
+
+`<COMMERCIAL_TYPE>`
+: the commercial type of the new Instance (e.g., `POP2-4C-16G`)
+
+`<ZONE>`
+: the destination AZ
+
+`<PROJECT_ID>`
+: the ID of the destination Project
+
+## Storage type considerations
+
+### Local Storage
+
+- The Instances API creates and manages Local Storage snapshots.
+- You cannot detach a Local Storage volume from its Instance. Use snapshots to move its data to a new Instance.
+- You can restore Local Storage (LSSD) snapshots only to Local Storage volumes.
+
+### Block Storage
+
+- You can restore Block Storage (BSSD) snapshots only to Block Storage volumes.
+- To move a Block Storage volume to another Instance in the same AZ and Project, you can detach and reattach it without using snapshots:
     ```bash
-    scw instance server detach-volume volume-id=<volume-id> zone=<zone-to-target>
-    scw instance server attach-volume server-id=<server-id> volume-id=<volume-id> zone=<zone-to-target>
+    scw instance server detach-volume volume-id=<VOLUME_ID> zone=<ZONE>
+    scw instance server attach-volume server-id=<INSTANCE_ID> volume-id=<VOLUME_ID> zone=<ZONE>
     ```
-- LSSD snapshots can only be restored to Local Storage volumes, and BSSD snapshots to Block Storage volumes. Ensure the correct snapshot type is selected during import.
+
+    Replace the following placeholders with their respective values:
+
+    `<VOLUME_ID>`
+    : the ID of the volume
+
+    `<INSTANCE_ID>`
+    : the ID of the destination Instance
+
+    `<ZONE>`
+    : the AZ of the Instances

@@ -39,6 +39,10 @@ export const instancesMenu = {
           slug: 'manage-storage',
         },
         {
+          label: 'Use scratch storage',
+          slug: 'use-scratch-storage',
+        },
+        {
           label: 'Connect to an Instance',
           slug: 'connect-to-instance',
         },
@@ -253,6 +257,10 @@ export const instancesMenu = {
         {
           label: 'Understanding Instance states',
           slug: 'instance-states',
+        },
+        {
+          label: 'Understanding scratch storage',
+          slug: 'understanding-scratch-storage',
         },
         {
           label: 'Identifying devices of an Instance',

@@ -75,7 +75,7 @@ export const instancesMenu = {
           slug: 'enable-openssh-windows',
         },
         {
-          label: 'How to reset the RDP password of a Windows Instance',
+          label: 'Reset the RDP password of a Windows Instance',
           slug: 'reset-rdp-password-windows',
         },
         {

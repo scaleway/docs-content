@@ -7,8 +7,8 @@ export const serverlessContainersMenu = {
     {
       items: [
         {
-          label: 'Serverless overview',
-          slug: 'serverless-overview',
+          label: 'Understanding Serverless Containers',
+          slug: 'understanding-serverless-containers',
         },
         {
           label: 'Containers use cases',
@@ -37,10 +37,6 @@ export const serverlessContainersMenu = {
     {
       label: 'Quickstart',
       slug: 'quickstart',
-    },
-    {
-      label: 'FAQ',
-      slug: 'faq',
     },
     {
       items: [
@@ -185,6 +181,10 @@ export const serverlessContainersMenu = {
       ],
       label: 'Monitoring',
       slug: 'monitoring',
+    },
+    {
+      label: 'FAQ',
+      slug: 'faq',
     },
     {
       label: 'Troubleshooting',

@@ -2,6 +2,7 @@
 // for its associated menu naming, to avoid breaking tooling
 import { accountMenu } from '../pages/account/menu'
 import { appleSiliconMenu } from '../pages/apple-silicon/menu'
+import { annotationsMenu } from '../pages/annotations/menu'
 import { auditTrailMenu } from '../pages/audit-trail/menu'
 import { billingMenu } from '../pages/billing/menu'
 import { blockStorageMenu } from '../pages/block-storage/menu'
@@ -77,10 +78,10 @@ export default [
         items: [accountMenu, organizationsAndProjectsMenu],
         label: 'Account & Organization',
         category: 'console',
-      },
+      },     
       {
         icon: 'CostAndImpactManagementCategoryIcon',
-        items: [billingMenu, environmentalFootprintMenu],
+        items: [billingMenu, environmentalFootprintMenu, annotationsMenu],
         label: 'Cost & Impact Management',
         category: 'console',
       },

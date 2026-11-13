@@ -135,7 +135,7 @@ export const serverlessContainersMenu = {
           slug: 'secure-a-container',
         },
       ],
-      label: 'Network and Security',
+      label: 'Network and security',
       slug: 'network-and-security',
     },
     {
@@ -161,7 +161,7 @@ export const serverlessContainersMenu = {
           slug: 'cron-schedules',
         },
       ],
-      label: 'Scaling and Eventing',
+      label: 'Scaling and eventing',
       slug: 'scaling-and-eventing',
     },
     {

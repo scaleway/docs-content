@@ -1,0 +1,455 @@
+# Open Workflow DSL
+
+## Table of Contents
+
+- [Abstract](#abstract)
+- [Motivation](#motivation)
+- [Priority of Constituencies](#priority-of-constituencies)
+- [Design](#design)
+- [Concepts](#concepts)
+  + [Workflow](#workflow)
+    - [Components](#components)
+      + [Task](#task)
+  + [Task Flow](#task-flow)
+  + [Data Flow](#data-flow)
+  + [Runtime Expressions](#runtime-expressions)
+    - [Arguments](#runtime-expression-arguments)
+  + [Fault Tolerance](#fault-tolerance)
+  + [Timeouts](#timeouts)
+  + [Catalogs](#catalogs)
+    + [File Structure](#file-structure)
+    + [Default Catalog](#default-catalog)
+    + [Using Cataloged Functions](#using-cataloged-functions)
+  + [Interoperability](#interoperability)
+    - [Supported Protocols](#supported-protocols)
+  + [Authentication](#authentication)
+
+## Abstract
+
+This document proposes the creation of a Domain Specific Language (DSL) for the Open Workflow Specification, designed for building platform agnostic workflows. 
+
+Open Workflow Specification aims to simplify the orchestration of complex processes across diverse environments, providing developers with a unified syntax and set of tools for defining and executing workflows.
+
+## Motivation
+
+Modern cloud-native computing has gained popularity for its ability to abstract away infrastructure management tasks, enabling developers to focus on application logic. However, orchestrating workflows across multiple environments often involves dealing with disparate tools and platforms, leading to complexity and inefficiency.
+
+Open Workflow Specification addresses this challenge by providing a DSL specifically designed for workflow orchestration. By abstracting away the underlying infrastructure complexities and offering a modular and extensible framework, Open Workflow Specification aims to streamline the development, deployment, and management of workflows.
+
+## Priority of Constituencies
+
+Inspired by the [Priority of Constituencies](https://www.w3.org/TR/2024/NOTE-design-principles-20240718/#priority-of-constituencies) principle from the W3C Design Principles, the Open Workflow DSL prioritizes the following constituencies (collectively referred to as "users"):
+
+- Authors: people authoring and reading workflows
+- Operators: people running and operating a runtime implementation of the specification
+- Implementors: people implementing a specification compliant runtime
+- Specifications writers: people working on the Open Workflow Specification
+
+If a trade-off needs to be made, always put author's needs above all.
+
+Similarly, when beginning to design an API, be sure to understand and document the user needs that the API aims to address.
+
+Author needs come before the needs of operators, which come before the needs of runtime implementors, which come before the needs of specification writers, which come before theoretical purity.
+
+Like all principles, this isn’t absolute. Ease of operations affects the perceived reliability of authors' workflows. Implementors have to prioritize finite engineering resources, which affects how features reach authors. Specification writers also have finite resources, and theoretical concerns reflect the underlying needs of all of these groups.
+
+## Design
+
+The Open Workflow DSL is crafted with a design philosophy that prioritizes clarity, expressiveness, and ease of use. Its foundation lies in linguistic fluency, emphasizing readability and comprehension. By adopting a fluent style, the DSL promotes intuitive understanding through natural language constructs. Verbs are employed in the imperative tense to denote actions, enhancing clarity and directness in expressing workflow logic. This imperative approach empowers developers to articulate their intentions succinctly and effectively.
+
+The DSL also embraces the principle of implicit default behaviors, sparing authors from unnecessary repetition and enhancing the conciseness of workflow definitions. For instance, default settings alleviate the burden of explicitly defining every detail, streamlining the workflow design process. Furthermore, the DSL allows both inline declaration of components or the creation of reusable elements, granting flexibility in workflow composition. This flexibility allows developers to seamlessly integrate inline task definitions without imposing rigid structural requirements.
+
+Moreover, the DSL eschews strong-typed enumerations wherever feasible, fostering extensibility and adaptability across different runtime environments. While maintaining portability is crucial, the DSL prioritizes customization options for extensions and runtimes, enabling tailored implementations to suit diverse use cases. Additionally, the DSL favors universally understood terms over technical jargon, enhancing accessibility and comprehension for a broader audience.
+
+- Embrace linguistic fluency for enhanced readability and understanding.
+- Utilize imperative verbs to convey actions directly and clearly.
+- Employ implicit default behaviors to reduce redundancy and streamline workflow definitions.
+- Enable the declaration and effortless import of shared components by supporting external references
+- Encourage the declaration of components inline for situations where reusability is unnecessary, prioritizing ease of use in such cases.
+- Prioritize flexibility over strong-typed enumerations for enhanced extensibility.
+- Opt for universally understood terms to improve accessibility and comprehension.
+
+## Concepts
+
+### Workflow
+
+A workflow defined using the Open Workflow Specification is a sequence of specific [tasks](dsl-reference.mdx#tasks) that are executed in a defined order. By default, this order follows the declaration sequence within the workflow definition. Workflows are designed to automate processes and orchestrate various functions and services. 
+
+Workflows can be triggered in different ways: upon request, scheduled using CRON expressions, or initiated upon correlation with specific events. 
+
+Additionally, workflows may optionally accept inputs and produce outputs, allowing for data processing and transformation within the workflow execution.
+
+#### Components
+
+Open Workflow DSL allows for defining reusable components that can be referenced across the workflow. These include:
+
+- [Authentications](dsl-reference.mdx#authentication)
+- [Errors](dsl-reference.mdx#error)
+- [Extensions](dsl-reference.mdx#extension)
+- [Functions](dsl-reference.mdx#task)
+- [Retries](dsl-reference.mdx#retry)
+- [Secrets](#secret)
+
+##### Task
+
+[Tasks](dsl-reference.mdx#tasks) are the fundamental computing units of a workflow. They define the different types of actions that a workflow can perform, including the ability to mutate their input and output data. Tasks can also write to and modify the context data, enabling complex and dynamic workflow behaviors.
+
+The Open Workflow DSL defines several default [task](dsl-reference.mdx#tasks) types that runtimes **must** implement:
+
+- [Call](dsl-reference.mdx#call), used to call services and/or functions.
+- [Do](dsl-reference.mdx#do), used to define one or more subtasks to perform in sequence.
+- [Emit](dsl-reference.mdx#emit), used to emit [events](dsl-reference.mdx#event).
+- [For](dsl-reference.mdx#for), used to iterate over a collection of items, and conditionally perform a task for each of them.
+- [Fork](dsl-reference.mdx#fork), used to define one or more two subtasks to perform in parallel.
+- [Listen](dsl-reference.mdx#listen), used to listen for an [event](dsl-reference.mdx#event) or more.
+- [Raise](dsl-reference.mdx#raise), used to raise an [error](dsl-reference.mdx#error) and potentially fault the [workflow](dsl-reference.mdx#workflow).
+- [Run](dsl-reference.mdx#run), used to run a [container](dsl-reference.mdx#container-process), a [script](dsl-reference.mdx#script-process), a [shell](dsl-reference.mdx#shell-process) command or even another [workflow](dsl-reference.mdx#workflow-process). 
+- [Set](dsl-reference.mdx#set), used to dynamically set the [workflow](dsl-reference.mdx#workflow)'s data during the its execution. 
+- [Switch](dsl-reference.mdx#switch), used to dynamically select and execute one of multiple alternative paths based on specified conditions
+- [Try](dsl-reference.mdx#try), used to attempt executing a specified [task](dsl-reference.mdx#task), and to handle any resulting [errors](dsl-reference.mdx#error) gracefully, allowing the [workflow](dsl-reference.mdx#workflow) to continue without interruption.
+- [Wait](dsl-reference.mdx#wait), used to pause or wait for a specified duration before proceeding to the next task.
+
+To ensure they conform to the DSL, runtimes **should** pass all the feature conformance test scenarios defined in the [ctk](ctk/README.md).
+
+##### Secret
+
+Secrets are sensitive information required by a workflow to securely access protected resources or services. They provide a way to securely store and manage credentials, tokens, or other sensitive data used during workflow execution.
+
+Runtime **must** implement a mechanism capable of providing the workflow with the data contained within the defined secrets. If a workflow attempts to access a secret to which it does not have access rights or which does not exist, runtimes **must** raise an error with type `https://open-workflow-specification.org/spec/1.0.0/errors/authorization` and status `403`.
+
+### Task Flow
+
+A workflow begins with the first task defined.
+
+Once the task has been executed, different things can happen:
+
+- `continue`: the task ran to completion, and the next task, if any, should be executed. The task to run next is implicitly the next in declaration order, or explicitly defined by the `then` property of the executed task. If the executed task is the last task, then the workflow's execution gracefully ends.
+- `fault`: the task raised an uncaught error, which abruptly halts the workflow's execution and makes it transition to `faulted` [status phase](#status-phases).
+- `end`: the task explicitly and gracefully ends the workflow's execution. 
+
+> [!WARNING]
+> Flow directives may only redirect to tasks declared within their own scope. In other words, they cannot target tasks at a different depth.
+
+### Data Flow
+
+In Open Workflow DSL, data flow management is crucial to ensure that the right data is passed between tasks and to the workflow itself.
+
+Here's how data flows through a workflow based on various transformation stages:
+
+1. **Validate Workflow Input**
+Before the workflow starts, the input data provided to the workflow can be validated against the `input.schema` property to ensure it conforms to the expected structure.
+The execution only proceeds if the input is valid. Otherwise, it will fault with a [ValidationError (https://open-workflow-specification.org/spec/1.0.0/errors/validation)](dsl-reference.mdx#error).
+
+2. **Transform Workflow Input**
+Before the workflow starts, the input data provided to the workflow can be transformed to ensure only relevant data in the expected format is passed into the workflow context. This can be done using the top level `input.from` expression. It evaluates on the raw workflow input and defaults to the identity expression which leaves the input unchanged. This step allows the workflow to start with a clean and focused dataset, reducing potential overhead and complexity in subsequent tasks. The result of this expression will set as the initial value for the `$input` runtime expression argument and be passed to the first task.
+
+*Example: If the workflow receives a JSON object as input, a transformation can be applied to remove unnecessary fields and retain only those that are required for the workflow's execution.*
+
+After workflow input validation and transformation, the transformed input is passed as the raw input to the first task.
+
+3. **Validate Task Input**
+Before a task executes, its raw input can be validated against the `input.schema` property to ensure it conforms to the expected structure.
+The execution only proceeds if the input is valid. Otherwise, it will fault with a [ValidationError (https://open-workflow-specification.org/spec/1.0.0/errors/validation)](dsl-reference.mdx#error).
+
+4. **Transform Task Input**
+The input data for the task can be transformed to match the specific requirements of that task. This ensures that the task receives only the data required to perform its operations. This can be done using the task's `input.from` expression. It evaluates the raw task input (i.e., the transformed workflow input for the first task or the transformed output of the previous task) and defaults to the identity expression, which leaves the input unchanged. The result of this expression will be set as the `$input` runtime expression argument and be passed to the task. This transformed input will be evaluated against any runtime expressions used within the task definition.
+
+*Example: If the task is a function call that only needs a subset of the workflow input, a transformation can be applied to provide only those fields needed for the function to execute.*
+
+5. **Transform Task Output**
+After completing the task, its output can be transformed before passing it to the next task or storing it in the workflow context. Transformations are applied using the `output.as` runtime expression. It evaluates the raw task output and defaults to the identity expression, which leaves the output unchanged. Its result will be input for the next task.
+
+*Example: If the task returns a large dataset, a transformation can be applied to retain only the relevant results needed for subsequent tasks.*
+
+6. **Validate Task Output**
+After `output.as` is evaluated, the transformed task output is validated against the `output.schema` property to ensure it conforms to the expected structure. The execution only proceeds if the output is valid. Otherwise, it will fault with a [ValidationError (https://open-workflow-specification.org/spec/1.0.0/errors/validation)](dsl-reference.mdx#error).
+
+7. **Update Workflow Context**
+To update the context, one uses the `export.as` runtime expression. It evaluates the transformed task output and defaults to the expression that returns the existing context. The result of this runtime expression replaces the workflow's current context and the content of the `$context` runtime expression argument. This helps manage the data flow and keep the context clean by removing any unnecessary data produced by the task.
+
+8. **Validate Exported Context**
+After the context is updated, the exported context is validated against the `export.schema` property to ensure it conforms to the expected structure. The execution only proceeds if the exported context is valid. Otherwise, it will fault with a [ValidationError (https://open-workflow-specification.org/spec/1.0.0/errors/validation)](dsl-reference.mdx#error).
+
+9. **Continue Workflow**
+After the context is updated, the workflow continues to the next task in the sequence. The transformed output of the previous task is passed as the raw input to the next task, and the data flow cycle repeats.
+If no more tasks are defined, the transformed output is passed to the workflow output transformation step.
+
+10. **Transform Workflow Output**
+Finally, the overall workflow output can be transformed before it is returned to the caller or stored. Transformations are applied using the `output.as` runtime expression. It evaluates the last task's transformed output and defaults to the identity expression, which leaves the output unchanged. This step ensures that the final output of the workflow is concise and relevant, containing only the necessary information that needs to be communicated or recorded.
+
+*Example: If the workflow's final output is a summary report, a transformation can ensure that the report contains only the most important summaries and conclusions, excluding any intermediate data.*
+
+11. **Validate Workflow Output**
+After `output.as` is evaluated, the transformed workflow output is validated against the `output.schema` property to ensure it conforms to the expected structure. The execution only proceeds if the output is valid. Otherwise, it will fault with a [ValidationError (https://open-workflow-specification.org/spec/1.0.0/errors/validation)](dsl-reference.mdx#error).
+
+By applying transformations at these strategic points, Open Workflow DSL ensures that data flows through the workflow in a controlled and efficient manner, maintaining clarity and relevance at each execution stage. This approach helps manage complex workflows and ensures that each task operates with the precise data required, leading to more predictable and reliable workflow outcomes.
+
+Visually, this can be represented as follows:
+
+```mermaid
+flowchart TD
+
+  subgraph Legend
+    legend_data{{Data}}
+    legend_schema[\Schema/]
+    legend_transformation[Transformation]
+    legend_arg([Runtime Argument])
+  end
+
+  initial_context_arg([<code>$context</code>])
+  context_arg([<code>$context</code>])
+  input_arg([<code>$input</code>])
+  output_arg([<code>$output</code>])
+
+  workflow_raw_input{{Raw Workflow Input}}
+  workflow_input_schema[\Workflow: <code>input.schema</code>/]
+  workflow_input_from[Workflow: <code>input.from</code>]
+  workflow_transformed_input{{Transformed Workflow Input}}
+
+  task_raw_input{{Raw Task Input}}
+  task_if[Task: <code>if</code>]
+  task_input_schema[\Task: <code>input.schema</code>/]
+  task_input_from[Task: <code>input.from</code>]
+  task_transformed_input{{Transformed Task Input}}
+  task_definition[Task definition]
+  task_raw_output{{Raw Task output}}
+  task_output_as[Task: <code>output.as</code>]
+  task_transformed_output{{Transformed Task output}}
+  task_output_schema[\Task: <code>output.schema</code>/]
+  task_export_as[Task: <code>export.as</code>]
+  task_export_schema[\Task: <code>export.schema</code>/]
+
+  new_context{{New execution context}}
+  
+  workflow_raw_output{{Raw Workflow Output}}
+  workflow_output_as[Workflow: <code>output.as</code>]
+  workflow_transformed_output{{Transformed Workflow Output}}
+  workflow_output_schema[\Workflow: <code>output.schema</code>/]
+
+  workflow_raw_input -- Validated by --> workflow_input_schema
+  workflow_input_schema -- Passed to --> workflow_input_from
+  workflow_input_from -- Produces --> workflow_transformed_input
+  workflow_transformed_input -- Set as --> initial_context_arg
+  workflow_transformed_input -- Passed to --> task_raw_input
+
+  subgraph Task
+
+    task_raw_input -- Passed to --> task_if
+    task_if -- Validated by --> task_input_schema
+    task_input_schema -- Passed to --> task_input_from
+    task_input_from -- Produces --> task_transformed_input
+    task_transformed_input -- Set as --> input_arg
+    task_transformed_input -- Passed to --> task_definition
+
+    task_definition -- Execution produces --> task_raw_output
+    task_raw_output -- Passed to --> task_output_as
+    task_output_as -- Produces --> task_transformed_output
+    task_transformed_output -- Set as --> output_arg
+    task_transformed_output -- Validated by --> task_output_schema
+    task_output_schema -- Passed to --> task_export_as
+    task_export_as -- Produces --> new_context
+    new_context -- Validated by --> task_export_schema
+  end
+
+  task_transformed_output -- Passed as raw input to --> next_task
+
+  subgraph next_task [Next Task]
+  end
+
+  new_context -- set as --> context_arg
+
+  next_task -- Transformed output becomes --> workflow_raw_output
+  workflow_raw_output -- Passed to --> workflow_output_as
+  workflow_output_as -- Produces --> workflow_transformed_output
+  workflow_transformed_output -- Validated by --> workflow_output_schema
+```
+
+### Runtime Expressions
+
+Runtime expressions serve as dynamic elements that enable flexible and adaptable workflow behaviors. These expressions provide a means to evaluate conditions, transform data, and make decisions during the execution of workflows.
+
+Runtime expressions allow for the incorporation of variables, functions, and operators to create logic that responds to changing conditions and input data. These expressions can range from simple comparisons, such as checking if a variable meets a certain condition, to complex computations and transformations involving multiple variables and data sources.
+
+One key aspect of runtime expressions is their ability to adapt to runtime data and context. This means that expressions can access and manipulate data generated during the execution of a workflow, enabling dynamic decision-making and behavior based on real-time information.
+
+Runtime expressions in Open Workflow Specification can be evaluated using either the default `strict` mode or the `loose` mode. In `strict` mode, all expressions must be properly identified with `${}` syntax. Conversely, in `loose` mode, expressions are evaluated more liberally, allowing for a wider range of input formats. While `strict` mode ensures strict adherence to syntax rules, `loose` mode offers flexibility, allowing evaluation even if the syntax is not perfectly formed.
+
+All runtimes **must** support the default runtime expression language, which is [`jq`](https://jqlang.github.io/jq/).
+
+Runtimes **may** optionally support other runtime expression languages, which authors can specifically use by adequately configuring the workflow. See [`evaluate.language`](dsl-reference.mdx#evaluate) for more details.
+
+CloudFlows defines [several arguments](#runtime-expression-arguments) that runtimes **must** provide during the evaluation of runtime expressions.
+
+When the evaluation of an expression fails, runtimes **must** raise an error with type `https://open-workflow-specification.org/spec/1.0.0/errors/expression` and status `400`.
+
+> [!WARNING]
+> Runtimes **must** evaluate only runtime expressions that are defined in workflow definitions, and **must not** parse or evaluate expression syntax embedded in workflow input or task input data (for example, `jq`, regular expressions, or similar). Treating input data as executable expressions exposes the system to injection attacks, potentially allowing unauthorized access to system data and resources.
+
+#### Runtime expression arguments
+
+| Name | Type | Description |
+|:-----|:----:|:------------|
+| context | `map` | The workflow's context data. |
+| input | `any` | The task's transformed input. |
+| output | `any` | The task's transformed output. |
+| secrets | `map` | A key/value map of the workflow secrets.<br>To avoid unintentional bleeding, secrets can only be used in the `input.from` runtime expression. |
+| authorization | [`authorizationDescriptor`](#authorization-descriptor) | Describes the resolved authorization, as defined by the task's authentication, if any. |
+| task | [`taskDescriptor`](#task-descriptor) | Describes the current task. |
+| workflow | [`workflowDescriptor`](#workflow-descriptor) | Describes the current workflow. |
+| runtime | [`runtimeDescriptor`](#runtime-descriptor) | Describes the runtime. |
+
+> [!WARNING] 
+> Use `$secrets` with caution: incorporating them in expressions or passing them as call inputs may inadvertently expose sensitive information.
+
+##### Runtime Descriptor
+
+This argument contains information about the runtime executing the workflow.
+
+| Name | Type | Description | Example |
+|:-----|:----:|:------------|:--------|
+| name | `string` | A human friendly name for the runtime. | `Synapse`, `Sonata` |
+| version | `string` | The version of the runtime. This can be an arbitrary string | An incrementing positive integer (`362`), semantic version (`1.4.78`), commit hash (`04cd3be6da98fc35422c8caa821e0aa1ef6b2c02`) or container image label (`v0.7.43-alpine`) |
+| metadata | `map` | An object/map of implementation specific key-value pairs. This can be chosen by runtime implementors and usage of this argument signals that a given workflow definition might not be runtime agnostic | A Software as a Service (SaaS) provider might choose to expose information about the tenant the workflow is executed for e.g. `{ "organization": { "id": "org-ff51cff2-fc83-4d70-9af1-8dacdbbce0be", "name": "example-corp" }, "featureFlags": ["fastZip", "arm64"] }`.  |
+
+##### Workflow Descriptor
+
+| Name | Type | Description | Example |
+|:-----|:----:|:------------|:--------|
+| id | `string` | A unique id of the workflow execution. Now specific format is imposed | UUIDv4: `4a5c8422-5868-4e12-8dd9-220810d2b9ee`, ULID: `0000004JFGDSW1H037G7J7SFB9` |
+| definition | `map` | The workflow's definition as a parsed object | `{ "document": { ... }, "do": [...] }` |
+| input | `any` | The workflow's *raw* input (i.e *BEFORE* the `input.from` expression). For the result of `input.from` expression use the `$input` argument | |
+| startedAt | [`dateTimeDescriptor`](#datetime-descriptor) | The start time of the execution | |
+
+##### Task Descriptor
+
+| Name | Type | Description | Example |
+|:-----|:----:|:------------|:--------|
+| name | `string` | The task's name. | `getPet` |
+| reference | `string` | The task's reference. | `/do/2/myTask` |
+| definition | `map` | The tasks definition (specified under the name) as a parsed object | `{ "call": "http", "with": { ... } }` |
+| input | `any` | The task's *raw* input (i.e. *BEFORE* the `input.from` expression). For the result of `input.from` expression use the context of the runtime expression (for jq `.`) | |
+| output | `any` | The task's *raw* output (i.e. *BEFORE* the `output.as` expression). | |
+| startedAt | [`dateTimeDescriptor`](#datetime-descriptor) | The start time of the task | |
+
+##### Authorization Descriptor
+
+| Name   | Type   | Description | Example |
+|:-------|:------:|:------------|:--------|
+| scheme | `string` | The resolved authorization scheme. | `Bearer` |
+| parameter | `string` | The resolved authorization parameter. | `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiaWF0IjoxNTE2MjM5MDIyfQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJVadQssw5c` |
+
+##### DateTime Descriptor
+
+| Name | Type | Description | Example |
+|:-----|:----:|:------------|:--------|
+| iso8601 | `string` | The date time as a ISO 8601 date time string. It uses `T` as the date-time delimiter, either UTC (`Z`) or a time zone offset (`+01:00`). The precision can be either seconds, milliseconds or nanoseconds | `2022-01-01T12:00:00Z`, `2022-01-01T12:00:00.123456Z`, `2022-01-01T12:00:00.123+01:00` |
+| epoch.seconds | `integer` | The date time as a integer value of seconds since midnight of 1970-01-01 UTC (i.e. [the Unix Epoch](https://en.wikipedia.org/wiki/Unix_time)) | `1641024000` (="2022-01-01T08:00:00Z") |
+| epoch.milliseconds | `integer` | The date time as a integer value of milliseconds since midnight of 1970-01-01 UTC. This contains the *whole* timestamp, not just the millisecond portion | `1641024000123` (="2022-01-01T08:00:00.123Z") |
+
+The following table shows which arguments are available for each runtime expression:
+
+| Runtime Expression | Evaluated on | Produces | `$context` | `$input` | `$output` | `$secrets` | `$task` | `$workflow` | `$runtime` | `$authorization` |
+|:-------------------|:---------:|:---------:|:---------:|:---------:|:-------:|:---------:|:-------:|:----------:|:----------:|:----------:|
+| Workflow `input.from` | Raw workflow input | Transformed workflow input | | | | ✔ | | ✔ | ✔ | |
+| Task `if` | Raw task input (i.e. transformed workflow input for the first task, transformed output from previous task otherwise) | | ✔ | | | ✔ | ✔ | ✔ | ✔ | |
+| Task `input.from` | Raw task input (i.e. transformed workflow input for the first task, transformed output from previous task otherwise) | Transformed task input | ✔ | | | ✔ | ✔ | ✔ | ✔ | |
+| Task definition | Transformed task input | | ✔ | ✔ | | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Task `output.as` | Raw task output | Transformed task output | ✔ | ✔ | | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Task `export.as` | Transformed task output | `$context` | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ | ✔ |
+| Workflow `output.as` | Last task's transformed output | Transformed workflow output | ✔ | | | ✔ | | ✔ | ✔ | |
+
+> [!WARNING]
+> Use `$secrets` with caution: incorporating them in expressions or passing them as call inputs may inadvertently expose sensitive information.
+
+### Fault Tolerance
+
+Open Workflow Specification is designed with resilience in mind, acknowledging that errors are an inevitable part of any system. The DSL provides robust mechanisms to identify, describe, and handle errors effectively, ensuring the workflow can recover gracefully from failures.
+
+Overall, the fault tolerance features in Open Workflow Specification enhance its robustness and reliability, making it capable of handling a wide range of failure scenarios gracefully and effectively.
+
+#### Errors
+
+Errors in Open Workflow Specification are described using the [Problem Details RFC](https://datatracker.ietf.org/doc/html/rfc7807). This specification helps to standardize the way errors are communicated, using the `instance` property as a [JSON Pointer](https://datatracker.ietf.org/doc/html/rfc6901) to identify the specific component of the workflow that has raised the error. By adhering to this standard, authors and runtimes can consistently describe and handle errors.
+
+*Example error:*
+```yaml
+type: https://open-workflow-specification.org/spec/1.0.0/errors/communication
+title: Service Unavailable
+status: 503
+detail: The service is currently unavailable. Please try again later.
+instance: /do/getPetById
+```
+
+The Open Workflow Specification defines several [standard error types](dsl-reference.mdx#standard-error-types) to describe commonly known errors, such as timeouts. Using these standard error types ensures that workflows behave consistently across different runtimes, and allows authors to rely on predictable error handling and recovery processes.
+
+See the [DSL reference](dsl-reference.mdx#error) for more details about errors.
+
+#### Retries
+
+Errors are critical for both authors and runtimes as they provide a means to communicate and describe the occurrence of problems. This, in turn, enables the definition of mechanisms to catch and act upon these errors. For instance, some errors caught using a [`try`](dsl-reference.mdx#try) block may be transient and temporary, such as a `503 Service Unavailable`. In such cases, the DSL provides a mechanism to retry a faulted task, allowing for recovery from temporary issues.
+
+*Retrying 5 times when an error with 503 is caught:*
+```yaml
+try:
+  call: http
+  with:
+    method: get
+    endpoint:
+      uri: https://example-service.com/healthz
+catch:
+  errors:
+    with:
+      status: 503
+  retry:
+    delay:
+      seconds: 3
+    backoff:
+      linear: {}
+    limit:
+      attempt:
+        count: 5
+```
+
+### Timeouts
+
+Workflows and tasks alike can be configured to timeout after a defined amount of time.
+
+When a timeout occur, runtimes **must** abruptly interrupt the execution of the workflow/task, and **must** raise an error that, if uncaught, force the workflow/task to transition to the [`faulted` status phase](#status-phases).
+
+A timeout error **must** have its `type` set to `https://open-workflow-specification.org/spec/1.0.0/errors/timeout` and **should** have its `status` set to `408`.
+
+### Interoperability
+
+Open Workflow DSL is designed to seamlessly interact with a variety of services, ensuring robust service interoperability.
+
+#### Supported Protocols
+
+- [**HTTP**](dsl-reference.mdx#http-call): Allows the workflow to make standard HTTP requests to web services. This is useful for RESTful services and web APIs that communicate over the HTTP protocol.
+
+Runtimes **must** raise an error with type `https://open-workflow-specification.org/spec/1.0.0/errors/communication` if and when a problem occurs during a call.
+
+### Authentication
+
+Authentication in Open Workflow specifies the method by which the workflow accesses protected resources or services.
+
+Among others, [external resources](dsl-reference.mdx#external-resource) and [calls](dsl-reference.mdx#call) may define authentication.
+
+The Open Workflow DSL supports a suite of standard authentication mechanisms, amongst which are:
+
+- **Basic Authentication**: Utilizes a username-password pair for authentication.
+```yaml
+sampleBasic:
+  basic:
+    username: admin
+    password: 123
+```
+
+- **Bearer Authentication**: Uses a bearer token for authentication.
+```yaml
+sampleBearer:
+  bearer: ${ .user.token }
+```
+
+These authentication schemes can be defined globally in the authentication section or associated with specific endpoints. They provide secure access to resources while ensuring proper authorization and identity verification.
+
+See the [DSL reference](dsl-reference.mdx#authentication) for more details about authentication.

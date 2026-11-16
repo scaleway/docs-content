@@ -61,7 +61,7 @@ export const annotationsMenu = {
           slug: 'technical-rules-limits',
         },
       ],
-      label: 'Reference content',
+      label: 'Additional content',
       slug: 'reference-content',
     },
     {

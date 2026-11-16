@@ -81,7 +81,7 @@ export default [
       },     
       {
         icon: 'CostAndImpactManagementCategoryIcon',
-        items: [billingMenu, environmentalFootprintMenu, annotationsMenu],
+        items: [annotationsMenu, billingMenu, environmentalFootprintMenu],
         label: 'Cost & Impact Management',
         category: 'console',
       },

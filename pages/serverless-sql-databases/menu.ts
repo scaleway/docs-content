@@ -39,6 +39,10 @@ export const serverlessSqlDatabasesMenu = {
           slug: 'monitor-database',
         },
         {
+          label: 'Restrict access to a Serverless SQL Database by IP address',
+          slug: 'restrict-access-by-ip',
+        },
+        {
           label: 'Use Row-Level Security on a database',
           slug: 'use-row-level-security',
         },

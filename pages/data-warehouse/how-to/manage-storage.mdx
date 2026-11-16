@@ -1,47 +1,48 @@
 ---
-title: How to manage data storage in a Data Warehouse for ClickHouse® deployment
-description: This page explains how to manage data storage in a Data Warehouse for ClickHouse® deployment using storage policies
-tags: data storage policy strategy options object block
+title: Manage data storage in a Data Warehouse for ClickHouse® deployment
+description: Choose where Data Warehouse for ClickHouse® stores table data with the tiered, S3 cache, or local-only storage policy, and configure the tiered move factor.
+tags: data storage policy strategy options object block move-factor
 dates:
-  validation: 2025-10-16
+  validation: 2026-11-13
   posted: 2025-10-16
 ---
 
 import Requirements from '@macros/iam/requirements.mdx'
 
-<Requirements />
+Scaleway Data Warehouse for ClickHouse® uses ClickHouse® native storage policies to decide where table data is stored: on Block Storage, on Object Storage, or on both. You apply a storage policy to each table when you create it.
 
-- A Scaleway account logged into the [console](https://console.scaleway.com)
+<Requirements />
+- A Scaleway account logged in to the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/iam/how-to/create-api-keys/) to configure the move factor of the `tiered` storage policy
 
 ## Overview
 
-Scaleway Data Warehouse for ClickHouse® uses ClickHouse®'s native storage policies to decide where table data lives: on Scaleway Block storage, and/or on Object Storage (Amazon S3). Policies are applied at table-level during table creation, using the settings presented below. You can choose between three policies for your deployment:
+You can choose from the following storage policies:
 
 - `tiered` (default in Scaleway Data Warehouse for ClickHouse®)
 - `s3_cache` (cache mode)
 - `default` (local-only mode)
 
-The table below provides an overview of each storage policy's behavior and use case.
+The following table describes the behavior and use case of each storage policy.
 
-| Storage&nbsp;policy | Behavior | When to use |
+| Storage and policy | Behavior | When to use |
 |------|---------|------------|
-| `tiered` | Writes on Block Storage first, and parts are automatically moved to Object Storage when disk is 90% full. | General purpose setting for fast local writes and transparent spillover to Object Storage as the dataset grows. |
-| `s3_cache` | Data is stored on Object Storage. A local Block Storage cache layer keeps frequently-read parts to accelerate repeated reads. | Large datasets that mostly live in Object Storage, with repeated reads on smaller subsets that benefit from local caching. |
-| `default` | Data is stored on Block storage only. | Small datasets where lowest latency for reads/writes on local disk is desired and capacity fits the Block Storage volume. |
+| `tiered` | Writes data to Block Storage first, then automatically moves parts to Object Storage when the disk is 90% full. You can change this threshold with the `move_factor` parameter. | General purpose setting for fast local writes, with transparent spillover to Object Storage as the dataset grows. |
+| `s3_cache` | Stores data on Object Storage. A local Block Storage cache layer keeps frequently read parts to accelerate repeated reads. | Large datasets that mostly live in Object Storage, with repeated reads on smaller subsets that benefit from local caching. |
+| `default` | Stores data on Block Storage only. | Small datasets that need the lowest read and write latency on local disk, and that fit in the Block Storage volume. |
 
 ## Tiered storage policy
 
-### Applying the tiered policy
+### Apply the tiered policy
 
-**Tiered** is the deployment's default policy. Data is stored on the `hot` volume (Block Storage) until it reaches 90% of its capacity, then data is moved to the `cold` volume. This mechanism is controlled by `move_factor:0.1`.
+`tiered` is the default storage policy of your deployment. ClickHouse® stores data on the `hot` volume (Block Storage) until the volume reaches 90% of its capacity, then moves data to the `cold` volume (Object Storage). The `move_factor` parameter controls this threshold. Its default value is `0.1`. See [Configure the move factor](#configure-the-move-factor) for more information.
 
-[Connect to you deployment](/data-warehouse/how-to/connect-applications/), then run the SQL query below to apply the `tiered` storage policy.
+[Connect to your deployment](/data-warehouse/how-to/connect-applications/), then run one of the following SQL queries to apply the `tiered` storage policy.
 
 <Tabs>
   <TabsTab label="Explicit">
-  
-  Storage policy is explicitly defined as `tiered`.
+    This query sets the storage policy to `tiered` explicitly.
 
     ```sql
     CREATE TABLE tiered_table
@@ -58,8 +59,7 @@ The table below provides an overview of each storage policy's behavior and use c
 
   </TabsTab>
   <TabsTab label="Implicit">
-
-    Storage policy is not defined, ClickHouse® applies the `tiered` storage policy by default.
+    This query does not set a storage policy. If you omit the `storage_policy` setting, ClickHouse® applies the `tiered` storage policy by default.
 
     ```sql
     CREATE TABLE dw.tiered_table_implicit
@@ -72,43 +72,86 @@ The table below provides an overview of each storage policy's behavior and use c
     PARTITION BY toYYYYMM(ts)
     ORDER BY id;
     ```
+
   </TabsTab>
 </Tabs>
 
-<Message type="note">
-If you omit the `storage_policy` setting, ClickHouse® will automatically apply the `tiered` policy.
-</Message>
+### Configure the move factor
 
-### Moving data with the tiered policy
+The `move_factor` parameter defines when ClickHouse® moves data from the `hot` volume (Block Storage) to the `cold` volume (Object Storage). Data moves once the free space on the `hot` volume drops below this fraction of its total capacity.
 
-When using the `tiered` storage policy, you can manually move partitions between `hot` (Block Storage) and `cold` (Object Storage) volumes using the SQL queries below.
+`move_factor` accepts any value between `0` and `1`. The default value is `0.1`, which means data moves to Object Storage when the `hot` volume is 90% full. For example, a value of `0.3` moves data when the `hot` volume is 70% full.
 
-- Moving specific partitions to the `cold` volume (Object Storage):
+The `move_factor` parameter applies to the whole deployment, and to all tables that use the `tiered` storage policy. You can only set or update it with the [Data Warehouse API](https://www.scaleway.com/en/developers/api/data-warehouse/), when you create or update a deployment.
 
+The following examples use the `SCW_SECRET_KEY`, `SCW_DEFAULT_REGION`, and `SCW_PROJECT_ID` environment variables. Set these variables, or replace them with the appropriate values.
+
+<Tabs>
+  <TabsTab label="New deployment">
+    Add the `move_factor` parameter to the request body when you create a deployment. See [Create a deployment](https://www.scaleway.com/en/developers/api/data-warehouse/deployments#create-a-deployment) for the full list of parameters.
+
+    ```bash
+    curl -X POST \
+      -H "X-Auth-Token: $SCW_SECRET_KEY" \
+      -H "Content-Type: application/json" \
+      "https://api.scaleway.com/datawarehouse/v1beta1/regions/$SCW_DEFAULT_REGION/deployments" \
+      -d '{
+        "project_id": "'"$SCW_PROJECT_ID"'",
+        "name": "my-deployment",
+        ...
+        "move_factor": 0.2
+      }'
+    ```
+
+    Replace `...` with the other parameters required to create your deployment.
+
+  </TabsTab>
+  <TabsTab label="Existing deployment">
+    Run the following command to update the move factor of an existing deployment. See [Update a deployment](https://www.scaleway.com/en/developers/api/data-warehouse/deployments#update-a-deployment) for more information.
+
+    ```bash
+    curl -X PATCH \
+      -H "X-Auth-Token: $SCW_SECRET_KEY" \
+      -H "Content-Type: application/json" \
+      "https://api.scaleway.com/datawarehouse/v1beta1/regions/$SCW_DEFAULT_REGION/deployments/<DEPLOYMENT_ID>" \
+      -d '{
+        "move_factor": 0.2
+      }'
+    ```
+
+    Replace `<DEPLOYMENT_ID>` with the ID of your deployment.
+
+  </TabsTab>
+</Tabs>
+
+### Move data with the tiered policy
+
+With the `tiered` storage policy, you can manually move partitions between the `hot` volume (Block Storage) and the `cold` volume (Object Storage). Run the following SQL queries:
+
+- Move a partition to the `cold` volume (Object Storage):
     ```sql
     ALTER TABLE tiered_table MOVE PARTITION '2024-08' TO VOLUME 'cold';
     ```
 
-- Moving a non-partitioned table (`tuple()`) to the `cold` volume (Object Storage):
-
+- Move a non-partitioned table (`tuple()`) to the `cold` volume (Object Storage):
     ```sql
     ALTER TABLE tiered_table_without_partitions MOVE PARTITION tuple() TO VOLUME 'cold';
     ```
 
-- Moving a partition to the `hot` volume (Block Storage):
-
+- Move a partition to the `hot` volume (Block Storage):
     ```sql
     ALTER TABLE tiered_table MOVE PARTITION '2024-08' TO VOLUME 'hot';
     ```
-- Moving a non-partitioned table (`tuple()`) to the `hot` volume (Block Storage):
 
+- Move a non-partitioned table (`tuple()`) to the `hot` volume (Block Storage):
     ```sql
     ALTER TABLE tiered_table_without_partitions MOVE PARTITION tuple() TO VOLUME 'hot';
     ```
 
 ## S3 cache policy
 
-[Connect to your deployment](/data-warehouse/how-to/connect-applications/), then run the SQL query below to create a new table with the `s3_cache` policy enabled.
+[Connect to your deployment](/data-warehouse/how-to/connect-applications/), then run the following SQL query to create a table with the `s3_cache` storage policy.
+
 ```sql
 CREATE TABLE cache_table
 (
@@ -124,7 +167,7 @@ SETTINGS storage_policy = 's3_cache';
 
 ## Local-only policy
 
-[Connect to your deployment](/data-warehouse/how-to/connect-applications/), then run the SQL query below to create a new table with the `default` (Block Storage only) policy enabled.
+[Connect to your deployment](/data-warehouse/how-to/connect-applications/), then run the following SQL query to create a table with the `default` (Block Storage only) storage policy.
 
 ```sql
 CREATE TABLE local_table
@@ -138,4 +181,3 @@ PARTITION BY toYYYYMM(ts)
 ORDER BY id
 SETTINGS storage_policy = 'default';
 ```
-

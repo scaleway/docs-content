@@ -75,13 +75,13 @@ export default [
     items: [
       {
         icon: 'OrganizationDashboardCategoryIcon',
-        items: [accountMenu, organizationsAndProjectsMenu],
+        items: [accountMenu, annotationsMenu, organizationsAndProjectsMenu],
         label: 'Account & Organization',
         category: 'console',
       },     
       {
         icon: 'CostAndImpactManagementCategoryIcon',
-        items: [annotationsMenu, billingMenu, environmentalFootprintMenu],
+        items: [billingMenu, environmentalFootprintMenu],
         label: 'Cost & Impact Management',
         category: 'console',
       },

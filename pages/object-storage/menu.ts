@@ -91,10 +91,6 @@ export const objectStorageMenu = {
           slug: 'use-obj-stor-with-private-networks',
         },
         {
-          label: 'Set up an Edge Services pipeline',
-          slug: 'get-started-edge-services',
-        },
-        {
           label: 'Delete an object',
           slug: 'delete-an-object',
         },
@@ -111,10 +107,6 @@ export const objectStorageMenu = {
         {
           label: 'Using the Object Storage API',
           slug: 'using-api-call-list',
-        },
-        {
-          label: 'Understanding common operations',
-          slug: 'common-operations',
         },
         {
           label: 'Understanding bucket operations',
@@ -147,6 +139,10 @@ export const objectStorageMenu = {
         {
           label: 'Managing multipart uploads',
           slug: 'multipart-uploads',
+        },
+        {
+          label: 'Using conditional writes',
+          slug: 'using-conditional-writes',
         },
         {
           label: 'Enabling SSE-C',
@@ -226,10 +222,6 @@ export const objectStorageMenu = {
       ],
       label: 'Additional Content',
       slug: 'reference-content',
-    },
-    {
-      label: 'Videos',
-      slug: 'videos',
     },
     {
       label: 'Troubleshooting',

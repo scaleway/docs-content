@@ -78,7 +78,7 @@ export const loadBalancerMenu = {
       items: [
         {
           label: 'Load Balancer API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/load-balancer/zoned-api/',
+          slug: 'https://www.scaleway.com/en/developers/api/load-balancer/zoned-api',
         },
         {
           label: 'Setting up SSL offloading',
@@ -133,10 +133,6 @@ export const loadBalancerMenu = {
         {
           label: 'Migrating from AWS ELB',
           slug: 'migrating-aws',
-        },
-        {
-          label: 'Deprecation of SNI routes with HTTP backends',
-          slug: 'sni-route-deprecation',
         },
       ],
       label: 'Additional Content',

@@ -86,7 +86,7 @@ export const serverlessFunctionsMenu = {
       items: [
         {
           label: 'Functions API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/serverless-functions/',
+          slug: 'https://www.scaleway.com/en/developers/api/serverless-functions',
         },
         {
           label: 'Create and deploy a function with the Scaleway API',
@@ -141,6 +141,10 @@ export const serverlessFunctionsMenu = {
         {
           label: 'Functions sandbox',
           slug: 'functions-sandbox',
+        },
+        {
+          label: 'Functions request headers reference',
+          slug: 'request-headers',
         },
         {
           label: 'Code examples',

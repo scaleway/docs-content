@@ -78,7 +78,7 @@ export const webhostingMenu = {
       items: [
         {
           label: 'Web Hosting API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/webhosting/hosting-api/',
+          slug: 'https://www.scaleway.com/en/developers/api/webhosting/hosting-api',
         },
       ],
       label: 'API/CLI',
@@ -105,6 +105,14 @@ export const webhostingMenu = {
         {
           label: 'Understanding security measures on a shared hosting',
           slug: 'shared-hosting-best-practices',
+        },
+        {
+          label: 'Access your Web Hosting migrated from Dedibox to Scaleway',
+          slug: 'access-migrated-webhosting',
+        },
+        {
+          label: 'PHP 5.6 Migration Guide',
+          slug: 'php-5-6-migration-guide',
         },
       ],
       label: 'Additional Content',

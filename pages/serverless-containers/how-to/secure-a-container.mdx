@@ -1,10 +1,10 @@
 ---
-title: How to secure a container
-description: Guide to securing Scaleway Serverless Containers.
+title: Secure a container
+description: Secure Scaleway Serverless Containers by managing secret environment variables, restricting access with IAM CEL policies, and isolating endpoints via VPC.
 tags: containers secure private
 dates:
-  validation: 2025-09-01
-  posted: 2023-02-01
+    validation: 2025-09-01
+    posted: 2023-02-01
 ---
 import Requirements from '@macros/iam/requirements.mdx'
 
@@ -13,11 +13,12 @@ This page explains how to secure your container.
 
 <Requirements />
 
-- A Scaleway account logged into the [console](https://console.scaleway.com)
-- [Owner](/iam/concepts/#owner) status or [IAM permissions](/iam/concepts/#permission) allowing you to perform actions in the intended Organization
-- [Created a containers namespace](/serverless-containers/how-to/create-manage-delete-containers-namespace/)
-- [Deployed a container](/serverless-containers/how-to/deploy-container/)
-- Created an [authentication token](/serverless-containers/how-to/create-auth-token-from-console/) for your container
+- A Scaleway account logged in to the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- A [containers namespace](/serverless-containers/how-to/create-manage-delete-containers-namespace/)
+- A [deployed container](/serverless-containers/how-to/deploy-container/)
+- An [authentication token](/serverless-containers/how-to/create-auth-token-from-console/) for your container
+- A [Private Network](/vpc/how-to/create-private-network/) (only for using private endpoints)
 
 ## Use secrets to store access keys and sensitive information
 
@@ -27,19 +28,19 @@ To inject data into Serverless Containers, you can use:
 
 ### Configure secrets from the Scaleway console
 
-1. Click **Containers** in the **Serverless** section of the side menu. The containers page displays.
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Serverless** > **Containers**. The **Serverless Containers** page appears.
 2. Click the relevant Containers namespace.
 3. Click the name of the container for which you want to define secrets.
-4. Click the **Deployment** tab.
-5. Scroll to the **Secrets** section of the page and click **Add secret**. Enter the key and value for your secret. Repeat for additional secrets.
+4. Click the **Settings** tab.
+5. Scroll to the **Secrets** section and click **Add secret**. Enter the key and value for your secret. Repeat for additional secrets.
     <Message type="important">
         Be careful when you type your secrets. You will not be able to read the value in the console once submitted.
     </Message>
-6. Click **Deploy container** to submit your secrets and redeploy your container.
+6. Click **Save settings and deploy container** to submit your secrets and redeploy your container.
 
 ### Configure secrets using the Serverless framework
 
-Add `secret` to your container's description (more information in the [plugin documentation](https://github.com/scaleway/serverless-scaleway-functions#security-and-secret-management)).
+Add `secret` to the description of your container (more information in the [plugin documentation](https://github.com/scaleway/serverless-scaleway-functions#security-and-secret-management)).
 We recommend using them with global environment variables or a `.env` file stored independently (and kept secret).
 
 ```
@@ -47,7 +48,7 @@ secret:
       secret_1: ${env:SCW_SECRET_KEY}
 ```
 <Message type="important">
-    We strongly suggest that you do not commit this in a Version Control System (VCS), and do not share your Project ID or access key. This helps to ensure the security of your configuration file, which may contain sensitive data.
+    Your configuration file may contain sensitive data. To keep it secure, do not commit it to a Version Control System (VCS), and do not share your Project ID or access key.
 </Message>
 
 ### Configure secrets using Terraform/OpenTofu
@@ -60,16 +61,16 @@ secret_environment_variables = { "key" = "secret" }
 
 ## Restrict access to your containers
 
-You can set Serverless containers as private if you want, to protect them from unwanted or unauthorized calls.
+You can set Serverless Containers as private if you want, to protect them from unwanted or unauthorized calls.
 
 Unauthenticated calls will be rejected, and your container will not receive the incoming request.
 
-### Restrict access from the Scaleway console
+### Restrict access by requiring an `X-Auth-Token`
 
-1. Click **Containers** in the **Serverless** section of the side menu. The containers page displays.
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Serverless** > **Containers**. The **Serverless Containers** page appears.
 2. Click the relevant container namespace.
 3. Click the name of the container for which you want to define secrets.
-4. Click the **Security** tab.
+4. Click the **Security & tokens** tab.
 5. Set the **Privacy Policy** of the container to **Private**.
 6. If required, set up [IAM authentication](/serverless-containers/how-to/create-auth-token-from-console/) for your container.
 
@@ -80,43 +81,46 @@ curl -H "X-Auth-Token: <YOUR_SECRET_KEY>" <YOUR_CONTAINER_ENDPOINT>
 ```
 
 <Message type="important">
-JWT authentication is deprecated, you must [migrate your existing containers to IAM authentication](/serverless-containers/how-to/migrate-jwt-to-iam-authentication/).
+    JWT authentication is deprecated. You must [migrate your existing containers to IAM authentication](/serverless-containers/how-to/migrate-jwt-to-iam-authentication/).
 </Message>
 
-### Restrict access using the Serverless framework
+### Restrict access using Private Networks
 
-Set `privacy: private` in your container's description.
+Using only a private endpoint allows your container to communicate only with other resources attached to Private Networks within the same VPC.
 
-Your container is now private, and requires an `X-Auth-Token` header to be called:
+1. Attach your container to a [Private Network](/serverless-containers/how-to/use-private-networks/).
+2. Enable the private endpoint for your container. 
+3. Disable the public endpoint for your container. This prevents your container from being accessed from the public internet.
 
-```bash
-curl -H "X-Auth-Token: <YOUR_SECRET_KEY>" <YOUR_CONTAINER_ENDPOINT>
-```
 
-Refer to the [How to manage authentication for private containers](/serverless-containers/how-to/create-auth-token-from-console/) documentation for more information.
+<Message type="tip">
+    Private endpoints are compatible with `X-Auth-Token` authentication.
+</Message>
 
 ## Advanced access control with IAM conditions
 
-When a container is set to **Private**, you can use Scaleway IAM policy conditions to define granular access rules using Common Expression Language (CEL): [policy conditions documentation](/iam/reference-content/understanding-policy-conditions/).
-These conditions use **Common Expression Language (CEL)** to evaluate requests based on attributes like IP address, time, or user-agent.
+When a container is set to **Private**, you can use Scaleway IAM policy conditions to define granular access rules using Common Expression Language (CEL): [policy conditions documentation](/iam/policies-permissions/understanding-policy-conditions/).
+These conditions use **Common Expression Language (CEL)** to evaluate requests based on request attributes like IP address, time, or user-agent, and on resource attributes like the name, ID, or locality of the targeted resource.
 
 <Message type="note">
   IAM conditions are not global Access Control Lists (ACLs) for the service itself; they are restrictions applied to a specific policy rule.
   * **Policy-based**: A condition only restricts the specific IAM policy it is attached to.
-  * **Owner exception**: Users with [Owner status](/iam/concepts/#owner) possess full administrative rights through global organization policies. Even if your custom policies include IP restrictions, an API key belonging to an Owner can still call the container from any IP address.
+  * **Owner exception**: Users with [Owner status](/iam/concepts/glossary/#owner) possess full administrative rights through global organization policies. Even if your custom policies include IP restrictions, an API key belonging to an Owner can still call the container from any IP address.
 </Message>
 
-### Restrict access by specific IP addresses
+### Restrict access to resources in a namespace
 
-To ensure your container is only reachable from a specific office network or a trusted proxy, you can use the `inIpRange()` function.
+You can scope private access to your containers using [resource-level conditions](/iam/policies-permissions/understanding-resource-level-conditions/), based on attributes of the resource targeted by the request, such as the name, ID, or locality of the namespace.
 
-**Example expression:**
+For private container access, `resource.name` and `resource.id` refer to the namespace, not to the container itself. A resource-level condition grants access to every container in the matching namespace. For example, to grant access to every container in a namespace:
 
 ```cel
-inIpRange(request.ip, "198.51.100.0/24")
+resource.name == <NAMESPACE_NAME>
 ```
 
-**Result:** Only requests originating from the `198.51.100.0/24` subnet are authorized.
+You can also use `resource.id` and `resource.locality` in your conditions to scope access to a specific namespace or region.
+
+Resource-level conditions for private containers apply to the `ContainersPrivateAccess` permission set only.
 
 ### Restrict access to specific user-agents
 
@@ -150,11 +154,11 @@ If you do not want to expose your container over HTTP, you can enable the HTTP t
 
 ### Configure redirection using the Scaleway console
 
-1. Click **Containers** in the **Serverless** section of the side menu of the Scaleway console. The Containers page displays.
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Serverless** > **Containers**. The **Serverless Containers** page appears.
 2. Click the relevant Containers namespace.
 3. Click the name of the container for which you want to enable the redirection.
-4. Click the **Security** tab.
-5. Toggle the **HTTPS connections only** switch to **On**.
+4. Click the **Security & tokens** tab.
+5. Click the **Enable HTTPS connections only** toggle to enable it.
 
 Incoming HTTP traffic is now redirected to HTTPS.
 
@@ -162,53 +166,10 @@ Incoming HTTP traffic is now redirected to HTTPS.
 
 To redirect HTTP traffic to HTTPS using the Serverless Framework, add the `httpOption: redirected` option to your container's description.
 
-Refer to our [dedicated repository](https://github.com/scaleway/serverless-scaleway-functions/?tab=readme-ov-file#container-specific-configuration) for more information on container configuration using the Serverless Framework.
+See our [dedicated repository](https://github.com/scaleway/serverless-scaleway-functions/?tab=readme-ov-file#container-specific-configuration) for more information on container configuration using the Serverless Framework.
 
 ## Set up alerts in Observability Cockpit (upcoming feature)
 
 Using Scaleway [Observability Cockpit](/cockpit/quickstart/), a managed Grafana solution to which all your containers are connected, you can:
 * Monitor your containers using the default dashboard or create custom ones.
 * Set up notifications to be alerted in case of unexpected behavior.
-
-## Advanced access control with IAM conditions
-
-When a container is set to **Private**, you can use Scaleway IAM policy conditions to define granular access rules.
-These conditions use **Common Expression Language (CEL)** to evaluate requests based on attributes like IP address, time, or user-agent.
-
-### Restrict access by specific IP addresses
-
-To ensure your container is only reachable from a specific office network or a trusted proxy, you can use the `inIpRange()` function.
-
-**Example expression:**
-
-```cel
-inIpRange(request.ip, "198.51.100.0/24")
-```
-
-**Result:** Only requests originating from the `198.51.100.0/24` subnet are authorized.
-
-### Restrict access to specific user-agents
-
-You can restrict calls to specific tools or internal clients by checking the `request.user_agent` attribute. This is useful for ensuring only authorized automation tools (like Terraform or a specific internal bot) can trigger the service.
-
-**Example expression:**
-
-```cel
-request.user_agent.contains("InternalAdminTool/1.0")
-```
-
-**Result:** Only requests with a User-Agent header containing "InternalAdminTool/1.0" are permitted.
-
-### Restrict access to specific time windows
-
-For sensitive workloads that should only be active during business hours or specific maintenance windows, you can use `request.time`.
-
-**Example expression (Working hours in Paris):**
-
-```cel
-request.time.getDayOfWeek() != 0 && request.time.getDayOfWeek() != 6
-&& request.time.getHours("Europe/Paris") >= 9
-&& request.time.getHours("Europe/Paris") < 18
-```
-
-**Result:** Access is granted only Monday through Friday, between 9:00 AM and 6:00 PM Paris time.

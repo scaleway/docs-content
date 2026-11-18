@@ -38,7 +38,7 @@ export const ipamMenu = {
       items: [
         {
           label: 'IPAM API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/ipam/',
+          slug: 'https://www.scaleway.com/en/developers/api/ipam',
         },
         {
           label: 'Set a reverse IPv6 DNS record',

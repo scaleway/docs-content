@@ -41,12 +41,32 @@ export const dataOrchestratorMenu = {
     {
       items: [
         {
+          label: 'Action tasks',
+          slug: 'action-tasks',
+        },
+        {
           label: 'Logic tasks',
           slug: 'logic-tasks',
         },
         {
+          label: 'Injected environment variables',
+          slug: 'injected-environment-variables',
+        },
+        {
+          label: 'Use secrets from Secret Manager',
+          slug: 'use-secrets',
+        },
+        {
           label: 'Cron schedules',
           slug: 'cron-schedules',
+        },
+        {
+          label: 'DSL reference',
+          slug: 'dsl-reference',
+        },
+        {
+          label: 'Workflow schema',
+          slug: 'workflow-schema',
         },
       ],
       label: 'Additional Content',

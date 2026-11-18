@@ -51,6 +51,10 @@ export const cockpitMenu = {
           slug: 'send-metrics-from-k8s-to-cockpit',
         },
         {
+          label: 'Send metrics or logs to Cockpit with OTLP',
+          slug: 'send-metrics-logs-to-cockpit-with-otlp'
+        },
+        {
           label: 'Federate Scaleway metrics with your own Prometheus',
           slug: 'federate-scaleway-metrics',
         },
@@ -90,11 +94,15 @@ export const cockpitMenu = {
       items: [
         {
           label: 'Cockpit API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/cockpit/regional-api/',
+          slug: 'https://www.scaleway.com/en/developers/api/cockpit/regional-api',
         },
         {
           label: 'Retrieving logs programmatically using LogCLI',
           slug: 'querying-logs-with-logcli',
+        },
+        {
+          label: 'Creating alerts programmatically for DevOps workflows',
+          slug: 'create-alerts-programmatically',
         },
       ],
       label: 'API/CLI',

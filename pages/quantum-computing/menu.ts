@@ -23,6 +23,10 @@ export const quantumComputingMenu = {
           slug: 'use-pasqal-qpus',
         },
         {
+          label: 'Use QoolQit on Pasqal platforms',
+          slug: 'use-qoolqit',
+        },
+        {
           label: 'Use IQM QPUs & emulators',
           slug: 'use-iqm-qpus',
         },
@@ -66,7 +70,7 @@ export const quantumComputingMenu = {
       items: [
         {
           label: 'QaaS API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/qaas/',
+          slug: 'https://www.scaleway.com/en/developers/api/qaas',
         },
       ],
       label: 'API/CLI',

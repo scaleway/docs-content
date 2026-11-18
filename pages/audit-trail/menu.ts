@@ -34,6 +34,10 @@ export const auditTrailMenu = {
           label: 'Activate Audit Trail preconfigured alerts',
           slug: 'activate-adt-preconfigured-alerts',
         },
+        {
+          label: 'Configure Audit Trail custom alerts',
+          slug: 'configure-audit-trail-custom-alerts',
+        },        
       ],
       label: 'How to',
       slug: 'how-to',
@@ -42,7 +46,7 @@ export const auditTrailMenu = {
       items: [
         {
           label: 'Audit Trail API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/audit-trail/',
+          slug: 'https://www.scaleway.com/en/developers/api/audit-trail',
         },
       ],
       label: 'API/CLI',
@@ -61,6 +65,10 @@ export const auditTrailMenu = {
         {
           label: 'Supported endpoints for Audit Trail',
           slug: 'adt-supported-endpoints',
+        },
+        {
+          label: 'Integrate Audit Trail with Splunk',
+          slug: 'splunk-integration',
         },
       ],
       label: 'Additional Content',

@@ -62,7 +62,7 @@ export const billingMenu = {
       items: [
         {
           label: 'Billing API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/billing/',
+          slug: 'https://www.scaleway.com/en/developers/api/billing',
         },
         {
           label: 'Retrieve monthly consumption',

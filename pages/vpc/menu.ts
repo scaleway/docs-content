@@ -39,6 +39,10 @@ export const vpcMenu = {
           slug: 'manage-routing',
         },
         {
+          label: 'Configure Object Storage private access',
+          slug: 'enable-object-storage-private-access',
+        },
+        {
           label: 'Use Network ACLs',
           slug: 'use-network-acl',
         },
@@ -58,7 +62,7 @@ export const vpcMenu = {
       items: [
         {
           label: 'VPC API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/vpc/',
+          slug: 'https://www.scaleway.com/en/developers/api/vpc',
         },
       ],
       label: 'API/CLI',

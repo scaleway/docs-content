@@ -46,7 +46,7 @@ export const interlinkMenu = {
       items: [
         {
           label: 'InterLink API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/interlink/',
+          slug: 'https://www.scaleway.com/en/developers/api/interlink',
         },
       ],
       label: 'API/CLI',

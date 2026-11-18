@@ -1,0 +1,510 @@
+---
+title: Transform images in an Object Storage bucket using Serverless Functions and Triggers
+description: Resize images stored in an Object Storage bucket automatically using Serverless Functions, a Scaleway Queues queue, and cron and queue triggers.
+products:
+  - functions
+  - queues
+  - object-storage
+tags: serverless functions triggers sqs queue
+dates:
+  validation: 2026-11-03
+  posted: 2023-07-07
+  validation_frequency: 12
+difficulty: beginner
+usecase:
+  - set-up-and-test
+ecosystem:
+  - scaleway
+---
+import Requirements from '@macros/iam/requirements.mdx'
+import CockpitIamPermissions from '@macros/cockpit/iam-permissions-cockpit.mdx'
+
+import imageArchitecture from './assets/scaleway-faas-image-transform.webp'
+
+This tutorial shows how to resize images stored in an Object Storage bucket automatically, using Serverless Functions and Triggers. A first function, `BucketScan`, lists the images in a source bucket and sends one message per image to a queue. A second function, ImageTransform, receives each message, resizes the image, and uploads it to a destination bucket.
+
+<Lightbox image={imageArchitecture} alt="Architecture diagram: the BucketScan function lists the image keys of the source bucket and calls the ImageTransform function once per image. ImageTransform pulls each image from the source bucket and pushes the resized image to the destination bucket." />
+
+You create the following resources:
+
+- A Project dedicated to this tutorial
+- 2 buckets to store images
+- A queue to manage events
+- Queues credentials and an API key to secure your environment
+- 2 functions and their triggers
+
+<Requirements />
+
+- A Scaleway account logged in to the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- Installed [Node.js](https://nodejs.org/en/download) and [npm](https://docs.npmjs.com/downloading-and-installing-node-js-and-npm)
+- At least 10 JPG or PNG images
+
+## Create a Project
+
+1. On the [Organization dashboard](https://console.scaleway.com/organization), click the **Projects** tab. A list of your Projects appears.
+2. Click **Create Project**. A dialog box appears.
+3. Enter `Functions Tutorial` as the Project name.
+4. Click **Create Project**. The new Project is added to the list.
+
+## Create the source bucket
+
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Storage** > **Object Storage**. The Object Storage dashboard opens.
+2. Click **Create bucket**.
+3. Enter `source-images-<YOUR_NAME>` as the bucket name. Replace `<YOUR_NAME>` with your name to make the bucket name unique.
+4. Select the **Amsterdam** (nl-ams) region.
+5. Set the bucket visibility to **Private**.
+6. Click **Create bucket**. The **Files** tab of the bucket opens.
+7. [Upload your images](/object-storage/how-to/upload-files-into-a-bucket/) to the bucket.
+8. Select the **Standard** storage class.
+
+## Create the destination bucket
+
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Storage** > **Object Storage**. The Object Storage dashboard opens.
+2. Click **Create bucket**.
+3. Enter `dest-images-<YOUR_NAME>` as the bucket name. Replace `<YOUR_NAME>` with your name to make the bucket name unique.
+4. Select the **Amsterdam** (nl-ams) region.
+5. Set the bucket visibility to **Private**.
+6. Click **Create bucket**.
+
+## Generate credentials for Scaleway Queues
+
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Integration Services** > **Queues**. The Queues page opens.
+2. Click **Generate credentials**.
+3. Enter `Function Push` as the credentials name.
+4. Check the **Write**, **Read**, and **Manage** permissions.
+5. Click **Generate credentials**.
+6. Store the access key and the secret key securely. You cannot view them again after you close the dialog box.
+
+## Create a queue
+
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Integration Services** > **Queues**. The Queues page opens.
+2. Click **Create queue**.
+3. Select **Standard** as the queue type.
+4. Enter `image-queue` as the queue name.
+5. Keep the default parameters.
+6. Click **Create queue**.
+
+## Create an API key
+
+Identity and Access Management (IAM) credentials let you secure access to your resources, such as buckets and functions.
+
+<Message type="note">
+This tutorial uses user credentials, which are simpler to set up. For production-grade Serverless applications, Scaleway recommends using application credentials with the minimum required permissions.
+</Message>
+
+1. In the [Scaleway console](https://console.scaleway.com) top right menu, click **IAM & API keys**. The Identity and Access Management dashboard opens.
+2. Click the **API keys** tab.
+3. Click **Generate API key**. A dialog box appears.
+4. Select **Myself (IAM)** as the bearer of the API key.
+5. Enter `API key for the Functions Tutorial` as the description.
+6. Set **Expiration** to **One Week**.
+7. Select **Yes, set up preferred Project**.
+8. Select the Project you created earlier (**Functions Tutorial** in this example).
+9. Click **Generate API key**.
+10. Store the access key and the secret key securely. You cannot view them again after you close the dialog box.
+
+## Create the BucketScan function
+
+The BucketScan function lists the images in the source bucket and sends the key of each image to the queue.
+
+1. Open a terminal and run the following command to create the project folders and go to the `BucketScan` folder:
+
+    ```bash
+    mkdir -p FunctionsTutorial/BucketScan && cd FunctionsTutorial/BucketScan
+    ```
+
+2. Create a file named `BucketScan.js` and open it in a code editor.
+3. Copy and paste the following code into the file:
+
+    ```javascript
+    console.log("init");
+    const { S3Client, ListObjectsV2Command } = require("@aws-sdk/client-s3");
+    const { SQSClient, SendMessageCommand } = require("@aws-sdk/client-sqs");
+
+    // Get info from env variables
+    const S3_ACCESS_KEY = process.env.S3_ACCESS_KEY;
+    const S3_ACCESS_KEY_ID = process.env.S3_ACCESS_KEY_ID;
+    const SOURCE_BUCKET = process.env.SOURCE_BUCKET;
+    const S3_REGION = process.env.S3_REGION;
+    const SQS_ACCESS_KEY = process.env.SQS_ACCESS_KEY;
+    const SQS_ACCESS_KEY_ID = process.env.SQS_ACCESS_KEY_ID;
+    const QUEUE_URL = process.env.QUEUE_URL;
+    const SQS_ENDPOINT = process.env.SQS_ENDPOINT;
+    const S3_ENDPOINT = `https://s3.${S3_REGION}.scw.cloud`;
+
+    // Create Object Storage service object
+    const s3Client = new S3Client({
+      credentials: {
+        accessKeyId: S3_ACCESS_KEY_ID,
+        secretAccessKey: S3_ACCESS_KEY,
+      },
+      endpoint: S3_ENDPOINT,
+      region: S3_REGION
+    });
+
+    // Configure parameters for the listObjectsV2 Command
+    const input = {
+      "Bucket": SOURCE_BUCKET
+    };
+
+    // Create SQS service
+    var sqsClient = new SQSClient({
+      credentials: {
+        accessKeyId: SQS_ACCESS_KEY_ID,
+        secretAccessKey: SQS_ACCESS_KEY
+      },
+      region: "par",
+      endpoint: SQS_ENDPOINT,
+    })
+
+    console.log("init Ok")
+
+    exports.handle = async (event, context, callback) => {
+      const s3ListCommand = new ListObjectsV2Command(input);
+      const s3List = await s3Client.send(s3ListCommand);
+      const contents = s3List.Contents;
+      const total = contents.length;
+      contents.forEach(async function (content) {
+        // Infer the image type from the file suffix.
+        const srcKey = content.Key;
+        const typeMatch = srcKey.match(/\.([^.]*)$/);
+        if (!typeMatch) {
+          console.error(`${srcKey}: Could not determine the image type.`)
+        }
+        const imageType = typeMatch[1].toLowerCase();
+        // Check that the image type is supported
+        if (["jpeg", "jpg", "png"].includes(imageType) !== true) {
+          console.error(`${srcKey}: Unsupported image type: ${imageType}`)
+        }
+        else {
+          try {
+            var sendMessageCommand = new SendMessageCommand({
+              QueueUrl: QUEUE_URL,
+              MessageBody: srcKey,
+            });
+            var sendMessage = await sqsClient.send(sendMessageCommand);
+            console.log(sendMessage.MessageId);
+          } catch (error) {
+            console.error(error);
+          }
+        }
+      });
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          status: "Done",
+          message: `All images from the bucket have been processed over ${total} files in the bucket`,
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+    };
+
+    /* This is used to test locally and will not be executed on Scaleway Functions */
+    if (process.env.NODE_ENV === 'test') {
+      import("@scaleway/serverless-functions").then(scw_fnc_node => {
+        scw_fnc_node.serveHandler(exports.handle, 8080);
+      });
+    }
+    ```
+
+4. Save the file and exit the code editor.
+5. Run the following command in the terminal to initialize a new npm project and create a `package.json` file:
+
+    ```bash
+    npm init --yes
+    ```
+
+6. Run the following command to install the required dependencies:
+
+    ```bash
+    npm i @aws-sdk/client-s3 @aws-sdk/client-sqs @scaleway/serverless-functions
+    ```
+
+7. Run the following command to compress the content of the folder into a ZIP archive:
+
+    ```bash
+    zip -r BucketScan.zip .
+    ```
+
+## Create the ImageTransform function
+
+The ImageTransform function receives an image key from the queue, resizes the image, and uploads it to the destination bucket.
+
+1. Run the following command in the terminal to create the `ImageTransform` folder in the `FunctionsTutorial` folder and go to it:
+
+    ```bash
+    mkdir ../ImageTransform && cd ../ImageTransform
+    ```
+
+2. Create a file named `ImageTransform.js` and open it in a code editor.
+3. Copy and paste the following code into the file:
+
+    ```javascript
+    // Add dependencies
+    console.log("init");
+    const { S3Client, PutObjectCommand, GetObjectCommand } = require("@aws-sdk/client-s3");
+    const sharp = require("sharp");
+
+    // Get connection information from secret environment variables
+    const S3_ACCESS_KEY=process.env.S3_ACCESS_KEY;
+    const S3_ACCESS_KEY_ID=process.env.S3_ACCESS_KEY_ID;
+    const SOURCE_BUCKET=process.env.SOURCE_BUCKET;
+    const DESTINATION_BUCKET=process.env.DESTINATION_BUCKET;
+    const S3_REGION=process.env.S3_REGION;
+    const RESIZED_WIDTH=process.env.RESIZED_WIDTH;
+    const S3_ENDPOINT = `https://s3.${S3_REGION}.scw.cloud`;
+
+    let width = parseInt(RESIZED_WIDTH, 10);
+    if (width < 1 || width > 1000) {
+      width = 200;
+    }
+
+    // Create Object Storage service object
+    const s3Client = new S3Client({
+      credentials: {
+        accessKeyId: S3_ACCESS_KEY_ID,
+        secretAccessKey: S3_ACCESS_KEY,
+      },
+      endpoint: S3_ENDPOINT,
+      region: S3_REGION
+    });
+
+    // Handler
+    exports.handle = async (event, context, callback) => {
+      // Object key may have spaces or unicode non-ASCII characters.
+      const srcKey = event.body;
+      console.log(srcKey);
+      const dstKey = "resized-" + srcKey;
+      // Infer the image type from the file suffix.
+      const typeMatch = srcKey.match(/\.([^.]*)$/);
+      if (!typeMatch) {
+        console.error(`${srcKey}: Could not determine the image type.`);
+        return {
+          statusCode: 500,
+          body: JSON.stringify({
+            status: "Error",
+            message: `${srcKey}: Could not determine the image type.`,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        };
+      }
+      // Check that the image type is supported
+      const imageType = typeMatch[1].toLowerCase();
+      if (["jpeg", "jpg", "png"].includes(imageType) !== true) {
+        console.error(`Unsupported image type: ${imageType}`);
+
+        return {
+          statusCode: 500,
+          body: JSON.stringify({
+            status: "Error",
+            message: `${srcKey}: Unsupported image type: ${imageType}`,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        };
+      };
+
+      // Download the image from the Object Storage source bucket.
+      try {
+        const input = {
+          Bucket: SOURCE_BUCKET,
+          Key: srcKey,
+        };
+        //var origimage = await s3.getObject(params).promise();
+        const getObjectCommand = new GetObjectCommand(input);
+        var getObjectResult = await s3Client.send(getObjectCommand);
+      } catch (error) {
+        console.error(error);
+        return error;
+      }
+
+      // Use the sharp module to resize the image.
+      try {
+        var sharpImg = sharp().resize({ width, withoutEnlargement: true })
+        getObjectResult.Body.pipe(sharpImg);
+      } catch (error) {
+        console.error(error);
+        return error;
+      }
+
+      // Upload the image as a Buffer to the destination bucket
+      try {
+        const destinput = {
+          Bucket: DESTINATION_BUCKET,
+          Key: dstKey,
+          Body: await sharpImg.toBuffer(),
+          ContentType: "image",
+        };
+        const putObjectCommand = new PutObjectCommand(destinput);
+        const putimage = await s3Client.send(putObjectCommand);
+        console.log(putimage.VersionId)
+      } catch (error) {
+        console.log(error);
+        return error;
+      }
+      console.log(`Successfully resized ${SOURCE_BUCKET}/${srcKey} and uploaded it to ${DESTINATION_BUCKET}/${dstKey}`)
+      return {
+        statusCode: 201,
+        body: JSON.stringify({
+          status: "ok",
+          message: `Image : ${srcKey} has successfully been resized and pushed to the bucket ${DESTINATION_BUCKET}`
+        }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+      };
+    };
+
+
+    /* This is used to test locally and will not be executed on Scaleway Functions */
+    if (process.env.NODE_ENV === 'test') {
+      import("@scaleway/serverless-functions").then(scw_fnc_node => {
+        scw_fnc_node.serveHandler(exports.handle, 8081);
+      });
+    }
+    ```
+
+4. Save the file and exit the code editor.
+5. Run the following command in the terminal to initialize a new npm project and create a `package.json` file:
+
+    ```bash
+    npm init --yes
+    ```
+
+6. Run the following commands to install the required dependencies:
+
+    ```bash
+    npm i @aws-sdk/client-s3 @aws-sdk/client-sqs @scaleway/serverless-functions
+    npm install sharp --platform=linuxmusl --arch=x64 sharp --ignore-script=false
+    ```
+
+7. Run the following command to compress the content of the folder into a ZIP archive:
+
+    ```bash
+    zip -r ImageTransform.zip .
+    ```
+
+## Deploy the functions
+
+### Create a namespace
+
+1. In the [Scaleway console](https://console.scaleway.com) side menu, go to **Serverless** > **Functions**. The Serverless Functions page opens.
+2. Click **Create namespace**.
+3. Enter a name for your namespace.
+4. Select the **Amsterdam** (nl-ams) region.
+5. Enter the following environment variables:
+    - `SOURCE_BUCKET`: The name of your source bucket, for example `source-images-<YOUR_NAME>`
+    - `S3_REGION`: `nl-ams`
+6. Enter the following secrets:
+    - `S3_ACCESS_KEY_ID`: The access key of the [API key you created earlier](#create-an-api-key)
+    - `S3_ACCESS_KEY`: The secret key of the API key you created earlier
+7. Click **Create namespace**. The **Functions** tab of the namespace opens.
+
+### Deploy the BucketScan function
+
+1. Click **Create function**.
+2. Enter `BucketScan.handle` as the handler.
+3. Select **NodeJS 20** as the runtime.
+4. Select **Upload a ZIP** and upload the `BucketScan.zip` archive you created earlier.
+5. Enter `bucketscan` as the function name.
+6. Set the resources to **1024 MB - 560 mvCPU**.
+7. Enter the following environment variables:
+    - `SQS_ENDPOINT`: The endpoint of Scaleway Queues, `https://sqs.mnq.fr-par.scaleway.com`
+    - `QUEUE_URL`: The URL of the queue you created earlier
+8. Enter the following secrets:
+    - `SQS_ACCESS_KEY_ID`: The access key of the [Queues credentials you generated earlier](#generate-credentials-for-scaleway-queues)
+    - `SQS_ACCESS_KEY`: The secret key of the Queues credentials you generated earlier
+9. Click **Create function**. The function deploys. This takes a few minutes.
+
+### Secure the BucketScan function
+
+1. Click the name of the function, then click the **Security** tab.
+2. Click **Generate token**. A dialog box appears.
+3. Enter a description, such as `Functions tutorial`.
+4. Keep the default expiration date.
+5. Click **Generate token**.
+6. Store the token securely. You cannot view it again after you close the dialog box.
+
+### Add a cron trigger to the BucketScan function
+
+1. Click the **Triggers** tab of the function.
+2. Click **Create trigger**.
+3. Select **CRON** as the trigger type.
+4. Enter `0 * * * *` as the **UNIX Schedule**.
+
+    <Message type="note">
+    The `0 * * * *` schedule triggers your function every hour at minute 0. For more information about cron schedules, see [Crontab Guru](https://crontab.guru/).
+    </Message>
+
+5. Keep the default **JSON arguments**.
+6. Click **Create trigger**.
+
+### Deploy the ImageTransform function
+
+1. Go back to the **Functions** tab of the namespace and click **Create function**.
+2. Enter `ImageTransform.handle` as the handler.
+3. Select **NodeJS 20** as the runtime.
+4. Select **Upload a ZIP** and upload the `ImageTransform.zip` archive you created earlier.
+5. Enter `imagetransform` as the function name.
+6. Set the resources to **1024 MB - 560 mvCPU**.
+7. Enter the following environment variables:
+    - `RESIZED_WIDTH`: The width, in pixels, to resize your images to
+    - `DESTINATION_BUCKET`: The name of your destination bucket, for example `dest-images-<YOUR_NAME>`
+8. Click **Create function**. The function deploys. This takes a few minutes.
+
+### Add a queue trigger to the ImageTransform function
+
+1. Click the **Triggers** tab of the function.
+2. Click **Create trigger**.
+3. Select **Queues (Scaleway)** as the trigger type.
+4. Select the `image-queue` queue you created earlier.
+5. Click **Create trigger**.
+
+## Test the functions
+
+<CockpitIamPermissions />
+
+
+1. Run the following command in a terminal to call the BucketScan function. Replace the placeholders with the appropriate values:
+
+    - `<BUCKETSCAN_ENDPOINT_URL>`: The endpoint of the BucketScan function
+    - `<BUCKETSCAN_TOKEN>`: The token you generated in [Secure the BucketScan function](#secure-the-bucketscan-function)
+
+    ```bash
+    curl --location --request GET '<BUCKETSCAN_ENDPOINT_URL>' \
+      --header 'X-Auth-Token: <BUCKETSCAN_TOKEN>'
+    ```
+
+    A response similar to the following appears:
+
+    ```json
+    {"status": "Done", "message": "All images from the bucket have been processed over 10 files in the bucket"}
+    ```
+
+2. Open the [Cockpit overview page](https://console.scaleway.com/cockpit/overview) and click **Access Grafana**. Grafana opens in a new tab.
+3. Open the **Functions Logs** dashboard and select the function whose name ends with `bucketscan` from the dropdown. Logs similar to the following appear:
+
+    ```text
+    2023-06-05 10:40:07.977 DEBUG - e7400516-7546-4f30-96cd-459632c2ac37 file=BucketScan.js line=77 source=user
+    2023-06-05 10:40:07.973 DEBUG - 2d61d7c4-088a-472d-b82f-2b5c064f5d7b file=BucketScan.js line=77 source=user
+    2023-06-05 10:40:07.954 DEBUG - 3dd90c82-eb8e-4838-b708-26982ba094a1 file=BucketScan.js line=77 source=user
+    2023-06-05 10:40:07.951 DEBUG - 9e3087c2-b8db-4233-9643-9a4eab5cc722 file=BucketScan.js line=77 source=user
+    2023-06-05 10:40:07.947 DEBUG - 2e69ab78-571f-46e5-bb2b-e5b24fbb0a7f file=BucketScan.js line=77 source=user
+    2023-06-05 10:40:07.946 DEBUG - c2c0b81a-e8e6-49df-996d-ea06022be2d7 file=BucketScan.js line=77 source=user
+    2023-06-05 10:40:07.944 DEBUG - 59bb6dcd-bdf4-4917-ba8d-6b7964952a25 file=BucketScan.js line=77 source=user
+    2023-06-05 10:40:07.926 DEBUG - b931f887-5351-49b6-ba62-dd456c0ba01b file=BucketScan.js line=77 source=user
+    2023-06-05 10:40:07.894 DEBUG - 80073154-ff74-4785-959a-6de9b177c4b4 file=BucketScan.js line=77 source=user
+    2023-06-05 10:40:07.064 DEBUG - init Ok file=BucketScan.js line=42 source=user
+    ```
+
+4. Open your destination bucket. The resized images appear in the **Files** tab, with the `resized-` prefix.
+
+<Message type="tip">
+Setting up an environment with all the necessary resources can be time-consuming. You can use Infrastructure as Code (IaC) tools such as Terraform/OpenTofu to automate the configuration of a Project. See [Deploying and managing Instances with Terraform/OpenTofu and Functions](/tutorials/manage-instances-with-terraform-and-functions/). For more examples of Serverless use cases, see the [Scaleway serverless-examples repository](https://github.com/scaleway/serverless-examples) on GitHub.
+</Message>

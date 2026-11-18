@@ -1,0 +1,43 @@
+---
+title: My container gets transient connection errors when connecting to Private Network resources
+description: Troubleshoot transient connection errors and delays when your Serverless Container connects to other resources in a Private Network.
+tags: serverless containers troubleshooting private-network transient connection error delay vpc
+dates:
+  validation: 2026-10-16
+  posted: 2026-10-16
+---
+
+## Problem
+
+When my Serverless Container attached to a Private Network connects to another resource in that Private Network, such as a database, the connection intermittently fails or takes longer to establish. The failures can appear randomly, and if the application exits when the first connection attempt fails, the container can crash or stop.
+
+## Cause
+
+These transient connection errors usually stem from networking problems at the VPC or Private Network level, such as failed ARP requests or an unreachable layer 2 neighborhood, rather than from a misconfiguration on your side, or from a fault in the Serverless Containers infrastructure.
+
+In the first few seconds after a container instance starts, it can fail to reach resources on the Private Network, for the following reasons:
+
+- Failed ARP requests.
+- The routes to the new IP address booked for the container instance have not yet propagated everywhere in the VPC infrastructure.
+
+Deployments and scaling operations create new container instances, so these transient failures are particularly likely right after a container instance starts.
+
+<Message type="note">
+  Container instances wait for the Private Network router (`169.254.169.254`) to be reachable before starting. This reduces connection issues at startup, but does not guarantee that all resources in the Private Network are reachable. See [My container cannot connect to Private Network resources at startup](/serverless-containers/troubleshooting/container-private-network-connectivity/) for more information.
+</Message>
+
+## Solutions
+
+You can mitigate these transient failures with the following solutions.
+
+### Health check
+
+Define an HTTP health check endpoint, such as `/health`, that verifies that a Private Network resource your container depends on is reachable. The endpoint can, for example, perform a dummy SQL query and return a `200` status code only if the query succeeds. Configure this endpoint as the health check of your container, so that traffic reaches the container instance only when the resource is reachable. See [Health check](/serverless-containers/concepts/#health-check) for more information.
+
+### Retry logic
+
+Add retry logic when connecting to Private Network resources, as temporary networking failures can occur. Retry the connection several times before treating the connection as permanently failed, and restart the container only after several consecutive failures, rather than crash on the first failure.
+
+### Separate Private Networks within the same VPC
+
+Place the container and the resource it accesses in different Private Networks within the same VPC. Traffic between them goes through the vRouter of the VPC (layer 3 routing), instead of directly over layer 2, where route propagation and ARP problems can occur. See [vRouter](/vpc/concepts/#vrouter) for more information.

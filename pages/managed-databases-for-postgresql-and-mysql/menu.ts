@@ -75,8 +75,8 @@ export const managedDatabasesForPostgresqlAndMysqlMenu = {
           slug: 'monitor-databases-cockpit',
         },
         {
-          label: 'Upgrade Database Instance engine versions',
-          slug: 'upgrade-version',
+          label: 'Upgrade PostgreSQL and MySQL Database Instance engine versions',
+          slug: 'postgresql-upgrade-version',
         },
         {
           label: 'Apply scheduled maintenance',
@@ -132,7 +132,7 @@ export const managedDatabasesForPostgresqlAndMysqlMenu = {
       items: [
         {
           label: 'Managed Database for PostgreSQL and MySQL API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/managed-databases-for-postgresql-and-mysql/',
+          slug: 'https://www.scaleway.com/en/developers/api/managed-databases-for-postgresql-and-mysql',
         },
         {
           label: 'Setting up encryption at rest',
@@ -169,6 +169,10 @@ export const managedDatabasesForPostgresqlAndMysqlMenu = {
         {
           label: 'Connecting Managed Databases to Kubernetes clusters',
           slug: 'connecting-managed-databases-to-kubernetes-clusters',
+        },
+        {
+          label: 'Advanced user permissions',
+          slug: 'advanced-user-permissions',
         },
       ],
       label: 'API/CLI',

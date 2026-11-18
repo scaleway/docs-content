@@ -106,6 +106,10 @@ export const dediboxScalewayMenu = {
       label: 'Additional Content',
       slug: 'reference-content',
     },
+    {
+      label: 'Troubleshooting',
+      slug: 'troubleshooting',
+    },
   ],
   label: 'Dedibox',
   slug: 'dedibox-scaleway',

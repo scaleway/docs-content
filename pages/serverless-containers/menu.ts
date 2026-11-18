@@ -5,6 +5,32 @@ export const serverlessContainersMenu = {
       slug: '../serverless-containers',
     },
     {
+      items: [
+        {
+          label: 'Understanding Serverless Containers',
+          slug: 'understanding-serverless-containers',
+        },
+        {
+          label: 'Containers use cases',
+          slug: 'containers-use-cases',
+        },
+        {
+          label: 'Differences between Jobs, Functions and Containers',
+          slug: 'difference-jobs-functions-containers',
+        },
+        {
+          label: 'Containers limitations',
+          slug: 'containers-limitations',
+        },
+        {
+          label: 'Containers billing',
+          slug: 'containers-billing',
+        },
+        {
+          label: 'Migrating to Serverless Containers',
+          slug: 'migrate-to-serverless-containers',
+        },
+      ],
       label: 'Concepts',
       slug: 'concepts',
     },
@@ -13,80 +39,38 @@ export const serverlessContainersMenu = {
       slug: 'quickstart',
     },
     {
-      label: 'FAQ',
-      slug: 'faq',
-    },
-    {
       items: [
         {
           label: 'Create, manage, and delete a namespace',
           slug: 'create-manage-delete-containers-namespace',
         },
         {
+          label: 'Build and push a container image',
+          slug: 'build-push-container-image',
+        },
+        {
           label: 'Deploy a container',
           slug: 'deploy-container',
+        },
+        {
+          label: 'Methods to deploy Serverless Containers',
+          slug: 'deploy-container-methods',
         },
         {
           label: 'Manage a container',
           slug: 'manage-a-container',
         },
         {
-          label: 'Build and push a container image',
-          slug: 'build-push-container-image',
-        },
-        {
-          label: 'Add a custom domain to a container',
-          slug: 'add-a-custom-domain-to-a-container',
-        },
-        {
-          label: 'Manage authentication for private containers',
-          slug: 'create-auth-token-from-console',
-        },
-        {
-          label: 'Migrate from legacy JWT to IAM authentication',
-          slug: 'migrate-jwt-to-iam-authentication',
-        },
-        {
-          label: 'Secure a container',
-          slug: 'secure-a-container',
-        },
-        {
-          label: 'Use Private Networks',
-          slug: 'use-private-networks',
-        },
-        {
-          label: 'Test a container',
-          slug: 'test-a-container',
-        },
-        {
-          label: 'Monitor container logs and metrics',
-          slug: 'monitor-container',
-        },
-        {
-          label: 'Add a trigger to a container',
-          slug: 'add-trigger-to-a-container',
-        },
-        {
-          label: 'Configure alerts for a container',
-          slug: 'configure-alerts-containers',
-        },
-        {
-          label: 'Deploy a Container behind Edge Services',
-          slug: 'deploy-container-behind-edge-services',
-        },
-        {
           label: 'Delete a container',
           slug: 'delete-a-container',
         },
-      ],
-      label: 'How to',
-      slug: 'how-to',
-    },
-    {
-      items: [
         {
-          label: 'Containers API Reference',
-          slug: 'https://www.scaleway.com/en/developers/api/serverless-containers',
+          label: 'Containers port parameter',
+          slug: 'port-parameter-variable',
+        },
+        {
+          label: 'Containers sandbox',
+          slug: 'containers-sandbox',
         },
         {
           label: 'Create and deploy a container with the Scaleway API',
@@ -100,40 +84,62 @@ export const serverlessContainersMenu = {
           label: 'Migrate images to the Scaleway Registry',
           slug: 'migrate-external-image-to-scaleway-registry',
         },
+        {
+          label: 'Deploy AI projects on Containers',
+          slug: 'deploy-ai-projects',
+        },
+        {
+          label: 'v1 migration guide',
+          slug: 'v1-migration-guide',
+        },
       ],
-      label: 'API/CLI',
-      slug: 'api-cli',
+      label: 'Deployment',
+      slug: 'deployment',
     },
     {
       items: [
         {
-          label: 'Serverless overview',
-          slug: 'serverless-overview',
+          label: 'Add a custom domain to a container',
+          slug: 'add-a-custom-domain-to-a-container',
         },
         {
-          label: 'Migrating to Serverless Containers',
-          slug: 'migrate-to-serverless-containers',
+          label: 'Deploy a Container behind Edge Services',
+          slug: 'deploy-container-behind-edge-services',
+        },
+        {
+          label: 'Use Private Networks',
+          slug: 'use-private-networks',
         },
         {
           label: 'Containers and Private Networks integration',
           slug: 'containers-private-networks',
         },
         {
-          label: 'Containers limitations',
-          slug: 'containers-limitations',
+          label: 'Containers request headers reference',
+          slug: 'request-headers',
         },
         {
-          label: 'Methods to deploy Serverless Containers',
-          slug: 'deploy-container',
+          label: 'DNS query rate limiting',
+          slug: 'dns-query-rate-limit',
         },
         {
-          label: 'Containers use cases',
-          slug: 'containers-use-cases',
+          label: 'Manage authentication for private containers',
+          slug: 'create-auth-token-from-console',
         },
         {
-          label: 'Considerations to configure event retention for Queues trigger inputs',
-          slug: 'configure-trigger-inputs',
+          label: 'Migrate from legacy JWT to IAM authentication',
+          slug: 'migrate-jwt-to-iam-authentication',
         },
+        {
+          label: 'Secure a container',
+          slug: 'secure-a-container',
+        },
+      ],
+      label: 'Network and security',
+      slug: 'network-and-security',
+    },
+    {
+      items: [
         {
           label: 'Containers concurrency',
           slug: 'containers-concurrency',
@@ -143,44 +149,42 @@ export const serverlessContainersMenu = {
           slug: 'containers-autoscaling',
         },
         {
-          label: 'Containers request headers reference',
-          slug: 'request-headers',
+          label: 'Add a trigger to a container',
+          slug: 'add-trigger-to-a-container',
         },
         {
-          label: 'Containers billing',
-          slug: 'containers-billing',
-        },
-        {
-          label: 'Containers port parameter',
-          slug: 'port-parameter-variable',
-        },
-        {
-          label: 'Containers sandbox',
-          slug: 'containers-sandbox',
-        },
-        {
-          label: 'Differences between Jobs, Functions and Containers',
-          slug: 'difference-jobs-functions-containers',
+          label: 'Considerations to configure event retention for Queues trigger inputs',
+          slug: 'configure-trigger-inputs',
         },
         {
           label: 'Cron schedules reference',
           slug: 'cron-schedules',
         },
+      ],
+      label: 'Scaling and eventing',
+      slug: 'scaling-and-eventing',
+    },
+    {
+      items: [
         {
-          label: 'DNS query rate limiting',
-          slug: 'dns-query-rate-limit',
+          label: 'Monitor container logs and metrics',
+          slug: 'monitor-container',
         },
         {
-          label: 'v1 migration guide',
-          slug: 'v1-migration-guide',
+          label: 'Configure alerts for a container',
+          slug: 'configure-alerts-containers',
         },
         {
-          label: 'Deploy AI projects on Containers',
-          slug: 'deploy-ai-projects',
+          label: 'Test a container',
+          slug: 'test-a-container',
         },
       ],
-      label: 'Additional Content',
-      slug: 'reference-content',
+      label: 'Monitoring',
+      slug: 'monitoring',
+    },
+    {
+      label: 'FAQ',
+      slug: 'faq',
     },
     {
       label: 'Troubleshooting',

@@ -67,6 +67,10 @@ export const fileStorageMenu = {
     {
       items: [
         {
+          label: 'Features and limitations',
+          slug: 'features-limitations',
+        },
+        {
           label: 'File Storage and Instances selection',
           slug: 'file-system-instance-selection',
         },
@@ -77,6 +81,16 @@ export const fileStorageMenu = {
       ],
       label: 'Additional content',
       slug: 'reference-content',
+    },
+    {
+      items: [
+        {
+          label: 'I am experiencing locking issues',
+          slug: 'locking-issues',
+        },
+      ],
+      label: 'Troubleshooting',
+      slug: 'troubleshooting',
     },
   ],
   label: 'File Storage',

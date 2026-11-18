@@ -22,7 +22,7 @@ There are several ways to interact with OCR models:
 
 <Requirements />
 
-- A Scaleway account logged into the [console](https://console.scaleway.com)
+- A Scaleway account logged in to the [console](https://console.scaleway.com)
 - [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
 - A valid [API key](/iam/credentials/create-api-keys/) for API authentication
 - Python 3.7+ installed on your system
@@ -31,7 +31,7 @@ There are several ways to interact with OCR models:
 
 Scaleway provides a web playground for OCR models hosted on Generative APIs.
 
-1. In the [Scaleway console](https://console.scaleway.com/) side menu, go to **AI** >  **Generative APIs**. The list of models you can query appears. 
+1. In the [Scaleway console](https://console.scaleway.com/) side menu, go to **AI** > **Generative APIs**. The list of models you can query appears. 
 2. Select the **Serverless** toggle button.
 3. Click the name of the OCR model you want to try. Alternatively, click **Try** next to the name of the model.
 
@@ -42,7 +42,6 @@ The web playground opens.
 1. Upload a `.pdf` file to the prompt area at the bottom of the page, or click **Analyze sample document**. The model starts detecting your document and rendering text. 
 2. Scroll down the rendered text to find an estimation of the number of input/output tokens, and the total amount of consumed tokens for this task. 
 3. Click **Use** to see the code snippets configured according to your settings in the playground. 
-
 
 ## Query OCR models via the API
 
@@ -66,8 +65,7 @@ pip install openai
 
 ### Initialize the client
 
-Initialize the OpenAI client with your base URL and API key, and define the file that you want to analyze. For the example, we will use this file: https://genapi-documentation-assets.s3.fr-par.scw.cloud/scaleway-impact-report-3-pages.pdf.
-
+Initialize the OpenAI client with your base URL and API key, and define the file that you want to analyze. The following example uses this file: https://genapi-documentation-assets.s3.fr-par.scw.cloud/scaleway-impact-report-3-pages.pdf.
 
 ```python
 from openai import OpenAI
@@ -75,7 +73,7 @@ import base64
 import os
 import urllib.request
 
-# Define the FILE that the OCR model will analyze. Here we use a public Scaleway document for the example
+# Define the FILE that the OCR model will analyze. This examples uses a public Scaleway document.
 FILE = "https://genapi-documentation-assets.s3.fr-par.scw.cloud/scaleway-impact-report-3-pages.pdf"
 
 # Initialize the client with your base URL and API key
@@ -113,3 +111,69 @@ response = client.chat.completions.create(
 if response.choices and response.choices[0].message.content:
     print(response.choices[0].message.content)
 ```
+
+## Grounding (bounding box detection)
+
+The LightOnOCR-3-0.8B model supports a grounding mode that returns bounding box coordinates for each detected element in the input file. This is useful when you need to know where text or objects appear in the document, for example to re-render a PDF, highlight regions, or build an interactive document viewer. 
+
+### How it works
+
+To activate grounding, include the keyword `grounding` as a text part in your user message, alongside the image: 
+
+```json
+{
+  "model": "lightonocr-3-0.8b",
+  "stream": false,
+  "messages": [
+    {
+      "role": "user",
+      "content": [
+        {
+          "type": "file",
+          "file": {
+            "file_data": "data:application/pdf;base64,<BASE64_FILE_CONTENT>"
+          }
+        },
+        {
+          "type": "text",
+          "text": "grounding"
+        }
+      ]
+    }
+  ]
+}
+```
+
+<Message type="tip">
+  The word `grounding` is the trigger keyword. It must be spelled exactly as shown, or it will result in an error.
+</Message>
+
+Example response:
+
+```json
+{
+  "id": "chatcmpl-...",
+  "choices": [{
+    "index": 0,
+    "message": {
+      "role": "assistant",
+      "content": "Annual Report [x:120, y:45, w:320, h:38]\nRevenue increased by 12% [x:80, y:120, w:580, h:24]"
+    },
+    "finish_reason": "stop"
+  }]
+}
+```
+
+Each detected element is followed by its bounding box coordinates `(x, y, w, h)` in pixels relative to the input file.
+
+### Use cases
+
+PDF re-rendering
+: OCR a scanned PDF, get element positions, then reconstruct a searchable/editable PDF.
+
+Interactive highlighting
+: Overlay bounding boxes on the original image in a web viewer.
+
+Structured extraction
+: Isolate tables, formulas, or logos by their spatial coordinates.
+

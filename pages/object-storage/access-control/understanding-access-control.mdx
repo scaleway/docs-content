@@ -1,0 +1,100 @@
+---
+title: Understanding access control
+description: Learn how API keys, IAM policies, bucket policies, visibility settings, presigned URLs, and CORS combine to control access to Object Storage buckets and objects.
+tags: object storage object-storage access control iam bucket-policy acl visibility public private presigned-url cors permission
+dates:
+  validation: 2026-11-03
+  posted: 2026-11-03
+---
+import ImportantBucketPolicy from '@macros/storage/important-bucket-policy.mdx'
+
+import image from './assets/scaleway-bucket-policy-iam-table.webp'
+
+
+By default, all Object Storage resources of a Project are private, and only principals with the right [IAM permissions](/iam/concepts/glossary/#permission) can access them. Object Storage provides several layers of access control, from Project-wide permissions down to temporary links to a single object. This page explains what each layer does, and how to choose the right one for your use case.
+
+## Access control layers
+
+| Layer | Scope | Controls | Configure with |
+|---|---|---|---|
+| [API keys and signatures](#authentication) | Each request | Who sends the request | IAM, AWS v4 signature |
+| [IAM policies](#iam-policies) | Project | Which Object Storage actions a user, group, or application can perform on all buckets of a Project | IAM permission sets |
+| [Bucket policies](#bucket-policies) | Bucket, prefix, or object | Which principals can perform which actions on a bucket and its objects, under which conditions | JSON policy applied to the bucket |
+| [Visibility and ACLs](#visibility-and-acls) | Bucket or object | Whether anyone with the URL can list a bucket or read an object | Console visibility settings, ACLs |
+| [Presigned URLs](#presigned-urls-and-temporary-links) | Object | Temporary access to a private object | Console public link, AWS CLI, SDKs |
+| [CORS](#cors) | Bucket | Which web domains can send requests to the bucket from a browser | CORS configuration |
+
+## Authentication
+
+Every request to the Object Storage API must be authenticated with the access key and secret key of an [API key](/iam/credentials/create-api-keys/). The API key belongs to a user or an [application](/iam/concepts/glossary/#application), and its permissions are those of that principal.
+
+Object Storage supports the [AWS v4 signature](/object-storage/access-control/aws4-signature/) protocol. Amazon S3-compatible tools such as the AWS CLI, rclone, s3cmd, or MinIO Client generate signatures automatically. You only need to sign requests yourself if you call the API directly.
+
+## IAM policies
+
+[Identity and Access Management (IAM)](/iam/concepts/glossary/#iam) policies grant permission sets to users, groups, and applications at the Project level. An Object Storage permission set applies to all the buckets of the Project. For example:
+
+- `ObjectStorageFullAccess` grants all Object Storage actions.
+- `ObjectStorageReadOnly` grants list and read access.
+- `ObjectStorageObjectsRead`, `ObjectStorageObjectsWrite`, and `ObjectStorageObjectsDelete` grant access to object operations only.
+- `ObjectStorageBucketsRead`, `ObjectStorageBucketsWrite`, and `ObjectStorageBucketsDelete` grant access to bucket operations and configuration only.
+- `ObjectStorageBucketPolicyFullAccess` grants full access to bucket policies.
+
+See [Permission sets](/iam/policies-permissions/permission-sets/) for the full list.
+
+Use IAM alone when Project-level access is enough for your use case. See [Amazon S3 and IAM permissions equivalence](/object-storage/access-control/s3-iam-permissions-equivalence/) for the API actions each permission set authorizes.
+
+Objects encrypted with [SSE-KMS](/object-storage/data-protection/sse-kms/) also require Key Manager permission sets.
+
+## Bucket policies
+
+A [bucket policy](/object-storage/access-control/bucket-policies/) is a JSON document attached to a bucket. It defines which principals can perform which actions on the bucket and its objects, optionally restricted to a prefix, and under conditions such as source IP address or date.
+
+As soon as a bucket has a bucket policy, Object Storage only allows the actions that the policy explicitly allows. Principals that have IAM access to Object Storage but are not listed in the policy lose access to the bucket.
+
+<ImportantBucketPolicy />
+
+See [How to manage bucket policies](/object-storage/access-control/manage-bucket-policies/) and [Bucket policy examples](/object-storage/access-control/bucket-policy-examples/).
+
+## How IAM and bucket policies combine
+
+To perform an action on a bucket, a principal must be allowed by IAM. If the bucket has a bucket policy, the principal must also be allowed by the bucket policy.
+
+<Lightbox image={image} alt="Table showing how IAM permissions and bucket policies combine to grant or deny access to a bucket" />
+
+To set up granular access, grant Object Storage access to a group in IAM, then restrict each critical bucket with a bucket policy. See [Combine IAM and bucket policies for granular access](/object-storage/access-control/bucket-policy-examples/#combine-iam-and-bucket-policies-for-granular-access) for a step-by-step example.
+
+## Visibility and ACLs
+
+Visibility settings make resources accessible to anyone with their URL, without authentication:
+
+- **Bucket visibility** defines whether anyone can list the objects of the bucket. It does not make the objects themselves public.
+- **Object visibility** defines whether anyone can read an object. All objects are private by default, even in a public bucket.
+
+The console sets visibility through access control lists (ACLs), which you can also manage with the `put-bucket-acl` and `put-object-acl` commands. Bucket policies take precedence over ACLs. To make many objects public at once, use a bucket policy that allows `s3:GetObject` to everyone.
+
+See [How to manage object visibility and sharing](/object-storage/access-control/object-visibility-and-sharing/).
+
+## Presigned URLs and temporary links
+
+A presigned URL grants temporary access to a private object, without changing its visibility. Anyone with the URL can access the object until the URL expires. You can generate a temporary link from the console, or a presigned URL with the AWS CLI or an SDK.
+
+To let users upload objects from a browser without exposing your credentials, use a signed [POST object](/object-storage/objects/upload-objects/#upload-objects-from-a-browser-with-post-object) form.
+
+## CORS
+
+Cross-Origin Resource Sharing (CORS) rules define which web domains can send requests to a bucket from a browser. Browsers block cross-domain requests by default, so a web application hosted on your own domain needs a CORS rule to fetch or upload objects directly. CORS rules do not grant permissions: the request must still be authorized by the other layers.
+
+See [Manage CORS rules on Object Storage buckets](/object-storage/access-control/cors/).
+
+## Choose an access control method
+
+| Use case | Method |
+|---|---|
+| Give a team access to all the buckets of a Project | [IAM policy](/iam/policies-permissions/create-policy/) with an Object Storage permission set |
+| Restrict a bucket to specific users or applications | [Bucket policy](/object-storage/access-control/manage-bucket-policies/) |
+| Allow access only from specific IP addresses | [Bucket policy with an IP condition](/object-storage/access-control/bucket-policy-examples/#allow-or-deny-access-based-on-ip-addresses) |
+| Publish a static website or public assets | [Public objects or a public bucket policy](/object-storage/access-control/object-visibility-and-sharing/) |
+| Share a private object for a limited time | [Temporary link or presigned URL](/object-storage/access-control/object-visibility-and-sharing/#share-an-object-over-https) |
+| Let a web application access a bucket from a browser | [CORS rules](/object-storage/access-control/cors/) |
+| Keep traffic between Instances and buckets off the public internet | [Private Networks](/object-storage/data-protection/private-networks/) |

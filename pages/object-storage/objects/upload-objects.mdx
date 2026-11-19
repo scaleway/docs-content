@@ -1,0 +1,339 @@
+---
+title: How to upload objects
+description: Upload objects to an Object Storage bucket using the Scaleway console, the AWS CLI, rclone, s3cmd, or MinIO Client, or from a browser with POST object.
+tags: object storage object-storage bucket upload put post object aws-cli rclone s3cmd minio console browser form
+dates:
+  validation: 2026-11-03
+  posted: 2026-11-03
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+import image from './assets/scaleway-post-object-use-case.webp'
+
+
+You can upload objects to a bucket from the [Scaleway console](https://console.scaleway.com), with any Amazon S3-compatible tool, or directly from a browser using the POST object operation. Each object has a [storage class](/object-storage/concepts/glossary/#storage-class) that you select at upload.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- An [Object Storage bucket](/object-storage/buckets/create-a-bucket/)
+- A CLI tool [installed and configured](/object-storage/api-clients/cli-tools-and-clients/), if you do not use the console
+
+## Upload an object
+
+<Message type="important">
+Before you upload your files, make sure that their names follow the [Amazon S3 object key naming guidelines](https://docs.aws.amazon.com/AmazonS3/latest/userguide/object-keys.html).
+</Message>
+
+The following tabs describe how to upload an object using the console or a CLI tool. The rclone, s3cmd, and MinIO Client examples use the `scaleway` remote and alias that [the Scaleway CLI generates](/object-storage/api-clients/scaleway-cli/). Replace the placeholders with the appropriate values.
+
+<Tabs>
+  <TabsTab label="Console">
+    1. In the Scaleway console side menu, under **Storage**, click **Object Storage**. The list of your buckets appears.
+
+    2. Click the name of the bucket to which you want to upload your files.
+
+    3. Click **Upload**, then select the files you want to upload. You can also drag and drop your files into the upload area.
+
+    4. Select the [storage class](/object-storage/concepts/glossary/#storage-class) of your objects. When the upload is complete, the list of objects appears, including the new objects.
+
+    Do not close your web browser during an upload, as it can result in an incomplete upload. To upload files larger than 1 GB, Scaleway recommends using a CLI tool.
+  </TabsTab>
+  <TabsTab label="AWS CLI">
+    1. Run the following command to upload a file. Use the optional `--storage-class` option to select `STANDARD`, `ONEZONE_IA`, or `GLACIER`.
+        ```bash
+        aws s3 cp <FILE_PATH> s3://<BUCKET_NAME>/<OBJECT_KEY> [--storage-class <STORAGE_CLASS>]
+        ```
+
+    2. Run the following command to list the objects of your bucket:
+        ```bash
+        aws s3 ls s3://<BUCKET_NAME>
+        ```
+
+    The AWS CLI automatically uses [multipart uploads](/object-storage/objects/multipart-uploads/) for large files.
+  </TabsTab>
+  <TabsTab label="rclone">
+    1. Run the following command to upload a file:
+        ```bash
+        rclone copy <FILE_PATH> scaleway:<BUCKET_NAME>
+        ```
+
+    2. Run the following command to list the objects of your bucket:
+        ```bash
+        rclone ls scaleway:<BUCKET_NAME>
+        ```
+        An output similar to the following appears:
+        ```
+        3259 my-object
+        ```
+  </TabsTab>
+  <TabsTab label="s3cmd">
+    Run the following command to upload a file:
+
+    ```bash
+    s3cmd put <FILE_PATH> s3://<BUCKET_NAME>/<OBJECT_KEY>
+    ```
+
+    An output similar to the following appears:
+
+    ```
+    upload: '/path/to/object/my-object' -> 's3://my-bucket/my-object'  [1 of 1]
+    3259 of 3259   100% in    0s     8.47 KB/s  done
+    ```
+
+    Object Storage uses the MIME type that s3cmd sends. If s3cmd does not send a MIME type, Object Storage infers it from the file extension, or falls back to `binary/octet-stream`.
+  </TabsTab>
+  <TabsTab label="MinIO Client">
+    Run the following command to upload a file:
+
+    ```bash
+    mc cp <FILE_PATH> scaleway/<BUCKET_NAME>
+    ```
+
+    An output similar to the following appears:
+
+    ```
+    .../my-file: 28 B / 28 B  ░░░░░░░░░░░░░░░░░░░░░░▓
+    ```
+  </TabsTab>
+</Tabs>
+
+The equivalent API call is [PutObject](/object-storage/api-clients/object-operations/#putobject).
+
+## Upload objects from a browser with POST object
+
+The POST object operation adds an object to a bucket using an HTML form. POST is an alternative to PUT that lets users upload objects from their browser directly to a bucket, without going through your application server. You must have write access to a bucket to add an object to it.
+
+Parameters that PUT receives as HTTP headers are passed to POST as form fields, in the `multipart/form-data` encoded message body.
+
+<Lightbox image={image} alt="Diagram of a browser-based upload: the application server signs a POST policy, and the browser sends the object directly to the bucket" />
+
+### Form fields
+
+| Field | Description | Required |
+|---|---|---|
+| `file` | File or text content | Yes |
+| `key` | Name of the object to create. If set to `${filename}`, Object Storage replaces it with the name of the uploaded file. | Yes |
+| `acl` | ACL of the object, such as `private` or `public-read` | No |
+| `Cache-Control` | Standard HTTP header | No |
+| `Content-Type` | Standard HTTP header | No |
+| `Content-Disposition` | Standard HTTP header | No |
+| `Content-Encoding` | Standard HTTP header | No |
+| `Expires` | Standard HTTP header | No |
+| `x-amz-meta-*` | Any metadata to attach to the object | No |
+| `success_action_redirect`, `redirect` | URL to redirect to (303 See Other) if the request succeeds. Ignored if the URL is not valid. | No |
+| `success_action_status` | Status code returned if the request succeeds: `200`, `201`, or `204` | No |
+| `policy` | Security policy describing what the request permits | Yes |
+| `x-amz-credential` | Access key | Yes |
+| `x-amz-algorithm` | `AWS4-HMAC-SHA256` | Yes |
+| `x-amz-signature` | Signature of the policy. See [Sign the policy](#sign-the-policy). | Yes |
+
+### POST policy
+
+The POST policy is a UTF-8 and Base64-encoded [JSON](https://www.json.org/) document that specifies the conditions that the request must meet. Depending on how you design your policy document, you can control the granularity of access. The policy always contains the `expiration` and `conditions` elements.
+
+The `expiration` element specifies the expiration date and time of the policy in [ISO 8601](https://www.iso.org/iso-8601-date-and-time-format.html) GMT format. For example, `2019-09-19T12:00:00.000Z` means that the policy is no longer valid after 12:00 GMT on September 19, 2019.
+
+The `conditions` element lists the conditions that each form field must match. You must specify 1 condition for each form field of the form, and you can specify several conditions for a form field to create more complex matching criteria.
+
+| Condition | Example | Description |
+|---|---|---|
+| Exact match | `{"acl": "public-read" }` | The value of the form field must match the specified value. In this example, the ACL must be `public-read`. |
+| Exact match | `[ "eq", "$acl", "public-read" ]` | Same as above |
+| Starts with | `["starts-with", "$key", "user/user1/"]` | The value of the form field must start with the specified value. |
+| Range | `["content-length-range", 1048576, 10485760]` | The size of the uploaded file must be between 1 MB and 10 MB. |
+
+All field names in conditions begin with `$`. To accept any value for a field, use `["starts-with", "$field", ""]`.
+
+### Sign the policy
+
+POST object only supports [signature v4](/object-storage/concepts/glossary/#signature-v2-signature-v4). The following Python example signs a POST policy:
+
+```python
+import base64
+import json
+import hmac
+import hashlib
+
+# Generate your access key from the console
+ACCESS_KEY_ID = "SCWXXXXXXXXXXXXXXXXX"
+SECRET_ACCESS_KEY = "XXXXXXXX-XXXX-XXXXXXX-XXXXXXXXXX"
+
+# Object Storage Region
+REGION = "fr-par"
+
+# Example for the demo
+DATE = "20190918"
+X_AMZ_DATE = "20190919T000000Z"
+EXPIRATION = "2019-09-19T02:00:00.000Z"
+
+policy = {
+    "expiration": EXPIRATION,
+    "conditions": [
+        {"bucket":"my-bucket"},
+        ["starts-with","$key",""],
+        {"acl":"public-read"},
+        {"x-amz-credential": ACCESS_KEY_ID + "/" + DATE + "/" + REGION + "/s3/aws4_request"},
+        {"x-amz-algorithm":"AWS4-HMAC-SHA256"},
+        {"x-amz-date": X_AMZ_DATE},
+        {"success_action_status":"204"}
+    ]
+}
+
+stringToSign = base64.b64encode(bytes(json.dumps(policy), encoding='utf8'))
+print("Base64 encoded policy:", stringToSign.decode("utf-8"), end="\n\n")
+# Base64 encoded policy: eyJleHBpcmF0aW9uIjogIjIwMTktMDktMTlUMDI6MDA6MDAuMDAwWiIsICJjb25kaXRpb25zIjogW3siYnVja2V0IjogIm15YnVja2V0In0sIFsic3RhcnRzLXdpdGgiLCAiJGtleSIsICIiXSwgeyJhY2wiOiAicHVibGljLXJlYWQifSwgeyJ4LWFtei1jcmVkZW50aWFsIjogIlNDV1hYWFhYWFhYWFhYWFhYWFhYLzIwMTkwOTE4L2ZyLXBhci9zMy9hd3M0X3JlcXVlc3QifSwgeyJ4LWFtei1hbGdvcml0aG0iOiAiQVdTNC1ITUFDLVNIQTI1NiJ9LCB7IngtYW16LWRhdGUiOiAiMjAxOTA5MTlUMDAwMDAwWiJ9LCB7InN1Y2Nlc3NfYWN0aW9uX3N0YXR1cyI6ICIyMDQifV19
+
+dateKey = hmac.new(bytes("AWS4" + SECRET_ACCESS_KEY, 'utf-8'), bytes(DATE, 'utf-8'), digestmod=hashlib.sha256).digest()
+dateRegionKey = hmac.new(dateKey, bytes(REGION, 'utf-8'), digestmod=hashlib.sha256).digest()
+dateRegionServiceKey = hmac.new(dateRegionKey, bytes("s3", 'utf-8'), digestmod=hashlib.sha256).digest()
+signinKey = hmac.new(dateRegionServiceKey, bytes("aws4_request", 'utf-8'), digestmod=hashlib.sha256).digest()
+print("Signin key:", signinKey.hex(), end="\n\n")
+# Signin key: 9c3ad81294a9263e472165307ae6e5c64e738b6837ff688f6e721a5ed53a4873
+
+signature = hmac.new(signinKey, stringToSign, digestmod=hashlib.sha256).digest()
+print("Signature:", signature.hex(), end="\n\n")
+# Signature: 4d879d70f91e6f2f417163b4a1e90e0e6b32c99cbe3eaa168bc7ab216d33d784
+```
+
+### POST object examples
+
+The following tabs show how to generate an upload form in Node.js, and a presigned POST request in Python.
+
+<Tabs>
+  <TabsTab label="Node.js">
+    Install the `aws-s3-form` package:
+
+    ```bash
+    npm install aws-s3-form
+    ```
+
+    ```js
+    const express = require("express")
+    const app = express()
+    const port = 3000
+
+    var AwsS3Form = require("aws-s3-form")
+
+    require("dotenv").config()
+
+    app.use(express.json())
+
+    // Generate your access key from the console
+    var PAR = {
+      access: "SCWXXXXXXXXXXXXXXXXX",
+      secret: "XXXXXXXX-XXXX-XXXXXXX-XXXXXXXXXX",
+      region: "fr-par",
+      bucket: "my-bucket"
+    }
+
+    var CREDS = PAR
+
+    app.get("/", (req, res) => {
+      var formGen = new AwsS3Form({
+        accessKeyId: CREDS.access,
+        secretAccessKey: CREDS.secret,
+        region: CREDS.region,
+        bucket: CREDS.bucket,
+        redirectUrlTemplate: "http://localhost/",
+        acl: "public-read"
+      })
+      obj = formGen.create("object")
+      console.log(obj)
+
+      var html = ""
+      html += "<body>"
+      html += "Fill the 'key' attribute, chose file and submit"
+      html += "<form action='https://s3.fr-par.scw.cloud/" + CREDS.bucket + "'  method='post' name='form1' enctype='multipart/form-data'>"
+      html += "<table>"
+      html += "<tr><td><span>Key: <span></td><td><input type='text' name='key'><br /></td></tr>"
+      html +=
+        "<tr><td><span>Signature: <span></td><td><input readonly type='text' name='X-Amz-Signature' value=" +
+        obj.fields["X-Amz-Signature"] +
+        "><br /></td></tr>"
+      html += "<tr><td><span>Policy: <span></td><td><input readonly type='text' name='Policy' value=" + obj.fields["Policy"] + "><br /></td></tr>"
+      html += "<tr><td><span>Acl: <span></td><td><input readonly type='text' name='acl' value=" + obj.fields["acl"] + "><br /></td></tr>"
+      html +=
+        "<tr><td><span>Credential: <span></td><td><input readonly type='text' name='X-Amz-Credential' value=" +
+        obj.fields["X-Amz-Credential"] +
+        "><br /></td></tr>"
+      html +=
+        "<tr><td><span>Algorithm: <span></td><td><input readonly type='text' name='X-Amz-Algorithm' value=" +
+        obj.fields["X-Amz-Algorithm"] +
+        "><br /></td></tr>"
+      html += "<tr><td><span>Date: <span></td><td><input readonly type='text' name='X-Amz-Date' value=" + obj.fields["X-Amz-Date"] + "><br /></td></tr>"
+      html +=
+        "<tr><td><span>Status: <span></td><td><input readonly type='text' name='success_action_status' value=" +
+        obj.fields["success_action_status"] +
+        "><br /></td></tr>"
+      html +=
+        "<tr><td><span>Meta: <span></td><td><input readonly type='text' name='x-amz-meta-uuid' value=" +
+        obj.fields["x-amz-meta-uuid"] +
+        "><br /></td></tr>"
+      html += "<tr><td><span>File</span></td><td><input type='file' name='file'><br /></td></tr>"
+      html += "<tr><td><input type='submit' value='submit'><br /></td></tr>"
+      html += "</form>"
+      html += "</body>"
+      res.send(html)
+    })
+
+    app.listen(port, () => console.log(`Example app listening on port ${port}!`))
+    ```
+  </TabsTab>
+  <TabsTab label="Python">
+    ```python
+    import logging
+    import boto3
+    import requests
+    from botocore.exceptions import ClientError
+
+
+    # Generate a presigned POST request for the object
+    session = boto3.session.Session()
+
+    s3_client = session.client(
+        service_name='s3',
+        region_name='fr-par',
+        use_ssl=True,
+        endpoint_url='https://s3.fr-par.scw.cloud',
+        aws_access_key_id='SCWXXXXXXXXXXXXXXXXX',
+        aws_secret_access_key='XXXXXXXX-XXXX-XXXXXXX-XXXXXXXXXX'
+    )
+
+    bucket_name = "my-bucket"
+    object_name = "my-object"
+    fields = {
+            "acl": "public-read",
+            "Cache-Control": "nocache",
+            "Content-Type": "image/jpeg"
+        }
+    conditions = [
+        {"key": "my-object"},
+        {"acl": "public-read"},
+        {"Cache-Control": "nocache"},
+        {"Content-Type": "image/jpeg"}
+    ]
+    expiration = 120 # Max two minutes to start upload
+
+    try:
+        response = s3_client.generate_presigned_post(Bucket=bucket_name,
+                                                        Key=object_name,
+                                                        Fields=fields,
+                                                        Conditions=conditions,
+                                                        ExpiresIn=expiration)
+    except ClientError as e:
+        logging.error(e)
+        exit()
+
+    # The response contains the presigned URL and required fields
+    print(response)
+
+
+    with open('myfile', 'rb') as f:
+        files = {'file': (object_name, f)}
+        http_response = requests.post(response['url'], data=response['fields'], files=files)
+        print(http_response.content)
+    ```
+  </TabsTab>
+</Tabs>

@@ -83,6 +83,60 @@ export const generativeApisMenu = {
     {
       items: [
         {
+          label: 'Adding AI to VS Code using Continue',
+          slug: 'adding-ai-to-vscode-using-continue',
+        },
+        {
+          label: 'Adding AI to VS Code using GitHub Copilot',
+          slug: 'adding-ai-to-vscode-using-github-copilot',
+        },
+        {
+          label: 'Adding AI to IntelliJ IDEA using Continue',
+          slug: 'adding-ai-to-intellij-using-continue',
+        },
+        {
+          label: 'Adding AI to the Zed IDE',
+          slug: 'adding-ai-to-zed-ide',
+        },
+        {
+          label: 'Integrating Generative APIs with n8n',
+          slug: 'integrate-with-n8n',
+        },
+        {
+          label: 'Integrating Generative APIs with Openclaw',
+          slug: 'integrate-with-openclaw',
+        },
+        {
+          label: 'Integrating Generative APIs with Cursor',
+          slug: 'integrate-with-cursor',
+        },
+        {
+          label: 'Integrating Generative APIs with OpenCode',
+          slug: 'integrate-with-opencode',
+        },
+        {
+          label: 'Integrating Generative APIs with Claude Code',
+          slug: 'integrate-with-claude-code',
+        },
+        {
+          label: 'Integrating Generative APIs with Qwen Code',
+          slug: 'integrate-with-qwen-code',
+        },
+        {
+          label: 'Integrating Generative APIs with LiteLLM',
+          slug: 'integrate-with-litellm',
+        },
+        {
+          label: 'Integrating Generative APIs with popular AI tools',
+          slug: 'integrating-generative-apis-with-popular-tools',
+        },
+      ],
+      label: 'Integrations',
+      slug: 'integrations',
+    },
+    {
+      items: [
+        {
           label: 'Deploy a model',
           slug: 'create-deployment',
         },
@@ -147,60 +201,6 @@ export const generativeApisMenu = {
       ],
       label: 'API/CLI',
       slug: 'api-cli',
-    },
-    {
-      items: [
-        {
-          label: 'Adding AI to VS Code using Continue',
-          slug: 'adding-ai-to-vscode-using-continue',
-        },
-        {
-          label: 'Adding AI to VS Code using GitHub Copilot',
-          slug: 'adding-ai-to-vscode-using-github-copilot',
-        },
-        {
-          label: 'Adding AI to IntelliJ IDEA using Continue',
-          slug: 'adding-ai-to-intellij-using-continue',
-        },
-        {
-          label: 'Adding AI to the Zed IDE',
-          slug: 'adding-ai-to-zed-ide',
-        },
-        {
-          label: 'Integrating Generative APIs with n8n',
-          slug: 'integrate-with-n8n',
-        },
-        {
-          label: 'Integrating Generative APIs with Openclaw',
-          slug: 'integrate-with-openclaw',
-        },
-        {
-          label: 'Integrating Generative APIs with Cursor',
-          slug: 'integrate-with-cursor',
-        },
-        {
-          label: 'Integrating Generative APIs with OpenCode',
-          slug: 'integrate-with-opencode',
-        },
-        {
-          label: 'Integrating Generative APIs with Claude Code',
-          slug: 'integrate-with-claude-code',
-        },
-        {
-          label: 'Integrating Generative APIs with Qwen Code',
-          slug: 'integrate-with-qwen-code',
-        },
-        {
-          label: 'Integrating Generative APIs with LiteLLM',
-          slug: 'integrate-with-litellm',
-        },
-        {
-          label: 'Integrating Generative APIs with popular AI tools',
-          slug: 'integrating-generative-apis-with-popular-tools',
-        },
-      ],
-      label: 'Integrations',
-      slug: 'integrations',
     },
     {
       items: [

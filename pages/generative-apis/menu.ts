@@ -7,6 +7,10 @@ export const generativeApisMenu = {
     {
       items: [
         {
+          label: 'Understanding Generative APIs',
+          slug: 'understanding-generative-apis',
+        },
+        {
           label: 'Glossary',
           slug: 'glossary',
         },

@@ -5,6 +5,12 @@ export const generativeApisMenu = {
       slug: '../generative-apis',
     },
     {
+      items: [
+        {
+          label: 'Glossary',
+          slug: 'glossary',
+        },
+      ],
       label: 'Concepts',
       slug: 'concepts',
     },
@@ -13,11 +19,15 @@ export const generativeApisMenu = {
       slug: 'quickstart',
     },
     {
-      label: 'FAQ',
-      slug: 'faq',
-    },
-    {
       items: [
+        {
+          label: 'Supported models',
+          slug: 'supported-models',
+        },
+        {
+          label: 'Model lifecycle',
+          slug: 'model-lifecycle',
+        },
         {
           label: 'Query language models',
           slug: 'query-language-models',
@@ -62,6 +72,12 @@ export const generativeApisMenu = {
           label: 'Use batch processing',
           slug: 'use-batch-processing',
         },
+      ],
+      label: 'Model capabilities',
+      slug: 'model-capabilities',
+    },
+    {
+      items: [
         {
           label: 'Deploy a model',
           slug: 'create-deployment',
@@ -95,8 +111,8 @@ export const generativeApisMenu = {
           slug: 'delete-deployment',
         },
       ],
-      label: 'How to',
-      slug: 'how-to',
+      label: 'Deployments',
+      slug: 'deployments',
     },
     {
       items: [
@@ -120,40 +136,16 @@ export const generativeApisMenu = {
           label: 'Understanding errors',
           slug: 'understanding-errors',
         },
+        {
+          label: 'OpenAI API compatibility',
+          slug: 'openai-compatibility',
+        },
       ],
       label: 'API/CLI',
       slug: 'api-cli',
     },
     {
       items: [
-        {
-          label: 'Supported models',
-          slug: 'supported-models',
-        },
-        {
-          label: 'Model lifecycle',
-          slug: 'model-lifecycle',
-        },
-        {
-          label: 'OpenAI API compatibility',
-          slug: 'openai-compatibility',
-        },
-        {
-          label: 'Rate limits for Serverless',
-          slug: 'rate-limits',
-        },
-        {
-          label: 'Data privacy',
-          slug: 'data-privacy',
-        },
-        {
-          label: 'Security and reliability in Generative APIs',
-          slug: 'security-and-reliability',
-        },
-        {
-          label: 'Understanding Generative APIs costs',
-          slug: 'cost-estimator',
-        },
         {
           label: 'Adding AI to VS Code using Continue',
           slug: 'adding-ai-to-vscode-using-continue',
@@ -203,8 +195,40 @@ export const generativeApisMenu = {
           slug: 'integrating-generative-apis-with-popular-tools',
         },
       ],
-      label: 'Additional Content',
-      slug: 'reference-content',
+      label: 'Integrations',
+      slug: 'integrations',
+    },
+    {
+      items: [
+        {
+          label: 'Data privacy',
+          slug: 'data-privacy',
+        },
+        {
+          label: 'Security and reliability in Generative APIs',
+          slug: 'security-and-reliability',
+        },
+      ],
+      label: 'Security',
+      slug: 'security',
+    },
+    {
+      items: [
+        {
+          label: 'Rate limits for Serverless',
+          slug: 'rate-limits',
+        },
+        {
+          label: 'Understanding Generative APIs costs',
+          slug: 'cost-estimator',
+        },
+      ],
+      label: 'Costs and limits',
+      slug: 'costs-and-limits',
+    },
+    {
+      label: 'FAQ',
+      slug: 'faq',
     },
     {
       label: 'Troubleshooting',

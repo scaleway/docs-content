@@ -3,7 +3,7 @@ title: How to use Private Networks with Elastic Metal servers
 description: This page explains how to use Private Networks with Elastic Metal servers
 tags: private-networks elastic-metal private networks
 dates:
-  validation: 2025-10-14
+  validation: 2026-11-19
   posted: 2022-01-17
 ---
 import Requirements from '@macros/iam/requirements.mdx'
@@ -131,6 +131,71 @@ You must configure the virtual network interface on each Elastic Metal server yo
       - To test your configuration before applying it, use the `sudo netplan try` command. Once tested, apply the configuration with `sudo netplan apply`.
       - Ensure that you have defined the same adapter name (`eno1`) for the default network interface in the default Netplan configuration file (`/etc/netplan/50-cloud-init.yaml`) before applying the new configuration.
     </Message>
+
+## How to remove the public IP address on Linux Elastic Metal servers
+
+By default, an Elastic Metal server is reachable on the public internet via its public IP address. Public traffic and [Private Network](/vpc/concepts/#private-networks) traffic pass through the same physical network interface. You can remove the public IP address from the operating system of your server when you want it to be reachable only through its Private Network.
+
+<Message type="important">
+  - When you remove the public IP address, your server is no longer reachable via its public IP address. Ensure your server remains reachable through another method (Bastion, VPN, Interlink, etc.).
+  - The commands in this section show how to remove the public IP address on an Elastic Metal server running Ubuntu and Netplan-based distributions.
+  - The Private Networks feature must be enabled on your server, and its network interface must be configured as described in the [configuration section above](#how-to-configure-the-network-interface-on-your-elastic-metal-server-for-private-networks).
+</Message>
+
+1. Create or edit a Netplan configuration file to disable DHCP on the base interface, while leaving the VLAN interface of your Private Network configured. Make the necessary replacements for `eno1` and `<vlan-id>` as you did previously.
+    <Message type="note">
+      The base interface (here `eno1`) carries the public IP address, and the interface of your Private Network is the VLAN interface built on top of it.
+    </Message>
+      ```yaml
+      # e.g.: /etc/netplan/51-custom-config.yaml
+      network:
+        version: 2
+        ethernets:
+          eno1:
+            dhcp4: false
+            dhcp6: false
+            accept-ra: false
+            optional: true
+        vlans:
+          eno1.<if-name>:
+            id: <vlan-id>
+            link: eno1
+            dhcp4: true
+      ```
+      - `dhcp4: false` and `dhcp6: false` disable DHCP on the base interface.
+      - `accept-ra: false` disables IPv6 router advertisements.
+      - `optional: true` prevents the boot process from waiting on the interface.
+      The VLAN interface keeps its DHCP configuration, so your server retains its private IP.
+
+      <Message type="tip">
+        - Your configuration file must be ordered after the default Netplan configuration file (`/etc/netplan/50-cloud-init.yaml`) so that it overrides it. Netplan applies its files in lexicographic order, hence the `51-` prefix used in the example above.
+        - If [DHCP is not activated on your Private Network](/vpc/how-to/activate-dhcp/), configure a static IP address on the VLAN interface instead of using `dhcp4: true`, as described in the [configuration section above](#how-to-configure-the-network-interface-on-your-elastic-metal-server-for-private-networks).
+      </Message>
+
+2. Test and apply the new configuration:
+    ```bash
+    sudo netplan try
+    sudo netplan apply
+    ```
+3. Disable Cloud-init at boot, so that it does not block the startup of your server. [Cloud-init](/elastic-metal/concepts/#cloud-init) runs at every boot of your Elastic Metal server and needs to reach the Scaleway metadata service. The system no longer applies SSH key updates without this service.
+Once the public IP address is removed, your server can no longer reach the metadata server, and the Cloud-init network stage waits for it at each boot, which prevents services such as SSH server from starting:
+    ```bash
+    sudo touch /etc/cloud/cloud-init.disabled
+    ```
+
+4. Reboot your server and verify that it comes back up correctly, reachable only via its Private Network:
+    ```bash
+    sudo systemctl reboot
+    ```
+    Once the server has rebooted, connect to it again over your Private Network and check the state of its network interfaces:
+    ```bash
+    ip -br a
+    ```
+    The base interface should no longer display the public IP address, while the VLAN interface still displays the private IP address of your server. Your SSH connection should be available.
+
+<Message type="note">
+  To restore the public IP address, restore your previous Netplan configuration, remove the `/etc/cloud/cloud-init.disabled` file, and reboot your server.
+</Message>
 
 ## How to configure the Private Network on Windows Server 2019 and 2022
 

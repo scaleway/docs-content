@@ -3,7 +3,7 @@ title: Understanding IAM Policies
 description: Detailed additional content for policies within Scaleway IAM.
 tags: iam
 dates:
-  validation: 2025-10-29
+  validation: 2026-11-20
 ---
 import image from './assets/scaleway-iam-policy-example.webp'
 
@@ -12,9 +12,9 @@ IAM Policies are statements that define the permissions of users, groups, and ap
 
 They are composed of:
 
-- a [principal](#principal) - a user, group, or application,
-- one or more IAM rules - consisting of [permission sets](#permission-sets) bound to a [scope](#scope).
-- one or more IAM conditions - defined in Common Expression Language (CEL) expressions.
+- a [principal](#principal) - a user, group, or application
+- one or more IAM rules - consisting of [permission sets](#permission-sets) bound to a [scope](#scope)
+- one or more IAM conditions - defined in Common Expression Language (CEL) expressions
 
 ## Principal
 
@@ -26,28 +26,26 @@ A principal is an entity that can be attached to a policy. Currently, you can at
 
 ## Rules
 
-A rule is the part of a policy that defines the permissions of the policy's [principal](/iam/concepts/glossary/#principal), and the [scope](/iam/concepts/glossary/#scope) of these permissions. It consists of a **scope** (at Project level or Organization level) and one or more **permission sets** (eg. "list all Instances").
+A rule is the part of a policy that defines the permissions of the policy's [principal](/iam/concepts/glossary/#principal), and the [scope](/iam/concepts/glossary/#scope) of these permissions. It consists of a scope (at Project level or Organization level) and one or more permission sets (e.g. "list all Instances").
 
-<Lightbox image={image} alt="" />
+<Lightbox image={image} alt="Example IAM policy showing a rule with scope and permission sets" />
 
 <Message type="note">
-  A policy can have one or many rules. Note that rules can only **give** access to the specified actions/resources. You cannot create a rule that explicitly **denies** access to specific actions/resources. In any case, the default starting point for any user or application other than the Organization's owner, is that they have zero permissions other than those defined via policies attached to them.
+  A policy can have one or many rules. Each rule is either an Allow rule (grants access) or a Deny rule (blocks access, acting as a security guardrail). The default starting point for any user or application other than the owner of the Organization is zero permissions. See [Allow and Deny rules](#allow-and-deny-rules) and [Permission resolution](#permission-resolution) for details.
 </Message>
 
 ### Scope
 
 A scope defines where the permission sets should apply. At Scaleway, a scope can be at Project or Organization level.
 
-  - **Projects** group your Scaleway resources (eg. Instances, Object Storage buckets, Managed Databases etc.) together. An Organization may have many Projects, or just one default Project. If you choose to define scope at Project level, you can select one, many, or all Projects. When you then define the permission sets for this scope, you can give access to different resources within the Project(s).
-  - an **Organization** is made of one or several Projects. IAM, billing, support and abuse tickets and project management are managed at Organization level, so choose an Organization scope to give access to these features.
+  - **Projects** group your Scaleway resources (e.g. Instances, Object Storage buckets, Managed Databases etc.) together. An Organization may have many Projects, or just one default Project. If you choose to define scope at Project level, you can select one, many, or all Projects. When you then define the permission sets for this scope, you can give access to different resources within the Project(s).
+  - **Organizations** are made of one or several Projects. IAM, billing, support and abuse tickets and project management are managed at Organization level, so choose an Organization scope to give access to these features.
 
 ### Permission sets
 
-A permission set consists of one or multiple permissions to perform actions on resources or features. Each permission set has a clear description, e.g. `InstancesFullAccess`, `InstancesReadOnly`, `RelationalDatabaseFullAccess`, `BillingReadOnly`.
+A permission set consists of one or more permissions to perform actions on resources or features. Each permission set has a clear description, e.g. `InstancesFullAccess`, `InstancesReadOnly`, `RelationalDatabaseFullAccess`, `BillingReadOnly`.
 
-<Message type="note">
-  You can find a detailed list of all permission sets available at Scaleway in the permission sets [reference page](/iam/policies-permissions/permission-sets/).
-</Message>
+You can find a detailed list of all permission sets available at Scaleway in the permission sets [reference page](/iam/policies-permissions/permission-sets/).
 
 <Message type="important">
   Keep in mind that, due to replication and caching, any new configuration of permission sets may take up to 1 minute to apply.
@@ -57,9 +55,23 @@ A permission set consists of one or multiple permissions to perform actions on r
 
 A condition is an additional layer of restrictions for your rule. You can allow access to specific user agents or IP addresses, and allow actions to be performed only at certain dates and times. Conditions are defined through [CEL](/iam/concepts/glossary/#common-expression-language-cel) expressions. In general, a condition expression consists of one or more statements that are joined by logical operators (`&&`, `||`, or `!`).
 
-Conditions can be set up and configured in the Scaleway console.
+You can set up and configure conditions in the Scaleway console.
 
 Refer to the [Understanding policy conditions](/iam/policies-permissions/understanding-policy-conditions/) documentation page to learn how they are set up and how you can define them.
+
+### Allow and Deny rules
+
+Each rule in a policy is either an Allow rule or a Deny rule.
+
+Allow rules
+: Grant the specified permission sets to the principal within the given scope. This is the standard way to give access.
+
+Deny rules
+: Guarantee that the specified permission sets can never be granted to the principal, regardless of any other Allow rules or policies. They act as security guardrails and are useful for enforcing governance policies (e.g., "no one can delete production Instances").
+
+Deny rules take precedence over Allow rules. If a principal has both an Allow and a Deny rule covering the same permission set and scope, the Deny rule wins. See [Permission resolution](#permission-resolution) for the full evaluation order.
+
+Deny rules use the same structure as Allow rules: a scope and one or more permission sets. They can also include [conditions](#conditions).
 
 ### Example rule
 
@@ -70,6 +82,38 @@ Scope
 
 Permission set
 : `InstancesFullAccess`, `ObjectStorageReadOnly`, `RelationalDatabasesFullAccess`
+
+## Permission resolution
+
+When a principal attempts an action, Scaleway evaluates access through a layered hierarchy. Each level can override the ones below it:
+
+<D2Schema title="IAM policy resolution hierarchy" description="Layered evaluation order from Owner rights down to the default deny.">
+```d2
+iam: "IAM policy resolution (higher level wins)" {
+  direction: down
+  icon: scw:iam
+
+  l4: "Level 4 — Owner\nOwner rights are above everything,\nstronger than deny policies" {
+    icon: scw:user
+  }
+  l3: "Level 3 — Managed & non-editable policies" {
+    icon: scw:policy
+  }
+  l2: "Level 2 — Deny policies\nDeny is stronger than Allow" {
+    icon: scw:policy
+  }
+  l1: "Level 1 — Allow policies\nRights granted to a principal" {
+    icon: scw:policy
+  }
+  l0: "Level 0 — Default\neverything is denied"
+}
+
+iam.l4 -> iam.l3
+iam.l3 -> iam.l2
+iam.l2 -> iam.l1
+iam.l1 -> iam.l0
+```
+</D2Schema>
 
 ## Example policy
 
@@ -95,12 +139,12 @@ Permission set
 : `ContainerRegistryFullAccess`, `ContainersReadOnly`, `RelationalDatabasesFullAccess`
 
 <Message type="note">
-  There is no notion of priority when it comes to IAM policies. Policies do not compete with each other, they simply combine to bestow all the permissions defined within them to any given principal.
+  Allow policies do not compete with each other, they simply combine to grant all the permissions defined within them to any given principal. However, if a Deny rule covers the same permission set and scope, it takes precedence over any Allow rule. See [Permission resolution](#permission-resolution).
 </Message>
 
 **JSON policy example**
 
-```
+```json
 {
   "application": "production-c",
   "rules": [
@@ -116,6 +160,4 @@ Permission set
 }
 ```
 
-If necessary, we could add more rules to the policy, giving `production-c` additional permissions in other Projects, or at Organization level.
-
-
+You can add more rules to the policy to give `production-c` additional permissions in other Projects or at Organization level.

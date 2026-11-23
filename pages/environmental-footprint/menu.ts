@@ -75,6 +75,10 @@ export const environmentalFootprintMenu = {
         {
           label: 'Generative APIs footprint calculation',
           slug: 'generative-apis-dedicated-env-footprint'
+        },
+        {
+          label: 'Serverless footprint calculation',
+          slug: 'serverless-env-footprint'
         }        
       ],
       label: 'Additional Content',

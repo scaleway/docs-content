@@ -99,10 +99,6 @@ export const serverlessSqlDatabasesMenu = {
           label: 'Supported PostgreSQL extensions',
           slug: 'supported-postgresql-extensions',
         },
-        {
-          label: 'Planned maintenance',
-          slug: 'planned-maintenance',
-        },
       ],
       label: 'Additional Content',
       slug: 'reference-content',

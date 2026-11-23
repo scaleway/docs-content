@@ -1,0 +1,177 @@
+---
+title: Configure CLI tools and clients for Object Storage
+description: Install and configure the AWS CLI, MinIO Client, or rclone to manage Scaleway Object Storage buckets and objects with Amazon S3-compatible tools.
+tags: object storage object-storage aws-cli aws cli minio mc minio-client rclone s3-client command-line
+dates:
+  validation: 2026-11-03
+  posted: 2026-11-03
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+
+Object Storage is compatible with the Amazon S3 API, so you can manage your buckets and objects with any Amazon S3-compatible tool. This page explains how to install and configure the following command-line clients:
+
+- **AWS CLI**: the official Amazon Web Services command-line tool, built on top of the [AWS SDK for Python (Boto3)](https://boto3.amazonaws.com/v1/documentation/api/latest/index.html). Most Object Storage CLI examples in this documentation use the AWS CLI.
+- **[MinIO Client](https://min.io/docs/minio/linux/reference/minio-mc.html)** (`mc`): a command-line tool that provides alternatives to UNIX commands such as `ls`, `cp`, and `rm` for object storage.
+- **[rclone](https://rclone.org)**: a command-line tool that synchronizes and transfers data between Amazon S3-compatible providers and other storage platforms.
+
+All clients require the same information: your API access key and secret key, the region of your bucket, and the matching Object Storage endpoint.
+
+| Region | Endpoint |
+|---|---|
+| Paris (`fr-par`) | `https://s3.fr-par.scw.cloud` |
+| Amsterdam (`nl-ams`) | `https://s3.nl-ams.scw.cloud` |
+| Warsaw (`pl-waw`) | `https://s3.pl-waw.scw.cloud` |
+| Milan (`it-mil`) | `https://s3.it-mil.scw.cloud` |
+
+To use the Scaleway CLI instead, see [Scaleway CLI for Object Storage](/object-storage/api-clients/scaleway-cli/).
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- A valid [API key](/iam/credentials/create-api-keys/)
+
+## Install and configure a client
+
+In the following procedures, replace the placeholders with the appropriate values. The following tabs describe how to set up each client.
+
+<Tabs>
+  <TabsTab label="AWS CLI">
+    This procedure applies to the AWS CLI v2. To use the AWS CLI v1, follow the [AWS CLI v1 installation instructions](https://docs.aws.amazon.com/cli/v1/userguide/cli-chap-install.html) and install the `awscli-plugin-endpoint` plugin, which lets the AWS CLI v1 interact with Object Storage.
+
+    1. Follow the [AWS CLI installation instructions](https://docs.aws.amazon.com/cli/latest/userguide/getting-started-install.html#getting-started-install-instructions) to download and install the AWS CLI for your environment.
+
+    2. Run the following command to create the `~/.aws/config` and `~/.aws/credentials` files:
+        ```bash
+        aws configure
+        ```
+
+    3. When prompted, enter the following values:
+        - Your API access key
+        - Your API secret key
+        - Your default Object Storage region (`fr-par`, `nl-ams`, `pl-waw`, or `it-mil`)
+        - `json` as the default output format
+
+    4. Open the `~/.aws/config` file in a code editor and edit it as follows. Set `region` and `endpoint_url` to the region of your bucket.
+        ```ini
+        [default]
+        region = nl-ams
+        output = json
+        services = scw-nl-ams
+        s3 =
+          max_concurrent_requests = 100
+          max_queue_size = 1000
+          multipart_threshold = 50 MB
+          # Set multipart_chunksize according to the size of the files you upload.
+          # This value allows uploads up to 10 GB (1,000 parts * 10 MB).
+          # A value of 5 GB allows uploads up to 5 TB.
+          multipart_chunksize = 10 MB
+
+        [services scw-nl-ams]
+        s3 =
+          endpoint_url = https://s3.nl-ams.scw.cloud
+        s3api =
+          endpoint_url = https://s3.nl-ams.scw.cloud
+        ```
+
+    5. (Optional) Add profiles for other regions or Projects. Each profile needs a `[profile <PROFILE_NAME>]` block and a services block in `~/.aws/config`:
+        ```ini
+        [profile two]
+        region = fr-par
+        services = scw-fr-par
+
+        [services scw-fr-par]
+        s3 =
+          endpoint_url = https://s3.fr-par.scw.cloud
+        s3api =
+          endpoint_url = https://s3.fr-par.scw.cloud
+        ```
+        Then, add the credentials of the profile to `~/.aws/credentials`. The profile names in both files must be identical (`[profile two]` in the configuration file, `[two]` in the credentials file).
+        ```ini
+        [default]
+        aws_access_key_id=<ACCESS_KEY>
+        aws_secret_access_key=<SECRET_KEY>
+
+        [two]
+        aws_access_key_id=<ACCESS_KEY>
+        aws_secret_access_key=<SECRET_KEY>
+        ```
+
+    6. Run the following command to test your configuration:
+        ```bash
+        aws s3 ls
+        ```
+        The list of your buckets in the region of your profile appears. To test another profile, add the `--profile` option, for example `aws --profile two s3 ls`.
+
+    See the [AWS CLI configuration and credential file settings](https://docs.aws.amazon.com/cli/latest/userguide/cli-configure-files.html) documentation for more information.
+  </TabsTab>
+  <TabsTab label="MinIO Client">
+    1. Follow the [MinIO Client installation instructions](https://min.io/docs/minio/linux/reference/minio-mc.html#install-mc) to install `mc` for your operating system. Download the binary to a directory that is in your `$PATH`.
+
+    2. Run the following command to check the installation:
+        ```bash
+        mc --help
+        ```
+
+    3. Run the following command to create an alias for the Object Storage endpoint of your region:
+        ```bash
+        mc alias set <ALIAS> <ENDPOINT> <ACCESS_KEY> <SECRET_KEY> --api S3v4
+        ```
+        For example, for the `nl-ams` region:
+        ```bash
+        mc alias set s3 https://s3.nl-ams.scw.cloud <ACCESS_KEY> <SECRET_KEY> --api S3v4
+        ```
+        You can create an alias for each [region](/object-storage/concepts/glossary/#region-and-availability-zone) in which you manage Object Storage resources.
+
+    4. Run the following command to list your buckets and test your configuration:
+        ```bash
+        mc ls s3
+        ```
+
+    Other common commands include:
+    - `mc ls s3/<BUCKET_NAME>` to list the objects of a bucket
+    - `mc rm s3/<BUCKET_NAME>/<OBJECT_KEY>` to delete an object
+    - `mc --help` to list all available commands
+  </TabsTab>
+  <TabsTab label="rclone">
+    1. Follow the [rclone installation instructions](https://rclone.org/install/) to install rclone. For example, on Linux, run the following commands as `root`:
+        ```bash
+        wget https://downloads.rclone.org/rclone-current-linux-amd64.zip
+        apt install zip
+        unzip rclone-current-linux-amd64.zip
+        cd rclone*linux-amd64/
+        mv rclone /usr/bin/
+        ```
+
+    2. Run the following command to start the interactive configuration:
+        ```bash
+        rclone config
+        ```
+
+    3. Enter the following values when prompted:
+        - **New remote**: `n`
+        - **name**: a name for the remote, for example `remote-scw-paris`
+        - **Storage**: `s3`
+        - **provider**: `Scaleway`
+        - **env_auth**: `false`, to enter your credentials in the next steps
+        - **access_key_id**: your API access key
+        - **secret_access_key**: your API secret key
+        - **region**: the region of your bucket, for example `fr-par`
+        - **endpoint**: the endpoint of the region, for example `s3.fr-par.scw.cloud`
+        - **acl**: the default ACL of new objects and buckets, for example `private`
+        - **storage_class**: the default storage class of new objects, for example `STANDARD`
+        - **Edit advanced config**: `n`
+
+    4. Review the summary of your configuration, then enter `y` to keep the remote.
+
+    5. Enter `q` to quit the configuration.
+
+    6. Run the following command to list your buckets and test your configuration:
+        ```bash
+        rclone lsd remote-scw-paris:
+        ```
+
+    To transfer data to or from a bucket in another region, repeat the configuration to create a remote for that region. See the [rclone Amazon S3 documentation](https://rclone.org/s3/) for more information.
+  </TabsTab>
+</Tabs>

@@ -207,6 +207,10 @@ export const objectStorageMenu = {
           slug: 'optimize-object-storage-performance',
         },
         {
+          label: 'Object Storage performance and limits',
+          slug: 'object-storage-performance',
+        },
+        {
           label:
             'Equivalence between Object Storage actions and IAM permissions',
           slug: 's3-iam-permissions-equivalence',

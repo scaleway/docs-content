@@ -5,6 +5,16 @@ export const generativeApisMenu = {
       slug: '../generative-apis',
     },
     {
+      items: [
+        {
+          label: 'Understanding Generative APIs',
+          slug: 'understanding-generative-apis',
+        },
+        {
+          label: 'Glossary',
+          slug: 'glossary',
+        },
+      ],
       label: 'Concepts',
       slug: 'concepts',
     },
@@ -13,11 +23,15 @@ export const generativeApisMenu = {
       slug: 'quickstart',
     },
     {
-      label: 'FAQ',
-      slug: 'faq',
-    },
-    {
       items: [
+        {
+          label: 'Supported models',
+          slug: 'supported-models',
+        },
+        {
+          label: 'Model lifecycle',
+          slug: 'model-lifecycle',
+        },
         {
           label: 'Query language models',
           slug: 'query-language-models',
@@ -62,98 +76,12 @@ export const generativeApisMenu = {
           label: 'Use batch processing',
           slug: 'use-batch-processing',
         },
-        {
-          label: 'Deploy a model',
-          slug: 'create-deployment',
-        },
-        {
-          label: 'Import a custom model',
-          slug: 'import-custom-model',
-        },
-        {
-          label: 'Change the model of a deployment',
-          slug: 'change-model',
-        },
-        {
-          label: 'Monitor a deployment',
-          slug: 'monitor-deployment',
-        },
-        {
-          label: 'Configure autoscaling',
-          slug: 'configure-autoscaling',
-        },
-        {
-          label: 'Manage access to a deployment',
-          slug: 'manage-allowed-ips',
-        },
-        {
-          label: 'Use deployment with a Private Network',
-          slug: 'dedicated-deployment-with-private-network',
-        },
-        {
-          label: 'Delete a deployment',
-          slug: 'delete-deployment',
-        },
       ],
-      label: 'How to',
-      slug: 'how-to',
+      label: 'Model capabilities',
+      slug: 'model-capabilities',
     },
     {
       items: [
-        {
-          label: 'Using Generative APIs',
-          slug: 'using-generative-apis',
-        },
-        {
-          label: 'Using Models API',
-          slug: 'using-models-api',
-        },
-        {
-          label: 'Using Chat API',
-          slug: 'using-chat-api',
-        },
-        {
-          label: 'Using Embeddings API',
-          slug: 'using-embeddings-api',
-        },
-        {
-          label: 'Understanding errors',
-          slug: 'understanding-errors',
-        },
-      ],
-      label: 'API/CLI',
-      slug: 'api-cli',
-    },
-    {
-      items: [
-        {
-          label: 'Supported models',
-          slug: 'supported-models',
-        },
-        {
-          label: 'Model lifecycle',
-          slug: 'model-lifecycle',
-        },
-        {
-          label: 'OpenAI API compatibility',
-          slug: 'openai-compatibility',
-        },
-        {
-          label: 'Rate limits for Serverless',
-          slug: 'rate-limits',
-        },
-        {
-          label: 'Data privacy',
-          slug: 'data-privacy',
-        },
-        {
-          label: 'Security and reliability in Generative APIs',
-          slug: 'security-and-reliability',
-        },
-        {
-          label: 'Understanding Generative APIs costs',
-          slug: 'cost-estimator',
-        },
         {
           label: 'Adding AI to VS Code using Continue',
           slug: 'adding-ai-to-vscode-using-continue',
@@ -203,8 +131,108 @@ export const generativeApisMenu = {
           slug: 'integrating-generative-apis-with-popular-tools',
         },
       ],
-      label: 'Additional Content',
-      slug: 'reference-content',
+      label: 'Integrations',
+      slug: 'integrations',
+    },
+    {
+      items: [
+        {
+          label: 'Deploy a model',
+          slug: 'create-deployment',
+        },
+        {
+          label: 'Import a custom model',
+          slug: 'import-custom-model',
+        },
+        {
+          label: 'Change the model of a deployment',
+          slug: 'change-model',
+        },
+        {
+          label: 'Monitor a deployment',
+          slug: 'monitor-deployment',
+        },
+        {
+          label: 'Configure autoscaling',
+          slug: 'configure-autoscaling',
+        },
+        {
+          label: 'Manage access to a deployment',
+          slug: 'manage-allowed-ips',
+        },
+        {
+          label: 'Use deployment with a Private Network',
+          slug: 'dedicated-deployment-with-private-network',
+        },
+        {
+          label: 'Delete a deployment',
+          slug: 'delete-deployment',
+        },
+      ],
+      label: 'Deployments',
+      slug: 'deployments',
+    },
+    {
+      items: [
+        {
+          label: 'Using Generative APIs',
+          slug: 'using-generative-apis',
+        },
+        {
+          label: 'Using Models API',
+          slug: 'using-models-api',
+        },
+        {
+          label: 'Using Chat API',
+          slug: 'using-chat-api',
+        },
+        {
+          label: 'Using Embeddings API',
+          slug: 'using-embeddings-api',
+        },
+        {
+          label: 'Understanding errors',
+          slug: 'understanding-errors',
+        },
+        {
+          label: 'OpenAI API compatibility',
+          slug: 'openai-compatibility',
+        },
+      ],
+      label: 'API/CLI',
+      slug: 'api-cli',
+    },
+    {
+      items: [
+        {
+          label: 'Data privacy',
+          slug: 'data-privacy',
+        },
+        {
+          label: 'Security and reliability in Generative APIs',
+          slug: 'security-and-reliability',
+        },
+      ],
+      label: 'Security',
+      slug: 'security',
+    },
+    {
+      items: [
+        {
+          label: 'Rate limits for Serverless',
+          slug: 'rate-limits',
+        },
+        {
+          label: 'Understanding Generative APIs costs',
+          slug: 'cost-estimator',
+        },
+      ],
+      label: 'Costs and limits',
+      slug: 'costs-and-limits',
+    },
+    {
+      label: 'FAQ',
+      slug: 'faq',
     },
     {
       label: 'Troubleshooting',

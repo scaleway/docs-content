@@ -73,7 +73,7 @@ This step runs automatically from the validated mapping (Step 2) — at this sca
      - Front-load the primary keywords: put the key terms (for example "manage IAM policies", "Scaleway Web Hosting") within the first 50 characters.
      - Include one or two actionable subtopics (for example create, configure, delete) to match long-tail search queries.
      - Total length between 120 and 155 characters, spaces included, so Google does not truncate the snippet.
-     - Example shape: `Manage IAM policies and permission sets on Scaleway: create policies, configure rule conditions, and review access for users and groups.` (that example is 136 characters).
+     - Example shape: `Manage IAM policies and permission sets on Scaleway - create policies, configure rule conditions, and review access for users and groups.` (that example is 136 characters).
    - **Check each description by script**: character count between 120 and 155, and a primary keyword inside the first 50 characters. Rewrite any that fail instead of listing them as exceptions.
    - Write the list of folders with their title, description and character count to the report so the user can review them in one table. Index files are created in the same commit as the moves, never modify the moved pages to link to them.
 5. Only touch a moved page's frontmatter (`categories`, breadcrumbs) if the move itself changes it — never touch the rest of the content in this step. Page content changes only if an image link had to be rewritten, and each such case is reported.

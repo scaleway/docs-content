@@ -19,9 +19,21 @@ export const kubernetesMenu = {
           slug: 'managed-kubernetes-service-definition',
         },
         {
+          label: 'Kubernetes control plane offers overview',
+          slug: 'kubernetes-control-plane-offers',
+        },
+        {
+          label: 'Kubernetes version support policy',
+          slug: 'version-support-policy',
+        },
+        {
+          label: 'Shared Responsibility Model for Kubernetes',
+          slug: 'kubernetes-shared-responsibility-model',
+        },
+        {
           label: 'Glossary',
           slug: 'glossary',
-        },
+        },        
       ],
       label: 'Concepts',
       slug: 'concepts',
@@ -253,24 +265,6 @@ export const kubernetesMenu = {
       ],
       label: 'API',
       slug: 'api',
-    },
-    {
-      items: [
-        {
-          label: 'Kubernetes control plane offers overview',
-          slug: 'kubernetes-control-plane-offers',
-        },
-        {
-          label: 'Kubernetes version support policy',
-          slug: 'version-support-policy',
-        },
-        {
-          label: 'Shared Responsibility Model for Kubernetes',
-          slug: 'kubernetes-shared-responsibility-model',
-        },
-      ],
-      label: 'Reference content',
-      slug: 'reference-content',
     },
     {
       label: 'FAQ',

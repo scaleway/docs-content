@@ -11,24 +11,8 @@ export const kubernetesMenu = {
           slug: 'introduction-to-kubernetes',
         },
         {
-          label: 'Understanding differences between the Kapsule and Kosmos',
+          label: 'Understanding differences between Kapsule and Kosmos',
           slug: 'understanding-differences-kapsule-kosmos',
-        },
-        {
-          label: 'Managed Kubernetes service definition',
-          slug: 'managed-kubernetes-service-definition',
-        },
-        {
-          label: 'Kubernetes control plane offers overview',
-          slug: 'kubernetes-control-plane-offers',
-        },
-        {
-          label: 'Kubernetes version support policy',
-          slug: 'version-support-policy',
-        },
-        {
-          label: 'Shared Responsibility Model for Kubernetes',
-          slug: 'kubernetes-shared-responsibility-model',
         },
         {
           label: 'Glossary',
@@ -65,6 +49,14 @@ export const kubernetesMenu = {
           slug: 'edit-kosmos-cluster',
         },            
         {
+          label: 'Kubernetes version lifecycle',
+          slug: 'version-support-policy',
+        },         
+        {
+          label: 'Upgrade the Kubernetes version on a Kapsule cluster',
+          slug: 'upgrade-kubernetes-version',
+        },
+        {
           label:
             'Use the NVIDIA GPU operator on Kapsule and Kosmos with GPU Instances',
           slug: 'use-nvidia-gpu-operator',
@@ -72,11 +64,7 @@ export const kubernetesMenu = {
         {
           label: 'Access the Kubernetes dashboard',
           slug: 'access-kubernetes-dashboard',
-        },
-        {
-          label: 'Upgrade the Kubernetes version on a Kapsule cluster',
-          slug: 'upgrade-kubernetes-version',
-        },
+        },        
         {
           label: 'Deploy an image from Container Registry',
           slug: 'deploy-image-from-container-registry',
@@ -98,21 +86,21 @@ export const kubernetesMenu = {
           slug: 'connect-cluster-kubectl',
         },
         {
-          label: 'Create and manage a Kubernetes Kapsule with CLI v2',
+          label: 'Create and manage a Kapsule cluster (CLI v2)',
           slug: 'creating-managing-kubernetes-lifecycle-cliv2',
         },
         {
-          label: 'Change the control plane offer with CLI v2',
+          label: 'Change the control plane offer (CLI v2)',
           slug: 'changing-control-plane-offer',
         },
         {
           label: 'Migrate end-of-life pools to newer Instances',
           slug: 'migrate-end-of-life-pools-to-newer-instances',
-        },
+        },         
         {
           label: 'Delete a cluster',
           slug: 'delete-cluster',
-        },           
+        },         
       ],
       label: 'Setup and lifecycle',
       slug: 'setup-lifecycle',
@@ -266,6 +254,24 @@ export const kubernetesMenu = {
       label: 'API',
       slug: 'api',
     },
+    {
+      items: [
+        {
+          label: 'Managed Kubernetes service definition',
+          slug: 'managed-kubernetes-service-definition',
+        },
+        {
+          label: 'Kubernetes control plane offers overview',
+          slug: 'kubernetes-control-plane-offers',
+        },
+        {
+          label: 'Shared Responsibility Model for Kubernetes',
+          slug: 'kubernetes-shared-responsibility-model',
+        },
+      ],
+      label: 'Service definition and offers',
+      slug: 'service-definition-offers',
+    },    
     {
       label: 'FAQ',
       slug: 'faq',

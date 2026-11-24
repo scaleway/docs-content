@@ -76,6 +76,10 @@ export const environmentalFootprintMenu = {
           label: 'Generative APIs footprint',
           slug: 'generative-apis-dedicated-env-footprint',
         },
+        {
+          label: 'Serverless footprint',
+          slug: 'serverless-env-footprint'
+        }         
       ],
     },
     {

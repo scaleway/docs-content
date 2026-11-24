@@ -77,58 +77,58 @@ export const generativeApisMenu = {
           slug: 'use-batch-processing',
         },
       ],
-      label: 'Model capabilities',
+      label: 'Models',
       slug: 'model-capabilities',
     },
     {
       items: [
         {
-          label: 'Adding AI to VS Code using Continue',
+          label: 'Integrating Generative APIs with popular AI tools',
+          slug: 'integrating-generative-apis-with-popular-tools',
+        },
+        {
+          label: 'VS Code with Continue',
           slug: 'adding-ai-to-vscode-using-continue',
         },
         {
-          label: 'Adding AI to VS Code using GitHub Copilot',
+          label: 'VS Code with GitHub Copilot',
           slug: 'adding-ai-to-vscode-using-github-copilot',
         },
         {
-          label: 'Adding AI to IntelliJ IDEA using Continue',
+          label: 'VS Code with IntelliJ IDEA',
           slug: 'adding-ai-to-intellij-using-continue',
         },
         {
-          label: 'Adding AI to the Zed IDE',
+          label: 'Zed IDE',
           slug: 'adding-ai-to-zed-ide',
         },
         {
-          label: 'Integrating Generative APIs with n8n',
+          label: 'n8n',
           slug: 'integrate-with-n8n',
         },
         {
-          label: 'Integrating Generative APIs with Openclaw',
+          label: 'Openclaw',
           slug: 'integrate-with-openclaw',
         },
         {
-          label: 'Integrating Generative APIs with Cursor',
+          label: 'Cursor',
           slug: 'integrate-with-cursor',
         },
         {
-          label: 'Integrating Generative APIs with OpenCode',
+          label: 'OpenCode',
           slug: 'integrate-with-opencode',
         },
         {
-          label: 'Integrating Generative APIs with Claude Code',
+          label: 'Claude Code',
           slug: 'integrate-with-claude-code',
         },
         {
-          label: 'Integrating Generative APIs with Qwen Code',
+          label: 'Qwen Code',
           slug: 'integrate-with-qwen-code',
         },
         {
-          label: 'Integrating Generative APIs with LiteLLM',
+          label: 'LiteLLM',
           slug: 'integrate-with-litellm',
-        },
-        {
-          label: 'Integrating Generative APIs with popular AI tools',
-          slug: 'integrating-generative-apis-with-popular-tools',
         },
       ],
       label: 'Integrations',

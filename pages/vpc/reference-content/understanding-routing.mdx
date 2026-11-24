@@ -82,7 +82,7 @@ From July 1st 2025, new routing behavior is available for VPCs.
 |  | Old behavior | New behavior |
 |---|---|---|
 | Custom routes | Custom route advertisements are scoped only to the Private Network(s) to which the “next hop” resource is directly attached. | Custom route advertisements are scoped to the entire VPC as standard. |
-| Default routes | Public Gateways' default route advertisements are scoped only to the Private Network(s) to which the gateway is attached.<br/><br/>Private Networks cannot receive default route advertisements from Public Gateways they are not directly attached to. | Standard behavior remains unchanged, but now each Private Network can opt in to receive default route advertisements from across the entire VPC. |
+| Default routes | Public Gateways' default route advertisements are scoped only to the Private Network(s) to which the gateway is attached.<br/><br/>Private Networks cannot receive default route advertisements from Public Gateways they are not directly attached to. | Standard behavior remains unchanged, but now each Private Network can opt in to receive default route advertisements from across the entire VPC.<br/><br/>Custom default routes via a peering connector are an exception: they are [always advertised to the entire VPC](#default-routes-via-a-peering-connector). |
 
 ### Custom routes
 
@@ -93,9 +93,9 @@ With new routing behavior, custom routes are scoped to the entire VPC as standar
 You can configure [Network ACLs](/vpc/reference-content/understanding-nacls/) to restrict traffic flow along custom routes. 
 
 <Message type="note">
-If you create a custom route with a destination of `0.0.0.0/0`, this custom route is treated in the same way as a **default route** advertised by a Public Gateway:
-- Its route will be advertised locally on the 'next hop' resource's Private Network.
-- Other Private Networks who have opted in to receive default routes from throughout the VPC will also receive this route.
+If you create a custom route with a destination of `0.0.0.0/0` and an Instance attached to a Private Network in the VPC as next hop, this custom route is treated in the same way as a default route advertised by a Public Gateway. It is advertised on the Private Network of the Instance, and on other Private Networks that have opted in to receive all default routes.
+
+If the next hop is a peering connector, the route is advertised to all Private Networks in the VPC. See [Default routes via a peering connector](#default-routes-via-a-peering-connector).
 </Message>
 
 ### Default routes
@@ -104,7 +104,7 @@ Previously, Public Gateways could only advertise their default routes to the Pri
 
 With new routing behavior, this standard behavior remains unchanged. Default routes' scope is still, as standard, limited to their directly attached Private Networks.
 
-However, you now have an additional option to enable each Private Network to receive advertisements of **all** default routes throughout the entire VPC. This includes routes towards all Public Gateways advertising a default route, as well as any custom-created default routes. This allows resources on other Private Networks to find access to the public internet, even if they do not have their own attached gateway.
+However, you now have an additional option to enable each Private Network to receive advertisements of **all** default routes throughout the entire VPC. This includes routes towards all Public Gateways advertising a default route, as well as any custom default routes whose next hop is an Instance attached to a Private Network in the VPC. This allows resources on other Private Networks to find access to the public internet, even if they do not have their own attached gateway.
 
 See the [documentation](/vpc/how-to/manage-routing/#how-to-manage-default-route-scope) on how to manage default route scope for a given Private Network, once you have [updated](/vpc/how-to/manage-routing/#how-to-update-routing-behavior) to new routing behavior.
 
@@ -112,9 +112,15 @@ See the [documentation](/vpc/how-to/manage-routing/#how-to-manage-default-route-
 
 The option to receive all default route advertisements must be enabled on a per-Private-Network basis. 
 
-This means that each Private Network in a VPC can opt to either receive **only** default routes from directly attached Public Gateways (and local custom default routes, if they exist), or **all** default routes being advertised throughout the whole VPC.
+This means that each Private Network in a VPC can opt to either receive **only** default routes from directly attached Public Gateways (and local custom default routes, if they exist), or **all** default routes being advertised throughout the whole VPC. This choice does not affect [default routes via a peering connector](#default-routes-via-a-peering-connector).
 
 To exercise more granular control over default route advertisements, Scaleway recommends that you configure [Network ACLs](/vpc/reference-content/understanding-nacls/).
+
+#### Default routes via a peering connector
+
+The option to receive all default route advertisements only filters default routes advertised by Public Gateways, and custom default routes whose next hop is an Instance attached to a Private Network in the VPC.
+
+It does not apply to custom routes with a destination of `0.0.0.0/0` and a [peering connector](/vpc-peering/concepts/#peering-connector) as next hop. These routes are always advertised to all Private Networks in the VPC, even those for which the option is disabled. This is expected behavior.
 
 #### Multiple default routes
 
@@ -124,7 +130,7 @@ When a resource on a Private Network receives multiple default route advertiseme
 
 When you update to new routing behavior, the only automatic change is that your custom routes (if any) will now be advertised across the whole VPC.
 
-Your Private Networks will continue to receive only their local default route announcements, **unless** you enable `Receive all default route announcements` in each Private Network's settings. Therefore, there is no risk of the scope of default route announcements automatically changing without your specific intervention, even after updating to new routing behavior.
+Except for [default routes via a peering connector](#default-routes-via-a-peering-connector), your Private Networks will continue to receive only their local default route announcements, **unless** you enable `Receive all default route announcements` in each Private Network's settings. Therefore, there is no risk of the scope of these default route announcements automatically changing without your specific intervention, even after updating to new routing behavior.
 
 Your existing setup may be impacted by the new behavior if you want your custom routes to be scoped only to the next-hop resource's Private Network. In this case, Scaleway recommends that you use [Network ACL rules](/vpc/reference-content/understanding-nacls/) to limit access to the custom route.
 

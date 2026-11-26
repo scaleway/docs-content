@@ -124,7 +124,7 @@ export const serverlessContainersMenu = {
         },
         {
           label: 'Methods to deploy Serverless Containers',
-          slug: 'deploy-container',
+          slug: 'deploy-container-methods',
         },
         {
           label: 'Containers use cases',

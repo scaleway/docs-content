@@ -61,7 +61,7 @@ export const dataOrchestratorMenu = {
           slug: 'cron-schedules',
         },
         {
-          label: 'DSL',
+          label: 'DSL concepts page',
           slug: 'dsl',
         },
         {

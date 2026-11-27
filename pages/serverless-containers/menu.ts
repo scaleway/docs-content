@@ -49,20 +49,16 @@ export const serverlessContainersMenu = {
           slug: 'build-push-container-image',
         },
         {
+          label: 'Migrate images to the Scaleway Registry',
+          slug: 'migrate-external-image-to-scaleway-registry',
+        },
+        {
           label: 'Deploy a container',
           slug: 'deploy-container',
         },
         {
-          label: 'Methods to deploy Serverless Containers',
-          slug: 'deploy-container-methods',
-        },
-        {
           label: 'Manage a container',
           slug: 'manage-a-container',
-        },
-        {
-          label: 'Delete a container',
-          slug: 'delete-a-container',
         },
         {
           label: 'Containers port parameter',
@@ -73,6 +69,10 @@ export const serverlessContainersMenu = {
           slug: 'containers-sandbox',
         },
         {
+          label: 'Methods to deploy Serverless Containers',
+          slug: 'deploy-container-methods',
+        },
+        {
           label: 'Create and deploy a container with the Scaleway API',
           slug: 'deploy-container-api',
         },
@@ -81,16 +81,16 @@ export const serverlessContainersMenu = {
           slug: 'deploy-container-cli',
         },
         {
-          label: 'Migrate images to the Scaleway Registry',
-          slug: 'migrate-external-image-to-scaleway-registry',
-        },
-        {
           label: 'Deploy AI projects on Containers',
           slug: 'deploy-ai-projects',
         },
         {
-          label: 'v1 migration guide',
+          label: 'V1 migration guide',
           slug: 'v1-migration-guide',
+        },
+        {
+          label: 'Delete a container',
+          slug: 'delete-a-container',
         },
       ],
       label: 'Deployment',
@@ -135,7 +135,7 @@ export const serverlessContainersMenu = {
           slug: 'secure-a-container',
         },
       ],
-      label: 'Network and Security',
+      label: 'Network and security',
       slug: 'network-and-security',
     },
     {
@@ -161,7 +161,7 @@ export const serverlessContainersMenu = {
           slug: 'cron-schedules',
         },
       ],
-      label: 'Scaling and Eventing',
+      label: 'Scaling and eventing',
       slug: 'scaling-and-eventing',
     },
     {

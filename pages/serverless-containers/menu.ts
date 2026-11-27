@@ -30,6 +30,10 @@ export const serverlessContainersMenu = {
           label: 'Migrating to Serverless Containers',
           slug: 'migrate-to-serverless-containers',
         },
+        {
+          label: 'Glossary',
+          slug: 'glossary',
+        },
       ],
       label: 'Concepts',
       slug: 'concepts',

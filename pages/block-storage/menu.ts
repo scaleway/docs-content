@@ -23,6 +23,10 @@ export const blockStorageMenu = {
           slug: 'create-a-volume',
         },
         {
+          label: 'Encrypt a volume with Key Manager',
+          slug: 'encrypt-volumes-with-key-manager',
+        },
+        {
           label: 'Attach a volume',
           slug: 'attach-a-volume',
         },

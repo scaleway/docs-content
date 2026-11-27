@@ -1,0 +1,100 @@
+---
+title: How to add a custom domain to a container
+description: Add a custom domain to Scaleway Serverless Containers.
+tags: custom-domain container serverless cname record
+dates:
+  validation: 2025-10-23
+  posted: 2022-02-21
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+import image from './assets/cloudflare-root-domain-configuration.webp'
+
+Each container comes with an automatically generated domain, on which it is available. However, to simplify access, you are free to map your own domain name to your container.
+
+<Requirements />
+
+- A Scaleway account logged into the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- A running [Serverless Container](/serverless-containers/deployment/deploy-container/)
+- Registered a domain name with the provider of your choice and have access to the DNS zone file of the domain name
+
+1. On your domain provider platform (for example, [Scaleway domains](/domains-and-dns/how-to/manage-dns-records/)), add a CNAME record pointing to your container default URL in the DNS zone file of the domain.
+
+    <Message type="note">
+      - All domains are supported.
+      - When using a root domain:
+          - If available, CNAME flattening is **mandatory**. [CNAME flattening](https://blog.cloudflare.com/introducing-cname-flattening-rfc-compliant-cnames-at-a-domains-root/) speeds up CNAME resolution and allows you to use a CNAME record at your root/apex domain. For example, for Cloudflare, this will look like the following:
+
+          <Lightbox image={image} size="medium" alt="" />
+
+          - If your DNS provider does not support CNAME flattening, you need to create an ALIAS on your root domain (named `@` or with an empty name) instead of a CNAME.
+    </Message>
+2. Before continuing, make sure the DNS entry is available. If not, the custom domain will likely end up in `error` on step 6. You can check this by:
+    - running `dig`, `drill` or `nslookup` commands on your domain using common DNS resolvers `1.1.1.1` and `8.8.8.8`:
+    ```shell
+    dig <your_custom_domain> @1.1.1.1
+    dig <your_custom_domain> @8.8.8.8
+    ```
+    - using a DNS check tool of your choice (some are available online)
+3. In your container page, click the **Network & Domains** tab.
+4. In the **Custom domains** section, click **Add Custom domain**.
+5. Enter your custom domain name and validate the form.
+    <Message type="note">
+      Before being `ready`, some checks are performed. Refer to the [technical details](#technical-details) below to know more about these checks.
+    </Message>
+6.  Connect to your container through that custom domain once the custom domain status is `ready`.
+
+Note that custom domains set for a Serverless Container work whether the public endpoint is enabled or not. See [Use Serverless Containers with Private Networks](/serverless-containers/network-and-security/use-private-networks/) for more information.
+
+## Technical details
+
+Read this section if you want more details about how custom domains are handled.
+
+When adding a custom domain, the following tasks are performed by Scaleway:
+
+1. Scaleway configures the custom domain on our gateways, so that they can handle traffic for that custom domain.
+2. Scaleway ensures that the custom domain points to one of the Serverless Container existing endpoints: either the public one `....functions.fnc.<region>.scw.cloud`, or an existing custom domain.
+3. If step 2 is OK, Scaleway generates a dedicated TLS certificate for that custom domain so it can respond to HTTPS requests.
+
+    <Message type="note">
+      During that step, the custom domain might be available in plain HTTP. But, it will be accessible in HTTPS only once this step is over.
+    </Message>
+
+During the configuration of a custom domain (`pending` status), callers will likely receive HTTP 404 errors, while our gateways are reconfiguring themselves.
+
+The last 2 steps above are done simultaneously with a HTTP-01 challenge. If that challenge does not succeed after 3 minutes:
+
+- The custom domain will be put in `error` status.
+- The custom domain will not be reachable (in HTTP or HTTPS).
+- No TLS certificate will be generated.
+
+If the HTTP-01 challenge fails and the custom domain is in `error` status, see the dedicated [troubleshooting page](/serverless-containers/troubleshooting/custom-domain-in-error-status/).
+
+## Migrating an active domain
+
+Read this section if you are trying to migrate a domain that is already serving a live website/API/web application, but not yet hosted on a Serverless Container.
+
+To clarify, let's take a concrete example:
+
+- your website is hosted on a Scaleway Instance, with the IP `51.15.x.x`
+- you own a domain `mydomain.com`
+- an `A` record is configured on `website.mydomain.com` and points to `51.15.x.x`
+- when a client accesses `http://website.mydomain.com`, the request hits your Instance IP `51.15.x.x:80`
+- you also have a running version of your website hosted as a Serverless Container (only accessible using `example-website.functions.fnc.fr-par.scw.cloud`), and now you want your users to access this version from `http://website.mydomain.com`
+
+Before adding the custom domain on your Serverless Container, you must change the DNS record to point to the Serverless Container public endpoint:
+
+- before: `website.mydomain.com` is an A record to `51.15.x.x`
+- after: `website.mydomain.com` is a CNAME record to `example-website.functions.fnc.fr-par.scw.cloud`
+
+When you change the DNS record:
+- Clients that already cached `website.mydomain.com` will continue to hit `51.15.x.x`, until the TTL expires. 
+- New clients (or those whose cache has expired) will start to hit `example-website.functions.fnc.fr-par.scw.cloud`. 
+
+However, as long as the custom domain is not configured on the Serverless Container, these requests will end up in 404, because `website.mydomain.com` is not (yet) known in Scaleway infrastructure. 
+
+Depending on your downtime tolerance (clients receiving 404) for a few minutes, there are 2 cases:
+
+- **downtime is acceptable or can be planned** (e.g. during the night or when there is less traffic on your website). In that case, after creating the CNAME record, and once you are sure DNS is available everywhere, create the custom domain on the Serverless Container. Once ready, requests to `http://website.mydomain.com` will hit your Serverless Container (no more 404).
+- **downtime is not acceptable**. Unfortunately, this is not possible right now out-of-the-box. To serve requests from `website.mydomain.com`, Scaleway infrastructure must know it, so a custom domain has to be configured. However, for the custom domain to be configured, the DNS record must point to the Serverless Container public endpoint, resulting in a chicken-and-egg problem. To handle such scenarios, a CDN can be configured to serve a cached version of your website while the domain is being reconfigured (for example with [`stale-if-error`](https://developer.mozilla.org/fr/docs/Web/HTTP/Headers/Cache-Control#stale-if-error) option). If you choose this solution, be sure to disable caching on routes starting with `/.well-known/acme-challenge` to avoid issues described in the "Technical details" section.

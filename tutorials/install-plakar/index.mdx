@@ -1,0 +1,188 @@
+---
+title: Install Plakar Control Plane on a Scaleway Instance
+description: Deploy Plakar Control Plane on a Scaleway Instance by importing its QCOW2 image as a Block Storage snapshot and configuring it with cloud-init.
+products:
+  - instances
+  - block-storage
+  - object-storage
+tags: plakar backup qcow2 snapshot cloud-init instance block-storage
+dates:
+  validation: 2026-11-18
+  posted: 2026-11-18
+  validation_frequency: 12
+difficulty: intermediate
+usecase:
+  - deploy-external-software
+  - back-up-data
+ecosystem:
+  - third-party
+---
+import Requirements from '@macros/iam/requirements.mdx'
+
+[Plakar](https://www.plakar.io/) is an open-source backup solution. It encrypts backups end to end, deduplicates them to save space, and stores each one as an independent snapshot that you can restore at any time. Plakar Control Plane is a virtual appliance that lets you manage these backups across your inventories from one place, either manually or as code.
+
+Deploy Plakar Control Plane on a Scaleway Instance by importing its QCOW2 image into Block Storage as a snapshot and using this snapshot as the boot volume. Then, configure the appliance with cloud-init user data and complete the enrollment from your browser.
+
+<Requirements />
+
+- A Scaleway account logged in to the [console](https://console.scaleway.com)
+- [Owner](/iam/concepts/glossary/#owner) status or [IAM permissions](/iam/concepts/glossary/#permission) allowing you to perform actions in the intended Organization
+- An [SSH key](/iam/security/create-ssh-key/)
+- An [Object Storage bucket](/object-storage/how-to/create-a-bucket/)
+- The Plakar Control Plane QCOW2 image for Scaleway, downloaded from the [Plakar Control Plane download page](https://www.plakar.io/download)
+
+## Upload the QCOW2 image to Object Storage
+
+Block Storage lets you import snapshots directly from Object Storage. Upload the QCOW2 image to your bucket before you import it.
+
+1. In the Scaleway console side menu, go to **Storage** > **Object Storage**.
+
+2. Click the name of your bucket. The **Files** tab of the bucket opens.
+
+3. Upload the QCOW2 image into the bucket. See [Upload files into a bucket](/object-storage/how-to/upload-files-into-a-bucket/) for detailed instructions.
+
+## Import the image as a Block Storage snapshot
+
+The bucket, the snapshot, the Block Storage volumes, and the Instance must belong to the same Scaleway Project. An Instance can only attach Block Storage volumes from its own Availability Zone, so import the snapshot into the zone where you plan to create the Instance.
+
+1. In the **Files** tab of your bucket, click <Icon name="more" /> next to the QCOW2 image, then click **Import as snapshot**. A dialog box appears.
+
+2. Enter a name for the snapshot.
+
+3. Select the Availability Zone where you plan to create the Instance.
+
+4. Select **Block Storage** as the snapshot type.
+
+5. Click **Import object as snapshot**. Scaleway converts the QCOW2 image into a Block Storage snapshot.
+
+See [Use the snapshot import/export feature](/instances/how-to/snapshot-import-export-feature/) for more information about snapshot imports.
+
+## Create the Instance
+
+The snapshot volume serves only as the operating system boot disk. Plakar Control Plane stores its database, logs, and state on an additional Block Storage data volume.
+
+1. In the Scaleway console side menu, go to **Compute** > **CPU & GPU Instances**.
+
+2. Click **Create Instance**. The Instance creation wizard opens.
+
+3. Select the Availability Zone of the snapshot.
+
+4. Select an Instance type that matches the CPU and memory requirements in the [Plakar appliance sizing documentation](https://www.plakar.io/docs/appliance/sizing/). For the S tier, an Instance type such as `BASIC3-X4C-16G` meets the requirements.
+
+5. Under **Choose an image**, click **My snapshots**, then select the snapshot you imported.
+
+6. Add a Block Storage volume with the data disk size given in the [Plakar appliance sizing documentation](https://www.plakar.io/docs/control-plane/appliance/sizing/). Plakar stores the backups themselves in the destinations you configure in Plakar.
+
+7. Configure SSH access and cloud-init user data as described in [Configure the appliance](#configure-the-appliance).
+
+8. Click **Create Instance**. The creation of the Instance starts.
+
+## Configure the appliance
+
+An Instance with a public IP and direct internet access requires no further configuration. The Plakar control plane can be accessed using its public IP.
+
+If you only need SSH access, follow the steps in [SSH access](#ssh-access) and skip the cloud-init user data.
+
+For other configurations, such as a proxy, or a Private Network, provide your settings as [cloud-init user data](cloud-init-user-data) when you create the Instance.
+
+### SSH access
+
+The appliance accepts SSH connections as the `plakar` user. Without cloud-init user data, the Instance receives the SSH keys of its Scaleway Project, which you select in the **SSH keys** section of the Instance creation wizard.
+
+Run the following command to connect to the appliance. Replace `<INSTANCE_IP_ADDRESS>` with the IP address of your Instance.
+
+```sh
+ssh plakar@<INSTANCE_IP_ADDRESS>
+```
+
+### Cloud-init user data
+
+The [Plakar appliance configuration documentation](https://www.plakar.io/docs/appliance/configuration/) describes each key of the user data. If the appliance connects to the internet through a proxy or firewall, see the [Required outbound access](https://www.plakar.io/docs/appliance/configuration/#required-outbound-access) section of the same page for the list of hosts the appliance must reach.
+
+<Message type="important">
+  When you provide user data, Scaleway ignores the SSH keys selected in the **SSH keys** section of the Instance creation wizard. To keep SSH access, list your public keys in the `ssh_authorized_keys` key of the user data.
+</Message>
+
+The following example sets every key except `network`, which you only need for an Instance on a Private Network. All keys are optional. Delete the keys your environment does not need, and replace the example values with your own.
+
+```yaml
+#cloud-config
+ssh_authorized_keys:
+  - ssh-ed25519 AAAA...
+
+proxy:
+  http: http://proxy.corp.example:3128
+  https: http://proxy.corp.example:3128
+  no_proxy: .corp.example
+
+registry:
+  mirrors:
+    docker.io: harbor.corp.example/dockerhub-proxy
+    ghcr.io: harbor.corp.example/ghcr-proxy
+  insecure: false
+
+releases:
+  url: https://dist.corp.example/plakar/enterprise
+  version: v1.1.2
+
+ntp:
+  servers:
+    - 10.20.0.1
+    - ntp.corp.example
+```
+
+See [Use cloud-init](/instances/how-to/use-cloud-init/) for more information about user data on Scaleway Instances.
+
+### Private Network
+
+On a Scaleway Instance, `eth0` is the public interface and `eth1` is the Private Network interface. By default, the appliance only configures `eth0` with DHCP, which works for an Instance with a public IP.
+
+An Instance without a public IP can reach the internet through a [Public Gateway](/public-gateways/quickstart/) attached to its Private Network. In this case, no DHCP server responds on `eth0` and the Instance does not finish booting. Add the following `network` key to the user data to enable DHCP on `eth1`:
+
+```yaml
+#cloud-config
+network:
+  ethernets:
+    eth1:
+      dhcp4: true
+```
+
+If you set other keys, add the `network` key to the same user data document.
+
+The Instance then receives its IP address, default route, and DNS resolver from the Private Network. This requires [default route advertisement](/public-gateways/how-to/configure-a-public-gateway/) to be enabled on the Public Gateway.
+
+To reach an Instance on a Private Network, use a [Load Balancer](/load-balancer/how-to/create-load-balancer/) or the [SSH bastion](/public-gateways/how-to/use-ssh-bastion/) of the Public Gateway. See the Plakar guides [HTTPS access to a Private Network](https://www.plakar.io/docs/guides/scaleway/https-access-to-a-private-network/) and [SSH bastion access](https://www.plakar.io/docs/guides/scaleway/ssh-bastion-access/) for more information.
+
+## Configure the security group
+
+Scaleway attaches the default security group to the Instance when you create it. For an Instance with a public IP, assign both an IPv4 and an IPv6 address, then restrict inbound traffic.
+
+1. In the Scaleway console side menu, go to **Compute** > **CPU & GPU Instances**.
+
+2. Click the name of your Instance, then click the **Security group** tab.
+
+3. Set the default inbound policy to **Drop**.
+
+4. Add a rule to allow inbound TCP traffic on port `80`.
+
+5. (Optional) Add a rule to allow inbound TCP traffic on port `22` if you connect over SSH.
+
+For the allowed source, use your public IP address, the IP address of your organization gateway or VPN, or `0.0.0.0/0` for temporary testing access.
+
+<Message type="important">
+  The `0.0.0.0/0` source allows access from any IP address. Use it only for testing or temporary deployments.
+</Message>
+
+In production, adapt networking and access control to your infrastructure. For example, expose Plakar Control Plane through a Load Balancer with HTTPS, restrict access to a VPN or Private Network, or limit inbound traffic to trusted IP ranges. See [Use security groups](/instances/how-to/use-security-groups/) for more information.
+
+## Access Plakar Control Plane
+
+1. Open Plakar Control Plane in a browser:
+    - For an Instance with a public IP, go to `http://<PUBLIC_IPV4_ADDRESS>`.
+    - For an Instance on a Private Network, connect through the Load Balancer or the SSH bastion.
+    
+2. Follow the enrollment process to:
+    - Register the Instance with Plakar services for licensing and billing
+    - Create the initial administrator account
+
+See the [Plakar enrollment documentation](https://www.plakar.io/docs/enrollment/) for more information.
